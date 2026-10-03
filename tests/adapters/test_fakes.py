@@ -9,7 +9,7 @@ embedder: Embedder = FakeEmbedder()
 scorer: Scorer = FakeScorer()
 llm: LLM = FakeLLM()
 managed: list[Managed] = [FakeSearcher(), FakeFetcher(), FakeEmbedder(), FakeScorer(), FakeLLM()]
-Q = Query(query_id="q1", text="battery")
+Q = Query(id="q1", text="battery")
 
 
 async def test_fake_searcher() -> None:
@@ -21,7 +21,7 @@ async def test_fake_searcher() -> None:
 
 async def test_fake_fetcher() -> None:
     fake = FakeFetcher({"https://a.com": "# A"}, failing={"https://b.com"})
-    assert (await fake.fetch("https://a.com")).markdown == "# A"
+    assert (await fake.fetch("https://a.com")).text == "# A"
     try:
         await fake.fetch("https://b.com")
     except RuntimeError:

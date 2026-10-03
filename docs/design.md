@@ -30,17 +30,20 @@ capability at a time and may refine it; when they do, update this file.
 ## Pipeline
 
 ```
-query ─► initial search ─► plan ─► search ─► fetch ─┐
-                                                    ├─► pages ─► chunk ─► prefilter ─► score ─► select ─► write
-attachments ─► load ────────────────────────────────┘
+attachments ─► load ──────┬──────────────────────────────┐
+                          │ outlines                     │
+                          ▼                              ├─► pages ─► chunk ─► prefilter ─► score ─► select ─► write
+query ─► initial search ─► plan ─► search ─► fetch ──────┘
 ```
+
+Load runs before plan so the planner sees attachment outlines.
 
 | Stage | Input | Output | Resource |
 |---|---|---|---|
 | plan | query, initial search snippets, attachment outlines | sub-queries | LLM |
 | search | sub-queries | hits (URL, title, snippet, query IDs) | network |
 | fetch | hits | pages (markdown) | network |
-| load | attachment paths | pages | disk |
+| load | attachment bytes | pages, outlines | CPU |
 | chunk | pages | chunks with heading path | CPU |
 | prefilter | chunks, queries | top-K (query, chunk) pairs | GPU or API |
 | score | pairs | scores | GPU or API |
@@ -209,8 +212,14 @@ other, so `--sources files` uses the whole budget.
 ### Attachments
 
 - `wosarcher run "q" --attach notes.md --attach ./docs/` (files, directories, globs).
+  `attachments.py` expands the paths (directories recursively in sorted
+  order, hidden parts skipped) and reads the bytes; a path that matches
+  nothing fails the run before any stage. The load stage only sees bytes,
+  so the server can pass uploads without touching disk.
 - Formats: `.md` and `.txt`; other files in a directory are skipped with a
-  warning. UTF-8 with replacement; size limit `attach.max_bytes`.
+  warning. UTF-8 with replacement; size limit `attach.max_bytes`. Identical
+  content is loaded once. No page cap: `fetch.max_chars` is for web pages
+  only.
 - pdf-ingest output is detected by its `<!-- page: … -->` and `<!-- a: … -->`
   comments; chunks keep page and block IDs for citations.
 - The planner sees an outline of each attachment (headings plus the first
@@ -224,9 +233,12 @@ other, so `--sources files` uses the whole budget.
 
 Markdown-aware: split by headings, then by size (`chunk.size` 1000
 characters, `chunk.overlap` 100). Each chunk keeps its heading path. HTML
-comments (other than pdf-ingest anchors), image payloads, and link URLs are
-stripped from chunk text. Pages are capped at `fetch.max_chars` (50000)
-before chunking.
+comments, images (kept as alt text), link URLs (kept as link text), and
+autolinks are stripped from chunk text. pdf-ingest anchors become chunk
+metadata: `page_id` is the page in effect at the chunk start and
+`block_ids` the `<!-- a: … -->` anchors inside it; the anchors are removed
+from the text. The Fetcher cuts web pages at `fetch.max_chars` (50000) and
+marks them truncated; the fetch stage never cuts again.
 
 ### Writing options
 
@@ -320,7 +332,7 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts (RunRequest, Query, Hit, Source, Page, Chunk, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport) and ID helpers
+  models.py      # Pydantic contracts (RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport) and ID helpers
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
@@ -330,9 +342,10 @@ src/wosarcher/
   build.py       # composition root: config -> adapters (a dict, no registry)
   doctor.py      # provider health probes and exclusive-GPU warnings
   lexical.py     # BM25: tokenizer, scoring, relative threshold (pure functions)
+  attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
-  prompts/       # jev.toml, plan.md, write.md, tones.toml
+  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, tones.toml
   cli.py
   server.py
 skill/SKILL.md

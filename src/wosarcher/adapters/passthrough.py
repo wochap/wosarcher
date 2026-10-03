@@ -8,6 +8,4 @@ class PassthroughScorer:
     calibrated = False
 
     async def score(self, query: Query, chunks: list[Chunk]) -> list[Score]:
-        return [
-            Score(query_id=query.query_id, chunk_id=chunk.chunk_id, value=1.0, scorer=self.name) for chunk in chunks
-        ]
+        return [Score(query_id=query.id, chunk_id=chunk.chunk_id, value=1.0, scorer=self.name) for chunk in chunks]

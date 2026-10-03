@@ -13,7 +13,7 @@ from wosarcher.http import ProviderError, UsageLedger
 from wosarcher.models import Query
 
 BASE = "https://api.typesafe.ai/v1"
-Q = Query(query_id="q1", text="How are batteries recycled?")
+Q = Query(id="q1", text="How are batteries recycled?")
 
 
 def scorer(http: httpx.AsyncClient, ledger: UsageLedger, **fields: object) -> JevScorer:

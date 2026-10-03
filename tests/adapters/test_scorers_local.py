@@ -8,7 +8,7 @@ from wosarcher.adapters.bm25 import Bm25Scorer
 from wosarcher.adapters.passthrough import PassthroughScorer
 from wosarcher.models import Query
 
-Q = Query(query_id="q1", text="lithium battery recycling")
+Q = Query(id="q1", text="lithium battery recycling")
 
 
 async def test_relative_values(monkeypatch: pytest.MonkeyPatch) -> None:

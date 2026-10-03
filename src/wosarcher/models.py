@@ -51,29 +51,51 @@ class WritingOptions(Contract):
     reference_style: str = "APA"
 
 
+Sources = Literal["both", "web", "files"]
+
+
 class Query(Contract):
-    query_id: str
+    """`q0` is the main query; `q1`, `q2`, ... are sub-queries."""
+
+    id: str
     text: str
+
+
+class Plan(Contract):
+    queries: list[Query]
+    """`queries[0]` is the main query."""
+    warnings: list[str] = []
 
 
 class Hit(Contract):
     url: str
     title: str
-    snippet: str = ""
-    rank: int = Field(default=1, ge=1)
-    query_ids: tuple[str, ...] = ()
+    snippet: str
+    rank: int = Field(ge=1)
+    """Best (lowest) rank over the queries that found it, 1-based."""
+    query_ids: list[str]
 
 
 class Source(Contract):
     source_id: str
     kind: Literal["web", "file"]
     uri: str
+    """Normalised URL, or the attachment name."""
     title: str
+    author: str | None = None
+    published: str | None = None
 
 
 class Page(Contract):
     source: Source
-    markdown: str
+    text: str
+    format: Literal["markdown", "pdf-ingest"] = "markdown"
+    truncated: bool = False
+    """Set by the Fetcher when it cut the text at `fetch.max_chars`."""
+    rank: int = 0
+    """Hit rank; 0 for files."""
+    query_ids: list[str] = []
+    """Empty for files."""
 
 
 class Chunk(Contract):
@@ -81,7 +103,43 @@ class Chunk(Contract):
     source_id: str
     position: int = Field(ge=0)
     text: str
-    heading_path: tuple[str, ...] = ()
+    heading_path: list[str] = []
+    page_id: str | None = None
+    block_ids: list[str] = []
+
+
+class Attachment(Contract):
+    """Attachment bytes read by `attachments.collect` or received by the server."""
+
+    name: str
+    data: bytes
+
+
+class Skipped(Contract):
+    """An item that did not make it: a failed search or fetch, or a skipped file."""
+
+    item: str
+    reason: str
+
+
+class SearchResult(Contract):
+    hits: list[Hit]
+    failures: list[Skipped] = []
+
+
+class FetchResult(Contract):
+    pages: list[Page]
+    failures: list[Skipped] = []
+
+
+class LoadResult(Contract):
+    pages: list[Page]
+    skipped: list[Skipped] = []
+
+
+class ChunkResult(Contract):
+    chunks: list[Chunk]
+    duplicates: int = 0
 
 
 class Score(Contract):
@@ -119,7 +177,7 @@ Stage = Literal["plan", "search", "fetch", "load", "chunk", "prefilter", "score"
 
 class RunRequest(Contract):
     query: str = Field(min_length=1)
-    sources: Literal["files", "web", "both"] = "both"
+    sources: Sources = "both"
     attachments: tuple[str, ...] = ()
     until: Stage | None = None
     profile: str | None = None
@@ -167,10 +225,17 @@ class DoctorReport(Contract):
 CONTRACTS: tuple[type[Contract], ...] = (
     RunRequest,
     Query,
+    Plan,
     Hit,
     Source,
     Page,
     Chunk,
+    Attachment,
+    Skipped,
+    SearchResult,
+    FetchResult,
+    LoadResult,
+    ChunkResult,
     Score,
     Passage,
     Context,

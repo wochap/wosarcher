@@ -24,7 +24,7 @@ class RerankScorer:
         results = await asyncio.gather(*(self._batch(query.text, batch) for batch in batches))
         values = [value for result in results for value in result]
         return [
-            Score(query_id=query.query_id, chunk_id=chunk.chunk_id, value=value, scorer=self.name)
+            Score(query_id=query.id, chunk_id=chunk.chunk_id, value=value, scorer=self.name)
             for chunk, value in zip(chunks, values, strict=True)
         ]
 

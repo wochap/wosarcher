@@ -9,7 +9,7 @@ from wosarcher.http import ProviderError, UsageLedger
 from wosarcher.models import Query
 
 BASE = "http://searx.lan:8888"
-Q1 = Query(query_id="q1", text="battery recycling")
+Q1 = Query(id="q1", text="battery recycling")
 
 
 def searcher(http: httpx.AsyncClient, ledger: UsageLedger, **fields: object) -> SearxngSearcher:
@@ -26,9 +26,9 @@ async def test_results_become_hits(http: httpx.AsyncClient, ledger: UsageLedger)
     respx.get(f"{BASE}/search").respond(200, json=results("https://a.com", None, "https://b.com", "https://c.com"))
     hits = await searcher(http, ledger).search(Q1)
     assert [(hit.url, hit.rank, hit.query_ids) for hit in hits] == [
-        ("https://a.com", 1, ("q1",)),
-        ("https://b.com", 2, ("q1",)),
-        ("https://c.com", 3, ("q1",)),
+        ("https://a.com", 1, ["q1"]),
+        ("https://b.com", 2, ["q1"]),
+        ("https://c.com", 3, ["q1"]),
     ]
     assert (hits[0].title, hits[0].snippet) == ("t0", "c0")
 

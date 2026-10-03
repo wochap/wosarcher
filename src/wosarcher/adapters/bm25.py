@@ -18,6 +18,6 @@ class Bm25Scorer:
         else:
             values = [1.0 if position < FALLBACK_COUNT else 0.0 for position in range(len(chunks))]
         return [
-            Score(query_id=query.query_id, chunk_id=chunk.chunk_id, value=value, scorer=self.name)
+            Score(query_id=query.id, chunk_id=chunk.chunk_id, value=value, scorer=self.name)
             for chunk, value in zip(chunks, values, strict=True)
         ]

@@ -82,7 +82,7 @@ async def test_jev_default_concurrency_64(http: httpx.AsyncClient) -> None:
     respx.post("https://api.typesafe.ai/v1/systemone").mock(side_effect=slow)
     cfg = Settings.model_validate({"score": {"provider": "jev", "base_url": "https://api.typesafe.ai/v1"}})
     scorer = build(cfg, http, UsageLedger({})).scorers["jev"]
-    await scorer.score(Query(query_id="q", text="x"), chunks(*(str(i) for i in range(100))))
+    await scorer.score(Query(id="q", text="x"), chunks(*(str(i) for i in range(100))))
     assert peak == 64
 
 

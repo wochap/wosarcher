@@ -145,3 +145,14 @@ def test_ollama_release_needs_model(env: dict[str, str]) -> None:
     user_profile(env, "ollama", '[score]\nprovider = "rerank"\nrelease = "ollama"\n')
     with pytest.raises(ConfigError, match=r"score\.model"):
         resolve("ollama", [], env)
+
+
+def test_collection_defaults() -> None:
+    settings = Settings()
+    assert (settings.plan.max_sub_queries, settings.attach.max_bytes) == (3, 5_000_000)
+    assert (settings.chunk.size, settings.chunk.overlap) == (1000, 100)
+
+
+def test_chunk_overlap_must_be_below_size(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"chunk\.overlap"):
+        resolve(None, ["chunk.size=100", "chunk.overlap=100"], env)

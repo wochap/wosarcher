@@ -47,7 +47,7 @@ class SearxngSearcher:
                     title=result.get("title") or url,
                     snippet=result.get("content") or "",
                     rank=len(hits) + 1,
-                    query_ids=(query.query_id,),
+                    query_ids=[query.id],
                 )
             )
             if len(hits) == self.cfg.max_results:
@@ -56,7 +56,7 @@ class SearxngSearcher:
 
     async def probe(self) -> ProviderHealth:
         async def call() -> None:
-            await self.search(Query(query_id="probe", text="test"))
+            await self.search(Query(id="probe", text="test"))
 
         return await probe(self.client, "search", call)
 

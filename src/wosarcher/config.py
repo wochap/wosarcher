@@ -76,9 +76,23 @@ class LLMConfig(Provider):
     context_window: int = Field(default=32768, gt=0)
 
 
+class PlanConfig(Block):
+    max_sub_queries: int = Field(default=3, ge=0)
+
+
+class AttachConfig(Block):
+    max_bytes: int = Field(default=5_000_000, gt=0)
+
+
 class ChunkConfig(Block):
     size: int = Field(default=1000, gt=0)
     overlap: int = Field(default=100, ge=0)
+
+    @model_validator(mode="after")
+    def check_overlap(self) -> "ChunkConfig":
+        if self.overlap >= self.size:
+            raise ValueError(f"chunk.overlap ({self.overlap}) must be below chunk.size ({self.size})")
+        return self
 
 
 class SelectConfig(Block):
@@ -98,6 +112,8 @@ class Settings(Block):
     prefilter: Provider = Provider(provider="bm25")
     score: ScoreConfig = ScoreConfig(provider="bm25")
     llm: LLMConfig = LLMConfig(provider="llm")
+    plan: PlanConfig = PlanConfig()
+    attach: AttachConfig = AttachConfig()
     chunk: ChunkConfig = ChunkConfig()
     select: SelectConfig = SelectConfig()
     run: RunConfig = RunConfig()

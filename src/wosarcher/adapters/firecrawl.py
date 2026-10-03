@@ -46,7 +46,8 @@ class FirecrawlFetcher:
             uri=url,
             title=title if isinstance(title, str) and title.strip() else url,
         )
-        return Page(source=source, markdown=markdown[: self.cfg.max_chars])
+        truncated = len(markdown) > self.cfg.max_chars
+        return Page(source=source, text=markdown[: self.cfg.max_chars], truncated=truncated)
 
     async def probe(self) -> ProviderHealth:
         async def call() -> None:

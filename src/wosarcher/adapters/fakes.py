@@ -47,7 +47,7 @@ class FakeSearcher(FakeManaged):
     async def search(self, query: Query) -> list[Hit]:
         self.calls.append(query)
         return [
-            Hit(url=url, title=url, rank=rank, query_ids=(query.query_id,))
+            Hit(url=url, title=url, snippet="", rank=rank, query_ids=[query.id])
             for rank, url in enumerate(self.hits.get(query.text, []), start=1)
         ]
 
@@ -64,7 +64,7 @@ class FakeFetcher(FakeManaged):
         if url in self.failing or url not in self.pages:
             raise RuntimeError(f"fake: cannot fetch {url}")
         source = Source(source_id=web_source_id(url), kind="web", uri=url, title=url)
-        return Page(source=source, markdown=self.pages[url])
+        return Page(source=source, text=self.pages[url])
 
 
 class FakeEmbedder(FakeManaged):
@@ -100,7 +100,7 @@ class FakeScorer(FakeManaged):
         self.calls.append((query, list(chunks)))
         return [
             Score(
-                query_id=query.query_id,
+                query_id=query.id,
                 chunk_id=chunk.chunk_id,
                 value=self.values.get(chunk.chunk_id, self.default),
                 scorer=self.name,

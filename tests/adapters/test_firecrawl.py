@@ -27,7 +27,7 @@ def scraped(markdown: str = "# Text", **metadata: object) -> dict[str, object]:
 async def test_page_fetched(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     route = respx.post(f"{BASE}/scrape").respond(200, json=scraped("Body", title="Battery recycling"))
     page = await fetcher(http, ledger, api_key="fc-key").fetch(URL)
-    assert (page.source.title, page.markdown) == ("Battery recycling", "Body")
+    assert (page.source.title, page.text) == ("Battery recycling", "Body")
     assert (page.source.uri, page.source.source_id, page.source.kind) == (URL, web_source_id(URL), "web")
     request = route.calls.last.request
     assert json.loads(request.content) == {
@@ -51,14 +51,15 @@ async def test_no_auth_header_without_key(http: httpx.AsyncClient, ledger: Usage
 async def test_pdf_markdown(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     respx.post(f"{BASE}/scrape").respond(200, json=scraped("# Report\n\nPDF text"))
     page = await fetcher(http, ledger).fetch("https://example.org/report.pdf")
-    assert page.markdown == "# Report\n\nPDF text"
+    assert page.text == "# Report\n\nPDF text"
 
 
 @respx.mock
 async def test_long_page_cut(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     respx.post(f"{BASE}/scrape").respond(200, json=scraped("x" * 80000))
     page = await fetcher(http, ledger, max_chars=50000).fetch(URL)
-    assert len(page.markdown) == 50000
+    assert len(page.text) == 50000
+    assert page.truncated
 
 
 @respx.mock

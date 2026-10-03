@@ -26,12 +26,28 @@ ALLOWED: dict[str, set[str]] = {
     "config": {"models"},
     "http": {"models", "config"},
     "store": {"models", "config"},
-    "stages": {"models", "ports", "lexical", "config"},
+    # Prompt files are read-only package data; stages own their prompts, so they load them.
+    "prompts": set(),
+    # Attachment paths come from the user and must be read from disk outside the pure stages.
+    "attachments": {"models", "config"},
+    "stages": {"models", "ports", "lexical", "config", "prompts"},
     "adapters": {"models", "ports", "lexical", "config", "http"},
     # The health check is shared by the CLI and, later, `GET /providers/health`.
     "doctor": {"models", "ports", "config"},
-    "runner": {"models", "ports", "lexical", "config", "http", "stages", "store"},
-    "build": {"models", "ports", "lexical", "config", "http", "stages", "store", "adapters", "runner"},
+    "runner": {"models", "ports", "lexical", "config", "http", "stages", "store", "prompts", "attachments"},
+    "build": {
+        "models",
+        "ports",
+        "lexical",
+        "config",
+        "http",
+        "stages",
+        "store",
+        "adapters",
+        "runner",
+        "prompts",
+        "attachments",
+    },
     "server": {
         "models",
         "ports",
@@ -44,6 +60,8 @@ ALLOWED: dict[str, set[str]] = {
         "runner",
         "build",
         "doctor",
+        "prompts",
+        "attachments",
     },
     "cli": {
         "models",
@@ -58,12 +76,14 @@ ALLOWED: dict[str, set[str]] = {
         "build",
         "doctor",
         "server",
+        "prompts",
+        "attachments",
     },
     "__main__": {"cli"},
 }
 
 # Parts that must stay free of I/O and interface libraries.
-PURE = {"models", "ports", "lexical", "stages"}
+PURE = {"models", "ports", "lexical", "stages", "prompts"}
 IO_LIBRARIES = {"httpx", "fastapi", "starlette", "uvicorn", "typer", "rich", "respx"}
 
 

@@ -2,21 +2,28 @@ import pytest
 from pydantic import ValidationError
 
 from wosarcher.models import (
+    Attachment,
     Chunk,
+    ChunkResult,
     Completion,
     Context,
     Contract,
     DoctorReport,
     EmbedderInfo,
+    FetchResult,
     Hit,
+    LoadResult,
     Message,
     Page,
     Passage,
+    Plan,
     ProviderHealth,
     Query,
     Report,
     RunRequest,
     Score,
+    SearchResult,
+    Skipped,
     Source,
     WritingOptions,
     chunk_id,
@@ -31,9 +38,14 @@ CHUNK = Chunk(
     source_id=SOURCE.source_id,
     position=0,
     text="text",
-    heading_path=("Title", "Part"),
+    heading_path=["Title", "Part"],
+    page_id="4",
+    block_ids=["p4-b1"],
 )
 PASSAGE = Passage(n=1, chunk_id=CHUNK.chunk_id, source_id=SOURCE.source_id, query_id="q1", text="text", score=0.9)
+HIT = Hit(url="https://example.com/a", title="A", snippet="s", rank=2, query_ids=["q1", "q2"])
+PAGE = Page(source=SOURCE, text="# A", truncated=True, rank=2, query_ids=["q1"])
+SKIPPED = Skipped(item="q2", reason="timeout")
 HEALTH = ProviderHealth(
     block="score",
     provider="rerank",
@@ -46,11 +58,18 @@ HEALTH = ProviderHealth(
 )
 SAMPLES: list[Contract] = [
     RunRequest(query="what", attachments=("notes.md",), until="select", writing=WritingOptions(words=500)),
-    Query(query_id="q1", text="what"),
-    Hit(url="https://example.com/a", title="A", snippet="s", rank=2, query_ids=("q1", "q2")),
+    Query(id="q1", text="what"),
+    Plan(queries=[Query(id="q0", text="what")], warnings=["planner answer had no query list"]),
+    HIT,
     SOURCE,
-    Page(source=SOURCE, markdown="# A"),
+    PAGE,
     CHUNK,
+    Attachment(name="notes/a.md", data=b"# A\n"),
+    SKIPPED,
+    SearchResult(hits=[HIT], failures=[SKIPPED]),
+    FetchResult(pages=[PAGE], failures=[SKIPPED]),
+    LoadResult(pages=[PAGE], skipped=[SKIPPED]),
+    ChunkResult(chunks=[CHUNK], duplicates=1),
     Score(query_id="q1", chunk_id=CHUNK.chunk_id, value=2.5, scorer="jev"),
     PASSAGE,
     Context(passages=(PASSAGE,), sources=(SOURCE,), scorer="jev"),
@@ -71,7 +90,7 @@ def test_round_trip(value: Contract) -> None:
 
 def test_unknown_field_rejected() -> None:
     with pytest.raises(ValidationError, match="surprise"):
-        Query.model_validate_json('{"query_id": "q1", "text": "x", "surprise": 1}')
+        Query.model_validate_json('{"id": "q1", "text": "x", "surprise": 1}')
 
 
 @pytest.mark.parametrize(

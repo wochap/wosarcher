@@ -11,7 +11,7 @@ from wosarcher.http import ProviderError, UsageLedger
 from wosarcher.models import Query
 
 BASE = "http://desktop.lan:8001/v1"
-Q2 = Query(query_id="q2", text="battery")
+Q2 = Query(id="q2", text="battery")
 
 
 def scorer(http: httpx.AsyncClient, ledger: UsageLedger, **fields: object) -> RerankScorer:
