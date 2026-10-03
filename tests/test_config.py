@@ -179,3 +179,14 @@ def test_invalid_score_fallback_names_allowed_values(env: dict[str, str]) -> Non
 def test_file_share_above_one_fails(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError, match=r"select\.file_share"):
         resolve("workstation", ["select.file_share=1.5"], env)
+
+
+def test_server_defaults() -> None:
+    server = Settings().server
+    assert (server.host, server.port, server.max_concurrent_runs) == ("127.0.0.1", 8765, 1)
+    assert server.static_dir == Path("web/dist")
+
+
+def test_server_limit_from_environment(env: dict[str, str]) -> None:
+    env["WOSARCHER_SERVER__MAX_CONCURRENT_RUNS"] = "2"
+    assert resolve(None, [], env).server.max_concurrent_runs == 2

@@ -5,11 +5,14 @@ description = "Modular, scriptable research pipeline"
 readme = "docs/design.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.142.2",
     "httpx>=0.28",
     "markdown-it-py>=3",
     "pydantic>=2.11",
+    "python-multipart>=0.0.32",
     "rich>=14",
     "typer>=0.16",
+    "uvicorn>=0.54.0",
 ]
 
 [project.scripts]
@@ -22,6 +25,7 @@ dev = [
     "pytest-asyncio>=1.0",
     "respx>=0.22",
     "ruff>=0.12",
+    "httpx2>=2.13.1",
 ]
 
 [build-system]

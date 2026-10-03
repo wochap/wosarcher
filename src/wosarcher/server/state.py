@@ -1,0 +1,25 @@
+"""What every route needs, kept on `app.state.server` (no globals)."""
+
+from dataclasses import dataclass
+from pathlib import Path
+
+from starlette.requests import HTTPConnection
+
+from wosarcher.config import Settings
+from wosarcher.server.manager import RunManager
+from wosarcher.store import RunStore
+
+
+@dataclass
+class ServerState:
+    settings: Settings
+    runs_dir: Path
+    config_dir: Path
+    command: list[str]
+    store: RunStore
+    manager: RunManager
+
+
+def get_state(connection: HTTPConnection) -> ServerState:
+    """FastAPI dependency for routes and sockets."""
+    return connection.app.state.server

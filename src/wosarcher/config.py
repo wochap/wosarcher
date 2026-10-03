@@ -142,6 +142,13 @@ class RunConfig(Block):
         return value
 
 
+class ServerConfig(Block):
+    host: str = "127.0.0.1"
+    port: int = Field(default=8765, gt=0, lt=65536)
+    max_concurrent_runs: int = Field(default=1, gt=0)
+    static_dir: Path = Path("web/dist")
+
+
 class Settings(Block):
     search: SearchConfig = SearchConfig(provider="searxng")
     fetch: FetchConfig = FetchConfig(provider="firecrawl")
@@ -154,6 +161,7 @@ class Settings(Block):
     select: SelectConfig = SelectConfig()
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
+    server: ServerConfig = ServerConfig()
 
     @model_validator(mode="after")
     def check_blocks(self) -> "Settings":

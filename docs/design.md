@@ -278,7 +278,8 @@ marks them truncated; the fetch stage never cuts again.
 ### Writing options
 
 Global defaults in config, overridable per run from the CLI, the server
-request, or the skill.
+request, or the skill. Runs started by the server also apply the server's
+global settings (see Server) between the profile and the request.
 
 | Option | Default | Values |
 |---|---|---|
@@ -362,7 +363,7 @@ Ports and adapters. Stages are pure functions over models and ports. The
 runner owns persistence and events. Interfaces sit at the edge.
 
 ```
-cli/ ── server.py (spawns `wosarcher run`, tails events.jsonl) ── skill (CLI + SKILL.md)
+cli/ ── server/ (spawns `wosarcher run`, tails events.jsonl and report.md) ── skill (CLI + SKILL.md)
    │
 runner/  ── store/ (runs/<id>/) ── events.jsonl
    │
@@ -375,7 +376,7 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, events) and ID helpers
+  models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, server API bodies, events) and ID helpers
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
@@ -390,9 +391,11 @@ src/wosarcher/
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
-  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; progress.py: rich Live view
+  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; serve.py: serve; progress.py: rich Live view
   __main__.py    # python -m wosarcher
-  server.py
+  server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
+                 # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health; stream.py: event socket;
+                 # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState
 skill/SKILL.md
 evals/
   variants.toml  # named ranking variants: fork stage (prefilter or score) plus --set overrides
@@ -479,13 +482,17 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   built-in scorers are shown without a request. Warns about blocks that
   cannot unload. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
-- `wosarcher runs [--limit N] [--json]`: lists runs newest first with
-  status from the last `run.*` event: `done`, `failed`, `cancelled`, or
-  `interrupted` (started without an end).
+- `wosarcher runs [--limit N] [--json]`: lists runs newest first as
+  `RunSummary` rows, with status from the last `run.*` event: `done`,
+  `failed`, `cancelled`, or `interrupted` (started without an end), plus
+  `until`, `fork_from`, the resolved writing options, `duration_s`
+  (`run.started` to the terminal event), and `cost` (from `costs.json`).
+- `wosarcher serve [--host H] [--port P]`: the HTTP server (see Server);
+  binds `server.host` and `server.port` (`127.0.0.1:8765`).
 
 ### Events
 
-- Run: `run.queued`, `run.started`, `run.done`, `run.failed` (stage and
+- Run: `run.queued` (server only, live), `run.started`, `run.done`, `run.failed` (stage and
   error text), `run.cancelled`.
 - Stage: `stage.started`, `stage.progress` (counters), `stage.done` (with
   cost), `stage.failed` (error text).
@@ -498,7 +505,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   ran, and the kept passages (text, heading path, source, display score).
   The full list, including rejected passages, is the `scores.jsonl`
   artifact.
-- Write: `report.delta`.
+- Write: `report.delta` and `report.snapshot` (server only, live).
 
 Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 `models.py` and are part of `wosarcher schema`. `data` fields:
@@ -522,11 +529,15 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
 | `report.delta`, `report.snapshot` | `text` |
 
-`seq` is assigned by the store's append, so the log has no gaps. `report.delta`
-is live only and not written to the log; it carries the last logged `seq`,
-and its text is appended to `report.md` as it streams. A reconnecting client
-gets all logged events after its `seq`, then a `report.snapshot` built from
-`report.md` so far.
+`seq` is assigned by the store's append, so the log has no gaps.
+`run.queued`, `report.delta`, and `report.snapshot` are live only and never
+written to `events.jsonl`; on the socket they carry the last logged `seq`
+sent to that client (0 when none). The report text is appended to
+`report.md` as it streams and replaced by the rendered report at the end of
+the write stage. A reconnecting client gets all logged events after its
+`seq`, then a `report.snapshot` of the report so far, then live events; when
+the report changes other than by appending, clients get a new
+`report.snapshot` instead of a delta.
 
 ### Errors and cancellation
 
@@ -548,26 +559,68 @@ each a `UsageTotals` with `cost` in dollars.
 
 ### Server
 
-The server spawns `wosarcher run` as a subprocess per run and tails
-`events.jsonl`, so the CLI, the server, and the skill share one code path.
-Cancel sends a signal.
+The server spawns `wosarcher run` (or `wosarcher fork`) as a subprocess per
+run with a server-chosen `--run-id` and tails `events.jsonl` and
+`report.md` every 100 ms, so the CLI, the server, and the skill share one
+code path. It never runs stages itself. Every JSON route and the event
+socket live under `/api`, so frontend routes like `/runs/<id>` never
+collide with them. Errors are `{"error": code, "detail": text}`; an unknown
+run is 404 `run_not_found`, an invalid body 422 naming each field.
 
-- `POST /runs` (multipart: request JSON plus attachments) returns `run_id`.
-- `GET /runs`, `GET /runs/{id}`.
-- `GET /runs/{id}/artifacts/{name}`: names from a fixed allowlist only.
-- `POST /runs/{id}/cancel`.
-- `POST /runs/{id}/fork` (stage plus overrides).
-- `POST /runs/{id}/rerun`: a new run with the original request and a
-  server-side copy of its attachments.
-- `WS /runs/{id}/events?since=<seq>`.
-- `GET /settings` and `PUT /settings`: global defaults, including writing
-  options; each run can override them.
-- `DELETE /runs/{id}`.
-- `GET /profiles`: names, source, and which is active.
-- `GET /providers/health`: the `wosarcher doctor` checks for the active
-  profile.
+- `POST /api/runs` (multipart: a `request` field with `RunCreate` JSON plus
+  `attachments` files, reduced to their base names; duplicates are 422)
+  returns 201 with `run_id` and `queued` or `running`.
+- `GET /api/runs`, `GET /api/runs/{id}`: `RunSummary` (status `queued`,
+  `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
+  `until`; resolved writing options; `duration_s`; `cost`;
+  `queue_position`), and for one run `RunDetail` (plus the redacted
+  `request.json`, `costs`, `last_seq`).
+- `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
+  `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`, `pages.jsonl`,
+  `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `context.json`,
+  `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
+  `application/json`, JSONL as `application/x-ndjson`, Markdown as
+  `text/markdown`, UTF-8); anything else is 404.
+- `POST /api/runs/{id}/cancel`: SIGTERM for a running run (202; SIGKILL
+  after 10 s, then the server logs `run.cancelled`), removal for a queued
+  one (200, connected clients get `run.cancelled`), 409 otherwise.
+- `POST /api/runs/{id}/fork` (`from`, optional `writing`, `set`,
+  `profile`): `wosarcher fork` through the queue. A fork keeps the parent's
+  configuration: only the request's writing fields and `set` are passed,
+  not the global settings. 409 for a queued or running parent or an
+  unfinished earlier stage; 422 for an unknown stage.
+- `POST /api/runs/{id}/rerun`: a new run (version 1, no parent) with the
+  original query, sources, `until`, profile, and saved overrides, and a
+  copy of its `attachments/`; global settings are not applied. 404 for an
+  unknown run, 409 for a queued one.
+- `WS /api/runs/{id}/events?since=<seq>`: replays logged events after
+  `seq`, sends a `report.snapshot` when the report is not empty and
+  `run.queued` while queued, then live events and `report.delta` until a
+  terminal event, and closes with 1000. Unknown runs close with 4404; a
+  client more than 1000 events behind is closed with 4408 and reconnects
+  with `since`. Runs not owned by this server (finished, interrupted, or
+  started by the CLI) are replayed and closed.
+- `GET /api/settings` and `PUT /api/settings`: global defaults
+  (`ServerSettings`: all writing options and `sources`), stored in
+  `<config dir>/server-settings.json`. They apply only to runs started by
+  the server, as `--set write.*` values after the profile and before the
+  request's `writing` and `set` (request wins). CLI runs use the profile.
+- `DELETE /api/runs/{id}`: 204 for a finished run or a queued one, 409
+  `run_active` for a running one.
+- `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`.
+- `GET /api/providers/health[?profile=P]`: runs `wosarcher doctor --json`
+  (60 s timeout; 502 when it times out or prints no report) and maps each
+  row: failed is `down` (error as detail), built in is `skipped`, a model
+  that cannot unload or a probe over 1000 ms is `degraded`, else `ok`.
 - `GET /session`, `GET /tokens`, `POST /tokens` (the new token is returned
   once), `DELETE /tokens/{id}`.
+- When `server.static_dir` (`web/dist`) exists, the frontend build is
+  served at `/`, and any other `GET` outside `/api` answers `index.html`.
+
+Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
+`RunSummary`, `RunDetail`, `ServerSettings`, `ProfileInfo`,
+`ProviderCheck`, `HealthReport`, `ApiError`) are models in `models.py` and
+part of `wosarcher schema`.
 
 Runs record lineage: `parent_run_id` and `version` (1 for a new run, parent
 version plus one for a fork) and `fork_from` (the stage a fork started
@@ -575,8 +628,16 @@ from), which the Versions screen shows. Rerun is a new run (version 1, no
 parent) with the same request and attachments; "Retry from Score" is a
 fork from the score stage.
 
-`server.max_concurrent_runs` (default 1) limits runs in progress; further
-runs wait and emit `run.queued`.
+`server.max_concurrent_runs` (default 1) limits run processes; further runs
+wait in FIFO order and get `run.queued` with their position (1 is next).
+A queued run is staged in `runs/.queue/<id>/` (request and attachments)
+until its process starts, and staged runs are queued again in creation
+order when the server starts. When a process exits without a terminal
+event, the server appends `run.failed` with the exit code and the last 20
+lines of standard error. On shutdown the server sends SIGTERM to every run
+process and waits up to 10 s; queued runs stay staged. Settings:
+`server.host`, `server.port`, `server.max_concurrent_runs`,
+`server.static_dir`.
 
 ### Authentication
 
@@ -737,12 +798,12 @@ orchestration; every model is behind HTTP.
 | Contracts, config | pydantic v2; profiles read with stdlib `tomllib` and resolved by own code in `config.py` | one set of models for contracts, docs, config, and JSON Schema; precedence readable in one function |
 | HTTP | httpx | async, explicit timeouts, easy to mock |
 | CLI | typer, rich | readable commands and progress |
-| Server | FastAPI, uvicorn | native WebSocket; serves the frontend build |
+| Server | FastAPI, uvicorn, python-multipart | native WebSocket; serves the frontend build; multipart uploads |
 | Markdown | markdown-it-py | real heading tree for chunking |
 | Prompts | `.md` files with stdlib `string.Template` (`$query`) | no brace bugs, no template engine |
 | Storage | JSONL and JSON files in `runs/` | no database; add a SQLite index only if listing gets slow |
 | Tokens | characters divided by `llm.chars_per_token` (default 3.5), times `llm.token_margin` (default 1.1), rounded up, plus 16 per passage label | local models use different tokenizers; a profile that switches models sets the ratio |
-| Tests | pytest, pytest-asyncio, respx | adapter tests without network |
+| Tests | pytest, pytest-asyncio, respx, httpx2 | adapter tests without network; httpx2 is what Starlette's `TestClient` uses |
 | Quality | ruff (lint and format), basedpyright (strict) | readability enforced by tools |
 
 Frontend: Vite, React, TypeScript, react-markdown, Biome (format and lint);

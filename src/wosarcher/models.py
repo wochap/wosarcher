@@ -5,7 +5,15 @@ from hashlib import sha256
 from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, TypeAdapter, model_serializer
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    model_serializer,
+)
 
 TRACKING_PARAMETERS = {"fbclid", "gclid"}
 
@@ -310,19 +318,31 @@ class RunRecord(Contract):
     version: int = Field(default=1, ge=1)
 
 
-RunStatus = Literal["done", "failed", "cancelled", "interrupted"]
+RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interrupted"]
+"""`queued` and `running` come from the server; a run with no terminal event and no process is `interrupted`."""
 
 
 class RunSummary(Contract):
-    """One row of `wosarcher runs`."""
+    """One run as `wosarcher runs --json` and `GET /api/runs` list it."""
 
     run_id: str
-    created_at: datetime
-    status: RunStatus
-    version: int
-    parent_run_id: str | None
-    profile: str
     query: str
+    status: RunStatus
+    created: datetime
+    parent_run_id: str | None = None
+    version: int = 1
+    fork_from: Stage | None = None
+    profile: str
+    sources: Sources = "both"
+    until: Stage | None = None
+    writing: WritingOptions = WritingOptions()
+    """The run's resolved writing options."""
+    duration_s: float | None = None
+    """`run.started` to the terminal run event; None while queued or running, and for interrupted runs."""
+    cost: float | None = None
+    """Dollars from `costs.json`; None when it is missing."""
+    queue_position: int | None = None
+    """1 for the next run to start; None unless queued."""
 
 
 class RunOutput(Contract):
@@ -351,6 +371,93 @@ class RunCosts(Contract):
     stages: dict[str, UsageTotals]
     providers: dict[str, UsageTotals]
     total: UsageTotals
+
+
+# Server API: request and response bodies of `/api`.
+
+
+class WritingPatch(Contract):
+    """Any subset of the writing options; unset fields keep the value from the layer below."""
+
+    tone: str | None = None
+    tone_instructions: str | None = None
+    words: int | None = Field(default=None, gt=0)
+    language: str | None = None
+    citation_marker: Literal["numeric", "superscript", "author-year"] | None = None
+    reference_style: str | None = None
+
+
+class RunCreate(Contract):
+    """The `request` field of `POST /api/runs`."""
+
+    query: str = Field(min_length=1)
+    sources: Sources | None = None
+    """None: the global default."""
+    until: Stage | None = None
+    profile: str | None = None
+    writing: WritingPatch = WritingPatch()
+    set: list[str] = []
+    """`dotted.key=value` overrides, applied last."""
+
+
+class ForkCreate(Contract):
+    """The body of `POST /api/runs/{id}/fork`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", serialize_by_alias=True)
+
+    from_stage: Stage = Field(validation_alias=AliasChoices("from", "from_stage"), serialization_alias="from")
+    writing: WritingPatch = WritingPatch()
+    set: list[str] = []
+    profile: str | None = None
+
+
+class RunCreated(Contract):
+    run_id: str
+    status: Literal["queued", "running"]
+
+
+class RunDetail(RunSummary):
+    """`GET /api/runs/{id}`: the summary plus the stored record, costs, and the last logged `seq`."""
+
+    request: RunRecord | None = None
+    """None while queued."""
+    costs: RunCosts | None = None
+    last_seq: int = 0
+
+
+class ServerSettings(Contract):
+    """Global defaults for runs started by the server (`server-settings.json`)."""
+
+    writing: WritingOptions = WritingOptions()
+    sources: Sources = "both"
+
+
+class ProfileInfo(Contract):
+    name: str
+    source: Literal["builtin", "user"]
+    active: bool
+
+
+class ProviderCheck(Contract):
+    role: str
+    provider: str
+    url: str = ""
+    model: str | None = None
+    device: str | None = None
+    status: Literal["ok", "degraded", "down", "skipped"]
+    latency_ms: float | None = None
+    detail: str = ""
+
+
+class HealthReport(Contract):
+    profile: str
+    checks: list[ProviderCheck]
+    warnings: list[str] = []
+
+
+class ApiError(Contract):
+    error: str
+    detail: str
 
 
 # Events: `data` field names are contracts the server and the frontend read.
@@ -654,5 +761,15 @@ CONTRACTS: tuple[type[Contract], ...] = (
     RunSummary,
     RunOutput,
     RunCosts,
+    WritingPatch,
+    RunCreate,
+    ForkCreate,
+    RunCreated,
+    RunDetail,
+    ServerSettings,
+    ProfileInfo,
+    ProviderCheck,
+    HealthReport,
+    ApiError,
     *EVENT_TYPES,
 )

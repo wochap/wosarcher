@@ -25,6 +25,7 @@ from wosarcher.models import (
     RunSummary,
     Stage,
     StageDone,
+    WritingOptions,
     make_event,
     parse_event,
 )
@@ -255,24 +256,41 @@ class RunStore:
         runs = [event.type for event in self.read_events(run_id) if event.type.startswith("run.")]
         return END_STATUS.get(runs[-1], "interrupted") if runs else "interrupted"
 
-    def list_runs(self, limit: int = 20) -> list[RunSummary]:
+    def read_costs(self, run_id: str) -> RunCosts | None:
+        path = self.run_dir(run_id) / "costs.json"
+        return RunCosts.model_validate_json(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    def summary(self, record: RunRecord) -> RunSummary:
+        """The run as listed: status and duration from the log, cost from `costs.json`."""
+        events = [event for event in self.read_events(record.run_id) if event.type.startswith("run.")]
+        status = END_STATUS.get(events[-1].type, "interrupted") if events else "interrupted"
+        started = next((event.ts for event in events if event.type == "run.started"), None)
+        duration = (events[-1].ts - started).total_seconds() if started and status != "interrupted" else None
+        costs = self.read_costs(record.run_id)
+        return RunSummary(
+            run_id=record.run_id,
+            query=record.request.query,
+            status=status,
+            created=record.created_at,
+            parent_run_id=record.parent_run_id,
+            version=record.version,
+            fork_from=record.fork_from,
+            profile=record.profile,
+            sources=record.request.sources,
+            until=record.request.until,
+            writing=WritingOptions.model_validate(record.settings.get("write", {})),
+            duration_s=duration,
+            cost=costs.total.cost if costs else None,
+        )
+
+    def list_runs(self, limit: int | None = 20) -> list[RunSummary]:
+        """Every run, newest first; directories starting with `.` (the server's `.queue/`) are skipped."""
         if not self.runs_dir.is_dir():
             return []
-        found: list[RunSummary] = []
-        for path in self.runs_dir.iterdir():
-            if path.name.startswith(".") or not (path / "request.json").is_file():
-                continue
-            record = self.read_record(path.name)
-            found.append(
-                RunSummary(
-                    run_id=record.run_id,
-                    created_at=record.created_at,
-                    status=self.status(record.run_id),
-                    version=record.version,
-                    parent_run_id=record.parent_run_id,
-                    profile=record.profile,
-                    query=record.request.query,
-                )
-            )
-        found.sort(key=lambda run: (run.created_at, run.run_id), reverse=True)
+        found = [
+            self.summary(self.read_record(path.name))
+            for path in self.runs_dir.iterdir()
+            if not path.name.startswith(".") and (path / "request.json").is_file()
+        ]
+        found.sort(key=lambda run: (run.created, run.run_id), reverse=True)
         return found[:limit]

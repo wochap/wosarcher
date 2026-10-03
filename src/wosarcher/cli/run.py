@@ -251,6 +251,6 @@ def runs(
         return
     table = Table("run", "created", "status", "version", "parent", "query")
     for item in found:
-        created = f"{item.created_at:%Y-%m-%d %H:%M}"
+        created = f"{item.created:%Y-%m-%d %H:%M}"
         table.add_row(item.run_id, created, item.status, str(item.version), item.parent_run_id or "", item.query)
     Console(highlight=False).print(table)
