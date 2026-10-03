@@ -795,6 +795,11 @@ report. Agents usually want cited context: `wosarcher run "q" --until select
 --json` returns passages with sources and scores. A full report is the
 default `wosarcher run`.
 
+The skill is `skill/SKILL.md`. Install it by copying or linking `skill/`
+into an agent's skills directory as `wosarcher/`. `tests/test_skill.py`
+checks its commands and flags against the typer app, its schema names
+against `wosarcher schema`, and its example output against `RunOutput`.
+
 ### Evals
 
 The eval harness measures prefilter and scorer choices over the same
