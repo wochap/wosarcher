@@ -1,0 +1,19 @@
+# Only what the image build copies: pyproject.toml, uv.lock, docs/design.md,
+# src/, and web/. Everything else stays out of the build context.
+**/__pycache__
+**/*.pyc
+.venv
+.git
+.direnv
+.cache
+runs
+web/node_modules
+web/dist
+design
+openspec
+tests
+evals
+skill
+scripts
+*.md
+!docs/design.md

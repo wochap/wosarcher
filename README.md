@@ -146,6 +146,39 @@ subprocess, so a run survives a reload of the UI.
    Run it under a process supervisor (for example a systemd service) with
    `Restart=on-failure`.
 
+### Docker
+
+The `Dockerfile` builds one image (about 165 MB) with the CLI, the API, and
+the built web UI. Everything that changes at runtime (profiles, password
+hash, tokens, runs, caches) lives under `/data`.
+
+```sh
+docker build -t wosarcher .
+
+# Admin password hash, for WOSARCHER_AUTH__PASSWORD_HASH (keep it in your secrets):
+docker run --rm -it wosarcher wosarcher auth set-password --print
+
+docker run -d --name wosarcher \
+  -p 8765:8765 \
+  -v wosarcher:/data \
+  -e WOSARCHER_AUTH__PASSWORD_HASH='scrypt$...' \
+  -e WOSARCHER_PROFILE=desktop \
+  wosarcher
+```
+
+- **Profiles**: put them in the volume at `/data/config/wosarcher/profiles/`,
+  or pass settings as `WOSARCHER_*` environment variables.
+- **Provider URLs**: inside a container, `localhost` is the container itself.
+  Use LAN or Tailscale addresses in profiles, or run with `--network=host`
+  (then drop `-p` and bind with `--host <address>`).
+- **CLI in the container**: `docker exec wosarcher wosarcher doctor`,
+  `docker exec wosarcher wosarcher runs`.
+- **Update**: rebuild (or pull) the image and recreate the container; the
+  `/data` volume keeps all state.
+
+On NixOS, the image fits `virtualisation.oci-containers` (podman) with the
+password hash and API keys in a sops environment file.
+
 **Security.** Single admin user, password stored as a scrypt hash, signed
 `HttpOnly` session cookie, `Origin` checks, login rate limiting, and bearer
 API tokens for scripts on other machines (`wosarcher auth new-token`). On
