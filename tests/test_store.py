@@ -236,3 +236,62 @@ def test_embedding_cache(tmp_path: Path) -> None:
     assert cache.get("model-a", 2, "ab12") == [0.5, 0.25]
     assert cache.get("model-b", 2, "ab12") is None
     assert cache.get("model-a", 3, "ab12") is None
+
+
+def append_raw(store: RunStore, run_id: str, text: str) -> None:
+    with (store.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
+        log.write(text)
+
+
+def test_read_events_skips_bad_lines(store: RunStore) -> None:
+    run_id = create(store)
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    append_raw(store, run_id, "not json\n")
+    append_raw(store, run_id, '{"seq": 2, "run_id": "r", "ts": "2026-01-01T00:00:00Z", "type": "stage.paused"}\n')
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    assert [e.seq for e in store.read_events(run_id)] == [1, 2]
+
+
+def nine_and_half(store: RunStore) -> str:
+    run_id = create(store)
+    for _ in range(9):
+        store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    append_raw(store, run_id, '{"seq": 10, "run_id": "r", "ts": "2026-01')
+    return run_id
+
+
+def test_tail_seq_ignores_partial_line(store: RunStore) -> None:
+    assert store.tail_seq(nine_and_half(store)) == 9
+
+
+def test_tail_seq_long_line(store: RunStore) -> None:
+    run_id = create(store)
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    store.append_event(run_id, "run.failed", None, RunFailedData(stage=None, error="x" * 21000))
+    assert store.tail_seq(run_id) == 2
+
+
+def test_seq_across_two_stores(store: RunStore) -> None:
+    run_id = create(store)
+    other = RunStore(store.runs_dir, store.cache_dir)
+    seqs = [s.append_event(run_id, "run.queued", None, RunQueuedData(position=0)).seq for s in (store, other, store)]
+    assert seqs == [1, 2, 3]
+
+
+def test_append_after_partial_line(store: RunStore) -> None:
+    run_id = nine_and_half(store)
+    event = store.append_event(run_id, "run.cancelled", None, RunCancelledData(stage=None))
+    assert event.seq == 10
+    assert (store.run_dir(run_id) / "events.jsonl").read_text().splitlines()[-1] == event.model_dump_json()
+    assert [e.seq for e in store.read_events(run_id)] == list(range(1, 11))
+
+
+def test_summary_error_and_end_stage(store: RunStore) -> None:
+    failed = create(store)
+    store.append_event(failed, "run.failed", "fetch", RunFailedData(stage="fetch", error="no output"))
+    summary = store.summary(store.read_record(failed))
+    assert (summary.status, summary.error, summary.end_stage) == ("failed", "no output", "fetch")
+    done = create(store)
+    store.append_event(done, "run.done", None, RunDoneData(until=None, totals=UsageTotals()))
+    summary = store.summary(store.read_record(done))
+    assert (summary.error, summary.end_stage) == (None, None)

@@ -220,6 +220,8 @@ export type Status2 = ("queued" | "running")
 export type Cost1 = (number | null)
 export type Created = string
 export type DurationS = (number | null)
+export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Error3 = (string | null)
 export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type LastSeq = number
 export type ParentRunId = (string | null)
@@ -255,19 +257,23 @@ export type Seq10 = number
 export type Stage11 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts10 = string
 export type Type10 = "run.done"
-export type Error3 = string
+export type Error4 = string
 export type Stage12 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type RunId14 = string
 export type Seq11 = number
 export type Stage13 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts11 = string
 export type Type11 = "run.failed"
-export type Error4 = (string | null)
-export type RunDir = string
+export type Detail3 = string
+export type Error5 = string
 export type RunId15 = string
-export type Status4 = ("done" | "failed" | "cancelled")
-export type Position1 = number
+export type Status4 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
+export type Error6 = (string | null)
+export type RunDir = string
 export type RunId16 = string
+export type Status5 = ("done" | "failed" | "cancelled")
+export type Position1 = number
+export type RunId17 = string
 export type Seq12 = number
 export type Stage14 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts12 = string
@@ -277,7 +283,7 @@ export type Profile5 = string
 export type Query5 = string
 export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Version2 = number
-export type RunId17 = string
+export type RunId18 = string
 export type Seq13 = number
 export type Stage15 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts13 = string
@@ -285,14 +291,16 @@ export type Type13 = "run.started"
 export type Cost2 = (number | null)
 export type Created1 = string
 export type DurationS1 = (number | null)
+export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Error7 = (string | null)
 export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
 export type Query6 = string
 export type QueuePosition1 = (number | null)
-export type RunId18 = string
+export type RunId19 = string
 export type Sources4 = ("both" | "web" | "files")
-export type Status5 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
+export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Version3 = number
 export type Failed = Skipped[]
@@ -312,14 +320,14 @@ export type Provider2 = (string | null)
 export type Seconds = number
 export type Skipped2 = boolean
 export type Warnings5 = string[]
-export type RunId19 = string
+export type RunId20 = string
 export type Seq14 = number
 export type Stage16 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts14 = string
 export type Type14 = "stage.done"
-export type Error5 = string
+export type Error8 = string
 export type Next = string
-export type RunId20 = string
+export type RunId21 = string
 export type Seq15 = number
 export type Stage17 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts15 = string
@@ -327,14 +335,14 @@ export type Type15 = "stage.failed"
 export type Done = number
 export type Failed1 = number
 export type Total = number
-export type RunId21 = string
+export type RunId22 = string
 export type Seq16 = number
 export type Stage18 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts16 = string
 export type Type16 = "stage.progress"
 export type Device3 = (string | null)
 export type Provider3 = string
-export type RunId22 = string
+export type RunId23 = string
 export type Seq17 = number
 export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts17 = string
@@ -964,6 +972,8 @@ cost?: Cost1
 costs?: (RunCosts | null)
 created: Created
 duration_s?: DurationS
+end_stage?: EndStage
+error?: Error3
 fork_from?: ForkFrom
 last_seq?: LastSeq
 parent_run_id?: ParentRunId
@@ -1054,8 +1064,20 @@ type?: Type11
  * via the `definition` "RunFailedData".
  */
 export interface RunFailedData {
-error: Error3
+error: Error4
 stage: Stage12
+}
+/**
+ * The 409 body of `POST /api/runs/{id}/cancel` for a run that is neither queued nor running.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "RunNotActive".
+ */
+export interface RunNotActive {
+detail: Detail3
+error: Error5
+run_id: RunId15
+status: Status4
 }
 /**
  * What `wosarcher run --json` and `wosarcher fork --json` print.
@@ -1065,11 +1087,11 @@ stage: Stage12
  */
 export interface RunOutput {
 context?: (Context | null)
-error?: Error4
+error?: Error6
 report?: (Report | null)
 run_dir: RunDir
-run_id: RunId15
-status: Status4
+run_id: RunId16
+status: Status5
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1077,7 +1099,7 @@ status: Status4
  */
 export interface RunQueued {
 data: RunQueuedData
-run_id: RunId16
+run_id: RunId17
 seq: Seq12
 stage?: Stage14
 ts: Ts12
@@ -1096,7 +1118,7 @@ position: Position1
  */
 export interface RunStarted {
 data: RunStartedData
-run_id: RunId17
+run_id: RunId18
 seq: Seq13
 stage?: Stage15
 ts: Ts13
@@ -1123,14 +1145,16 @@ export interface RunSummary {
 cost?: Cost2
 created: Created1
 duration_s?: DurationS1
+end_stage?: EndStage1
+error?: Error7
 fork_from?: ForkFrom2
 parent_run_id?: ParentRunId3
 profile: Profile6
 query: Query6
 queue_position?: QueuePosition1
-run_id: RunId18
+run_id: RunId19
 sources?: Sources4
-status: Status5
+status: Status6
 until?: Until5
 version?: Version3
 writing?: WritingOptions1
@@ -1197,7 +1221,7 @@ token_name?: TokenName
  */
 export interface StageDone {
 data: StageDoneData
-run_id: RunId19
+run_id: RunId20
 seq: Seq14
 stage?: Stage16
 ts: Ts14
@@ -1229,7 +1253,7 @@ units?: Units
  */
 export interface StageFailed {
 data: StageFailedData
-run_id: RunId20
+run_id: RunId21
 seq: Seq15
 stage?: Stage17
 ts: Ts15
@@ -1240,7 +1264,7 @@ type?: Type15
  * via the `definition` "StageFailedData".
  */
 export interface StageFailedData {
-error: Error5
+error: Error8
 next: Next
 }
 /**
@@ -1249,7 +1273,7 @@ next: Next
  */
 export interface StageProgress {
 data: StageProgressData
-run_id: RunId21
+run_id: RunId22
 seq: Seq16
 stage?: Stage18
 ts: Ts16
@@ -1270,7 +1294,7 @@ total: Total
  */
 export interface StageStarted {
 data: StageStartedData
-run_id: RunId22
+run_id: RunId23
 seq: Seq17
 stage?: Stage19
 ts: Ts17

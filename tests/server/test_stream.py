@@ -99,3 +99,21 @@ def test_cancel_queued_notifies(client: TestClient) -> None:
         messages, code = read_to_close(socket)
     assert ([m["type"] for m in messages], code) == (["run.cancelled"], 1000)
     finished(client, running)
+
+
+def test_ended_queued_run_socket(client: TestClient) -> None:
+    running, queued = create(client, {"query": "slow"}), create(client, {"query": "slow"})
+    assert client.post(f"/api/runs/{queued}/cancel").status_code == 200
+    with client.websocket_connect(f"{WS_URL}/api/runs/{queued}/events") as socket:
+        messages, code = read_to_close(socket)
+    assert ([(m["type"], m["seq"]) for m in messages], code) == ([("run.cancelled", 0)], 1000)
+    finished(client, running)
+
+
+def test_early_exit_socket(client: TestClient) -> None:
+    run_id = create(client, {"query": "early-exit"})
+    finished(client, run_id)
+    with client.websocket_connect(f"{WS_URL}/api/runs/{run_id}/events") as socket:
+        messages, code = read_to_close(socket)
+    assert ([(m["type"], m["seq"]) for m in messages], code) == ([("run.failed", 0)], 1000)
+    assert "unknown profile 'x'" in messages[0]["data"]["error"]

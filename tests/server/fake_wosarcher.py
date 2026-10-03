@@ -12,6 +12,11 @@ when it names a mode, else `FAKE_MODE`:
 - `slow`: the same with a pause between chunks (`FAKE_STEP`, default 0.05 s).
 - `crash`: `stage.started` for `score`, some standard error, exit code 1.
 - `ignore-term`: ignores SIGTERM and waits to be killed.
+- `bad-line`: writes `not json` to `events.jsonl` between two `stage.done` events, then ends with `run.done`.
+- `huge-stderr`: prints one 100 000-character line to standard error, exit code 1.
+- `early-exit`: prints `error: unknown profile 'x'` to standard error and exits with 2 before creating the run
+  directory.
+- `partial-kill`: like `ignore-term`, but first writes half an event line without a newline.
 
 SIGTERM logs `run.cancelled` at the next chunk and exits 130. `doctor --json` prints a
 `DoctorReport` chosen by `FAKE_DOCTOR` (`ok`, `failed`, or `garbage`).
@@ -44,7 +49,7 @@ from wosarcher.models import (
 )
 from wosarcher.store import RunStore
 
-MODES = ("ok", "slow", "crash", "ignore-term")
+MODES = ("ok", "slow", "crash", "ignore-term", "bad-line", "huge-stderr", "early-exit", "partial-kill")
 CHUNKS = 20
 FINAL_SUFFIX = "\n\n## References\n"
 
@@ -129,18 +134,23 @@ def main(argv: list[str]) -> int:
     args = parse(argv)
     if args.command == "doctor":
         return doctor(store, argv)
+    query = getattr(args, "query", None)
+    if (query if query in MODES else os.environ.get("FAKE_MODE")) == "early-exit":
+        print("error: unknown profile 'x'", file=sys.stderr)
+        return 2
     record = create(store, args)
     run_id = record.run_id
     (store.run_dir(run_id) / "argv.json").write_text(json.dumps(argv))
     mode = record.request.query if record.request.query in MODES else os.environ.get("FAKE_MODE", "ok")
-    step = float(os.environ.get("FAKE_STEP", "0.05")) if mode in ("slow", "ignore-term") else 0.0
+    waits = mode in ("ignore-term", "partial-kill")
+    step = float(os.environ.get("FAKE_STEP", "0.05")) if mode == "slow" or waits else 0.0
 
     cancelled: list[int] = []
 
     def cancel(signum: int, _frame: object) -> None:
         cancelled.append(signum)
 
-    signal.signal(signal.SIGTERM, signal.SIG_IGN if mode == "ignore-term" else cancel)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN if waits else cancel)
     started = RunStartedData(
         query=record.request.query,
         profile=record.profile,
@@ -154,9 +164,15 @@ def main(argv: list[str]) -> int:
         for n in range(30):
             print(f"traceback line {n}", file=sys.stderr)
         return 1
+    if mode == "huge-stderr":
+        print("x" * 100_000, file=sys.stderr)
+        return 1
     first = STAGES.index(args.from_stage) if args.command == "fork" else 0
     for stage in STAGES[first:-1]:
         store.append_event(run_id, "stage.done", stage, StageDoneData(count=0, seconds=0))
+        if mode == "bad-line" and stage == STAGES[first]:
+            with (store.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
+                log.write("not json\n")
     store.append_event(run_id, "stage.started", "write", StageStartedData(device=None, provider="llm"))
     streamed = ""
     for n in range(CHUNKS):
@@ -168,7 +184,10 @@ def main(argv: list[str]) -> int:
         streamed += chunk
         store.append_event(run_id, "stage.progress", "write", StageProgressData(done=n + 1, total=CHUNKS, failed=0))
         time.sleep(step)
-    while mode == "ignore-term":
+    if mode == "partial-kill":
+        with (store.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
+            log.write('{"seq": 999, "run_id": "')
+    while waits:
         time.sleep(step)
     store.write_text(run_id, "report.md", streamed + FINAL_SUFFIX)
     store.append_event(run_id, "stage.done", "write", StageDoneData(count=1, seconds=0.1))

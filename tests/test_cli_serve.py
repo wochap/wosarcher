@@ -28,6 +28,7 @@ def test_defaults(calls: list[dict[str, Any]], tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     [call] = calls
     assert (call["host"], call["port"], call["proxy_headers"]) == ("127.0.0.1", 8765, True)
+    assert (call["log_level"], call["forwarded_allow_ips"]) == ("info", "127.0.0.1")
     state = call["app"].state.server
     assert state.command == [sys.executable, "-m", "wosarcher"]
     assert state.runs_dir == tmp_path / "data" / "wosarcher" / "runs"
@@ -57,3 +58,9 @@ def test_localhost_name_allowed(calls: list[dict[str, Any]]) -> None:
     assert CliRunner().invoke(app, ["serve", "--host", "127.0.0.2"]).exit_code == 0
     assert CliRunner().invoke(app, ["serve", "--host", "::1"]).exit_code == 0
     assert len(calls) == 3
+
+
+def test_forwarded_allow_ips_setting(calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_SERVER__FORWARDED_ALLOW_IPS", '["172.17.0.1", "10.0.0.0/8"]')
+    assert CliRunner().invoke(app, ["serve"]).exit_code == 0
+    assert calls[0]["forwarded_allow_ips"] == "172.17.0.1,10.0.0.0/8"

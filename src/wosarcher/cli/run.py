@@ -5,8 +5,10 @@ Exit status: 0 done, 1 failed, 130 cancelled, 2 invalid arguments or configurati
 
 import asyncio
 import json
+import logging
 import os
 import signal
+import sys
 from collections.abc import Callable
 from contextlib import ExitStack
 from typing import Annotated, Literal, get_args
@@ -20,6 +22,7 @@ from rich.table import Table
 
 import wosarcher.build as building
 from wosarcher.cli import ProfileOption, SetOption, fail
+from wosarcher.cli.logs import stderr_listener
 from wosarcher.cli.progress import ProgressView
 from wosarcher.config import ConfigError, Prices, Settings, resolve, restore_secrets, select_profile
 from wosarcher.http import UsageLedger
@@ -101,12 +104,28 @@ async def execute(
                 loop.remove_signal_handler(sig)
 
 
+def diagnostics(view_shown: bool) -> list[Listener]:
+    """Log lines on standard error when no progress view is shown; otherwise nothing may print under the view."""
+    logger = logging.getLogger("wosarcher")
+    logger.handlers.clear()
+    logger.propagate = not view_shown
+    if view_shown:
+        logger.addHandler(logging.NullHandler())
+        return []
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    return [stderr_listener(logger)]
+
+
 def start(store: RunStore, settings: Settings, record: RunRecord, until: Stage | None, as_json: bool) -> None:
     err = Console(stderr=True)
     with ExitStack() as stack:
         listeners: list[Listener] = []
         if err.is_terminal and not as_json:
             listeners.append(stack.enter_context(ProgressView(err)))
+        listeners.extend(diagnostics(view_shown=bool(listeners)))
         status = asyncio.run(execute(store, settings, record.run_id, until, listeners))
     output(store, record.run_id, status, as_json)
     raise typer.Exit(EXIT[status])

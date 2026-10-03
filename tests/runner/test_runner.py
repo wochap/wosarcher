@@ -290,3 +290,52 @@ async def test_costs(tmp_path: Path) -> None:
     assert costs["total"]["input_tokens"] == 100
     assert costs["providers"]["llm"]["input_tokens"] == 100
     assert done_of(store, run_id, "plan").data.usage.input_tokens == 100
+
+
+async def test_page_failed_reason_short(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    error = "\n".join(f"line {n} " + "x" * 90 for n in range(30))
+
+    class Loud(FakeFetcher):
+        async def fetch(self, url: str) -> Page:
+            if url == "https://b.test":
+                raise RuntimeError(error)
+            return await super().fetch(url)
+
+    cfg = settings(tmp_path)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg, until="fetch")
+    assert await run(cfg, run_id, adapters(fetcher=Loud(PAGES))) == "done"
+    (failed,) = [event for event in store.read_events(run_id) if isinstance(event, PageFailed)]
+    assert len(failed.data.reason) <= 200
+    assert "\n" not in failed.data.reason
+    assert "fetch https://b.test failed:" in caplog.text
+    assert "line 29 " in caplog.text
+
+
+async def test_cancel_writes_costs(tmp_path: Path) -> None:
+    ledger = UsageLedger({})
+    started = asyncio.Event()
+
+    class Counting(FakeLLM):
+        async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+            ledger.record("llm", "plan", input_tokens=100)
+            return await super().complete(messages, max_tokens=max_tokens)
+
+    class Stuck(FakeFetcher):
+        async def fetch(self, url: str) -> Page:
+            started.set()
+            await asyncio.sleep(10)
+            raise AssertionError("not cancelled")
+
+    cfg = settings(tmp_path)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg)
+    fakes = adapters(planner=Counting(['{"queries": ["recycling cost"]}']), fetcher=Stuck(PAGES))
+    task = asyncio.create_task(Runner(store, cfg, fakes, ledger).run(run_id))
+    await started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert ending(store, run_id) == RunCancelledData(stage="fetch")
+    costs = json.loads((store.run_dir(run_id) / "costs.json").read_text())
+    assert (costs["stages"]["plan"]["input_tokens"], costs["total"]["input_tokens"]) == (100, 100)

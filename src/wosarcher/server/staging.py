@@ -32,6 +32,9 @@ class StagingError(Exception):
     pass
 
 
+NO_ATTACHMENT = "sources files needs at least one attachment"
+
+
 class StagedRun(RunCreate):
     """`runs/.queue/<id>/request.json`: the request plus what the server decided when it accepted it."""
 
@@ -93,6 +96,8 @@ def stage_run(
     runs_dir: Path, request: RunCreate, uploads: list[Attachment], defaults: ServerSettings, profile: str
 ) -> StagedRun:
     """A new run: global settings below the request's sources and writing."""
+    if (request.sources or defaults.sources) == "files" and not uploads:
+        raise StagingError(NO_ATTACHMENT)
     staged = StagedRun(
         **request.model_dump(),
         run_id=fresh_id(runs_dir),
@@ -148,6 +153,10 @@ def stage_rerun(runs_dir: Path, original: RunRecord) -> StagedRun:
     attachments = runs_dir / original.run_id / "attachments"
     if attachments.is_dir():
         shutil.copytree(attachments, path / "attachments")
+    copied = (path / "attachments").is_dir() and any((path / "attachments").iterdir())
+    if staged.resolved_sources == "files" and not copied:
+        remove(runs_dir, staged.run_id)
+        raise StagingError(NO_ATTACHMENT)
     return write(runs_dir, staged, [])
 
 

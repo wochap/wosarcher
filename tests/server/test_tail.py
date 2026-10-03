@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from wosarcher.models import Event, ReportDelta, ReportSnapshot, RunStartedData, make_event
 from wosarcher.server.tail import RunTail
 
@@ -72,3 +74,12 @@ def test_subscriber_overflow_marked(tmp_path: Path) -> None:
     assert not fast.overflowed
     assert [e and e.seq for e in received] == [1, 2, 3, 4]
     assert [slow.queue.get_nowait() for _ in range(slow.queue.qsize())][-1] is None
+
+
+def test_bad_line_skipped(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    tail = RunTail("r", tmp_path)
+    tail.subscribe()
+    (tmp_path / "events.jsonl").write_bytes(line(1) + b"not json\n" + line(2))
+    tail.poll()
+    assert [e and e.seq for e in drain(tail)] == [1, 2]
+    assert "run r: skipped unreadable event line: not json" in caplog.text

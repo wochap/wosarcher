@@ -97,7 +97,7 @@ def test_writing_patch_names_field() -> None:
 def test_schema_has_api_models() -> None:
     definitions = json.loads(CliRunner().invoke(app, ["schema"]).output)["$defs"]
     names = {"RunCreate", "ForkCreate", "RunCreated", "RunSummary", "RunDetail", "ServerSettings"}
-    assert names | {"ProfileInfo", "ProviderCheck", "HealthReport", "ApiError"} <= set(definitions)
+    assert names | {"ProfileInfo", "ProviderCheck", "HealthReport", "ApiError", "RunNotActive"} <= set(definitions)
 
 
 def test_schema_has_auth_models() -> None:

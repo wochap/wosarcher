@@ -1,10 +1,12 @@
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from tests.auth.web import bearer, login
 from tests.server.conftest import BASE_URL, WS_URL, MakeApp, create, finished
@@ -166,3 +168,21 @@ def test_password_set_while_running(client: TestClient, config_dir: Path, passwo
         assert client.get("/api/runs").status_code == 200
         AuthStore(config_dir / "auth.json").set_password(password_hash)
         assert client.get("/api/runs").status_code == 401
+
+
+def test_non_ascii_cookie_401(auth_client: TestClient) -> None:
+    with auth_client:
+        response = auth_client.get("/api/runs", headers=[(b"cookie", "wosarcher_session=é.1.2.sig".encode())])
+        assert (response.status_code, response.json()["error"]) == (401, "unauthenticated")
+
+
+@pytest.mark.parametrize(
+    ("trusted", "code", "error"), [("*", 401, "unauthenticated"), ("127.0.0.1", 403, "bad_origin")]
+)
+def test_forwarded_proto_trusted(auth_app: FastAPI, trusted: str, code: int, error: str) -> None:
+    # uvicorn and Starlette type the ASGI interface separately; the objects match at runtime.
+    proxied: Any = ProxyHeadersMiddleware(cast(Any, auth_app), trusted_hosts=trusted)
+    headers = {"X-Forwarded-Proto": "https", "Host": "wos.lan", "Origin": "https://wos.lan"}
+    with TestClient(proxied, base_url=BASE_URL) as client:
+        response = client.post("/api/runs/missing/cancel", headers=headers)
+        assert (response.status_code, response.json()["error"]) == (code, error)

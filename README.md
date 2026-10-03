@@ -146,6 +146,18 @@ subprocess, so a run survives a reload of the UI.
    Run it under a process supervisor (for example a systemd service) with
    `Restart=on-failure`.
 
+**Logs.** The server logs to standard error: each run's lifecycle (queued,
+started, done, failed, cancelled, with its run ID) and every line a run
+process prints to standard error, prefixed with `run <run-id>: `. Watch them
+with `journalctl -u <service> -f` or `docker logs -f wosarcher`, and set the
+level with `server.log_level` (`debug`, `info`, `warning`, `error`; for
+example `WOSARCHER_SERVER__LOG_LEVEL=warning`). One run's events, also while
+it runs:
+
+```sh
+wosarcher logs <run-id> --follow
+```
+
 ### Docker
 
 The `Dockerfile` builds one image (about 165 MB) with the CLI, the API, and
@@ -178,6 +190,31 @@ docker run -d --name wosarcher \
 
 On NixOS, the image fits `virtualisation.oci-containers` (podman) with the
 password hash and API keys in a sops environment file.
+
+**Reverse proxy.** The server trusts `X-Forwarded-For` and
+`X-Forwarded-Proto` only from the addresses in `server.forwarded_allow_ips`
+(default `["127.0.0.1"]`). Without the proxy's address there, every
+state-changing request from the browser answers 403 `bad_origin`, because
+the server sees `http` while the browser sends an `https` origin. Set it to
+the address the proxy connects from:
+
+- Caddy on the Docker host, container published with `-p`: the bridge
+  gateway, usually
+  `-e WOSARCHER_SERVER__FORWARDED_ALLOW_IPS='["172.17.0.1"]'` (check with
+  `docker network inspect bridge`).
+- Caddy in the same Compose network: that network's subnet, for example
+  `'["172.18.0.0/16"]'`.
+- Caddy on the host and the container with `--network=host`: keep
+  `127.0.0.1`.
+
+Never use `"*"` unless nothing but the proxy can reach the server's port: it
+lets any client set its own address and scheme. A minimal Caddyfile:
+
+```
+wos.lan {
+    reverse_proxy 127.0.0.1:8765
+}
+```
 
 **Security.** Single admin user, password stored as a scrypt hash, signed
 `HttpOnly` session cookie, `Origin` checks, login rate limiting, and bearer

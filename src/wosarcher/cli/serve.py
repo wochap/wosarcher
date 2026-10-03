@@ -1,6 +1,7 @@
 """`wosarcher serve`: the HTTP API, the event socket, and the frontend build."""
 
 import ipaddress
+import logging
 import os
 import sys
 from typing import Annotated
@@ -13,6 +14,8 @@ from wosarcher.cli import fail
 from wosarcher.config import ConfigError, config_dir, resolve
 from wosarcher.server import create_app
 from wosarcher.store import RunStore
+
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def serve(
@@ -31,7 +34,16 @@ def serve(
         raise fail(ValueError(message), 2)
     store = RunStore.from_settings(settings, env)
     app = create_app(settings, store.runs_dir, config_dir(env), [sys.executable, "-m", "wosarcher"])
-    uvicorn.run(app, host=bind, port=port or settings.server.port, proxy_headers=True)
+    level = settings.server.log_level
+    logging.basicConfig(level=level.upper(), format=LOG_FORMAT, stream=sys.stderr)
+    uvicorn.run(
+        app,
+        host=bind,
+        port=port or settings.server.port,
+        proxy_headers=True,
+        forwarded_allow_ips=",".join(settings.server.forwarded_allow_ips),
+        log_level=level,
+    )
 
 
 def is_loopback(host: str) -> bool:

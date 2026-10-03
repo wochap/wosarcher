@@ -343,6 +343,10 @@ class RunSummary(Contract):
     """Dollars from `costs.json`; None when it is missing."""
     queue_position: int | None = None
     """1 for the next run to start; None unless queued."""
+    error: str | None = None
+    """The `run.failed` error text; None unless the status is `failed`."""
+    end_stage: Stage | None = None
+    """The stage named by the last `run.failed` or `run.cancelled`; None otherwise."""
 
 
 class RunOutput(Contract):
@@ -458,6 +462,15 @@ class HealthReport(Contract):
 class ApiError(Contract):
     error: str
     detail: str
+
+
+class RunNotActive(Contract):
+    """The 409 body of `POST /api/runs/{id}/cancel` for a run that is neither queued nor running."""
+
+    error: str
+    detail: str
+    run_id: str
+    status: RunStatus
 
 
 class LoginRequest(Contract):
@@ -813,6 +826,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ProviderCheck,
     HealthReport,
     ApiError,
+    RunNotActive,
     LoginRequest,
     SessionInfo,
     TokenInfo,

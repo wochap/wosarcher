@@ -3,6 +3,7 @@
 Each step returns an `Outcome`; the runner turns it into `stage.done`.
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,6 +49,10 @@ from wosarcher.stages import write as writing
 from wosarcher.store import RunStore
 from wosarcher.store.caches import EmbeddingCache
 
+log = logging.getLogger(__name__)
+
+REASON_MAX_CHARS = 200
+
 
 @dataclass
 class StepContext:
@@ -78,6 +83,15 @@ class Outcome:
     """Items the stage produced; for `write`, characters of report text."""
     provider: str | None = None
     warnings: list[str] = field(default_factory=list[str])
+
+
+def short_reason(text: str) -> str:
+    """The first line of an error, at most 200 characters, ending with `…` when cut."""
+    lines = text.strip().splitlines()
+    first = lines[0] if lines else ""
+    if len(first) <= REASON_MAX_CHARS and len(lines) <= 1:
+        return first
+    return first[: REASON_MAX_CHARS - 1] + "…"
 
 
 def failures(items: list[Skipped]) -> list[str]:
@@ -178,7 +192,8 @@ async def fetch(ctx: StepContext) -> Outcome:
             ctx.log.emit("page.fetched", "fetch", data)
         else:
             failed += 1
-            ctx.log.emit("page.failed", "fetch", PageFailedData(url=item.item, reason=item.reason))
+            log.warning("fetch %s failed: %s", item.item, item.reason)
+            ctx.log.emit("page.failed", "fetch", PageFailedData(url=item.item, reason=short_reason(item.reason)))
         ctx.log.progress("fetch", done, total, failed)
 
     concurrency = ctx.settings.fetch.concurrency or DEFAULT_CONCURRENCY["firecrawl"]

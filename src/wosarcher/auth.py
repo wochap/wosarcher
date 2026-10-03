@@ -107,7 +107,8 @@ def sign_session(secret: bytes, password_hash: str, now: datetime, days: int) ->
 
 def verify_session(value: str, secret: bytes, password_hash: str, now: datetime) -> Session | None:
     payload, _, sig = value.rpartition(".")
-    if not hmac.compare_digest(sig, signature(session_key(secret, password_hash), payload)):
+    expected = signature(session_key(secret, password_hash), payload)
+    if not hmac.compare_digest(sig.encode(), expected.encode()):
         return None
     try:
         _, issued, expires = payload.split(".")

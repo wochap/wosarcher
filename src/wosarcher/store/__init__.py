@@ -18,7 +18,9 @@ from wosarcher.config import Settings, redact
 from wosarcher.models import (
     STAGES,
     Event,
+    RunCancelled,
     RunCosts,
+    RunFailed,
     RunRecord,
     RunRequest,
     RunStatus,
@@ -42,6 +44,19 @@ STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "write": ("report.md", "report.json"),
 }
 END_STATUS: dict[str, RunStatus] = {"run.done": "done", "run.failed": "failed", "run.cancelled": "cancelled"}
+
+
+TAIL_BLOCK = 8192
+
+
+def line_seq(line: bytes) -> int | None:
+    """The `seq` of one log line, or None when it is not an event."""
+    if not line.strip():
+        return None
+    try:
+        return parse_event(line.decode("utf-8")).seq
+    except ValueError:
+        return None
 
 
 class RunStoreError(Exception):
@@ -84,7 +99,6 @@ class RunStore:
     def __init__(self, runs_dir: Path, cache_dir: Path) -> None:
         self.runs_dir = runs_dir
         self.cache_dir = cache_dir
-        self.last_seq: dict[str, int] = {}
 
     @classmethod
     def from_settings(cls, settings: Settings, env: Mapping[str, str] = os.environ) -> "RunStore":
@@ -220,28 +234,58 @@ class RunStore:
     # Events
 
     def append_event(self, run_id: str, event_type: str, stage: Stage | None, data: BaseModel) -> Event:
-        if run_id not in self.last_seq:
-            events = self.read_events(run_id)
-            self.last_seq[run_id] = events[-1].seq if events else 0
-        event = make_event(self.last_seq[run_id] + 1, run_id, datetime.now(UTC), event_type, stage, data)
-        with (self.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
-            log.write(event.model_dump_json() + "\n")
+        """Append with the next `seq` after the last complete line; a partial last line is closed first."""
+        event = make_event(self.tail_seq(run_id) + 1, run_id, datetime.now(UTC), event_type, stage, data)
+        path = self.run_dir(run_id) / "events.jsonl"
+        with path.open("a+b") as log:
+            prefix = b""
+            if log.seek(0, os.SEEK_END) > 0:
+                log.seek(-1, os.SEEK_END)
+                prefix = b"" if log.read(1) == b"\n" else b"\n"
+            log.write(prefix + event.model_dump_json().encode("utf-8") + b"\n")
             log.flush()
-        self.last_seq[run_id] = event.seq
         return event
 
+    def tail_seq(self, run_id: str) -> int:
+        """The `seq` of the last complete line that parses, read backwards in 8 KiB blocks; 0 when none."""
+        path = self.run_dir(run_id) / "events.jsonl"
+        if not path.is_file():
+            return 0
+        with path.open("rb") as log:
+            end = log.seek(0, os.SEEK_END)
+            buffer = b""
+            while end > 0:
+                start = max(0, end - TAIL_BLOCK)
+                log.seek(start)
+                buffer = log.read(end - start) + buffer
+                end = start
+                # The last piece has no "\n" yet; the first may be cut by the block boundary.
+                lines = buffer.split(b"\n")[:-1]
+                for line in reversed(lines if end == 0 else lines[1:]):
+                    seq = line_seq(line)
+                    if seq is not None:
+                        return seq
+        return 0
+
     def last_logged_seq(self, run_id: str) -> int:
-        if run_id not in self.last_seq:
-            events = self.read_events(run_id)
-            return events[-1].seq if events else 0
-        return self.last_seq[run_id]
+        return self.tail_seq(run_id)
 
     def read_events(self, run_id: str, since: int = 0) -> list[Event]:
+        """Every event after `since`; lines that do not parse (a partial line, an unknown type) are skipped."""
         path = self.run_dir(run_id) / "events.jsonl"
         if not path.is_file():
             return []
-        events = [parse_event(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
-        return [event for event in events if event.seq > since]
+        events: list[Event] = []
+        for line in path.read_text(encoding="utf-8").split("\n"):
+            if not line.strip():
+                continue
+            try:
+                event = parse_event(line)
+            except ValueError:
+                continue
+            if event.seq > since:
+                events.append(event)
+        return events
 
     def done_events(self, run_id: str) -> dict[Stage, StageDone]:
         return {e.stage: e for e in self.read_events(run_id) if isinstance(e, StageDone) and e.stage is not None}
@@ -267,6 +311,9 @@ class RunStore:
         started = next((event.ts for event in events if event.type == "run.started"), None)
         duration = (events[-1].ts - started).total_seconds() if started and status != "interrupted" else None
         costs = self.read_costs(record.run_id)
+        last = events[-1] if events else None
+        ended = last if isinstance(last, RunFailed | RunCancelled) else None
+        error = last.data.error if isinstance(last, RunFailed) else None
         return RunSummary(
             run_id=record.run_id,
             query=record.request.query,
@@ -281,6 +328,8 @@ class RunStore:
             writing=WritingOptions.model_validate(record.settings.get("write", {})),
             duration_s=duration,
             cost=costs.total.cost if costs else None,
+            error=error,
+            end_stage=ended.data.stage if ended else None,
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:

@@ -215,3 +215,12 @@ def test_sigterm_exits_130(tmp_path: Path) -> None:
     log = (runs_dir(tmp_path) / "20260101-120000-abcdef" / "events.jsonl").read_text().splitlines()
     last = json.loads(log[-1])
     assert (last["type"], last["data"]["stage"]) == ("run.cancelled", "fetch")
+
+
+def test_stderr_diagnostics_when_piped(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "battery recycling"])
+    assert result.exit_code == 0
+    lines = result.stderr.splitlines()
+    assert any(line.startswith("INFO ") and " plan stage.started " in line for line in lines)
+    assert any(line.startswith("INFO ") and " plan stage.done " in line for line in lines)
+    assert any(line.startswith("INFO ") and " run.done " in line for line in lines)

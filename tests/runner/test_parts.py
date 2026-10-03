@@ -10,6 +10,7 @@ from wosarcher.models import ReportTextData, RunQueuedData, RunRequest, Stage, S
 from wosarcher.runner.caches import CachedFetcher, EmbeddingMapping
 from wosarcher.runner.devices import needs_release
 from wosarcher.runner.events import EventLog, snapshot_event
+from wosarcher.runner.steps import short_reason
 from wosarcher.store import RunStore
 from wosarcher.store.caches import EmbeddingCache, PageCache
 
@@ -111,3 +112,10 @@ def devices(policy: str = "exclusive", score: str | None = "d0", llm: str | None
 )
 def test_needs_release(cfg: Settings, done: Stage, remaining: list[Stage], expected: bool) -> None:
     assert needs_release(done, remaining, cfg) is expected
+
+
+def test_short_reason() -> None:
+    assert short_reason("HTTP 500") == "HTTP 500"
+    assert short_reason("HTTP 500\ntraceback") == "HTTP 500…"
+    cut = short_reason("x" * 300)
+    assert (len(cut), cut[-1]) == (200, "…")

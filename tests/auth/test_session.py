@@ -33,3 +33,8 @@ def test_new_hash_invalidates() -> None:
 def test_new_secret_invalidates() -> None:
     value = sign_session(SECRET, HASH, NOW, 30)
     assert verify_session(value, b"t" * 32, HASH, NOW) is None
+
+
+def test_non_ascii_cookie_rejected() -> None:
+    assert verify_session("é.1.2.x", SECRET, HASH, NOW) is None
+    assert verify_session("a.1.2.é", SECRET, HASH, NOW) is None

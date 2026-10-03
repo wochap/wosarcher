@@ -56,3 +56,37 @@ def test_fake_ignore_term(tmp_path: Path) -> None:
     process.kill()
     process.wait(10)
     assert last_type(tmp_path, "r") == "stage.progress"
+
+
+def test_fake_bad_line(tmp_path: Path) -> None:
+    process = start(tmp_path, "bad-line", "r")
+    assert process.wait(10) == 0
+    lines = (tmp_path / "r" / "events.jsonl").read_text().splitlines()
+    assert "not json" in lines
+    assert json.loads(lines[-1])["type"] == "run.done"
+
+
+def test_fake_huge_stderr(tmp_path: Path) -> None:
+    process = start(tmp_path, "huge-stderr", "r")
+    _, stderr = process.communicate(timeout=10)
+    assert process.returncode == 1
+    assert len(stderr) > 100_000
+
+
+def test_fake_early_exit(tmp_path: Path) -> None:
+    process = start(tmp_path, "early-exit", "r")
+    _, stderr = process.communicate(timeout=10)
+    assert process.returncode == 2
+    assert b"unknown profile 'x'" in stderr
+    assert not (tmp_path / "r").exists()
+
+
+def test_fake_partial_kill(tmp_path: Path) -> None:
+    process = start(tmp_path, "partial-kill", "r")
+    log = tmp_path / "r" / "events.jsonl"
+    wait_until(lambda: log.is_file() and not log.read_bytes().endswith(b"\n"))
+    process.send_signal(signal.SIGTERM)
+    time.sleep(0.3)
+    assert process.poll() is None
+    process.kill()
+    assert process.wait(10) == -signal.SIGKILL

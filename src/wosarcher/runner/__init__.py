@@ -123,6 +123,8 @@ class Runner:
             if current is not None and self.settings.run.gpu_policy == "exclusive":
                 with suppress(Exception):
                     await asyncio.shield(self.release(current))
+            with suppress(Exception):
+                self.write_costs(run_id)
             log.emit("run.cancelled", None, RunCancelledData(stage=current))
             raise
         self.write_costs(run_id)

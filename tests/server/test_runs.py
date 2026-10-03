@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,12 +19,16 @@ from wosarcher.models import (
 from wosarcher.store import RunStore
 
 
-def on_disk(runs_dir: Path, run_id: str, ends: bool, costs: float | None = None) -> None:
+def on_disk(
+    runs_dir: Path, run_id: str, ends: bool, costs: float | None = None, request: RunRequest | None = None
+) -> None:
     """A run directory as the CLI leaves it: started at 10:00:00, done at 10:02:05 when `ends`."""
     store = RunStore(runs_dir, runs_dir)
     store.run_dir(run_id).mkdir(parents=True)
     created = datetime(2026, 1, 1, 9, 59, tzinfo=UTC)
-    record = RunRecord(run_id=run_id, created_at=created, request=RunRequest(query="q"), profile="p", settings={})
+    record = RunRecord(
+        run_id=run_id, created_at=created, request=request or RunRequest(query="q"), profile="p", settings={}
+    )
     store.write_artifact(run_id, "request.json", record)
     started = RunStartedData(query="q", profile="p", parent_run_id=None, version=1, until=None)
     lines = [make_event(1, run_id, datetime(2026, 1, 1, 10, 0, 0, tzinfo=UTC), "run.started", None, started)]
@@ -165,8 +170,64 @@ def test_artifact_missing_404(client: TestClient, runs_dir: Path) -> None:
 
 def test_cancel_finished_409(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
-    assert client.post("/api/runs/r/cancel").status_code == 409
+    response = client.post("/api/runs/r/cancel")
+    assert response.status_code == 409
+    assert response.json() == {
+        "error": "run_not_active",
+        "detail": "run r is not queued or running (status done)",
+        "run_id": "r",
+        "status": "done",
+    }
     assert client.post("/api/runs/missing/cancel").status_code == 404
+
+
+def test_cancel_failed_409_status(client: TestClient) -> None:
+    run_id = create(client, {"query": "crash"})
+    finished(client, run_id)
+    response = client.post(f"/api/runs/{run_id}/cancel")
+    assert (response.status_code, response.json()["status"]) == (409, "failed")
+
+
+def test_cancel_ended_queued_409(client: TestClient) -> None:
+    first, second = create(client, {"query": "slow"}), create(client, {"query": "slow"})
+    assert client.post(f"/api/runs/{second}/cancel").status_code == 200
+    response = client.post(f"/api/runs/{second}/cancel")
+    assert (response.status_code, response.json()["status"]) == (409, "cancelled")
+    finished(client, first)
+
+
+def test_cancelled_queued_run_still_shown(client: TestClient) -> None:
+    first, second = create(client, {"query": "slow"}), create(client, {"query": "slow"})
+    client.post(f"/api/runs/{second}/cancel")
+    response = client.get(f"/api/runs/{second}")
+    assert response.status_code == 200
+    assert (response.json()["status"], response.json()["last_seq"]) == ("cancelled", 0)
+    assert second in [run["run_id"] for run in client.get("/api/runs").json()]
+    assert client.delete(f"/api/runs/{second}").status_code == 204
+    assert client.get(f"/api/runs/{second}").status_code == 404
+    finished(client, first)
+
+
+def test_early_exit_run_failed(client: TestClient) -> None:
+    run_id = create(client, {"query": "early-exit"})
+    finished(client, run_id)
+    found = summary(client, run_id)
+    assert found["status"] == "failed"
+    assert "unknown profile 'x'" in found["error"]
+
+
+def test_files_without_attachments_422(client: TestClient, runs_dir: Path) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "sources": "files"}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert (response.status_code, response.json()["error"]) == (422, "invalid_attachment")
+    assert not list((runs_dir / ".queue").glob("*"))
+
+
+def test_rerun_files_without_attachments_422(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True, request=RunRequest(query="q", sources="files"))
+    response = client.post("/api/runs/r/rerun")
+    assert (response.status_code, response.json()["error"]) == (422, "invalid_attachment")
+    assert not list((runs_dir / ".queue").glob("*"))
 
 
 def test_fork_write_with_tone(client: TestClient, runs_dir: Path) -> None:

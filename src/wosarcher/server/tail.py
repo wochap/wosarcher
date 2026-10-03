@@ -7,11 +7,14 @@ ended, or the subscriber fell too far behind and `overflowed` is set).
 
 import asyncio
 import codecs
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 from wosarcher.models import Event, ReportDelta, ReportSnapshot, ReportTextData, parse_event
+
+log = logging.getLogger(__name__)
 
 MAX_BEHIND = 1000
 TERMINAL = {"run.done", "run.failed", "run.cancelled"}
@@ -36,7 +39,8 @@ class RunTail:
         self.offset = 0
         self.partial: bytes = b""
         self.last_seq = 0
-        self.terminal = False
+        self.terminal_event: Event | None = None
+        """The last terminal event published."""
         self.report_bytes: bytes = b""
         self.report_text = ""
         self.decoder = codecs.getincrementaldecoder("utf-8")()
@@ -52,6 +56,8 @@ class RunTail:
             self.subscribers.remove(subscriber)
 
     def publish(self, event: Event) -> None:
+        if event.type in TERMINAL:
+            self.terminal_event = event
         for subscriber in self.subscribers:
             if subscriber.overflowed:
                 continue
@@ -93,9 +99,13 @@ class RunTail:
         for line in lines:
             if not line.strip():
                 continue
-            event = parse_event(line.decode("utf-8"))
+            text = line.decode("utf-8", errors="replace")
+            try:
+                event = parse_event(text)
+            except ValueError:
+                log.warning("run %s: skipped unreadable event line: %s", self.run_id, text[:200])
+                continue
             self.last_seq = event.seq
-            self.terminal = self.terminal or event.type in TERMINAL
             self.publish(event)
 
     def poll_report(self) -> None:

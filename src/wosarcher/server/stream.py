@@ -1,9 +1,15 @@
 """`WS /api/runs/{id}/events?since=<seq>`: replay, report snapshot, then live events until the run ends.
 
 Live-only events (`report.delta`, `report.snapshot`, `run.queued`, and the
-`run.cancelled` of a dequeued run, which has `seq` 0) carry the last logged
-`seq` sent to this client, so resuming from the highest `seq` seen never
-skips a logged event.
+`run.cancelled` or `run.failed` of a run with no run directory, which have
+`seq` 0) carry the last logged `seq` sent to this client, so resuming from the
+highest `seq` seen never skips a logged event. Clients apply terminal events
+whatever their `seq`.
+
+The run is looked up after the socket is accepted and subscribed to with no
+`await` in between, so a run that ends during the handshake is seen as ended.
+A run the manager remembers as ended without a run directory gets its
+terminal event and 1000.
 """
 
 from datetime import UTC, datetime
@@ -41,13 +47,18 @@ class Client:
 @router.websocket("/runs/{run_id}/events")
 async def events(socket: WebSocket, run_id: str, since: int = 0) -> None:
     state = get_state(socket)
+    await socket.accept()
     active = state.manager.active(run_id)
     known = not run_id.startswith(".") and (state.runs_dir / run_id / "request.json").is_file()
-    await socket.accept()
-    if active is None and not known:
-        await socket.close(CLOSE_UNKNOWN)
-        return
+    ended = state.manager.ended.get(run_id)
     subscriber = active.tail.subscribe() if active else None
+    if active is None and not known:
+        if ended is not None:
+            await Client(socket, since).send(ended.event)
+            await socket.close(1000)
+        else:
+            await socket.close(CLOSE_UNKNOWN)
+        return
     try:
         await stream(socket, run_id, since, subscriber, state.manager.queue_position(run_id))
     except WebSocketDisconnect:

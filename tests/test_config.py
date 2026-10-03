@@ -185,6 +185,22 @@ def test_server_defaults() -> None:
     server = Settings().server
     assert (server.host, server.port, server.max_concurrent_runs) == ("127.0.0.1", 8765, 1)
     assert server.static_dir == Path("web/dist")
+    assert (server.log_level, server.forwarded_allow_ips) == ("info", ["127.0.0.1"])
+
+
+def test_server_log_level_from_environment(env: dict[str, str]) -> None:
+    env["WOSARCHER_SERVER__LOG_LEVEL"] = "debug"
+    assert resolve(None, [], env).server.log_level == "debug"
+
+
+def test_server_log_level_invalid(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"server\.log_level"):
+        resolve(None, ['server.log_level="loud"'], env)
+
+
+def test_forwarded_allow_ips_from_environment(env: dict[str, str]) -> None:
+    env["WOSARCHER_SERVER__FORWARDED_ALLOW_IPS"] = '["172.17.0.1"]'
+    assert resolve(None, [], env).server.forwarded_allow_ips == ["172.17.0.1"]
 
 
 def test_server_limit_from_environment(env: dict[str, str]) -> None:

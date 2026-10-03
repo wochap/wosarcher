@@ -392,7 +392,8 @@ src/wosarcher/
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
-  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; serve.py: serve; auth.py: auth; progress.py: rich Live view
+  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; logs.py: logs, event lines, stderr listener;
+                 # serve.py: serve; auth.py: auth; progress.py: rich Live view
   __main__.py    # python -m wosarcher
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
                  # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health; stream.py: event socket;
@@ -419,9 +420,12 @@ tests/
   gets its inputs and ports, returns its output, and does not know about
   files or events. Tests need only fakes.
 - **Repository.** `RunStore` owns paths and serialisation.
-- **Append-only event log.** `RunStore.append_event` assigns `seq` (last
-  logged plus 1, also for another process appending later) and writes the
-  event to `events.jsonl`; the runner then publishes it.
+- **Append-only event log.** `RunStore.append_event` assigns `seq` (the
+  last complete line's `seq` plus 1, read from the end of `events.jsonl` on
+  every append, so another store or process appending later never repeats
+  a `seq`) and writes the event to `events.jsonl`, on a new line when the
+  file ends with a partial one; the runner then publishes it. Readers skip
+  lines that do not parse (a partial line, a type from another version).
 
 Cross-cutting concerns (retry, rate limits, costs) live in `http.py` as
 plain functions used by adapters, not as generic decorators.
@@ -489,6 +493,11 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   `failed`, `cancelled`, or `interrupted` (started without an end), plus
   `until`, `fork_from`, the resolved writing options, `duration_s`
   (`run.started` to the terminal event), and `cost` (from `costs.json`).
+- `wosarcher logs <id> [--follow] [--profile NAME] [--set k=v]`: prints the
+  run's logged events, one line each: `<HH:MM:SS> <stage or -> <type>
+  <summary>` (local time; the summary on one line, at most 160 characters).
+  Unreadable lines are skipped. `--follow` polls every 0.5 s and exits 0
+  after a terminal event. An unknown run exits 2.
 - `wosarcher serve [--host H] [--port P]`: the HTTP server (see Server);
   binds `server.host` and `server.port` (`127.0.0.1:8765`).
 
@@ -502,7 +511,8 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   the previous model unloads), `resource.released`.
 - Plan and search: `plan.ready` (sub-queries), `hit.found` (URL, title,
   query IDs).
-- Fetch: `page.fetched`, `page.failed` (reason).
+- Fetch: `page.fetched`, `page.failed` (reason: the first line of the
+  error, at most 200 characters; the full text goes to standard error).
 - Score: `passages.scored`, one per query: counts, the scorer that actually
   ran, and the kept passages (text, heading path, source, display score).
   The full list, including rejected passages, is the `scores.jsonl`
@@ -534,7 +544,11 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 `seq` is assigned by the store's append, so the log has no gaps.
 `run.queued`, `report.delta`, and `report.snapshot` are live only and never
 written to `events.jsonl`; on the socket they carry the last logged `seq`
-sent to that client (0 when none). The report text is appended to
+sent to that client (0 when none). So do the terminal events of a run that
+has no run directory (cancelled while queued, or its process exited
+first): they have `seq` 0 on the server. Clients apply `run.done`,
+`run.failed`, and `run.cancelled` whatever their `seq`, without moving
+their last `seq`; every other event is deduplicated by `seq`. The report text is appended to
 `report.md` as it streams and replaced by the rendered report at the end of
 the write stage. A reconnecting client gets all logged events after its
 `seq`, then a `report.snapshot` of the report so far, then live events; when
@@ -549,7 +563,15 @@ the report changes other than by appending, clients get a new
   left (for example zero pages fetched with `--sources web`).
 - Each stage has a timeout.
 - Cancel cancels the asyncio task; in-flight HTTP requests are cancelled,
-  `release()` is called in `exclusive` mode, and `run.cancelled` is emitted.
+  `release()` is called in `exclusive` mode, `costs.json` is written with
+  the usage so far, and `run.cancelled` is emitted.
+- Diagnostics: when no progress view is shown (standard error is not a
+  terminal, or `--json`), the run process writes one `INFO` line per
+  `run.*`, `stage.started`, `stage.done`, `stage.failed`, and
+  `resource.*` event (the `wosarcher logs` format; `WARNING` for
+  `run.failed` and `stage.failed`), a `WARNING` line per `stage.done`
+  warning, and each page failure's full text, to standard error. With the
+  progress view, nothing else is written under it.
 
 ### Costs
 
@@ -570,22 +592,31 @@ collide with them. Errors are `{"error": code, "detail": text}`; an unknown
 run is 404 `run_not_found`, an invalid body 422 naming each field.
 
 - `POST /api/runs` (multipart: a `request` field with `RunCreate` JSON plus
-  `attachments` files, reduced to their base names; duplicates are 422)
-  returns 201 with `run_id` and `queued` or `running`.
+  `attachments` files, reduced to their base names; duplicates are 422,
+  and so are sources `files` with no attachment, as `invalid_attachment`
+  before anything is staged) returns 201 with `run_id` and `queued` or
+  `running`.
 - `GET /api/runs`, `GET /api/runs/{id}`: `RunSummary` (status `queued`,
   `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
   `until`; resolved writing options; `duration_s`; `cost`;
-  `queue_position`), and for one run `RunDetail` (plus the redacted
-  `request.json`, `costs`, `last_seq`).
+  `queue_position`; `error`, the `run.failed` text when failed; `end_stage`,
+  the stage named by a final `run.failed` or `run.cancelled`), and for one
+  run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
+  Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
   `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`, `pages.jsonl`,
   `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `context.json`,
   `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
-- `POST /api/runs/{id}/cancel`: SIGTERM for a running run (202; SIGKILL
-  after 10 s, then the server logs `run.cancelled`), removal for a queued
-  one (200, connected clients get `run.cancelled`), 409 otherwise.
+- `POST /api/runs/{id}/cancel`:
+
+  | Run state | Status | Body |
+  |---|---|---|
+  | running | 202 | `{"run_id", "result": "signalled"}`; SIGKILL after 10 s, then the server logs `run.cancelled` |
+  | queued | 200 | `{"run_id", "result": "dequeued"}`; connected clients get `run.cancelled` |
+  | done, failed, cancelled, interrupted | 409 | `RunNotActive`: `{"error": "run_not_active", "detail", "run_id", "status"}` |
+  | unknown | 404 | `run_not_found` |
 - `POST /api/runs/{id}/fork` (`from`, optional `writing`, `set`,
   `profile`): `wosarcher fork` through the queue. A fork keeps the parent's
   configuration: only the request's writing fields and `set` are passed,
@@ -594,21 +625,26 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 - `POST /api/runs/{id}/rerun`: a new run (version 1, no parent) with the
   original query, sources, `until`, profile, and saved overrides, and a
   copy of its `attachments/`; global settings are not applied. 404 for an
-  unknown run, 409 for a queued one.
+  unknown run, 409 for a queued one, 422 `invalid_attachment` for sources
+  `files` without attachments.
 - `WS /api/runs/{id}/events?since=<seq>`: replays logged events after
   `seq`, sends a `report.snapshot` when the report is not empty and
   `run.queued` while queued, then live events and `report.delta` until a
   terminal event, and closes with 1000. Unknown runs close with 4404; a
   client more than 1000 events behind is closed with 4408 and reconnects
   with `since`. Runs not owned by this server (finished, interrupted, or
-  started by the CLI) are replayed and closed.
+  started by the CLI) are replayed and closed. The run is looked up after
+  the socket is accepted, so a run that ends during the handshake is
+  treated as ended; a run that ended without a run directory gets its
+  terminal event (`seq` 0) and 1000.
 - `GET /api/settings` and `PUT /api/settings`: global defaults
   (`ServerSettings`: all writing options and `sources`), stored in
   `<config dir>/server-settings.json`. They apply only to runs started by
   the server, as `--set write.*` values after the profile and before the
   request's `writing` and `set` (request wins). CLI runs use the profile.
-- `DELETE /api/runs/{id}`: 204 for a finished run or a queued one, 409
-  `run_active` for a running one.
+- `DELETE /api/runs/{id}`: 204 for a finished run, a queued one, or one
+  that ended without a run directory (forgotten), 409 `run_active` for a
+  running one.
 - `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`.
 - `GET /api/providers/health[?profile=P]`: runs `wosarcher doctor --json`
   (60 s timeout; 502 when it times out or prints no report) and maps each
@@ -627,7 +663,7 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 
 Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
 `RunSummary`, `RunDetail`, `ServerSettings`, `ProfileInfo`,
-`ProviderCheck`, `HealthReport`, `ApiError`, `LoginRequest`,
+`ProviderCheck`, `HealthReport`, `ApiError`, `RunNotActive`, `LoginRequest`,
 `SessionInfo`, `TokenInfo`, `TokenCreate`, `TokenCreated`, `LoginError`) are models in `models.py` and
 part of `wosarcher schema`.
 
@@ -643,10 +679,25 @@ A queued run is staged in `runs/.queue/<id>/` (request and attachments)
 until its process starts, and staged runs are queued again in creation
 order when the server starts. When a process exits without a terminal
 event, the server appends `run.failed` with the exit code and the last 20
-lines of standard error. On shutdown the server sends SIGTERM to every run
-process and waits up to 10 s; queued runs stay staged. Settings:
-`server.host`, `server.port`, `server.max_concurrent_runs`,
-`server.static_dir`.
+lines of standard error. Whatever fails while the server watches or
+finishes a run (an unreadable event line, a standard-error line of any
+length, a failed write), the error is logged and the run is still
+finalised: the tail closed, staging removed, the slot freed, and the next
+run started. A queued run that is cancelled, or a process that exits before
+creating its run directory, is remembered in memory (at most 100) with its
+terminal event and staged request: `GET` and the list show it as
+`cancelled` or `failed` (`last_seq` 0) until it is deleted or the server
+restarts, after which it is 404. On shutdown the server sends SIGTERM to
+every run process and waits up to 10 s; queued runs stay staged.
+
+The server logs to standard error with stdlib `logging` at
+`server.log_level` (`debug`, `info`, `warning`, `error`; also uvicorn's
+level): per run `queued (position n)`, `started: run|fork pid <pid>`,
+`done`, `cancelled`, `cancelled while queued`, and `failed in <stage>:
+<first line>` (warning), each with the run ID, and every standard-error
+line of a run process as `run <id>: <line>` (cut to 4000 characters plus
+`…`). Settings: `server.host`, `server.port`, `server.max_concurrent_runs`,
+`server.static_dir`, `server.log_level`, `server.forwarded_allow_ips`.
 
 ### Authentication
 
@@ -721,8 +772,12 @@ stays loopback only.
 - **Transport.** On plain HTTP over Wi-Fi, the password and cookie can be
   sniffed. Use Tailscale (encrypted, and limits access to your devices) or a
   local reverse proxy with TLS (for example Caddy). The server must not be
-  exposed to the internet. Behind a local proxy, uvicorn's proxy headers
-  supply the client IP and scheme.
+  exposed to the internet. Behind a local proxy, uvicorn takes the client
+  IP and scheme from `X-Forwarded-For` and `X-Forwarded-Proto` only when
+  the direct peer is in `server.forwarded_allow_ips` (addresses, networks,
+  or `*`; default `["127.0.0.1"]`); the Origin check, the cookie's
+  `Secure` flag, and the login limiter use them. A malformed session
+  cookie, including a non-ASCII one, is 401.
 
 Settings: `auth.password_hash`, `auth.session_days`, `auth.allowed_origins`.
 

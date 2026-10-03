@@ -16,6 +16,8 @@ from wosarcher.models import (
     RunCreate,
     RunCreated,
     RunDetail,
+    RunFailed,
+    RunNotActive,
     RunRecord,
     RunSummary,
 )
@@ -71,12 +73,27 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
     )
 
 
+def ended_summary(state: ServerState, run_id: str) -> RunSummary | None:
+    """A run this server remembers as ended without a run directory."""
+    ended = state.manager.ended.get(run_id)
+    if ended is None:
+        return None
+    event = ended.event
+    update = {
+        "status": "failed" if isinstance(event, RunFailed) else "cancelled",
+        "error": event.data.error if isinstance(event, RunFailed) else None,
+        "end_stage": event.data.stage,
+        "queue_position": None,
+    }
+    return staged_summary(state, ended.staged).model_copy(update=update)
+
+
 def summary(state: ServerState, run_id: str) -> RunSummary | None:
-    """The store's summary, with `queued` or `running` when this server owns the run."""
+    """The store's summary, with `queued` or `running` when this server owns the run, or a remembered ended run."""
     active = state.manager.active(run_id)
     record = record_of(state, run_id)
     if record is None:
-        return staged_summary(state, active.staged) if active else None
+        return staged_summary(state, active.staged) if active else ended_summary(state, run_id)
     found = state.store.summary(record)
     if active is not None:
         return found.model_copy(update={"status": "running", "duration_s": None})
@@ -122,7 +139,7 @@ async def create_run(
 @router.get("")
 async def list_runs(state: State) -> list[RunSummary]:
     stored = {run.run_id: run for run in state.store.list_runs(None)}
-    active = [*state.manager.running, *(run.run_id for run in state.manager.queued)]
+    active = [*state.manager.running, *(run.run_id for run in state.manager.queued), *state.manager.ended]
     found = {run_id: run for run_id in [*stored, *active] if (run := summary(state, run_id)) is not None}
     return sorted(found.values(), key=lambda run: (run.created, run.run_id), reverse=True)
 
@@ -146,6 +163,9 @@ async def delete_run(state: State, run_id: str) -> Response:
         raise RouteError(409, "run_active", f"run {run_id} is running; cancel it first")
     if state.manager.queue_position(run_id) is not None:
         await state.manager.cancel(run_id)
+        state.manager.forget(run_id)
+        return Response(status_code=204)
+    if state.manager.forget(run_id):
         return Response(status_code=204)
     if record_of(state, run_id) is None:
         raise not_found(run_id)
@@ -167,9 +187,12 @@ async def artifact(state: State, run_id: str, name: str) -> FileResponse:
 async def cancel_run(state: State, run_id: str) -> JSONResponse:
     result = await state.manager.cancel(run_id)
     if result is None:
-        if record_of(state, run_id) is None:
+        found = summary(state, run_id)
+        if found is None:
             raise not_found(run_id)
-        raise RouteError(409, "run_not_active", f"run {run_id} is not queued or running")
+        detail = f"run {run_id} is not queued or running (status {found.status})"
+        body = RunNotActive(error="run_not_active", detail=detail, run_id=run_id, status=found.status)
+        return JSONResponse(body.model_dump(), status_code=409)
     return JSONResponse({"run_id": run_id, "result": result}, status_code=202 if result == "signalled" else 200)
 
 
@@ -191,4 +214,8 @@ async def rerun_run(state: State, run_id: str) -> JSONResponse:
     original = record_of(state, run_id)
     if original is None:
         raise not_found(run_id)
-    return await submit(state, staging.stage_rerun(state.runs_dir, original))
+    try:
+        staged = staging.stage_rerun(state.runs_dir, original)
+    except StagingError as error:
+        raise RouteError(422, "invalid_attachment", str(error)) from None
+    return await submit(state, staged)
