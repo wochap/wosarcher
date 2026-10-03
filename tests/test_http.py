@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import AsyncIterator
 
 import httpx
@@ -7,7 +8,7 @@ import respx
 from pydantic import SecretStr
 
 from wosarcher.config import Prices, Provider
-from wosarcher.http import ProviderClient, ProviderError, UsageLedger
+from wosarcher.http import ProviderClient, ProviderError, UsageLedger, unload, unload_supported
 
 PRIMARY = "http://primary.lan:8001"
 BACKUP = "http://backup.lan:8001"
@@ -147,3 +148,78 @@ def test_no_price_means_zero_cost() -> None:
     assert ledger.totals[("rerank", "score")].cost == 0
     assert ledger.totals[("rerank", "score")].input_tokens == 1000
     assert ledger.totals[("firecrawl", "fetch")].cost == pytest.approx(0.01)
+
+
+@respx.mock
+async def test_get_json_params(http: httpx.AsyncClient) -> None:
+    route = respx.get(f"{PRIMARY}/search").respond(200, json={"results": []})
+    assert await client(http).get_json("/search", {"q": "x", "format": "json"}) == {"results": []}
+    assert dict(route.calls.last.request.url.params) == {"q": "x", "format": "json"}
+
+
+@respx.mock
+async def test_root_path_strips_v1(http: httpx.AsyncClient) -> None:
+    primary = respx.get("http://primary.lan:8001/running").mock(side_effect=httpx.ConnectError("refused"))
+    backup = respx.get("http://backup.lan:8001/running").respond(200, json={})
+    provider = client(http, base_url=f"{PRIMARY}/v1/", fallback_urls=[f"{BACKUP}/v1"])
+    await provider.request("GET", "/running", root=True)
+    assert (primary.call_count, backup.call_count) == (1, 1)
+
+
+def sse(*events: str) -> bytes:
+    return "".join(f"data: {event}\n\n" for event in events).encode()
+
+
+@respx.mock
+async def test_stream_lines_yields_data(http: httpx.AsyncClient) -> None:
+    body = b": comment\n\n" + sse('{"a": 1}', "[DONE]")
+    respx.post(f"{PRIMARY}/chat").respond(200, content=body)
+    assert [line async for line in client(http).stream_lines("/chat", {})] == ['{"a": 1}', "[DONE]"]
+
+
+@respx.mock
+async def test_stream_retries_before_first_line(http: httpx.AsyncClient) -> None:
+    route = respx.post(f"{PRIMARY}/chat").mock(side_effect=[httpx.Response(503), httpx.Response(200, content=sse("x"))])
+    assert [line async for line in client(http).stream_lines("/chat", {})] == ["x"]
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_stream_close_releases_slot(http: httpx.AsyncClient) -> None:
+    respx.post(f"{PRIMARY}/chat").respond(200, content=sse("one", "two"))
+    respx.post(f"{PRIMARY}/other").respond(200, json={"ok": True})
+    provider = client(http, concurrency=1)
+    lines = provider.stream_lines("/chat", {})
+    assert await anext(lines) == "one"
+    await lines.aclose()
+    assert await asyncio.wait_for(provider.post_json("/other", {}), 1) == {"ok": True}
+
+
+@respx.mock
+async def test_unload_llama_swap_at_root(http: httpx.AsyncClient) -> None:
+    route = respx.get("http://desktop.lan:8080/unload").respond(200)
+    await unload(client(http, base_url="http://desktop.lan:8080/v1"), "llama-swap", "")
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_unload_ollama_keep_alive(http: httpx.AsyncClient) -> None:
+    route = respx.post("http://desktop.lan:11434/api/generate").respond(200, json={})
+    await unload(client(http, base_url="http://desktop.lan:11434/v1"), "ollama", "qwen3:8b")
+    assert json.loads(route.calls.last.request.content) == {"model": "qwen3:8b", "keep_alive": 0}
+
+
+@respx.mock
+async def test_unload_none_sends_nothing(http: httpx.AsyncClient) -> None:
+    await unload(client(http), "none", "")
+    assert respx.calls.call_count == 0
+
+
+@respx.mock
+async def test_unload_supported(http: httpx.AsyncClient) -> None:
+    respx.get("http://ok.lan/running").respond(200, json=[])
+    respx.get("http://plain.lan/running").respond(404)
+    respx.get("http://down.lan/running").mock(side_effect=httpx.ConnectError("refused"))
+    assert await unload_supported(client(http, base_url="http://ok.lan/v1"), "llama-swap")
+    assert not await unload_supported(client(http, base_url="http://plain.lan/v1"), "llama-swap")
+    assert not await unload_supported(client(http, base_url="http://down.lan/v1"), "llama-swap")

@@ -6,10 +6,13 @@ from wosarcher.models import (
     Completion,
     Context,
     Contract,
+    DoctorReport,
+    EmbedderInfo,
     Hit,
     Message,
     Page,
     Passage,
+    ProviderHealth,
     Query,
     Report,
     RunRequest,
@@ -31,10 +34,20 @@ CHUNK = Chunk(
     heading_path=("Title", "Part"),
 )
 PASSAGE = Passage(n=1, chunk_id=CHUNK.chunk_id, source_id=SOURCE.source_id, query_id="q1", text="text", score=0.9)
+HEALTH = ProviderHealth(
+    block="score",
+    provider="rerank",
+    base_url="http://desktop.lan:8001/v1",
+    device="desktop:gpu0",
+    status="ok",
+    model="reranker",
+    latency_ms=12.5,
+    unload="no",
+)
 SAMPLES: list[Contract] = [
     RunRequest(query="what", attachments=("notes.md",), until="select", writing=WritingOptions(words=500)),
     Query(query_id="q1", text="what"),
-    Hit(url="https://example.com/a", title="A", snippet="s", query_ids=("q1", "q2")),
+    Hit(url="https://example.com/a", title="A", snippet="s", rank=2, query_ids=("q1", "q2")),
     SOURCE,
     Page(source=SOURCE, markdown="# A"),
     CHUNK,
@@ -45,6 +58,9 @@ SAMPLES: list[Contract] = [
     WritingOptions(),
     Message(role="user", content="hi"),
     Completion(text="hello", input_tokens=3, output_tokens=1),
+    EmbedderInfo(model="Qwen3-Embedding-0.6B", dimension=1024),
+    HEALTH,
+    DoctorReport(providers=(HEALTH,), warnings=("score cannot unload",)),
 ]
 
 

@@ -9,7 +9,7 @@ base_url = "http://localhost:8888"
 
 [fetch]
 provider = "firecrawl"
-base_url = "http://localhost:3002"
+base_url = "http://localhost:3002/v1"
 concurrency = 2
 
 [prefilter]
@@ -23,7 +23,7 @@ concurrency = 1
 
 [score]
 provider = "rerank"
-base_url = "http://localhost:8080"
+base_url = "http://localhost:8080/v1"
 model = "reranker"
 device = "local:gpu0"
 release = "llama-swap"
@@ -31,7 +31,7 @@ batch_size = 8
 concurrency = 1
 
 [llm]
-provider = "openai"
+provider = "llm"
 base_url = "http://localhost:8080/v1"
 model = "writer"
 device = "local:gpu0"

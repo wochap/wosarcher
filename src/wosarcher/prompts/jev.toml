@@ -1,0 +1,9 @@
+# The usefulness question Jev answers for every chunk. Only `$query` is
+# filled in; the chunk text goes to Jev as `state`, never into this text.
+instructions = "How useful is this passage for answering the question: $query"
+criteria = [
+  "Unrelated to the question",
+  "Same topic, but does not help answer the question",
+  "Partially answers the question or gives useful supporting facts",
+  "Directly answers the question with specific facts",
+]

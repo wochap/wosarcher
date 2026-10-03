@@ -10,13 +10,16 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
 from wosarcher.models import WritingOptions
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
 BUILTIN_PROFILES = Path(__file__).parent / "profiles"
+
+# Concurrency per adapter when a block leaves `concurrency` unset.
+DEFAULT_CONCURRENCY = {"searxng": 4, "firecrawl": 6, "embeddings": 4, "rerank": 4, "jev": 64, "llm": 1}
 
 
 class ConfigError(Exception):
@@ -44,21 +47,29 @@ class Provider(Block):
     release: Literal["none", "llama-swap", "ollama"] = "none"
     fallback_urls: list[str] = []
     batch_size: int = Field(default=16, gt=0)
-    concurrency: int = Field(default=4, gt=0)
+    concurrency: int | None = Field(default=None, gt=0)
     connect_timeout: float = Field(default=3.0, gt=0)
     timeout: float = Field(default=60.0, gt=0)
     prices: Prices = Prices()
 
 
+class SearchConfig(Provider):
+    max_results: int = Field(default=10, ge=1)
+    language: str = ""
+    time_range: Literal["", "day", "week", "month", "year"] = ""
+
+
 class FetchConfig(Provider):
-    max_chars: int = Field(default=50000, gt=0)
+    max_chars: int = Field(default=50000, ge=1)
+    only_main_content: bool = True
+    page_timeout: float = Field(default=45.0, gt=0)
 
 
 class ScoreConfig(Provider):
     min_score: float | None = None
     relative_threshold: float = Field(default=0.5, ge=0, le=1)
     top_k: int = Field(default=10, gt=0)
-    fallback: list[str] = ["bm25", "passthrough"]
+    fallback: list[Literal["bm25", "passthrough"]] = ["bm25", "passthrough"]
 
 
 class LLMConfig(Provider):
@@ -82,15 +93,27 @@ class RunConfig(Block):
 
 
 class Settings(Block):
-    search: Provider = Provider(provider="searxng")
+    search: SearchConfig = SearchConfig(provider="searxng")
     fetch: FetchConfig = FetchConfig(provider="firecrawl")
     prefilter: Provider = Provider(provider="bm25")
     score: ScoreConfig = ScoreConfig(provider="bm25")
-    llm: LLMConfig = LLMConfig(provider="openai")
+    llm: LLMConfig = LLMConfig(provider="llm")
     chunk: ChunkConfig = ChunkConfig()
     select: SelectConfig = SelectConfig()
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
+
+    @model_validator(mode="after")
+    def check_blocks(self) -> "Settings":
+        for name in ("search", "fetch", "prefilter", "score", "llm"):
+            block: Provider = getattr(self, name)
+            if block.release == "ollama" and not block.model:
+                raise ValueError(f"{name}.model must be set when {name}.release is 'ollama'")
+        if self.fetch.page_timeout >= self.fetch.timeout:
+            raise ValueError(
+                f"fetch.page_timeout ({self.fetch.page_timeout}) must be below fetch.timeout ({self.fetch.timeout})"
+            )
+        return self
 
 
 # Profiles
@@ -240,6 +263,9 @@ def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str]) -
         lines: list[str] = []
         for problem in error.errors():
             location = ".".join(str(part) for part in problem["loc"])
+            if not location:
+                lines.append(problem["msg"])
+                continue
             lines.append(f"{location}: {problem['msg']} (from {source_of(location, sources)})")
         raise ConfigError("invalid configuration:\n" + "\n".join(lines)) from None
 

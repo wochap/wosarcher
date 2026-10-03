@@ -1,15 +1,30 @@
-"""Command line: `wosarcher profile list|show|use` and `wosarcher schema`."""
+"""Command line: `wosarcher profile list|show|use`, `wosarcher doctor`, and `wosarcher schema`."""
 
+import asyncio
 import json
 import os
 from typing import Annotated
 
+import httpx
 import typer
 from pydantic.json_schema import models_json_schema
 from rich.console import Console
+from rich.table import Table
 
-from wosarcher.config import ConfigError, list_profiles, redact, resolve, select_profile, store_profile, to_toml
-from wosarcher.models import CONTRACTS
+import wosarcher.doctor as health
+from wosarcher.build import build
+from wosarcher.config import (
+    ConfigError,
+    Settings,
+    list_profiles,
+    redact,
+    resolve,
+    select_profile,
+    store_profile,
+    to_toml,
+)
+from wosarcher.http import UsageLedger
+from wosarcher.models import CONTRACTS, DoctorReport
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 profile_app = typer.Typer(no_args_is_help=True, help="List, show, and choose configuration profiles.")
@@ -51,6 +66,58 @@ def profile_use(name: str) -> None:
     except ConfigError as error:
         raise fail(error) from None
     typer.echo(f"default profile: {name}")
+
+
+async def check_providers(settings: Settings) -> DoctorReport:
+    async with httpx.AsyncClient() as http:
+        try:
+            adapters = build(settings, http, UsageLedger({}))
+        except ValueError as error:
+            raise ConfigError(str(error)) from None
+        return await health.check(settings, adapters.managed)
+
+
+def render(report: DoctorReport) -> None:
+    table = Table("block", "provider", "base URL", "device", "status", "model", "latency ms", "unload")
+    for column in table.columns:
+        column.overflow = "fold"
+    for row in report.providers:
+        latency = f"{row.latency_ms:.0f}" if row.latency_ms is not None else ""
+        status = "built in" if row.status == "built-in" else row.status
+        cells = [row.block, row.provider, row.base_url, row.device or "", status, row.model or "", latency, row.unload]
+        table.add_row(*cells)
+    console = Console(highlight=False)
+    console.print(table)
+    for row in report.providers:
+        if row.error:
+            console.print(f"{row.block}: {row.error}", markup=False)
+    for warning in report.warnings:
+        console.print(f"warning: {warning}", markup=False)
+
+
+@app.command()
+def doctor(
+    profile: ProfileOption = None,
+    set_: SetOption = None,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the report as JSON.")] = False,
+) -> None:
+    """Check that every configured provider answers, which model it serves, and whether it can unload.
+
+    Each remote block gets one small real request. The Firecrawl probe scrapes
+    https://example.com, which spends one credit on the cloud API.
+    Exit code 1 when any probe fails.
+    """
+    try:
+        settings = resolve(profile, set_ or [], os.environ)
+        report = asyncio.run(check_providers(settings))
+    except ConfigError as error:
+        raise fail(error) from None
+    if as_json:
+        typer.echo(report.model_dump_json(indent=2))
+    else:
+        render(report)
+    if any(row.status == "failed" for row in report.providers):
+        raise typer.Exit(1)
 
 
 @app.command()

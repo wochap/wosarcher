@@ -11,7 +11,7 @@ concurrency = 8
 
 [fetch]
 provider = "firecrawl"
-base_url = "https://api.firecrawl.dev"
+base_url = "https://api.firecrawl.dev/v1"
 concurrency = 16
 
 [prefilter]
@@ -19,12 +19,12 @@ provider = "bm25"
 
 [score]
 provider = "jev"
-base_url = "https://api.jev.example"
+base_url = "https://api.typesafe.ai/v1"
 concurrency = 16
 timeout = 120.0
 
 [llm]
-provider = "openai"
+provider = "llm"
 base_url = "https://api.openai.com/v1"
 model = "gpt-5-mini"
 concurrency = 8

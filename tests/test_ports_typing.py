@@ -17,6 +17,6 @@ wrong: Searcher = WrongSearcher()  # pyright: ignore[reportAssignmentType]
 
 
 def test_fakes_module_imports() -> None:
-    from tests import fakes
+    from wosarcher.adapters import fakes
 
-    assert fakes.scorer.name == "fake"
+    assert fakes.FakeScorer().name == "fake"

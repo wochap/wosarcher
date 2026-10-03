@@ -120,3 +120,28 @@ def test_api_key_from_environment_is_redacted(env: dict[str, str]) -> None:
     assert settings.score.api_key is not None
     assert settings.score.api_key.get_secret_value() == "sk-env"
     assert redact(settings)["score"]["api_key"] == "***"
+
+
+def test_time_range_invalid(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"search\.time_range"):
+        resolve(None, ["search.time_range=decade"], env)
+
+
+def test_page_timeout_must_be_below_timeout(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve(None, ["fetch.page_timeout=60", "fetch.timeout=30"], env)
+    assert "fetch.page_timeout" in str(error.value)
+    assert "fetch.timeout" in str(error.value)
+
+
+def test_fallback_rejects_remote_scorer(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve(None, ["score.fallback=['rerank']"], env)
+    assert "score.fallback" in str(error.value)
+    assert "'bm25' or 'passthrough'" in str(error.value)
+
+
+def test_ollama_release_needs_model(env: dict[str, str]) -> None:
+    user_profile(env, "ollama", '[score]\nprovider = "rerank"\nrelease = "ollama"\n')
+    with pytest.raises(ConfigError, match=r"score\.model"):
+        resolve("ollama", [], env)

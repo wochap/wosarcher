@@ -86,7 +86,7 @@ device = "desktop:gpu0"        # free-form label; omit for cloud or CPU
 
 [score]
 provider = "rerank"
-base_url = "http://desktop.lan:8001"
+base_url = "http://desktop.lan:8001/v1"
 device = "desktop:gpu0"
 release = "llama-swap"         # none | llama-swap | ollama
 
@@ -95,6 +95,12 @@ base_url = "http://localhost:8080/v1"
 device = "laptop:gpu0"
 ```
 
+`base_url` includes the API version (`/v1`, or `/v2` for Cohere), as in
+OpenAI-compatible clients; each adapter appends a fixed resource path (see
+Adapters). Unload and health calls go to the **server root**: `base_url`
+without a trailing `/` and then without a trailing `/v1`, for the primary
+URL and each fallback URL.
+
 `run.gpu_policy`:
 
 - `shared` (default): models stay resident; this works with plain
@@ -102,10 +108,13 @@ device = "laptop:gpu0"
 - `exclusive`: after a GPU stage, the runner releases its model only if the
   next GPU stage uses the **same device label**. Stages on different devices
   (for example the reranker on the desktop and the writer on the laptop)
-  never wait for each other. Release needs a backend that can unload:
-  llama-swap (`/unload`) or Ollama (`keep_alive: 0`), called over HTTP, so it
-  works for remote hosts too. Plain llama-server has no unload endpoint;
-  `wosarcher doctor` warns about this combination.
+  never wait for each other. Release needs a backend that can unload,
+  called over HTTP so it works for remote hosts too: llama-swap
+  (`GET <root>/unload`, which unloads every model on that server) or Ollama
+  (`POST <root>/api/generate` with the block's `model` and `keep_alive: 0`;
+  `release = "ollama"` requires `model`). Plain llama-server has no unload
+  endpoint; `wosarcher doctor` warns when a block that cannot unload shares
+  its device with another block.
 
 There is no separate scheduler: stage order already serialises GPU use, and
 device labels decide when a release is needed.
@@ -130,7 +139,8 @@ Remote endpoints:
   model name reported by the endpoint plus vector dimension, so pointing at a
   different machine with a different model never reuses wrong vectors.
 - **Health.** `wosarcher doctor` checks each endpoint: reachable, model name,
-  latency of one small request, unload support.
+  latency of one small request, unload support (llama-swap answers
+  `GET <root>/running`, Ollama `GET <root>/api/version`).
 
 ### Scoring
 
@@ -146,8 +156,11 @@ Remote endpoints:
   - `rerank`: not calibrated across queries; relative threshold
     `score.relative_threshold` (keep pairs scoring at least this fraction of
     the best pair for the same query, default 0.5).
-  - `bm25`: local, no model, no API; relative threshold (default 0.5 of the
-    best chunk for the same query), up to 25 chunks per query.
+  - `bm25`: local, no model, no API; values are relative to the best chunk
+    for the query (best 1.0, others their fraction of it; when nothing
+    matches, the first 25 chunks score 1.0 and the rest 0.0); relative
+    threshold (default 0.5), up to 25 chunks per query.
+  - `passthrough`: every chunk 1.0, so input order is kept.
   - All are capped by `score.top_k` per query.
 
 **BM25** is pure Python with no dependencies (`wosarcher/lexical.py`, about 100
@@ -172,7 +185,9 @@ BM25 has three roles:
 
 **Fallback is per stage, not per call.** If the configured scorer fails, the
 whole score stage reruns with the next scorer in `score.fallback` (default
-`["bm25", "passthrough"]` after the configured one), so one run never mixes
+`["bm25", "passthrough"]` after the configured one; only these two built-in
+scorers are allowed, because the score block configures one remote
+endpoint), so one run never mixes
 score scales. The terminal fallback is `passthrough`: chunks in search-rank
 order, then page order, capped by the token budget. A run never ends without
 context.
@@ -262,21 +277,29 @@ behind each claim.
 
 | Port | Adapter | Local | Cloud |
 |---|---|---|---|
-| Searcher | `searxng` | self-hosted | any SearXNG URL that allows `format=json` |
-| Fetcher | `firecrawl` | self-hosted | api.firecrawl.dev |
-| Embedder | `embeddings` (OpenAI-compatible `/v1/embeddings`) | llama-server, Ollama, vLLM | OpenAI, Jina, Voyage |
-| Scorer | `rerank` (Cohere/Jina-style `/v1/rerank`) | llama-server `--rerank`, vLLM | Jina, Cohere, Voyage |
-| Scorer | `jev` | none | TypeSafe |
-| Scorer, Prefilter | `bm25` (built in, `wosarcher/lexical.py`) | CPU | none |
-| LLM | `llm` (OpenAI-compatible chat) | llama-server, Ollama | any |
+| Port | Adapter | Path after `base_url` | Default concurrency | Local | Cloud |
+|---|---|---|---|---|---|
+| Searcher | `searxng` | `GET /search` | 4 | self-hosted | any SearXNG URL that allows `format=json` |
+| Fetcher | `firecrawl` | `POST /scrape` | 6 | self-hosted (`http://host:3002/v1`) | `https://api.firecrawl.dev/v1` |
+| Embedder | `embeddings` (OpenAI-compatible) | `POST /embeddings` | 4 | llama-server, Ollama, vLLM | OpenAI, Jina, Voyage |
+| Scorer | `rerank` (Cohere/Jina-style) | `POST /rerank` | 4 | llama-server `--rerank`, vLLM | Jina, Cohere, Voyage |
+| Scorer | `jev` | `POST /systemone` | 64 | none | TypeSafe (`https://api.typesafe.ai/v1`) |
+| Scorer, Prefilter | `bm25` (built in, `wosarcher/lexical.py`) | none | none | CPU | none |
+| Scorer | `passthrough` (built in) | none | none | CPU | none |
+| LLM | `llm` (OpenAI-compatible chat) | `POST /chat/completions` | 1 | llama-server, Ollama | any |
 
 One adapter per wire format, not per vendor: `base_url` and `api_key` select
 the provider. Every adapter has a fake for tests.
 
-Provider settings that matter: SearXNG `max_results`, `language`,
-`time_range`; Firecrawl `onlyMainContent`, per-page `timeout` (PDFs are
-slow); concurrency defaults fetch 6, Jev 64, local LLM 1 (shared by planner
-and writer).
+Provider settings that matter: `search.max_results` (10), `search.language`,
+`search.time_range` (`day`, `week`, `month`, `year`); `fetch.only_main_content`,
+`fetch.page_timeout` (45 s, must be below `fetch.timeout`; PDFs are slow),
+`fetch.max_chars` (50000). An unset `concurrency` takes the adapter default
+above; the planner and writer share one LLM client and its limit.
+
+Every remote adapter also has `probe()` (one small request, for
+`wosarcher doctor`) and `release()` (unload as configured by `release`; a
+no-op for SearXNG and Firecrawl).
 
 ## Architecture
 
@@ -297,18 +320,19 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts (RunRequest, Query, Hit, Source, Page, Chunk, Score, Context, Report, WritingOptions, Message, Completion) and ID helpers
-  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM
+  models.py      # Pydantic contracts (RunRequest, Query, Hit, Source, Page, Chunk, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport) and ID helpers
+  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
-  http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore; UsageLedger
+  http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
   profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
   store.py       # RunStore: run directory, artifacts, caches (pages by URL, embeddings by SHA-256)
   runner.py      # runs stages in order, emits events, writes artifacts, handles cancel
   build.py       # composition root: config -> adapters (a dict, no registry)
+  doctor.py      # provider health probes and exclusive-GPU warnings
   lexical.py     # BM25: tokenizer, scoring, relative threshold (pure functions)
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
-  prompts/       # plan.md, write.md, tones.toml
+  prompts/       # jev.toml, plan.md, write.md, tones.toml
   cli.py
   server.py
 skill/SKILL.md
@@ -362,8 +386,11 @@ half-written artifact without that event is ignored.
   `<stage>` into a new run and continues with the saved config plus the
   overrides. Used for resume, for changing writing options, and by the eval
   harness.
-- `wosarcher doctor`: checks every configured provider and warns about unsupported
-  combinations.
+- `wosarcher doctor [--profile <name>] [--set k=v] [--json]`: one row per
+  block (provider, base URL, device, status, model, latency, unload support);
+  built-in scorers are shown without a request. Warns about blocks that
+  cannot unload. Exit code 1 when any probe fails. The Firecrawl probe
+  scrapes `https://example.com`, which spends one credit on the cloud API.
 - `wosarcher runs`: lists runs.
 
 ### Events

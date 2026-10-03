@@ -60,6 +60,7 @@ class Hit(Contract):
     url: str
     title: str
     snippet: str = ""
+    rank: int = Field(default=1, ge=1)
     query_ids: tuple[str, ...] = ()
 
 
@@ -137,6 +138,32 @@ class Completion(Contract):
     output_tokens: int = 0
 
 
+class EmbedderInfo(Contract):
+    """The embedding model identity used in cache keys."""
+
+    model: str
+    dimension: int = Field(gt=0)
+
+
+class ProviderHealth(Contract):
+    """One row of `wosarcher doctor`: a configured block and its probe result."""
+
+    block: str
+    provider: str
+    base_url: str = ""
+    device: str | None = None
+    status: Literal["ok", "failed", "built-in"]
+    model: str | None = None
+    latency_ms: float | None = None
+    unload: Literal["yes", "no", "n/a"] = "n/a"
+    error: str | None = None
+
+
+class DoctorReport(Contract):
+    providers: tuple[ProviderHealth, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
 CONTRACTS: tuple[type[Contract], ...] = (
     RunRequest,
     Query,
@@ -151,4 +178,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     WritingOptions,
     Message,
     Completion,
+    EmbedderInfo,
+    ProviderHealth,
+    DoctorReport,
 )
