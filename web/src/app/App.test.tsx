@@ -25,6 +25,6 @@ describe("App", () => {
     await act(async () => {});
     fireEvent.keyDown(window, { code: "Digit2", key: "2", altKey: true });
     await waitFor(() => expect(window.location.hash).toBe("#/live/r_new"));
-    expect(await screen.findByRole("heading", { name: "Live run" })).toBeTruthy();
+    expect(await screen.findByText("r_new")).toBeTruthy();
   });
 });

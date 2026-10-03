@@ -8,8 +8,23 @@ import { App } from "../app/App";
 import { routeHash, type Screen } from "../app/route";
 import type { LoginState } from "../screens/login/LoginScreen";
 import { type FakeData, fakeApi } from "../test/fakeApi";
+import { cancelled } from "../test/fixtures/cancelled";
+import { failure } from "../test/fixtures/failure";
+import { finished } from "../test/fixtures/finished";
+import { live } from "../test/fixtures/live";
+import { loading } from "../test/fixtures/loading";
+import { reconnecting } from "../test/fixtures/reconnecting";
+import { type Fixture, otherRuns } from "../test/fixtures/sample";
+import { versions } from "../test/fixtures/versions";
 
-type Scenario = { screen: Screen; data?: Partial<FakeData>; login?: () => LoginState };
+type Scenario = {
+  screen: Screen;
+  runId?: string;
+  data?: Partial<FakeData>;
+  login?: () => LoginState;
+  stream?: Fixture["stream"];
+  dropAt?: number;
+};
 
 const SCENARIOS: Record<string, Scenario> = {
   login: { screen: "new", login: () => ({ kind: "idle" }) },
@@ -21,22 +36,74 @@ const SCENARIOS: Record<string, Scenario> = {
   history: { screen: "history" },
   emptyHistory: { screen: "history", data: { runs: [] } },
   settings: { screen: "settings" },
+  new: { screen: "new" },
+  empty: { screen: "live", data: { runs: otherRuns } },
+  live,
+  loading,
+  reconnecting,
+  failure,
+  cancelled,
+  finished,
+  versions,
 };
 
-/** Replays a run's fixture events, then stays open like a live run. */
-function previewSocket(events: Record<string, RunEvent[]>): SocketFactory {
+const TERMINAL = new Set(["run.done", "run.failed", "run.cancelled"]);
+const RECONNECTING_MS = 1500;
+
+/**
+ * Plays each run's fixture events after `since`: at once (closing when the run has ended), one
+ * by one on a timer (`timer`), or up to `dropAt`, then fails once more before replaying (`drop`).
+ */
+function previewSocket(events: Record<string, RunEvent[]>, scenario: Scenario): SocketFactory {
+  const connections = new Map<string, number>();
   return class {
     onopen: (() => void) | null = null;
     onmessage: ((message: { data: string }) => void) | null = null;
     onclose: ((close: { code: number }) => void) | null = null;
+    private timers: ReturnType<typeof setTimeout>[] = [];
     constructor(url: string) {
-      const runId = decodeURIComponent(new URL(url).pathname.split("/")[3] ?? "");
-      setTimeout(() => {
+      const parsed = new URL(url);
+      const runId = decodeURIComponent(parsed.pathname.split("/")[3] ?? "");
+      const since = Number(parsed.searchParams.get("since") ?? 0);
+      const all = (events[runId] ?? []).filter((e) => e.seq > since || since === 0);
+      const attempt = (connections.get(runId) ?? 0) + 1;
+      connections.set(runId, attempt);
+      const drop = scenario.stream === "drop" && runId === scenario.runId;
+      if (drop && attempt === 2) {
+        this.later(50, () => this.onclose?.({ code: 1006 }));
+        return;
+      }
+      const shown =
+        drop && attempt === 1 ? all.filter((e) => e.seq <= (scenario.dropAt ?? 0)) : all;
+      this.later(50, () => {
         this.onopen?.();
-        for (const event of events[runId] ?? []) this.onmessage?.({ data: JSON.stringify(event) });
-      }, 50);
+        if (scenario.stream === "timer" && runId === scenario.runId && attempt === 1) {
+          return this.play(shown, 0);
+        }
+        for (const event of shown) this.emit(event);
+        if (drop && attempt === 1)
+          this.later(RECONNECTING_MS, () => this.onclose?.({ code: 1006 }));
+        else if (shown.some((e) => TERMINAL.has(e.type))) this.onclose?.({ code: 1000 });
+      });
     }
-    close() {}
+    private later(ms: number, run: () => void) {
+      this.timers.push(setTimeout(run, ms));
+    }
+    /** Streamed scenarios happen now, so the elapsed time counts from the page load. */
+    private emit(event: RunEvent) {
+      const now = scenario.stream ? { ...event, ts: new Date().toISOString() } : event;
+      this.onmessage?.({ data: JSON.stringify(now) });
+    }
+    private play(list: RunEvent[], i: number) {
+      const event = list[i];
+      if (!event) return;
+      this.emit(event);
+      if (TERMINAL.has(event.type)) return this.onclose?.({ code: 1000 });
+      this.later(event.type === "report.delta" ? 40 : 160, () => this.play(list, i + 1));
+    }
+    close() {
+      for (const timer of this.timers) clearTimeout(timer);
+    }
   };
 }
 
@@ -44,11 +111,17 @@ export function Preview({ name }: { name: string }) {
   const scenario = SCENARIOS[name];
   const [setup] = useState(() => {
     if (!scenario) return null;
-    window.history.replaceState(null, "", routeHash({ screen: scenario.screen }));
+    const route =
+      scenario.screen === "report"
+        ? { screen: "report" as const, runId: scenario.runId }
+        : scenario.screen === "live" && scenario.runId
+          ? { screen: "live" as const, runId: scenario.runId }
+          : { screen: scenario.screen };
+    window.history.replaceState(null, "", routeHash(route));
     const api = fakeApi(scenario.data);
     return {
       makeApi: () => api,
-      Socket: previewSocket(api.data.events),
+      Socket: previewSocket(api.data.events, scenario),
       login: scenario.login?.(),
     };
   });

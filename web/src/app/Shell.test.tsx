@@ -22,7 +22,7 @@ describe("Shell", () => {
 
   it("highlights Live run on the Report screen", async () => {
     renderApp({ hash: "#/runs/r_7f3a" });
-    await screen.findByRole("heading", { name: "Report" });
+    await screen.findByRole("heading", { name: /Compare pgvector HNSW/ });
     expect(current()).toHaveLength(1);
     expect(current()[0].textContent).toContain("Live run");
   });

@@ -1,0 +1,50 @@
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 2px 0;
+}
+
+[data-phone="true"] .footer {
+  gap: 10px;
+}
+
+.item {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.conn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+.dot[data-state="connecting"],
+.dot[data-state="reconnecting"] {
+  background: var(--color-warn);
+  animation: sx-pulse 1s infinite;
+}
+
+.dot[data-state="closed"] {
+  background: var(--faint);
+}
+
+.seq {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}

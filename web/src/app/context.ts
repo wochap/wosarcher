@@ -1,7 +1,9 @@
 // The three app contexts: the API (client and socket factory), authentication, and UI state.
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
-import type { SocketFactory } from "../api/events";
+import type { Conn, SocketFactory } from "../api/events";
+import type { WritingOptions } from "../api/types";
+import type { RunView } from "../run/reducer";
 import type { Theme } from "./theme";
 
 export type Services = { api: ApiClient; Socket?: SocketFactory };
@@ -19,6 +21,23 @@ export const AuthContext = createContext<Auth | null>(null);
 export type OverlayKind = "alertdialog" | "dialog" | "tooltip";
 export type ToastOptions = { undo?: () => void };
 
+export type RunOptions = {
+  recipe: "report" | "context";
+  sources: "web" | "files" | "both";
+  profile: string;
+};
+
+/** The New run form, kept while the user visits other screens. Options hold overrides only. */
+export type Draft = {
+  query: string;
+  files: File[];
+  options: Partial<RunOptions>;
+  writing: Partial<WritingOptions>;
+};
+export const EMPTY_DRAFT: Draft = { query: "", files: [], options: {}, writing: {} };
+
+export type LiveTab = "progress" | "sources" | "passages" | "report";
+
 export type Ui = {
   theme: Theme;
   toggleTheme(): void;
@@ -29,6 +48,13 @@ export type Ui = {
   /** The run "Live run" opens and whose stream stays open on every screen. */
   followed: string | null;
   follow(runId: string | null): void;
+  /** The followed run's view and connection. */
+  live: { view: RunView | null; conn: Conn };
+  draft: Draft;
+  setDraft(update: (draft: Draft) => Draft): void;
+  /** The Live run tab shown below 720px. */
+  liveTab: LiveTab;
+  setLiveTab(tab: LiveTab): void;
   /** Whether the last provider health result had a provider that is not healthy. */
   healthWarn: boolean;
   setHealthWarn(warn: boolean): void;

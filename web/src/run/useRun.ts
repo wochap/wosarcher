@@ -10,7 +10,10 @@ type Action = { reset: string } | { event: RunEvent } | { interrupted: true };
 function reduce(state: RunView, action: Action): RunView {
   if ("reset" in action) return initialRunView(action.reset);
   if ("interrupted" in action) return { ...state, status: "interrupted" };
-  return runReducer(state, action.event);
+  const next = runReducer(state, action.event);
+  // The summary can arrive before the replayed log, whose events cannot undo the interruption.
+  const open = next.status === "running" || next.status === "queued";
+  return state.status === "interrupted" && open ? { ...next, status: "interrupted" } : next;
 }
 
 const IDLE: Conn = { state: "closed", attempt: 0, replayed: 0, notFound: false };

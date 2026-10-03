@@ -1,0 +1,91 @@
+.report {
+  font-size: 13.5px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.report h1,
+.report h2,
+.report h3 {
+  font-size: 16px;
+  margin: 16px 0 6px;
+}
+
+.report p {
+  margin: 0 0 7px;
+}
+
+.report ul,
+.report ol {
+  margin: 0 0 7px;
+  padding-left: 20px;
+}
+
+.report li {
+  margin: 0 0 4px;
+}
+
+.report li::marker {
+  color: var(--muted);
+}
+
+.report[data-variant="article"] {
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.report[data-variant="article"] h1,
+.report[data-variant="article"] h2,
+.report[data-variant="article"] h3 {
+  font-size: 19px;
+  margin: 22px 0 8px;
+}
+
+.report[data-variant="article"] p {
+  margin: 0 0 9px;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1;
+  padding: 2px 4px;
+  margin: 0 1px;
+  vertical-align: 1px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
+  cursor: help;
+}
+
+.chip:hover {
+  background: var(--color-accent-800);
+}
+
+.chip[data-marker="superscript"] {
+  font-size: 12px;
+  padding: 1px 2px;
+  vertical-align: 5px;
+}
+
+.chip[data-marker="author-year"] {
+  font-size: 11px;
+}
+
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--color-accent);
+  animation: sx-blink 1s steps(1) infinite;
+}
+
+.references {
+  list-style: none;
+  padding-left: 0;
+  font-size: 0.9em;
+  color: var(--muted);
+}

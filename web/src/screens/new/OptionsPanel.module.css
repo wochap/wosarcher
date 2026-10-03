@@ -1,0 +1,103 @@
+.panel {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-md);
+}
+
+.toggle:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+.caret {
+  color: var(--muted);
+  flex: none;
+}
+
+.title {
+  font-weight: 500;
+}
+
+.summary {
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  font-size: 10.5px;
+  padding: 1px 7px;
+}
+
+.body {
+  padding: 4px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 0 2px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 6px 16px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+[data-phone="true"] .row {
+  grid-template-columns: 1fr;
+}
+
+.rowLabel {
+  font-size: 12.5px;
+}
+
+.writingHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0 2px;
+}
+
+.writingHead .group {
+  padding: 0;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.link {
+  font-size: 12px;
+  padding: 0 3px;
+}
+
+.resetAll {
+  margin-left: auto;
+}

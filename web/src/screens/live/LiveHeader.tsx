@@ -1,0 +1,89 @@
+// The Live run header: status tag, rewrite tag, id, meta, query, device chip, and actions.
+import { ArrowClockwise, Article, Circle, GitBranch, Stop } from "@phosphor-icons/react";
+import type { RunDetail, RunStatus } from "../../api/types";
+import type { RunView } from "../../run/reducer";
+import { DeviceChip } from "./DeviceChip";
+import css from "./LiveHeader.module.css";
+import { recipeOf } from "./model";
+
+const LABELS: Record<RunStatus, string> = {
+  queued: "Connecting",
+  running: "Running",
+  done: "Completed",
+  failed: "Failed",
+  interrupted: "Interrupted",
+  cancelled: "Cancelled",
+};
+
+type Props = {
+  run: RunView;
+  detail: RunDetail | null;
+  files: number;
+  isPhone: boolean;
+  onCancel: () => void;
+  onOpenReport: () => void;
+  onRerun: () => void;
+};
+
+export function LiveHeader({
+  run,
+  detail,
+  files,
+  isPhone,
+  onCancel,
+  onOpenReport,
+  onRerun,
+}: Props) {
+  const status = run.status;
+  const active = status === "queued" || status === "running";
+  const ended = status === "failed" || status === "cancelled" || status === "interrupted";
+  const meta = [
+    recipeOf(run.until ?? detail?.until),
+    detail?.sources ?? "both",
+    run.profile ?? detail?.profile ?? "",
+  ];
+  if (files) meta.push(`${files} file${files > 1 ? "s" : ""}`);
+  const parent = run.parentRunId ?? detail?.parent_run_id;
+  return (
+    <header className={css.header}>
+      <div className={css.main}>
+        <div className={css.line}>
+          <span className={`tag ${css.status}`} data-state={status}>
+            <Circle weight="fill" className={css.dot} aria-hidden="true" />
+            {LABELS[status]}
+          </span>
+          {detail?.fork_from === "write" && parent && (
+            <span className={`tag tag-outline ${css.rewrite}`}>
+              <GitBranch aria-hidden="true" />
+              rewrite of {parent}
+            </span>
+          )}
+          <span className={css.id}>{run.runId}</span>
+          <span>{meta.join(" · ")}</span>
+        </div>
+        <div className={css.query}>{run.query ?? detail?.query}</div>
+      </div>
+      <div className={css.actions}>
+        {active && !isPhone && <DeviceChip run={run} />}
+        {active && (
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+            <Stop aria-hidden="true" />
+            Cancel
+          </button>
+        )}
+        {status === "done" && (
+          <button type="button" className="btn btn-primary" onClick={onOpenReport}>
+            <Article aria-hidden="true" />
+            Open report
+          </button>
+        )}
+        {ended && (
+          <button type="button" className="btn btn-secondary" onClick={onRerun}>
+            <ArrowClockwise aria-hidden="true" />
+            Rerun
+          </button>
+        )}
+      </div>
+    </header>
+  );
+}

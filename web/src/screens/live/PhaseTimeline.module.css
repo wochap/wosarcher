@@ -1,0 +1,128 @@
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 5px;
+}
+
+[data-phone="true"] .timeline {
+  grid-template-columns: 1fr 1fr;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px 0;
+  border-radius: var(--radius-md);
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 1px solid var(--line);
+  --label: var(--muted);
+  --icon: var(--faint);
+  --text: var(--faint);
+  --bar: transparent;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--label);
+}
+
+.icon {
+  color: var(--icon);
+  font-size: 14px;
+  flex: none;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text {
+  font-size: 11.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track {
+  height: 3px;
+  margin: 3px -9px 0;
+  background: var(--line);
+}
+
+.bar {
+  height: 100%;
+  background: var(--bar);
+  transition: width 0.2s linear;
+}
+
+.card[data-state="waiting"] {
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-warn) 14%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  border: 1px dashed var(--color-warn);
+  --label: var(--color-text);
+  --icon: var(--color-warn);
+  --text: var(--color-warn);
+}
+
+.card[data-state="running"] {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 16px -6px var(--color-accent);
+  --label: var(--color-text);
+  --icon: var(--color-accent);
+  --text: var(--color-accent-300);
+  --bar: var(--color-accent);
+}
+
+.card[data-state="running"] .icon {
+  animation: sx-spin 0.9s linear infinite;
+}
+
+.card[data-state="done"] {
+  border: 1px solid var(--color-divider);
+  --label: var(--color-text);
+  --icon: var(--muted);
+  --text: var(--muted);
+  --bar: var(--faint);
+}
+
+.card[data-state="reused"] {
+  border: 1px dashed var(--color-divider);
+  --icon: var(--muted);
+  --text: var(--muted);
+  --bar: var(--line);
+}
+
+.card[data-state="failed"] {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border: 1px solid var(--color-danger);
+  --label: var(--color-text);
+  --icon: var(--color-danger);
+  --text: var(--color-danger);
+  --bar: var(--color-danger);
+}
+
+.card[data-state="cancelled"] {
+  border: 1px dashed var(--muted);
+  --label: var(--color-text);
+  --icon: var(--muted);
+  --text: var(--muted);
+  --bar: var(--faint);
+}

@@ -1,0 +1,275 @@
+.page {
+  flex: 1;
+  overflow: auto;
+}
+
+.inner {
+  padding: 28px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1240px;
+}
+
+[data-phone="true"] .inner {
+  padding: 16px 14px 24px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.id {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.h1 {
+  font-size: 26px;
+  margin: 0;
+  line-height: 1.25;
+  max-width: 880px;
+  text-wrap: pretty;
+}
+
+[data-phone="true"] .h1 {
+  font-size: 21px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.versions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kicker {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.versionList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.version {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.version:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.version[aria-current="true"] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.versionHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.versionIcon {
+  color: var(--color-accent);
+}
+
+.versionId {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.versionDesc {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 28px;
+  align-items: start;
+}
+
+@media (max-width: 1099.98px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.article {
+  max-width: 720px;
+  min-width: 0;
+}
+
+.parentNote {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.parentIcon {
+  color: var(--color-accent);
+  flex: none;
+}
+
+.optsLine {
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.asideTitle {
+  font-size: 13px;
+  letter-spacing: 0;
+  margin: 0 0 6px;
+}
+
+.asideCount {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.sourceTitle {
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kept {
+  font-size: 11.5px;
+  color: var(--color-accent-300);
+}
+
+.sourceUrl {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourceCites {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.passages {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.passage {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.passageHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.cite {
+  font-family: var(--mono);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
+}
+
+.score {
+  font-family: var(--mono);
+  color: var(--color-accent-300);
+}
+
+.heading {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passageText {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.domain {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}

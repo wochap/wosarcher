@@ -45,6 +45,8 @@ export type SourceView = {
   state: "found" | "fetched" | "failed";
   reason?: string;
   kept: number;
+  /** Fetched by the run this fork copied the fetch stage from. */
+  cached?: boolean;
 };
 
 export type ScoredQuery = {

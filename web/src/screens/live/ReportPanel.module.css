@@ -1,0 +1,17 @@
+.options {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.body {
+  padding: 4px 16px 16px;
+}
+
+.empty {
+  padding: 8px 0;
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}

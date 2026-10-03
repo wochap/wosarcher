@@ -1,24 +1,15 @@
 // The Run history table. Every column comes from the one GET /api/runs response.
 import { ArrowClockwise, ArrowElbowDownRight, ArrowSquareOut, Trash } from "@phosphor-icons/react";
-import type { RunSummary, WritingOptions } from "../../api/types";
+import type { RunSummary } from "../../api/types";
 import { StatusTag } from "../../components/StatusTag";
-import { describeValue, type WritingField } from "../../components/WritingOptionsForm";
 import { dateTime, minSec } from "../../format";
+import { wDiff } from "../../run/format";
 import css from "./HistoryTable.module.css";
 
 export const recipeOf = (run: RunSummary) => (run.until === "select" ? "context" : "report");
 export const durationOf = (run: RunSummary) =>
   run.duration_s == null ? "–" : minSec(run.duration_s);
 export const costOf = (run: RunSummary) => (run.cost == null ? "–" : `$${run.cost.toFixed(3)}`);
-
-/** The writing options in which a fork differs from its parent: "Concise · 300 words". */
-export function writingChanges(parent: WritingOptions, fork: WritingOptions): string {
-  const fields = Object.keys(fork) as WritingField[];
-  const changed = fields.filter((f) => String(parent[f]) !== String(fork[f]));
-  return changed
-    .map((f) => (f === "tone_instructions" ? "custom instructions" : describeValue(f, fork[f])))
-    .join(" · ");
-}
 
 type Props = {
   runs: RunSummary[];
@@ -60,7 +51,7 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
                     <div className={css.rewrite}>
                       <ArrowElbowDownRight aria-hidden="true" />
                       rewrite of <span className={css.id}>{run.parent_run_id}</span> ·{" "}
-                      {parent ? writingChanges(parent.writing, run.writing) || "same options" : "–"}
+                      {parent ? wDiff(parent.writing, run.writing) || "same options" : "–"}
                     </div>
                   )}
                 </td>

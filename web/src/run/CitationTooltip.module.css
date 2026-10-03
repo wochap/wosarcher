@@ -1,0 +1,91 @@
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.tooltip[data-above="true"] {
+  transform: translateY(-100%);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+}
+
+.label {
+  font-family: var(--mono);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
+}
+
+.score {
+  font-family: var(--mono);
+  color: var(--color-accent-300);
+}
+
+.bar {
+  flex: 1;
+  max-width: 90px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--color-accent);
+}
+
+.relevance {
+  margin-left: auto;
+  color: var(--faint);
+}
+
+.text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.source {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.title {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.where {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.domain {
+  font-family: var(--mono);
+  font-size: 11px;
+}

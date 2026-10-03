@@ -15,6 +15,9 @@ import {
   ApiContext,
   type Auth,
   AuthContext,
+  type Draft,
+  EMPTY_DRAFT,
+  type LiveTab,
   type OverlayKind,
   type Ui,
   UiContext,
@@ -78,7 +81,11 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
   const [followed, follow] = useState<string | null>(null);
   const [healthWarn, setHealthWarn] = useState(false);
   const services = useMemo(() => ({ api, Socket }), [api, Socket]);
-  const { view } = useRun(followed, services);
+  const { view, conn } = useRun(followed, services);
+  const live = useMemo(() => ({ view, conn }), [view, conn]);
+  const [draft, setDraftState] = useState<Draft>(EMPTY_DRAFT);
+  const setDraft = useCallback((update: (d: Draft) => Draft) => setDraftState(update), []);
+  const [liveTab, setLiveTab] = useState<LiveTab>("progress");
   const [hiddenRuns, setHidden] = useState<ReadonlySet<string>>(new Set());
   const unhide = useCallback((id: string) => {
     setHidden((h) => new Set([...h].filter((x) => x !== id)));
@@ -142,12 +149,31 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
       overlay,
       followed,
       follow,
+      live,
+      draft,
+      setDraft,
+      liveTab,
+      setLiveTab,
       healthWarn,
       setHealthWarn,
       hiddenRuns,
       deleteRun,
     }),
-    [theme, toggleTheme, isPhone, toast, overlay, followed, healthWarn, hiddenRuns, deleteRun],
+    [
+      theme,
+      toggleTheme,
+      isPhone,
+      toast,
+      overlay,
+      followed,
+      live,
+      draft,
+      setDraft,
+      liveTab,
+      healthWarn,
+      hiddenRuns,
+      deleteRun,
+    ],
   );
   const auth: Auth = useMemo(
     () => ({ locked, method, lock, unlock }),
@@ -183,7 +209,7 @@ function Current({ route }: { route: Route }) {
     case "live":
       return <LiveScreen />;
     case "report":
-      return <ReportScreen />;
+      return <ReportScreen key={route.runId} runId={route.runId ?? ""} />;
     case "history":
       return <HistoryScreen />;
     case "settings":

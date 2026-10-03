@@ -1,0 +1,42 @@
+.banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 11px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  --tint: var(--color-accent);
+  background: color-mix(in srgb, var(--tint) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tint) 30%, transparent);
+}
+
+.banner[data-tone="warn"] {
+  --tint: var(--color-warn);
+  background: color-mix(in srgb, var(--tint) 9%, transparent);
+  border-color: color-mix(in srgb, var(--tint) 45%, transparent);
+}
+
+.banner[data-tone="muted"] {
+  --tint: var(--color-text);
+  background: color-mix(in srgb, var(--tint) 5%, transparent);
+  border-color: color-mix(in srgb, var(--tint) 16%, transparent);
+}
+
+.icon {
+  color: var(--tint);
+  font-size: 15px;
+  flex: none;
+}
+
+.banner[data-tone="warn"] .icon {
+  animation: sx-pulse 1.2s infinite;
+}
+
+.banner[data-tone="muted"] .icon {
+  color: var(--muted);
+}
+
+.text {
+  flex: 1;
+}

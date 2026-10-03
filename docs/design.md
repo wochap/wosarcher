@@ -895,7 +895,20 @@ These override the prototype where they differ:
 - **Name:** "wosarcher" everywhere the prototype says "Sift" (brand, token
   prefix `wosarcher_`, storage keys). No version string is hard-coded.
 - **Citations:** `[n]` points to a passage; hover shows the passage text,
-  source, and score.
+  source, and score. Citation chips are built from the body with `[n]`
+  markers (the streamed text while writing, `report.json` `body` once
+  written) and labelled by the client per `citation_marker`, with the
+  report writer's author-year fallbacks (web host without `www.`, file
+  name, "n.d."); the References list comes from `report.json`.
+- **Rejected passages:** read on demand from `scores.jsonl` joined with
+  `chunks.jsonl` by `chunk_id`, once score is done; display scores use the
+  server's mapping below, and a chunk kept for any query is not shown as
+  rejected.
+- **Forks:** a fork's log has only `stage.done` events with `copied_from`
+  for the stages it copied. The browser replays the parent's events,
+  following `copied_from` to the run that ran each stage, and shows the
+  parent's sub-queries, sources (marked "cached"), and passages for the
+  reused phases.
 - **Citation options:** two settings, `citation_marker` and
   `reference_style` (see Writing options).
 - **Tones:** the 11 tones in Writing options. Default length 1200 words.

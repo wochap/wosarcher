@@ -1,6 +1,6 @@
 // In-memory ApiClient for tests and the dev preview. Records every call; any method can be
 // replaced on the returned object to script a test.
-import type { ApiClient, LoginResult } from "../api/client";
+import { type ApiClient, ApiError, type LoginResult } from "../api/client";
 import type {
   HealthReport,
   ProfileInfo,
@@ -17,6 +17,8 @@ import * as fixtures from "./fixtures/data";
 export type FakeData = {
   runs: RunSummary[];
   events: Record<string, RunEvent[]>;
+  /** Artifact text by run id and name; a missing one answers 404. */
+  artifacts: Record<string, Record<string, string>>;
   settings: ServerSettings;
   profiles: ProfileInfo[];
   health: HealthReport;
@@ -33,6 +35,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
   return structuredClone({
     runs: fixtures.runs,
     events: {},
+    artifacts: {},
     settings: fixtures.settings,
     profiles: fixtures.profiles,
     health: fixtures.health,
@@ -99,7 +102,9 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     },
     async getArtifact(id, name) {
       record("getArtifact", id, name);
-      return "";
+      const text = data.artifacts[id]?.[name];
+      if (text === undefined) throw new ApiError(404, "not_found", `no artifact ${name}`);
+      return text;
     },
     async getSettings() {
       record("getSettings");
