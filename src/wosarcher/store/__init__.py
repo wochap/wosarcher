@@ -206,7 +206,7 @@ class RunStore:
         path = self.run_dir(run_id) / name
         if not path.is_file():
             return []
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_text(encoding="utf-8").split("\n")
         return [model_type.model_validate_json(line) for line in lines if line.strip()]
 
     def append_report(self, run_id: str, text: str) -> None:
@@ -240,7 +240,7 @@ class RunStore:
         path = self.run_dir(run_id) / "events.jsonl"
         if not path.is_file():
             return []
-        events = [parse_event(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        events = [parse_event(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
         return [event for event in events if event.seq > since]
 
     def done_events(self, run_id: str) -> dict[Stage, StageDone]:

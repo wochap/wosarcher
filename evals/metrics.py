@@ -55,7 +55,7 @@ def context_size(run_dir: Path) -> tuple[int, int]:
 
 def stage_seconds(run_dir: Path) -> dict[Stage, float]:
     path = run_dir / "events.jsonl"
-    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    lines = path.read_text(encoding="utf-8").split("\n") if path.is_file() else []
     events = [parse_event(line) for line in lines if line.strip()]
     return {
         event.stage: event.data.seconds

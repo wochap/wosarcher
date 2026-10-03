@@ -68,7 +68,9 @@ async def judge_result(llm: LLM, query: str, passages: Sequence[str]) -> float |
 def read_judgements(path: Path) -> list[Judgement]:
     if not path.is_file():
         return []
-    return [Judgement.model_validate_json(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    return [
+        Judgement.model_validate_json(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()
+    ]
 
 
 async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]) -> int:

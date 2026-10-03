@@ -104,6 +104,15 @@ def test_artifacts_round_trip(store: RunStore) -> None:
     assert not list(store.run_dir(run_id).glob("*.tmp"))
 
 
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029", "\x85"])
+def test_items_with_unicode_line_separators(store: RunStore, separator: str) -> None:
+    # JSON keeps these characters raw; only "\n" may end a JSONL record.
+    run_id = create(store)
+    hits = [Hit(url="https://a.test", title=f"A{separator}B", snippet=f"x{separator}y", rank=1, query_ids=["q0"])]
+    store.write_artifact(run_id, "hits.jsonl", hits)
+    assert store.read_items(run_id, "hits.jsonl", Hit) == hits
+
+
 def test_seq_continues_in_new_store(store: RunStore) -> None:
     run_id = create(store)
     for _ in range(41):

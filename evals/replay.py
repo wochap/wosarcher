@@ -98,7 +98,7 @@ def fork(
 def read_results(path: Path) -> list[ForkResult]:
     if not path.is_file():
         return []
-    lines = path.read_text(encoding="utf-8").splitlines()
+    lines = path.read_text(encoding="utf-8").split("\n")
     return [ForkResult.model_validate_json(line) for line in lines if line.strip()]
 
 

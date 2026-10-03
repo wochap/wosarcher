@@ -12,7 +12,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "rich>=14",
     "typer>=0.16",
-    "uvicorn>=0.54.0",
+    "uvicorn[standard]>=0.54.0",
 ]
 
 [project.scripts]
