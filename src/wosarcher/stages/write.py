@@ -1,7 +1,7 @@
 """Write: one streamed LLM call answers the query from the selected passages; code renders citations and references.
 
 Only the query and options go through the templates; passage titles and
-text go in a separate, delimited data message.
+text go in a delimited data block of the user message, before the task.
 """
 
 import re
@@ -56,8 +56,7 @@ def messages(context: Context, options: WritingOptions, tone_description: str) -
     task = load("write_task").substitute(query=context.query, words=options.words, language=options.language)
     return [
         Message(role="system", content=system),
-        Message(role="user", content=f"{preamble}\n\n<passages>\n{entries}</passages>"),
-        Message(role="user", content=task),
+        Message(role="user", content=f"{preamble}\n\n<passages>\n{entries}</passages>\n\n{task}"),
     ]
 
 
@@ -211,7 +210,13 @@ async def write(
     if not context.passages:
         raise ValueError("no passages to write from")
     pieces: list[str] = []
-    async for piece in llm.stream(messages(context, options, description), max_tokens=output_tokens(options.words)):
+    reasons: list[str | None] = []
+    limit = output_tokens(options.words)
+    async for piece in llm.stream(messages(context, options, description), max_tokens=limit, on_finish=reasons.append):
         on_delta(piece)
         pieces.append(piece)
-    return render("".join(pieces), context, options)
+    report = render("".join(pieces), context, options)
+    if reasons != ["length"]:
+        return report
+    truncated = f"report truncated at the output limit of {limit} tokens"
+    return report.model_copy(update={"warnings": [*report.warnings, truncated]})

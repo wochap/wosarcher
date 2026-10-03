@@ -49,6 +49,8 @@ async def test_fake_llm() -> None:
     fake = FakeLLM(["first reply", "second"])
     messages = [Message(role="user", content="hi")]
     assert (await fake.complete(messages, max_tokens=8)).text == "first reply"
-    assert [part async for part in fake.stream(messages, max_tokens=8)] == ["second"]
+    reasons: list[str | None] = []
+    assert [part async for part in fake.stream(messages, max_tokens=8, on_finish=reasons.append)] == ["second"]
+    assert reasons == ["stop"]
     await fake.release()
     assert (fake.releases, len(fake.calls), (await fake.probe()).status) == (1, 2, "ok")

@@ -30,3 +30,9 @@ provider = "llm"
 base_url = "http://localhost:8080/v1"
 model = "writer"
 device = "local:gpu0"
+# Prompt processing of a large context, or a model load behind llama-swap,
+# can take minutes before the first token.
+timeout = 600.0
+# Start llama-server with `-c` at least llm.context_window (`wosarcher doctor`
+# checks it). Ollama: set max_tokens_field = "max_tokens" if it ignores
+# max_completion_tokens.

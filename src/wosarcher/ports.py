@@ -1,6 +1,6 @@
 """Protocols that stages depend on; adapters and fakes satisfy them structurally."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -31,7 +31,11 @@ class Scorer(Protocol):
 class LLM(Protocol):
     async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion: ...
 
-    def stream(self, messages: list[Message], *, max_tokens: int) -> AsyncIterator[str]: ...
+    def stream(
+        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = ...
+    ) -> AsyncIterator[str]:
+        """Text deltas in order; `on_finish` gets the final finish reason (or None) when the stream ends."""
+        ...
 
 
 class Managed(Protocol):

@@ -80,3 +80,23 @@ async def test_release_unsupported_warns() -> None:
     )
     report = await check(settings, managed(score=row("score", unload="no", base_url="http://d/v1")))
     assert report.warnings == ("score cannot unload: http://d/v1 does not answer like llama-swap",)
+
+
+def window(size: int) -> Settings:
+    return Settings.model_validate({"llm": {"provider": "llm", "context_window": size}})
+
+
+async def test_context_too_small_warns() -> None:
+    report = await check(window(32768), managed(llm=row("llm", context_window=4096)))
+    assert len(report.warnings) == 1
+    assert "4096" in report.warnings[0]
+    assert "32768" in report.warnings[0]
+
+
+async def test_context_large_enough_no_warning() -> None:
+    report = await check(window(16384), managed(llm=row("llm", context_window=32768)))
+    assert report.warnings == ()
+
+
+async def test_no_context_no_warning() -> None:
+    assert (await check(window(32768), managed())).warnings == ()

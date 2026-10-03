@@ -290,6 +290,8 @@ class ProviderHealth(Contract):
     latency_ms: float | None = None
     unload: Literal["yes", "no", "n/a"] = "n/a"
     error: str | None = None
+    context_window: int | None = None
+    note: str | None = None
 
 
 class DoctorReport(Contract):

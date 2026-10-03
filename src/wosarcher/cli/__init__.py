@@ -91,6 +91,9 @@ def render(report: DoctorReport) -> None:
     for row in report.providers:
         if row.error:
             console.print(f"{row.block}: {row.error}", markup=False)
+    for row in report.providers:
+        if row.note:
+            console.print(f"{row.block}: {row.note}", markup=False)
     for warning in report.warnings:
         console.print(f"warning: {warning}", markup=False)
 

@@ -43,10 +43,12 @@ export type Sources = Source[]
 export type UsedTokens = number
 export type BaseUrl = string
 export type Block = string
+export type ContextWindow = (number | null)
 export type Device = (string | null)
 export type Error1 = (string | null)
 export type LatencyMs = (number | null)
 export type Model = (string | null)
+export type Note = (string | null)
 export type Provider = string
 export type Status = ("ok" | "failed" | "built-in")
 export type Unload = ("yes" | "no" | "n/a")
@@ -478,10 +480,12 @@ warnings?: Warnings
 export interface ProviderHealth {
 base_url?: BaseUrl
 block: Block
+context_window?: ContextWindow
 device?: Device
 error?: Error1
 latency_ms?: LatencyMs
 model?: Model
+note?: Note
 provider: Provider
 status: Status
 unload?: Unload

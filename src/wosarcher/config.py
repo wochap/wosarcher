@@ -64,6 +64,7 @@ class Provider(Block):
     concurrency: int | None = Field(default=None, gt=0)
     connect_timeout: float = Field(default=3.0, gt=0)
     timeout: float = Field(default=60.0, gt=0)
+    retry_budget: float = Field(default=60.0, ge=0)
     prices: Prices = Prices()
 
 
@@ -84,6 +85,7 @@ class ScoreConfig(Provider):
     relative_threshold: float = Field(default=0.5, ge=0, le=1)
     top_k: int = Field(default=10, gt=0)
     fallback: list[Literal["bm25", "passthrough"]] = ["bm25", "passthrough"]
+    rerank_scale: Literal["auto", "probability", "logit"] = "auto"
 
 
 class PrefilterConfig(Provider):
@@ -95,6 +97,8 @@ class LLMConfig(Provider):
     context_window: int = Field(default=32768, gt=0)
     chars_per_token: float = Field(default=3.5, gt=0)
     token_margin: float = Field(default=1.1, ge=1)
+    max_tokens_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
+    reasoning_tokens: int = Field(default=0, ge=0)
 
 
 class PlanConfig(Block):

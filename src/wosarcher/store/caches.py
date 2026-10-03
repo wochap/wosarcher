@@ -73,5 +73,5 @@ class EmbeddingCache:
 
     def put(self, model: str, dim: int, key: str, vector: list[float]) -> None:
         if len(vector) != dim:
-            return
+            raise ValueError(f"embedding has {len(vector)} dimensions, expected {dim} for model {model}")
         write_atomic(self.path(model, dim, key), array("f", vector).tobytes())

@@ -37,3 +37,9 @@ model = "writer"
 device = "local:gpu0"
 release = "llama-swap"
 concurrency = 1
+# Prompt processing of a large context, or a model load behind llama-swap,
+# can take minutes before the first token.
+timeout = 600.0
+# Start llama-server with `-c` at least llm.context_window (`wosarcher doctor`
+# checks it). Ollama: set max_tokens_field = "max_tokens" if it ignores
+# max_completion_tokens.

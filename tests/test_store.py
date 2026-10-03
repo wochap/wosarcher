@@ -238,6 +238,12 @@ def test_embedding_cache(tmp_path: Path) -> None:
     assert cache.get("model-a", 3, "ab12") is None
 
 
+def test_embedding_cache_rejects_wrong_dimension(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"3 dimensions, expected 4 for model model-a"):
+        EmbeddingCache(tmp_path).put("model-a", 4, "ab12", [0.5, 0.25, 0.125])
+    assert not [path for path in tmp_path.rglob("*") if path.is_file()]
+
+
 def append_raw(store: RunStore, run_id: str, text: str) -> None:
     with (store.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
         log.write(text)

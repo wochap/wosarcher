@@ -279,9 +279,25 @@ variables, for example `WOSARCHER_SCORE__API_KEY` or
 `WOSARCHER_LLM__API_KEY`. They are redacted everywhere they are shown or
 saved.
 
+**Provider quirks.**
+
+- `llm.max_tokens_field`: the request field for the output limit,
+  `max_completion_tokens` (default) or `max_tokens` for servers that need
+  the older field (for example an Ollama build that ignores
+  `max_completion_tokens`).
+- `llm.reasoning_tokens`: extra output tokens added to every LLM request
+  for reasoning models (gpt-5, o-series) that count hidden reasoning against
+  the limit. Default 0; the `cloud` profile sets 4096.
+- `score.rerank_scale`: `auto` (default), `probability`, or `logit`. Logit
+  scores from a reranker are mapped through a sigmoid before thresholds and
+  display; `auto` detects the scale per run.
+- `retry_budget` (every provider block): seconds a call may spend waiting
+  between retries on 429/502/503/504/529, default 60; `0` disables retries.
+
 `wosarcher profile show` prints the resolved configuration;
 `wosarcher doctor` checks each endpoint, its model, latency, and whether it
-can unload.
+can unload. It warns when the LLM server's context (llama-server `-c`) is
+below `llm.context_window`.
 
 **Paths.**
 

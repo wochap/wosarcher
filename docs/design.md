@@ -139,7 +139,17 @@ Remote endpoints:
   is out of scope; put LiteLLM or llama-swap in front if needed.
 - **Timeouts and batches.** Connect timeout short (`connect_timeout`, 3 s) so
   a sleeping machine fails fast and the fallback chain takes over (BM25 for
-  prefilter and score). Larger batches amortise network latency.
+  prefilter and score). The read `timeout` defaults to 60 s; the local
+  profiles set `llm.timeout = 600` so prompt processing of a large context,
+  or a model load behind llama-swap, finishes before the first token.
+  Larger batches amortise network latency.
+- **Retries.** HTTP 429, 502, 503, 504, and 529 are retried on the same URL
+  with exponential backoff (0.5 s doubling, each wait at most 8 s) or the
+  `Retry-After` header, while the total wait on that URL stays within the
+  block's `retry_budget` (default 60 s) and at most 10 retries; a wait that
+  would exceed the budget fails the call at once. `retry_budget = 0`
+  disables retries. Connection failures and connect timeouts go to the next
+  fallback URL at once; read timeouts are not retried.
 - **Payload size.** Request `encoding_format: "base64"` for embeddings when
   the server supports it; JSON float arrays are several times larger.
 - **Security.** Run llama-server with `--api-key` and bind to the LAN
@@ -162,16 +172,23 @@ Remote endpoints:
 - File chunks are paired with the main query and each sub-query. Only
   pairs that survive the prefilter (`prefilter.top_k` per query, default
   50, by embedding similarity or BM25, or all with `none`) reach the
-  scorer. If the embedder fails, the prefilter uses BM25 for the whole
-  stage and records a warning. Embeddings are cached by the SHA-256 of the
-  text.
+  scorer. If the embedder fails, or returns a vector of another dimension,
+  the prefilter uses BM25 for the whole stage and records a warning.
+  Embeddings are cached by the SHA-256 of the text; the cache refuses a
+  vector whose dimension differs from its identity.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
     (default 1.5).
   - `rerank`: not calibrated across queries; relative threshold
     `score.relative_threshold` (keep pairs scoring at least this fraction of
-    the best pair for the same query, default 0.5). When no score of a
-    query is positive, only its best pair is kept.
+    the best pair for the same query, default 0.5), applied to the mapped
+    score. Rerankers return either probabilities (0 to 1) or raw logits;
+    `score.rerank_scale` (`auto`, `probability`, `logit`) names the scale,
+    and `auto` picks `logit` when any raw score of the stage is outside
+    [0, 1], so one stage never mixes scales. On the logit scale the mapped
+    score is the sigmoid `1 / (1 + e^-x)`; on the probability scale it is
+    the raw score. Raw scores stay in `scores.jsonl`. When no mapped score
+    of a query is positive, only its best pair is kept.
   - `bm25`: local, no model, no API; raw BM25 values, kept by the lexical
     ranking rule: relative threshold (default 0.5), zero scores dropped, up
     to 25 chunks per query, and the first chunks in page order when nothing
@@ -234,8 +251,8 @@ tried.
 
 The token budget is
 `min(select.max_context_tokens, llm.context_window - select.prompt_reserve_tokens - output)`,
-where `output = max(1024, 2 * words)` is also the write call's
-`max_tokens` (defaults 16000 and 2000). A budget of zero or less is an
+where `output = max(1024, 2 * words)` is also the write call's output
+limit, sent as `llm.max_tokens_field` (defaults 16000 and 2000). A budget of zero or less is an
 error naming `llm.context_window`.
 
 File and web shares are soft and run in two phases: when both sides have
@@ -324,15 +341,16 @@ behind each claim.
 ### Prompt injection
 
 - Fetched content never reaches the planner.
-- The writer receives chunks in a separate, delimited message and is told to
-  treat them as data, not instructions.
+- The writer sends `system` then one `user` message: an instruction to treat
+  the following block as data, not instructions, the delimited
+  `<passages>` block, and after it the writing task. Text that would close
+  the block is escaped. One user message keeps chat templates that require
+  alternating roles working.
 - Scraped text is never passed through `str.format` or a template engine;
-  it is inserted as a whole message.
+  it is inserted as a whole block.
 
 ## Adapters
 
-| Port | Adapter | Local | Cloud |
-|---|---|---|---|
 | Port | Adapter | Path after `base_url` | Default concurrency | Local | Cloud |
 |---|---|---|---|---|---|
 | Searcher | `searxng` | `GET /search` | 4 | self-hosted | any SearXNG URL that allows `format=json` |
@@ -352,6 +370,15 @@ Provider settings that matter: `search.max_results` (10), `search.language`,
 `fetch.page_timeout` (45 s, must be below `fetch.timeout`; PDFs are slow),
 `fetch.max_chars` (50000). An unset `concurrency` takes the adapter default
 above; the planner and writer share one LLM client and its limit.
+
+The LLM adapter sends the output limit plus `llm.reasoning_tokens` under
+`llm.max_tokens_field` (`max_completion_tokens` by default, `max_tokens` for
+servers that need it; never both). An answer with empty content and finish
+reason `length` fails with an error naming `llm.reasoning_tokens`. Streaming
+fails with a provider error on an event with an `error` member, and reports
+the last `finish_reason` to the caller's `on_finish` callback; the writer
+warns `report truncated at the output limit of <N> tokens` when it is
+`length`.
 
 Every remote adapter also has `probe()` (one small request, for
 `wosarcher doctor`) and `release()` (unload as configured by `release`; a
@@ -486,7 +513,12 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 - `wosarcher doctor [--profile <name>] [--set k=v] [--json]`: one row per
   block (provider, base URL, device, status, model, latency, unload support);
   built-in scorers are shown without a request. Warns about blocks that
-  cannot unload. Exit code 1 when any probe fails. The Firecrawl probe
+  cannot unload. After a successful LLM probe it reads the server's `n_ctx`
+  from `GET <root>/props` (or `<root>/upstream/<model>/props` behind
+  llama-swap), shows it as a note, and warns when it is below
+  `llm.context_window`. The rerank row's note shows the probe's raw score
+  and its scale (`probe score -3.25 (logit scale)`). Warnings and notes do
+  not change the exit code. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
 - `wosarcher runs [--limit N] [--json]`: lists runs newest first as
   `RunSummary` rows, with status from the last `run.*` event: `done`,
@@ -795,12 +827,18 @@ Environment variables use the prefix `WOSARCHER_` and `__` for nesting
 
 Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `model`, `device`, `release` (none, llama-swap, ollama), `fallback_urls`,
-`batch_size`, `concurrency`, `connect_timeout`, `timeout`, `prices`
-(optional `input_per_mtok`, `output_per_mtok`, `per_unit` for cost
-recording).
+`batch_size`, `concurrency`, `connect_timeout`, `timeout`, `retry_budget`
+(seconds of retry waits, default 60), `prices` (optional `input_per_mtok`,
+`output_per_mtok`, `per_unit` for cost recording). The `llm` block adds
+`max_tokens_field` (`max_completion_tokens` or `max_tokens`) and
+`reasoning_tokens` (default 0, added to every LLM request's limit, for
+reasoning models that count hidden reasoning tokens); the `score` block adds
+`rerank_scale` (`auto`, `probability`, `logit`).
 
 Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
-`workstation` (shared), `cloud` (no local models, high concurrency).
+`workstation` (shared), `cloud` (no local models, high concurrency;
+`llm.reasoning_tokens = 4096` for `gpt-5-mini`). The local profiles set
+`llm.timeout = 600`.
 
 Secrets come from the environment or a secrets file and are redacted in
 `request.json` and in all server responses.
@@ -974,7 +1012,8 @@ These override the prototype where they differ:
 - **Tones:** the 11 tones in Writing options. Default length 1200 words.
 - **Scores:** shown as a 0 to 1 bar (`display`). `jev` scores are divided
   by 3; `bm25` scores are divided by the best score of the same query;
-  other scorers (`rerank`) are shown as returned; all clamped to 0 to 1.
+  `rerank` shows its mapped score (the sigmoid on the logit scale); other
+  scorers are shown as returned; all clamped to 0 to 1.
   The threshold line is `score.min_score / 3` for `jev`,
   `score.relative_threshold` for `bm25`, and `score.relative_threshold`
   times the query's best display score for other scorers. `passthrough`

@@ -46,5 +46,11 @@ async def check(settings: Settings, managed: Mapping[str, Managed]) -> DoctorRep
             row = ProviderHealth(block=name, provider=cfg.provider, status="built-in")
         elif row.unload == "no" and cfg.release != "none":
             warnings.append(f"{name} cannot unload: {row.base_url} does not answer like {cfg.release}")
+        if name == "llm" and row.context_window is not None and row.context_window < settings.llm.context_window:
+            size, window = row.context_window, settings.llm.context_window
+            warnings.append(
+                f"llm server context is {size} tokens, below llm.context_window = {window}; "
+                f"start the server with a larger context (llama-server -c {window}) or lower llm.context_window"
+            )
         rows.append(row)
     return DoctorReport(providers=tuple(rows), warnings=tuple(warnings + exclusive_warnings(settings)))

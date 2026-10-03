@@ -10,6 +10,8 @@ import asyncio
 from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass
 from functools import partial
+from math import exp
+from typing import Literal
 
 from wosarcher.config import ScoreConfig
 from wosarcher.lexical import bm25_scores, rank
@@ -18,6 +20,8 @@ from wosarcher.ports import Scorer
 
 JEV_MAX = 3.0
 BM25_MAX_RESULTS = 25
+
+type Scale = Literal["probability", "logit"]
 
 
 def noop(_: QueryScores) -> None:
@@ -34,6 +38,23 @@ class Group:
 
 
 # Thresholds and display
+
+
+def stage_scale(cfg: ScoreConfig, values: Sequence[Sequence[float]]) -> Scale:
+    """The configured rerank scale; for `auto`, `logit` when any value of the stage is outside [0, 1]."""
+    if cfg.rerank_scale != "auto":
+        return cfg.rerank_scale
+    return "logit" if any(not 0 <= value <= 1 for group in values for value in group) else "probability"
+
+
+def mapped(name: str, scale: Scale, value: float) -> float:
+    """Rerank logits through the logistic sigmoid (stable for large negative values); anything else as is."""
+    if name != "rerank" or scale != "logit":
+        return value
+    if value >= 0:
+        return 1 / (1 + exp(-value))
+    small = exp(value)
+    return small / (1 + small)
 
 
 def _keep_calibrated(values: Sequence[float], min_score: float) -> set[int]:
@@ -126,17 +147,20 @@ async def gather[T](calls: Sequence[Callable[[], Coroutine[object, object, T]]])
     return [task.result() for task in tasks]
 
 
-def scored_pairs(name: str, calibrated: bool, group: Group, values: Sequence[float], cfg: ScoreConfig) -> list[Score]:
-    """Every pair of the group with value, display, and threshold result."""
-    kept = _kept(name, calibrated, group, values, cfg)
-    best = max(values, default=0.0)
+def scored_pairs(
+    name: str, calibrated: bool, group: Group, values: Sequence[float], cfg: ScoreConfig, scale: Scale
+) -> list[Score]:
+    """Every pair of the group with raw value, display, and threshold result (on the mapped values)."""
+    shown = [mapped(name, scale, value) for value in values]
+    kept = _kept(name, calibrated, group, shown, cfg)
+    best = max(shown, default=0.0)
     return [
         Score(
             query_id=group.query.id,
             chunk_id=chunk.chunk_id,
             value=values[i],
             scorer=name,
-            display=_display(name, values[i], best),
+            display=_display(name, shown[i], best),
             kept=i in kept,
         )
         for i, chunk in enumerate(group.chunks)
@@ -172,10 +196,10 @@ def capped(scores: list[Score], top_k: int) -> list[Score]:
     ]
 
 
-def report(group: Group, name: str, scores: list[Score], cfg: ScoreConfig) -> QueryScores:
+def report(group: Group, name: str, scores: list[Score], cfg: ScoreConfig, scale: Scale) -> QueryScores:
     order = sorted(range(len(scores)), key=lambda i: (-scores[i].value, i))
     passages = [scores[i] for i in order if scores[i].kept]
-    best = max((score.value for score in scores), default=None)
+    best = max((mapped(name, scale, score.value) for score in scores), default=None)
     return QueryScores(
         query_id=group.query.id,
         scorer=name,
@@ -230,13 +254,15 @@ async def score(
         break
 
     calibrated = scorer is not None and scorer.name == name and scorer.calibrated
+    scale: Scale = stage_scale(cfg, values) if name == "rerank" else "probability"
     used = {group.query.id: (name, group, vals) for group, vals in zip(ranked, values, strict=True)}
     for group in groups:
         if group.passthrough:
             used[group.query.id] = ("passthrough", group, await raw_values("passthrough", group, None))
 
     per_query = {
-        query_id: scored_pairs(entry, calibrated, group, vals, cfg) for query_id, (entry, group, vals) in used.items()
+        query_id: scored_pairs(entry, calibrated, group, vals, cfg, scale)
+        for query_id, (entry, group, vals) in used.items()
     }
     flat = best_pair_only([s for group in groups for s in per_query[group.query.id]], plan_index)
     reports: list[QueryScores] = []
@@ -247,7 +273,7 @@ async def score(
         if entry != "passthrough":
             own = capped(own, cfg.top_k)
         scores.extend(own)
-        reports.append(report(group, entry, own, cfg))
+        reports.append(report(group, entry, own, cfg, scale))
     for item in reports:
         on_item(item)
     return ScoreResult(scores=scores, scorer=name, failed=failed, queries=reports)

@@ -15,7 +15,8 @@ from wosarcher.config import DEFAULT_CONCURRENCY, Prices, Provider
 from wosarcher.models import ProviderHealth
 
 RETRY_STATUSES = {429, 502, 503, 504, 529}
-MAX_RETRIES = 3
+MAX_RETRIES = 10
+MAX_BACKOFF = 8.0
 
 
 class ProviderError(Exception):
@@ -80,17 +81,17 @@ class UsageLedger:
         return [UsageRow(provider, stage, replace(usage)) for (provider, stage), usage in self.totals.items()]
 
 
-def retry_delay(response: httpx.Response, attempt: int, backoff: float, cap: float) -> float:
-    """`Retry-After` (seconds or HTTP date) when present, else exponential backoff; never above `cap`."""
+def retry_delay(response: httpx.Response, attempt: int, backoff: float) -> float:
+    """`Retry-After` (seconds or HTTP date) when present, else exponential backoff capped at `MAX_BACKOFF`."""
     header = response.headers.get("retry-after")
-    delay = backoff * 2**attempt
+    delay = min(backoff * 2**attempt, MAX_BACKOFF)
     if header:
         try:
             delay = float(header)
         except ValueError:
             with suppress(TypeError, ValueError):
                 delay = (parsedate_to_datetime(header) - datetime.now(UTC)).total_seconds()
-    return max(0.0, min(delay, cap))
+    return max(0.0, delay)
 
 
 def server_root(base_url: str) -> str:
@@ -133,6 +134,7 @@ class ProviderClient:
         for base in [self.cfg.base_url, *self.cfg.fallback_urls]:
             url = f"{server_root(base) if root else base.rstrip('/')}/{path.lstrip('/')}"
             tried.append(url)
+            waited = 0.0
             for attempt in range(MAX_RETRIES + 1):
                 request = self.http.build_request(
                     method, url, json=json, params=params, headers=headers, timeout=timeout
@@ -156,14 +158,20 @@ class ProviderClient:
                     await response.aclose()
                 finally:
                     self.slots.release()
-                if response.status_code not in RETRY_STATUSES or attempt == MAX_RETRIES:
+                delay = retry_delay(response, attempt, self.backoff)
+                if (
+                    response.status_code not in RETRY_STATUSES
+                    or attempt == MAX_RETRIES
+                    or waited + delay > self.cfg.retry_budget
+                ):
                     raise ProviderError(
                         self.name,
                         f"HTTP {response.status_code} at {url}: {self.excerpt(response.text)}",
                         url=url,
                         status=response.status_code,
                     )
-                await asyncio.sleep(retry_delay(response, attempt, self.backoff, self.cfg.timeout))
+                await asyncio.sleep(delay)
+                waited += delay
         raise ProviderError(self.name, f"cannot connect to any endpoint: {', '.join(tried)}")
 
     async def request(

@@ -1,8 +1,10 @@
+import math
+
 import pytest
 
 from wosarcher.adapters.fakes import FakeScorer
 from wosarcher.config import ScoreConfig
-from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores
+from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, ScoreResult
 from wosarcher.stages.score import _display, _keep_calibrated, _keep_relative, score
 
 from .ranking_data import chunks_of, file_page, queries, web_page
@@ -132,3 +134,73 @@ async def test_everything_fails_ends_with_passthrough() -> None:
     assert [f.item for f in result.failed] == ["rerank"]
     assert all(s.kept for s in result.scores)
     assert len(result.scores) == 12
+
+
+class ByQuery(FakeScorer):
+    """Rerank values per query, one per chunk in page order."""
+
+    def __init__(self, values: dict[str, list[float]]) -> None:
+        super().__init__("rerank")
+        self.by_query = values
+
+    async def score(self, query: Query, chunks: list[Chunk]):
+        self.values = dict(zip((c.chunk_id for c in chunks), self.by_query[query.id], strict=True))
+        return await super().score(query, chunks)
+
+
+async def rerank_stage(values: dict[str, list[float]], **fields: object) -> ScoreResult:
+    size = len(next(iter(values.values())))
+    pages, chunks = setup([f"c{n}" for n in range(size)], list(values))
+    qs = [Query(id=query_id, text="x") for query_id in values]
+    cfg = ScoreConfig.model_validate({"provider": "rerank", **fields})
+    return await score(every(qs, chunks), qs, pages, chunks, ByQuery(values), cfg=cfg)
+
+
+def kept_values(result: ScoreResult, query_id: str = "q0") -> list[float]:
+    return [s.value for s in result.scores if s.kept and s.query_id == query_id]
+
+
+async def test_negative_logits_keep_two() -> None:
+    result = await rerank_stage({"q0": [-1.2, -1.5, -4.0]})
+    assert kept_values(result) == [-1.2, -1.5]
+    assert [s.display for s in result.queries[0].passages] == [
+        pytest.approx(0.23, abs=0.01),
+        pytest.approx(0.18, abs=0.01),
+    ]
+
+
+async def test_large_logits() -> None:
+    assert kept_values(await rerank_stage({"q0": [6.0, 2.0, -3.0]})) == [6.0, 2.0]
+
+
+async def test_probability_scale_unchanged() -> None:
+    result = await rerank_stage({"q0": [0.9, 0.5, 0.4]})
+    assert kept_values(result) == [0.9, 0.5]
+    assert [s.display for s in result.queries[0].passages] == [0.9, 0.5]
+
+
+async def test_forced_probability_negative_keeps_best() -> None:
+    result = await rerank_stage({"q0": [-1.2, -1.5, -4.0]}, rerank_scale="probability")
+    assert kept_values(result) == [-1.2]
+
+
+async def test_scale_decided_per_stage() -> None:
+    result = await rerank_stage({"q0": [0.9, 0.5], "q1": [2.5, 1.0]})
+    q0 = [s for s in result.scores if s.query_id == "q0"]
+    assert q0[0].display == pytest.approx(1 / (1 + math.exp(-0.9)))
+
+
+async def test_logit_best_pair_across_queries() -> None:
+    page = file_page("notes.md")
+    chunks = chunks_of(page, ["shared"])
+    qs = queries(2)
+    result = await score(
+        every(qs, chunks), qs, [page], chunks, ByQuery({"q0": [-1.0], "q1": [-0.1]}), cfg=ScoreConfig(provider="rerank")
+    )
+    assert [(s.query_id, s.kept) for s in result.scores] == [("q0", False), ("q1", True)]
+    assert [s.display for s in result.scores] == [pytest.approx(0.27, abs=0.01), pytest.approx(0.48, abs=0.01)]
+
+
+async def test_raw_values_kept() -> None:
+    result = await rerank_stage({"q0": [6.0, 2.0, -3.0]})
+    assert [s.value for s in result.scores] == [6.0, 2.0, -3.0]

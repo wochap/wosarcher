@@ -1,6 +1,8 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 
 import httpx
 import pytest
@@ -8,7 +10,7 @@ import respx
 from pydantic import SecretStr
 
 from wosarcher.config import Prices, Provider
-from wosarcher.http import ProviderClient, ProviderError, UsageLedger, unload, unload_supported
+from wosarcher.http import ProviderClient, ProviderError, UsageLedger, retry_delay, unload, unload_supported
 
 PRIMARY = "http://primary.lan:8001"
 BACKUP = "http://backup.lan:8001"
@@ -20,9 +22,20 @@ async def http() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
-def client(http: httpx.AsyncClient, **fields: object) -> ProviderClient:
+def client(http: httpx.AsyncClient, *, backoff: float = 0, **fields: object) -> ProviderClient:
     cfg = Provider.model_validate({"provider": "rerank", "base_url": PRIMARY, **fields})
-    return ProviderClient("rerank", cfg, http, UsageLedger({}), backoff=0)
+    return ProviderClient("rerank", cfg, http, UsageLedger({}), backoff=backoff)
+
+
+@pytest.fixture
+def sleeps(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    delays: list[float] = []
+
+    async def record(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr(asyncio, "sleep", record)
+    return delays
 
 
 @respx.mock
@@ -56,12 +69,64 @@ async def test_client_error_not_retried(http: httpx.AsyncClient) -> None:
 
 
 @respx.mock
-async def test_retries_exhausted_after_four_attempts(http: httpx.AsyncClient) -> None:
-    route = respx.post(f"{PRIMARY}/rerank").respond(503, headers={"Retry-After": "0"})
+async def test_retries_exhausted_after_eleven_attempts(http: httpx.AsyncClient) -> None:
+    route = respx.post(f"{PRIMARY}/rerank").respond(503)
     with pytest.raises(ProviderError, match="HTTP 503") as error:
         await client(http).post_json("/rerank", {})
     assert error.value.status == 503
-    assert route.call_count == 4
+    assert route.call_count == 11
+
+
+@respx.mock
+async def test_budget_stops_retries(http: httpx.AsyncClient, sleeps: list[float]) -> None:
+    respx.post(f"{PRIMARY}/rerank").respond(503)
+    with pytest.raises(ProviderError, match="HTTP 503"):
+        await client(http, backoff=0.5, retry_budget=5).post_json("/rerank", {})
+    assert sleeps == [0.5, 1, 2]
+
+
+@respx.mock
+async def test_retry_after_beyond_budget_fails_at_once(http: httpx.AsyncClient) -> None:
+    route = respx.post(f"{PRIMARY}/rerank").respond(429, headers={"Retry-After": "30"})
+    with pytest.raises(ProviderError, match="HTTP 429"):
+        await client(http, retry_budget=10).post_json("/rerank", {})
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_zero_budget_no_retry(http: httpx.AsyncClient, sleeps: list[float]) -> None:
+    route = respx.post(f"{PRIMARY}/rerank").respond(503)
+    with pytest.raises(ProviderError, match="HTTP 503"):
+        await client(http, backoff=0.5, retry_budget=0).post_json("/rerank", {})
+    assert route.call_count == 1
+    assert sleeps == []
+
+
+@respx.mock
+async def test_model_loading_then_ok(http: httpx.AsyncClient) -> None:
+    respx.post(f"{PRIMARY}/rerank").mock(
+        side_effect=[*[httpx.Response(503) for _ in range(4)], httpx.Response(200, json={"n": 1})]
+    )
+    assert await client(http).post_json("/rerank", {}) == {"n": 1}
+
+
+def test_retry_delay_backoff_capped() -> None:
+    response = httpx.Response(503)
+    assert [retry_delay(response, attempt, 0.5) for attempt in range(6)] == [0.5, 1, 2, 4, 8, 8]
+
+
+def test_retry_delay_header_seconds() -> None:
+    assert retry_delay(httpx.Response(429, headers={"Retry-After": "7"}), 0, 0.5) == 7
+
+
+def test_retry_delay_header_date() -> None:
+    when = format_datetime(datetime.now(UTC) + timedelta(seconds=3), usegmt=True)
+    assert 1.5 < retry_delay(httpx.Response(429, headers={"Retry-After": when}), 0, 0.5) <= 3
+
+
+def test_retry_delay_header_past_date() -> None:
+    when = format_datetime(datetime.now(UTC) - timedelta(seconds=30), usegmt=True)
+    assert retry_delay(httpx.Response(429, headers={"Retry-After": when}), 0, 0.5) == 0
 
 
 @respx.mock

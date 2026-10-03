@@ -89,3 +89,23 @@ async def test_release_ollama_posts_keep_alive(http: httpx.AsyncClient, ledger: 
     route = respx.post("http://desktop.lan:8001/api/generate").respond(200, json={})
     await scorer(http, ledger, release="ollama", model="reranker").release()
     assert json.loads(route.calls.last.request.content) == {"model": "reranker", "keep_alive": 0}
+
+
+async def probe_note(http: httpx.AsyncClient, ledger: UsageLedger, score: float, **fields: object) -> str | None:
+    respx.post(f"{BASE}/rerank").respond(200, json={"results": [{"index": 0, "relevance_score": score}]})
+    return (await scorer(http, ledger, **fields).probe()).note
+
+
+@respx.mock
+async def test_probe_note_logit(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    assert await probe_note(http, ledger, -3.25) == "probe score -3.25 (logit scale)"
+
+
+@respx.mock
+async def test_probe_note_probability(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    assert await probe_note(http, ledger, 0.93) == "probe score 0.93 (probability scale)"
+
+
+@respx.mock
+async def test_probe_note_configured_scale(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    assert await probe_note(http, ledger, 0.5, rerank_scale="logit") == "probe score 0.5 (logit scale)"

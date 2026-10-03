@@ -59,6 +59,12 @@ def test_health_mapping() -> None:
     assert (report.profile, report.warnings) == ("cloud", ["w"])
 
 
+def test_ok_row_detail_is_note() -> None:
+    row = ProviderHealth(block="score", provider="rerank", status="ok", note="probe score -3.25 (logit scale)")
+    report = health_report("workstation", DoctorReport(providers=(row,)))
+    assert (report.checks[0].status, report.checks[0].detail) == ("ok", "probe score -3.25 (logit scale)")
+
+
 def test_health_profile_param(client: TestClient, runs_dir: Path) -> None:
     response = client.get("/api/providers/health", params={"profile": "cloud"})
     assert response.status_code == 200

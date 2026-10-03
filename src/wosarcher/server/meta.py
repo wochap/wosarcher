@@ -50,7 +50,7 @@ def provider_check(row: ProviderHealth) -> ProviderCheck:
     elif row.latency_ms is not None and row.latency_ms > SLOW_MS:
         status, detail = "degraded", "slow response"
     else:
-        status, detail = "ok", ""
+        status, detail = "ok", row.note or ""
     return ProviderCheck(
         role=row.block,
         provider=row.provider,

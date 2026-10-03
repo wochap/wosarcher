@@ -3,7 +3,8 @@
 Web chunks pair with every query that found their page; file chunks pair with
 every query. A query whose paired pages are short skips ranking (small-input
 passthrough). Others keep `top_k` pairs by embedding similarity or BM25, or all
-with `none`. An embedder failure switches the whole stage to BM25.
+with `none`. An embedder failure or a vector of another dimension switches the
+whole stage to BM25.
 """
 
 import math
@@ -109,12 +110,14 @@ async def prefilter(
     warnings: list[str] = []
     vectors: MutableMapping[str, list[float]] = cache if cache is not None else {}
 
+    similar: dict[str, list[Candidate]] = {}
     if ran == "embeddings":
         texts = [text for query in ranked for text in (query.text, *(chunk.text for chunk in paired[query.id]))]
         try:
             if embedder is None:
                 raise RuntimeError("embedder not configured")
             await embed_all(texts, embedder, vectors)
+            similar = {query.id: by_similarity(query, paired[query.id], top_k, vectors) for query in ranked}
         except Exception as error:
             warnings.append(f"embeddings prefilter failed, used bm25: {error}")
             ran = "bm25"
@@ -125,7 +128,7 @@ async def prefilter(
         if query.id in small:
             candidates.extend(Candidate(query_id=query.id, chunk_id=c.chunk_id, passthrough=True) for c in chunks_of)
         elif ran == "embeddings":
-            candidates.extend(by_similarity(query, chunks_of, top_k, vectors))
+            candidates.extend(similar[query.id])
         elif ran == "bm25":
             candidates.extend(by_bm25(query, chunks_of, top_k))
         else:

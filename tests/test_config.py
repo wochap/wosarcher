@@ -219,3 +219,37 @@ def test_auth_password_hash_from_environment_is_redacted(env: dict[str, str]) ->
     assert settings.auth.password_hash is not None
     assert settings.auth.password_hash.get_secret_value() == "scrypt$15$8$1$salt$key"
     assert redact(settings)["auth"]["password_hash"] == "***"
+
+
+def test_wire_format_defaults() -> None:
+    settings = Settings()
+    assert settings.llm.retry_budget == 60.0
+    assert settings.llm.max_tokens_field == "max_completion_tokens"
+    assert settings.llm.reasoning_tokens == 0
+    assert settings.score.rerank_scale == "auto"
+
+
+def test_invalid_max_tokens_field(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve("workstation", ['llm.max_tokens_field="n_predict"'], env)
+    assert "llm.max_tokens_field" in str(error.value)
+    assert "'max_completion_tokens' or 'max_tokens'" in str(error.value)
+
+
+def test_negative_retry_budget_rejected(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"llm\.retry_budget"):
+        resolve("workstation", ["llm.retry_budget=-1"], env)
+
+
+def test_negative_reasoning_tokens_rejected(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"llm\.reasoning_tokens"):
+        resolve("workstation", ["llm.reasoning_tokens=-1"], env)
+
+
+@pytest.mark.parametrize("name", ["workstation", "low-vram"])
+def test_local_profiles_llm_timeout(name: str, env: dict[str, str]) -> None:
+    assert resolve(name, [], env).llm.timeout == 600
+
+
+def test_cloud_reasoning_tokens(env: dict[str, str]) -> None:
+    assert resolve("cloud", [], env).llm.reasoning_tokens == 4096

@@ -1,6 +1,6 @@
 """In-memory fakes for every port, for stage and runner tests. No network code."""
 
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from hashlib import sha256
 
 from wosarcher.models import (
@@ -18,6 +18,10 @@ from wosarcher.models import (
 )
 
 FAKE_DIMENSION = 8
+
+
+def ignore(_reason: str | None) -> None:
+    pass
 
 
 def healthy(block: str, provider: str, model: str | None = None) -> ProviderHealth:
@@ -116,6 +120,7 @@ class FakeLLM(FakeManaged):
         super().__init__(healthy("llm", "fake", "fake-llm"))
         self.replies = list(replies or ["ok"])
         self.calls: list[list[Message]] = []
+        self.finish_reason: str | None = "stop"
 
     def _next(self, messages: list[Message]) -> str:
         self.calls.append(list(messages))
@@ -124,7 +129,10 @@ class FakeLLM(FakeManaged):
     async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
         return Completion(text=self._next(messages))
 
-    async def stream(self, messages: list[Message], *, max_tokens: int) -> AsyncIterator[str]:
+    async def stream(
+        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = ignore
+    ) -> AsyncIterator[str]:
         words = self._next(messages).split(" ")
         for position, word in enumerate(words):
             yield word if position == len(words) - 1 else word + " "
+        on_finish(self.finish_reason)

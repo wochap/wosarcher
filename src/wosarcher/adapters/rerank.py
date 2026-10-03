@@ -1,6 +1,7 @@
 """Scorer: a Cohere/Jina-style reranker (`POST <base_url>/rerank`). Scores are uncalibrated."""
 
 import asyncio
+from contextlib import suppress
 from typing import Any
 
 from wosarcher.config import ScoreConfig
@@ -58,11 +59,25 @@ class RerankScorer:
         return [values[index] for index in range(len(chunks))]
 
     async def probe(self) -> ProviderHealth:
+        values: list[float] = []
+
         async def call() -> str | None:
             data = await self._request("probe", ["probe document"])
+            results: list[dict[str, Any]] = data.get("results") or data.get("data") or []
+            with suppress(KeyError, IndexError, TypeError, ValueError):
+                values.append(float(results[0]["relevance_score"]))
             return data.get("model")
 
-        return await probe(self.client, "score", call)
+        health = await probe(self.client, "score", call)
+        if health.status != "ok" or not values:
+            return health
+        return health.model_copy(update={"note": f"probe score {values[0]:g} ({self.scale(values[0])} scale)"})
+
+    def scale(self, value: float) -> str:
+        """The configured scale, or for `auto` the one this raw score implies."""
+        if self.cfg.rerank_scale != "auto":
+            return self.cfg.rerank_scale
+        return "probability" if 0 <= value <= 1 else "logit"
 
     async def release(self) -> None:
         await unload(self.client, self.cfg.release, self.cfg.model)
