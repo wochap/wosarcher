@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/styles.css">
+<script src="_ds/nocturne-53929d40-05df-499c-bc14-17884e999fc5/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<style>
+html,body{margin:0;height:100%}
+.sx{--muted:color-mix(in srgb,var(--color-text) 64%,transparent);--faint:color-mix(in srgb,var(--color-text) 42%,transparent);--line:color-mix(in srgb,var(--color-text) 9%,transparent);--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--color-danger:#e58a99;--color-warn:#d9b56c;font-variant-numeric:tabular-nums}
+.sx[data-theme=light]{--color-bg:#f2f2f6;--color-surface:#fbfbfd;--color-text:#1d1f2c;--color-accent:#6b5ec4;--color-divider:color-mix(in srgb,#1d1f2c 16%,transparent);--color-danger:#b23c50;--color-warn:#8f6514;--color-neutral-100:#292b31;--color-neutral-200:#3f424d;--color-neutral-300:#595d6c;--color-neutral-400:#75798c;--color-neutral-600:#b2b6ca;--color-neutral-700:#cfd3e5;--color-neutral-800:#e4e7f5;--color-neutral-900:#f3f5fe;--color-accent-100:#2b2741;--color-accent-200:#423a6a;--color-accent-300:#5d5294;--color-accent-400:#796cbf;--color-accent-600:#b5abfc;--color-accent-700:#d2cefd;--color-accent-800:#e7e5fe;--color-accent-900:#f5f4ff;--shadow-sm:0 0 0 1px #e1e3ee;--shadow-md:0 0 0 1px #d6d9e6,0 6px 18px rgba(29,31,44,.08);--shadow-lg:0 0 0 1px #c9cddd,0 16px 40px rgba(29,31,44,.14)}
+.sx .seg{flex-wrap:wrap;max-width:100%}
+.sx select.input{appearance:auto}
+@keyframes sx-spin{to{transform:rotate(360deg)}}
+@keyframes sx-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes sx-blink{50%{opacity:0}}
+@keyframes sx-shimmer{0%{background-position:-240px 0}100%{background-position:240px 0}}
+.sx ::-webkit-scrollbar{width:10px;height:10px}.sx ::-webkit-scrollbar-thumb{background:var(--color-divider);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.sx a{color:var(--color-accent);text-decoration:none}.sx a:hover{color:var(--color-accent-300);text-decoration:underline}
+</style>
+</helmet>
+<div class="sx" data-theme="{{ theme }}" style="height:100vh;display:flex;align-items:center;justify-content:center;background:var(--color-bg);color:var(--color-text);font-size:13.5px;line-height:1.5">
+<div style="width:{{ appW }};height:{{ appH }};border-radius:{{ appR }};box-shadow:{{ appShadow }};overflow:hidden;display:flex;flex-direction:{{ appDir }};background:var(--color-bg);position:relative">
+
+<sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}">
+<nav aria-label="Main" style="width:184px;flex:none;display:flex;flex-direction:column;gap:2px;padding:14px 10px;background:color-mix(in srgb,var(--color-surface) 45%,var(--color-bg));border-right:1px solid var(--line)">
+  <div style="display:flex;align-items:center;gap:8px;padding:2px 8px 16px"><i class="ph ph-funnel-simple" style="font-size:18px;color:var(--color-accent)"></i><span style="font-size:16px;font-weight:500;letter-spacing:-0.01em">Sift</span><span style="font-family:var(--mono);font-size:10.5px;color:var(--faint);margin-left:auto">0.9.2</span></div>
+  <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+    <button onClick="{{ n.go }}" aria-current="{{ n.cur }}" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:0;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.col }};font:inherit;font-size:13.5px;text-align:left;cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)">
+      <i class="ph {{ n.ic }}" style="font-size:16px"></i><span style="flex:1">{{ n.l }}</span>
+      <sc-if value="{{ n.dot }}" hint-placeholder-val="{{ false }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ n.dotCol }};animation:{{ n.dotAnim }}"></span></sc-if>
+      <span style="font-size:10.5px;color:var(--faint);white-space:nowrap">{{ n.k }}</span>
+    </button>
+  </sc-for>
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:0 8px">
+    <button class="btn btn-secondary" onClick="{{ toggleTheme }}" style="justify-content:flex-start;font-size:12.5px;padding:5px 8px"><i class="ph {{ themeIcon }}"></i>{{ themeLabel }}</button>
+    <div style="font-family:var(--mono);font-size:10.5px;color:var(--faint)">ws://localhost:8765</div>
+  </div>
+</nav>
+</sc-if>
+
+<sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+<nav aria-label="Main" style="display:flex;align-items:center;gap:2px;padding:4px 6px;border-bottom:1px solid var(--line);flex:none">
+  <i class="ph ph-funnel-simple" style="font-size:18px;color:var(--color-accent);margin:0 6px 0 6px"></i><span style="font-size:15px;font-weight:500;margin-right:auto">Sift</span>
+  <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+    <button onClick="{{ n.go }}" aria-label="{{ n.l }}" aria-current="{{ n.cur }}" style="width:44px;height:44px;display:grid;place-items:center;border:0;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.col }};cursor:pointer;position:relative"><i class="ph {{ n.ic }}" style="font-size:19px"></i><sc-if value="{{ n.dot }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:10px;right:10px;width:6px;height:6px;border-radius:50%;background:{{ n.dotCol }}"></span></sc-if></button>
+  </sc-for>
+  <button onClick="{{ toggleTheme }}" aria-label="{{ themeLabel }}" style="width:44px;height:44px;display:grid;place-items:center;border:0;background:transparent;color:var(--muted);cursor:pointer"><i class="ph {{ themeIcon }}" style="font-size:18px"></i></button>
+</nav>
+</sc-if>
+
+<main style="flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden">
+
+<sc-if value="{{ scrNew }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+<div style="max-width:800px;padding:{{ pagePad }};display:flex;flex-direction:column;gap:18px">
+  <div>
+    <h1 style="font-size:26px;margin:0 0 4px">New research run</h1>
+    <p style="margin:0;color:var(--muted)">Sift searches the web and your files, scores passages for relevance, and writes a cited report.</p>
+  </div>
+  <div class="field">
+    <label for="q">Question</label>
+    <textarea id="q" class="input" ref="{{ qRef }}" rows="6" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onQueryKey }}" placeholder="e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?" style="font-size:16px;line-height:1.5;padding:12px 14px;min-height:150px"></textarea>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px">
+      <span style="font-size:12px;color:var(--muted);display:flex;gap:4px;align-items:center"><kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--color-divider);border-radius:4px">Ctrl</kbd>+<kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--color-divider);border-radius:4px">Enter</kbd>to run</span>
+      <button class="btn btn-primary" disabled="{{ cantRun }}" onClick="{{ submit }}" style="margin-left:auto"><i class="ph ph-play"></i>Run research</button>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:12px;color:var(--muted)">Attachments</div>
+    <div role="button" tabIndex="0" aria-label="Add .md or .txt files" onClick="{{ browse }}" onKeyDown="{{ dropKey }}" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="display:flex;align-items:center;gap:12px;padding:16px;border:1px dashed {{ dropBorder }};border-radius:var(--radius-md);background:{{ dropBg }};cursor:pointer" style-hover="border-color:var(--color-accent)">
+      <i class="ph ph-file-arrow-up" style="font-size:22px;color:var(--color-accent)"></i>
+      <div style="display:flex;flex-direction:column"><span>Drop <span style="font-family:var(--mono);font-size:12.5px">.md</span> or <span style="font-family:var(--mono);font-size:12.5px">.txt</span> files, or <span style="color:var(--color-accent)">browse</span></span><span style="font-size:12px;color:var(--muted)">Chunked locally and searched alongside the web.</span></div>
+      <input type="file" ref="{{ fileRef }}" accept=".md,.txt" multiple="{{ true }}" onChange="{{ onPick }}" style="display:none">
+    </div>
+    <sc-if value="{{ dropErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="font-size:12px;color:var(--color-danger);display:flex;gap:6px;align-items:center"><i class="ph ph-warning"></i>{{ dropErr }}</div></sc-if>
+    <sc-if value="{{ hasFiles }}" hint-placeholder-val="{{ false }}">
+    <ul style="list-style:none;margin:0;padding:0;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
+      <sc-for list="{{ files }}" as="f" hint-placeholder-count="2">
+        <li style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--line)"><i class="ph ph-file-text" style="color:var(--muted);font-size:16px"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="font-size:12px;color:var(--muted)">{{ f.size }}</span><button class="btn btn-ghost btn-icon" aria-label="{{ f.removeLabel }}" onClick="{{ f.remove }}" style="width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></li>
+      </sc-for>
+    </ul>
+    </sc-if>
+  </div>
+
+  <div style="border-radius:var(--radius-md);box-shadow:var(--shadow-sm)">
+    <button onClick="{{ toggleOpts }}" aria-expanded="{{ optsOpen }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:0;background:transparent;color:var(--color-text);font:inherit;cursor:pointer;text-align:left;border-radius:var(--radius-md)" style-hover="background:color-mix(in srgb,var(--color-text) 4%,transparent)">
+      <i class="ph {{ optsCaret }}" style="color:var(--muted)"></i><span style="font-weight:500">Options</span>
+      <span style="font-size:12px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ optSummary }}</span>
+      <sc-if value="{{ wOverCount }}" hint-placeholder-val="{{ false }}"><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ wOverLabel }}</span></sc-if>
+    </button>
+    <sc-if value="{{ optsOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:4px 14px 14px;display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 0 2px">Run</div>
+      <sc-for list="{{ runFields }}" as="f" hint-placeholder-count="3">
+        <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:center;padding:4px 0">
+          <span style="font-size:12.5px">{{ f.label }}</span>
+          <div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
+        </div>
+      </sc-for>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 0 2px"><span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Writing</span><span style="font-size:12px;color:var(--faint)">Preselected from your defaults ·</span><button class="btn btn-ghost" onClick="{{ goSettings }}" style="font-size:12px;padding:0 3px">edit defaults</button><sc-if value="{{ wOverCount }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ resetAllW }}" style="font-size:12px;padding:0 3px;margin-left:auto"><i class="ph ph-arrow-counter-clockwise"></i>Reset all to defaults</button></sc-if></div>
+      <sc-for list="{{ newWFields }}" as="f" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:5px 0">
+          <div style="display:flex;flex-direction:column;gap:3px;padding-top:6px">
+            <label for="{{ f.id }}" style="font-size:12.5px">{{ f.label }}</label>
+            <sc-if value="{{ f.changed }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="tag tag-outline" style="font-size:10px;padding:0 6px">{{ f.mark }}</span><button class="btn btn-ghost" onClick="{{ f.reset }}" style="font-size:11.5px;padding:0 3px">Reset</button></div><span style="font-size:11px;color:var(--faint)">{{ f.baseText }}</span></sc-if>
+          </div>
+          <div style="min-width:0">
+            <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
+            <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.ph }}" style="min-height:64px;font-size:13.5px"></textarea></sc-if>
+            <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span></div></sc-if>
+            <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:220px"><sc-for list="{{ f.options }}" as="o"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+  </div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ scrLive }}" hint-placeholder-val="{{ true }}">
+<sc-if value="{{ noRun }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:10px;padding:{{ pagePad }};max-width:560px">
+    <i class="ph ph-pulse" style="font-size:28px;color:var(--faint)"></i>
+    <h2 style="font-size:22px;margin:0">No run in progress</h2>
+    <p style="margin:0;color:var(--muted)">Start a run to watch each stage live: planning, search, fetching, scoring and the report as it is written.</p>
+    <button class="btn btn-primary" onClick="{{ goNew }}"><i class="ph ph-plus"></i>New run<span style="font-size:11px;color:var(--faint);margin-left:4px">Alt 1</span></button>
+  </div>
+</sc-if>
+<sc-if value="{{ hasRun }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;gap:{{ liveGap }};padding:{{ livePad }};overflow:{{ liveOverflow }}">
+  <header style="display:flex;align-items:flex-start;gap:14px;flex:none">
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+        <span class="tag" style="background:{{ L.stBg }};color:{{ L.stFg }};gap:5px;padding:2px 8px"><i class="ph-fill ph-circle" style="font-size:7px;animation:{{ L.stAnim }}"></i>{{ L.stLabel }}</span>
+        <sc-if value="{{ L.isRewrite }}" hint-placeholder-val="{{ false }}"><span class="tag tag-outline" style="gap:5px;padding:1px 8px"><i class="ph ph-git-branch"></i>{{ L.rewriteLabel }}</span></sc-if>
+        <span style="font-family:var(--mono);font-size:11.5px">{{ L.id }}</span><span>{{ L.meta }}</span>
+      </div>
+      <div style="font-size:{{ L.qSize }};line-height:1.35;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:pretty">{{ L.query }}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex:none">
+      <sc-if value="{{ L.showGpu }}" hint-placeholder-val="{{ false }}"><span title="{{ L.gpuTitle }}" style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 9px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)"><i class="ph ph-cpu" style="color:{{ L.gpuCol }}"></i>{{ L.gpu }}</span></sc-if>
+      <sc-if value="{{ L.canCancel }}" hint-placeholder-val="{{ true }}"><button class="btn btn-secondary" onClick="{{ cancel }}"><i class="ph ph-stop"></i>Cancel</button></sc-if>
+      <sc-if value="{{ L.isDone }}" hint-placeholder-val="{{ false }}"><button class="btn btn-primary" onClick="{{ openReport }}"><i class="ph ph-article"></i>Open report</button></sc-if>
+      <sc-if value="{{ L.canRerun }}" hint-placeholder-val="{{ false }}"><button class="btn btn-secondary" onClick="{{ rerun }}"><i class="ph ph-arrow-clockwise"></i>Rerun</button></sc-if>
+    </div>
+  </header>
+
+  <sc-if value="{{ L.banner }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="flex:none;display:flex;align-items:center;gap:9px;padding:6px 11px;border-radius:var(--radius-md);font-size:12.5px;background:{{ L.bannerBg }};border:1px solid {{ L.bannerBd }}"><i class="ph {{ L.bannerIcon }}" style="color:{{ L.bannerIc }};font-size:15px;animation:{{ L.bannerAnim }}"></i><span style="flex:1">{{ L.bannerText }}</span></div>
+  </sc-if>
+
+  <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
+    <div role="tablist" style="flex:none;display:grid;grid-template-columns:repeat(4,1fr);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+        <button role="tab" aria-selected="{{ tb.sel }}" onClick="{{ tb.go }}" style="height:44px;border:0;background:{{ tb.bg }};color:{{ tb.col }};font:inherit;font-size:12.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;box-shadow:{{ tb.line }}">{{ tb.label }}<span style="font-size:11px;color:var(--faint)">{{ tb.count }}</span></button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showTimeline }}" hint-placeholder-val="{{ true }}">
+  <ol aria-label="Phases" style="list-style:none;margin:0;padding:0;flex:none;display:grid;grid-template-columns:{{ tlCols }};gap:5px">
+    <sc-for list="{{ L.phases }}" as="p" hint-placeholder-count="9">
+      <li title="{{ p.title }}" style="display:flex;flex-direction:column;gap:3px;padding:7px 9px 0;border-radius:var(--radius-md);background:{{ p.bg }};border:{{ p.bd }};box-shadow:{{ p.glow }};min-width:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:{{ p.lc }}"><i class="ph {{ p.icon }}" style="color:{{ p.ic }};font-size:14px;flex:none;animation:{{ p.anim }}"></i><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.label }}</span></div>
+        <div style="font-size:11.5px;color:{{ p.tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.text }}</div>
+        <div style="height:3px;margin:3px -9px 0;background:var(--line)"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.bar }};transition:width .2s linear"></div></div>
+      </li>
+    </sc-for>
+  </ol>
+  </sc-if>
+
+  <div style="flex:{{ gridFlex }};min-height:{{ gridMinH }};display:grid;grid-template-columns:{{ liveCols }};gap:10px">
+    <sc-if value="{{ showCol1 }}" hint-placeholder-val="{{ true }}">
+    <div style="min-height:0;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+      <sc-if value="{{ showSubq }}" hint-placeholder-val="{{ true }}">
+      <section aria-label="Sub-queries" style="flex:{{ subqFlex }};max-height:{{ subqMax }};min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+        <header style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)"><h2 style="margin:0;font-size:13px;letter-spacing:0">Sub-queries</h2><span style="font-size:12px;color:var(--muted)">{{ L.subqSummary }}</span></header>
+        <sc-if value="{{ L.subqEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:10px 12px;font-size:12.5px;color:var(--muted)">{{ L.subqEmptyText }}</div></sc-if>
+        <ol style="list-style:none;margin:0;padding:4px 0;flex:1;min-height:0;overflow:auto">
+          <sc-for list="{{ L.subq }}" as="s" hint-placeholder-count="5">
+            <li style="display:flex;align-items:flex-start;gap:8px;padding:3px 12px;font-size:12.5px"><span style="color:var(--faint);width:12px;flex:none">{{ s.n }}</span><span style="flex:1;min-width:0">{{ s.text }}</span><span style="font-size:11.5px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:4px"><i class="ph {{ s.icon }}" style="animation:{{ s.anim }}"></i>{{ s.st }}</span></li>
+          </sc-for>
+        </ol>
+      </section>
+      </sc-if>
+      <sc-if value="{{ showSources }}" hint-placeholder-val="{{ true }}">
+      <section aria-label="Sources" style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+        <header style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none"><h2 style="margin:0;font-size:13px;letter-spacing:0">Sources</h2><span style="font-size:12px;color:var(--muted)">{{ L.srcSummary }}</span><sc-if value="{{ L.srcFailNote }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:11.5px;color:var(--color-danger);display:flex;align-items:center;gap:4px"><i class="ph ph-warning"></i>{{ L.srcFailNote }}</span></sc-if></header>
+        <div style="flex:1;min-height:0;overflow:auto">
+          <sc-if value="{{ L.loading }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ skel }}" as="k" hint-placeholder-count="6"><div style="padding:9px 12px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--line)"><div style="height:10px;width:{{ k.w }};border-radius:4px;background:linear-gradient(90deg,var(--line),color-mix(in srgb,var(--color-text) 16%,transparent),var(--line));background-size:480px 100%;animation:sx-shimmer 1.4s linear infinite"></div><div style="height:8px;width:40%;border-radius:4px;background:var(--line)"></div></div></sc-for></sc-if>
+          <sc-if value="{{ L.srcEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;font-size:12.5px;color:var(--muted)">{{ L.srcEmptyText }}</div></sc-if>
+          <sc-for list="{{ L.sources }}" as="s" hint-placeholder-count="8">
+            <div style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:0 9px;padding:6px 12px;border-bottom:1px solid var(--line)">
+              <i class="ph {{ s.icon }}" style="color:{{ s.ic }};font-size:15px;margin-top:2px;animation:{{ s.anim }}"></i>
+              <div style="min-width:0"><a href="{{ s.href }}" target="_blank" rel="noreferrer" style="display:block;color:var(--color-text);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</a><div style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.url }}</div></div>
+              <div style="text-align:right;font-size:11.5px;white-space:nowrap;padding-top:1px"><div style="color:{{ s.sc }}">{{ s.st }}</div><sc-if value="{{ s.kept }}" hint-placeholder-val="{{ false }}"><div style="color:var(--color-accent-300)">{{ s.kept }}</div></sc-if></div>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ showPassages }}" hint-placeholder-val="{{ true }}">
+    <section aria-label="Passages" style="min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+      <header style="display:flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--line);flex:none"><h2 style="margin:0;font-size:13px;letter-spacing:0">Passages</h2><span style="font-size:12px;color:var(--muted);flex:1">{{ L.passSummary }}</span>
+        <button onClick="{{ toggleRej }}" aria-pressed="{{ showRej }}" title="Toggle rejected passages (R)" style="display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:3px 6px;border-radius:var(--radius-sm)" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)"><span style="width:24px;height:14px;border-radius:7px;background:{{ rejTrack }};position:relative;transition:background .15s"><span style="position:absolute;top:2px;left:{{ rejKnob }};width:10px;height:10px;border-radius:50%;background:var(--color-text);transition:left .15s"></span></span>Rejected<span style="font-size:10.5px;color:var(--faint)">R</span></button>
+      </header>
+      <div style="flex:1;min-height:0;overflow:auto">
+        <sc-if value="{{ L.passEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;gap:8px;font-size:12.5px;color:var(--muted)"><i class="ph {{ L.passEmptyIcon }}" style="font-size:15px;color:{{ L.passEmptyIc }}"></i><span>{{ L.passEmptyText }}</span></div></sc-if>
+        <sc-for list="{{ L.passages }}" as="p" hint-placeholder-count="6">
+          <article style="padding:9px 12px;border-bottom:1px solid var(--line);opacity:{{ p.op }};display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:var(--mono);font-size:12px;color:{{ p.sc }}">{{ p.score }}</span>
+              <div style="position:relative;flex:1;max-width:120px;height:4px;border-radius:2px;background:var(--line)"><div style="width:{{ p.pct }}%;height:100%;border-radius:2px;background:{{ p.bar }}"></div><div title="threshold 0.60" style="position:absolute;left:60%;top:-3px;bottom:-3px;width:1px;background:var(--muted)"></div></div>
+              <span style="margin-left:auto;font-size:11px;color:{{ p.badgeCol }};font-family:{{ p.badgeFont }}">{{ p.badge }}</span>
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-family:var(--mono);font-size:11px">{{ p.dom }}</span> · {{ p.heading }}</div>
+            <p style="margin:0;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ p.text }}</p>
+          </article>
+        </sc-for>
+      </div>
+    </section>
+    </sc-if>
+
+    <sc-if value="{{ showReport }}" hint-placeholder-val="{{ true }}">
+    <section aria-label="Report" style="min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+      <header style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none"><h2 style="margin:0;font-size:13px;letter-spacing:0">Report</h2><span style="font-size:12px;color:var(--muted)">{{ L.repSummary }}</span><span style="margin-left:auto;font-size:11.5px;color:var(--faint)">{{ L.repOpts }}</span></header>
+      <div ref="{{ repRef }}" style="flex:1;min-height:0;overflow:auto;padding:4px 16px 16px">
+        <sc-if value="{{ L.repEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:8px 0;display:flex;gap:8px;font-size:12.5px;color:var(--muted)"><i class="ph {{ L.repEmptyIcon }}" style="font-size:15px;color:{{ L.repEmptyIc }}"></i><span>{{ L.repEmptyText }}</span></div></sc-if>
+        <sc-if value="{{ L.isFailed }}" hint-placeholder-val="{{ false }}">
+          <div role="alert" style="margin-top:10px;padding:12px;border-radius:var(--radius-md);border:1px solid var(--color-danger);background:color-mix(in srgb,var(--color-danger) 8%,transparent);display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500"><i class="ph ph-warning-octagon" style="color:var(--color-danger);font-size:17px"></i>Run failed at Score</div>
+            <pre style="margin:0;font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--color-text)">{{ L.errText }}</pre>
+            <p style="margin:0;font-size:12.5px;color:var(--muted)">Plan through prefilter are cached. Retry from Score with a smaller batch, or rerun the scorer on the cloud profile.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" onClick="{{ retry }}"><i class="ph ph-arrow-clockwise"></i>Retry from Score</button><button class="btn btn-secondary" onClick="{{ retryCloud }}">Use cloud profile</button><button class="btn btn-ghost" onClick="{{ copyErr }}"><i class="ph ph-copy"></i>Copy error</button></div>
+          </div>
+        </sc-if>
+        <sc-for list="{{ L.blocks }}" as="b" hint-placeholder-count="4">
+          <sc-if value="{{ b.isH }}" hint-placeholder-val="{{ false }}"><h3 style="font-size:16px;margin:16px 0 6px">{{ b.text }}</h3></sc-if>
+          <sc-if value="{{ b.isBody }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;margin:0 0 7px;padding-left:{{ b.indent }};font-size:13.5px;line-height:1.65;text-wrap:pretty"><sc-if value="{{ b.bullet }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted);flex:none;min-width:12px">{{ b.bullet }}</span></sc-if><span><sc-for list="{{ b.segs }}" as="s"><sc-if value="{{ s.isText }}" hint-placeholder-val="{{ true }}">{{ s.text }}</sc-if><sc-if value="{{ s.isCite }}" hint-placeholder-val="{{ false }}"><button aria-label="{{ s.aria }}" onMouseEnter="{{ s.show }}" onFocus="{{ s.show }}" onMouseLeave="{{ hideCite }}" onBlur="{{ hideCite }}" style="font-family:var(--mono);font-size:{{ s.fs }};line-height:1;padding:{{ s.pad }};margin:0 1px;vertical-align:{{ s.va }};border:0;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-200);cursor:help" style-hover="background:var(--color-accent-800)">{{ s.label }}</button></sc-if><sc-if value="{{ s.isCaret }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="display:inline-block;width:7px;height:14px;margin-left:2px;vertical-align:-2px;background:var(--color-accent);animation:sx-blink 1s steps(1) infinite"></span></sc-if></sc-for></span></div></sc-if>
+        </sc-for>
+      </div>
+    </section>
+    </sc-if>
+  </div>
+
+  <footer style="flex:none;display:flex;align-items:center;gap:{{ footGap }};flex-wrap:wrap;font-size:12px;color:var(--muted);padding:2px 2px 0">
+    <span style="display:flex;gap:5px;align-items:center"><i class="ph ph-timer"></i>{{ L.elapsed }}</span>
+    <span title="{{ L.tokTitle }}">{{ L.tokens }}</span>
+    <span>{{ L.cost }}</span>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:{{ L.connCol }};animation:{{ L.connAnim }}"></span>{{ L.connText }}<sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}"><span style="font-family:var(--mono);font-size:11px;color:var(--faint)">{{ L.seq }}</span></sc-if></span>
+  </footer>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{ scrReport }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+<div style="padding:{{ pagePad }};display:flex;flex-direction:column;gap:16px;max-width:1240px">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+      <span class="tag tag-neutral" style="gap:5px;padding:2px 8px"><i class="ph ph-check"></i>Completed</span>
+      <span style="font-family:var(--mono);font-size:11.5px">{{ R.id }}</span><span>{{ R.meta }}</span>
+    </div>
+    <h1 style="font-size:{{ R.h1 }};margin:0;line-height:1.25;max-width:880px;text-wrap:pretty">{{ R.query }}</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+      <button class="btn btn-primary" onClick="{{ openRewrite }}"><i class="ph ph-pen-nib"></i>Rewrite</button>
+      <button class="btn btn-secondary" onClick="{{ copyMd }}"><i class="ph ph-copy"></i>Copy markdown</button>
+      <button class="btn btn-secondary" onClick="{{ download }}"><i class="ph ph-download-simple"></i>Download .md</button>
+      <button class="btn btn-secondary" onClick="{{ copyJson }}"><i class="ph ph-brackets-curly"></i>Copy JSON (context)</button>
+    </div>
+  </header>
+
+  <sc-if value="{{ R.multi }}" hint-placeholder-val="{{ false }}">
+  <nav aria-label="Report versions" style="display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Versions</span>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:stretch">
+      <sc-for list="{{ R.versions }}" as="v" hint-placeholder-count="2">
+        <button onClick="{{ v.go }}" aria-current="{{ v.cur }}" style="display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;border-radius:var(--radius-md);border:1px solid {{ v.bd }};background:{{ v.bg }};color:var(--color-text);font:inherit;text-align:left;cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-accent) 8%,transparent)">
+          <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500"><i class="ph {{ v.icon }}" style="color:var(--color-accent)"></i>v{{ v.v }} · {{ v.kind }}<span style="font-family:var(--mono);font-size:11px;font-weight:400;color:var(--muted)">{{ v.id }}</span></span>
+          <span style="font-size:11.5px;color:var(--muted)">{{ v.desc }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </nav>
+  </sc-if>
+
+  <div style="display:grid;grid-template-columns:{{ repCols }};gap:28px;align-items:start">
+    <article style="max-width:720px;min-width:0">
+      <sc-if value="{{ R.parentNote }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px"><i class="ph ph-git-branch" style="color:var(--color-accent)"></i>{{ R.parentNote }}</div></sc-if>
+      <div style="font-size:11.5px;color:var(--faint);margin-bottom:4px">{{ R.optsLine }}</div>
+      <sc-for list="{{ R.blocks }}" as="b" hint-placeholder-count="6">
+        <sc-if value="{{ b.isH }}" hint-placeholder-val="{{ false }}"><h2 style="font-size:19px;margin:22px 0 8px">{{ b.text }}</h2></sc-if>
+        <sc-if value="{{ b.isBody }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;margin:0 0 9px;padding-left:{{ b.indent }};font-size:15px;line-height:1.7;text-wrap:pretty"><sc-if value="{{ b.bullet }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted);flex:none;min-width:14px">{{ b.bullet }}</span></sc-if><span><sc-for list="{{ b.segs }}" as="s"><sc-if value="{{ s.isText }}" hint-placeholder-val="{{ true }}">{{ s.text }}</sc-if><sc-if value="{{ s.isCite }}" hint-placeholder-val="{{ false }}"><button aria-label="{{ s.aria }}" onMouseEnter="{{ s.show }}" onFocus="{{ s.show }}" onMouseLeave="{{ hideCite }}" onBlur="{{ hideCite }}" style="font-family:var(--mono);font-size:{{ s.fs }};line-height:1;padding:{{ s.pad }};margin:0 1px;vertical-align:{{ s.va }};border:0;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-200);cursor:help" style-hover="background:var(--color-accent-800)">{{ s.label }}</button></sc-if></sc-for></span></div></sc-if>
+      </sc-for>
+    </article>
+    <aside style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <section>
+        <h2 style="font-size:13px;letter-spacing:0;margin:0 0 6px">Sources <span style="font-weight:400;color:var(--muted)">{{ R.srcCount }}</span></h2>
+        <ol style="list-style:none;margin:0;padding:0">
+          <sc-for list="{{ R.sources }}" as="s" hint-placeholder-count="8">
+            <li style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 10px;padding:5px 0;border-bottom:1px solid var(--line)"><a href="{{ s.href }}" target="_blank" rel="noreferrer" style="font-size:13px;color:var(--color-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</a><span style="font-size:11.5px;color:var(--color-accent-300)">{{ s.kept }}</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.url }}</span><span style="font-size:11px;color:var(--faint)">{{ s.cites }}</span></li>
+          </sc-for>
+        </ol>
+      </section>
+      <section>
+        <h2 style="font-size:13px;letter-spacing:0;margin:0 0 6px">Selected passages <span style="font-weight:400;color:var(--muted)">14</span></h2>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ R.passages }}" as="p" hint-placeholder-count="5">
+            <div style="padding:8px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:3px">
+              <div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="font-family:var(--mono);padding:0 4px;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-200)">{{ p.label }}</span><span style="font-family:var(--mono);color:var(--color-accent-300)">{{ p.score }}</span><span style="color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.heading }}</span></div>
+              <p style="margin:0;font-size:12.5px;line-height:1.5">{{ p.text }}</p>
+              <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ p.dom }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ scrHistory }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+<div style="padding:{{ pagePad }};display:flex;flex-direction:column;gap:14px;max-width:1240px">
+  <div style="display:flex;align-items:baseline;gap:10px"><h1 style="font-size:26px;margin:0">Run history</h1><span style="color:var(--muted)">{{ histCount }}</span></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <div style="position:relative;flex:1;min-width:220px;max-width:380px"><i class="ph ph-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)"></i><input class="input" ref="{{ hRef }}" aria-label="Search runs" placeholder="Search queries   /" value="{{ hq }}" onChange="{{ onHq }}" style="padding-left:32px"></div>
+    <div class="seg" role="radiogroup" aria-label="Status"><sc-for list="{{ hfOpts }}" as="o"><label class="seg-opt"><input type="radio" name="hf" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
+    <div class="seg" role="radiogroup" aria-label="Recipe"><sc-for list="{{ hrOpts }}" as="o"><label class="seg-opt"><input type="radio" name="hr" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
+  </div>
+  <sc-if value="{{ histEmpty }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:40px 0">
+      <i class="ph ph-clock-counter-clockwise" style="font-size:26px;color:var(--faint)"></i>
+      <div style="font-size:17px;font-weight:500">{{ histEmptyTitle }}</div>
+      <div style="color:var(--muted)">{{ histEmptyText }}</div>
+      <sc-if value="{{ histFiltered }}" hint-placeholder-val="{{ false }}"><button class="btn btn-secondary" onClick="{{ clearFilters }}">Clear filters</button></sc-if>
+      <sc-if value="{{ histNone }}" hint-placeholder-val="{{ false }}"><button class="btn btn-primary" onClick="{{ goNew }}"><i class="ph ph-plus"></i>New run</button></sc-if>
+    </div>
+  </sc-if>
+  <sc-if value="{{ histHas }}" hint-placeholder-val="{{ true }}">
+  <div style="overflow-x:auto">
+  <table class="table" style="min-width:820px;font-size:13px">
+    <thead><tr><th style="width:44%">Query</th><th>Date</th><th>Recipe</th><th>Status</th><th style="text-align:right">Duration</th><th style="text-align:right">Cost</th><th style="text-align:right"><span style="position:absolute;left:-9999px">Actions</span></th></tr></thead>
+    <tbody>
+      <sc-for list="{{ hist }}" as="h" hint-placeholder-count="8">
+        <tr>
+          <td style="max-width:0"><button onClick="{{ h.open }}" style="display:block;width:100%;border:0;background:transparent;padding:0;color:var(--color-text);font:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" style-hover="color:var(--color-accent-300)">{{ h.q }}</button><sc-if value="{{ h.parent }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px"><i class="ph ph-arrow-elbow-down-right"></i>rewrite of <span style="font-family:var(--mono);font-size:11px">{{ h.parent }}</span> · {{ h.wnote }}</div></sc-if></td>
+          <td style="white-space:nowrap;color:var(--muted)">{{ h.d }}</td>
+          <td>{{ h.recipe }}</td>
+          <td><span class="tag" style="gap:5px;padding:2px 8px;background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.bd }}"><i class="ph {{ h.icon }}" style="animation:{{ h.anim }}"></i>{{ h.status }}</span></td>
+          <td style="text-align:right;white-space:nowrap">{{ h.dur }}</td>
+          <td style="text-align:right;white-space:nowrap">{{ h.cost }}</td>
+          <td style="text-align:right;white-space:nowrap"><div style="display:inline-flex;gap:2px"><button class="btn btn-ghost btn-icon" aria-label="Open" title="Open" onClick="{{ h.open }}" style="width:30px;height:30px"><i class="ph ph-arrow-square-out"></i></button><button class="btn btn-ghost btn-icon" aria-label="Rerun" title="Rerun" onClick="{{ h.rerun }}" style="width:30px;height:30px"><i class="ph ph-arrow-clockwise"></i></button><button class="btn btn-ghost btn-icon" aria-label="Delete" title="Delete" onClick="{{ h.del }}" style="width:30px;height:30px;color:var(--muted)"><i class="ph ph-trash"></i></button></div></td>
+        </tr>
+      </sc-for>
+    </tbody>
+  </table>
+  </div>
+  </sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ scrSettings }}" hint-placeholder-val="{{ false }}">
+<div style="flex:1;overflow:auto">
+<div style="padding:{{ pagePad }};display:flex;flex-direction:column;gap:16px;max-width:1240px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h1 style="font-size:26px;margin:0;margin-right:auto">Settings</h1><button class="btn btn-secondary" onClick="{{ checkAll }}"><i class="ph ph-heartbeat"></i>Check all providers</button></div>
+  <div style="display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)"><i class="ph ph-cpu" style="color:var(--color-warn);font-size:16px"></i><span>Profile <b style="font-weight:500;color:var(--color-text)">low-vram</b> · RTX 3060, 12 GB · GPU stages (embeddings, scorer, LLM) load one at a time, so later stages wait for the GPU.</span></div>
+  <h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:8px 0 0;font-weight:500">Providers</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">
+    <sc-for list="{{ providers }}" as="p" hint-placeholder-count="5">
+      <section class="card elev-sm" style="gap:8px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px"><span class="card-kicker">{{ p.role }}</span><button class="btn btn-ghost" onClick="{{ p.check }}" disabled="{{ p.checking }}" style="margin-left:auto;font-size:12px;padding:2px 6px"><i class="ph ph-arrow-clockwise" style="animation:{{ p.anim }}"></i>Check</button></div>
+        <div class="card-title" style="font-size:16px">{{ p.name }}</div>
+        <dl style="margin:0;display:grid;grid-template-columns:72px minmax(0,1fr);gap:3px 10px;font-size:12px">
+          <dt style="color:var(--muted)">Base URL</dt><dd style="margin:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.url }}</dd>
+          <dt style="color:var(--muted)">{{ p.modelLabel }}</dt><dd style="margin:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ p.model }}">{{ p.model }}</dd>
+        </dl>
+        <div role="status" style="display:flex;align-items:center;gap:7px;padding:6px 9px;margin-top:2px;border-radius:var(--radius-md);background:{{ p.hBg }};font-size:12.5px"><i class="ph-fill {{ p.hIcon }}" style="color:{{ p.hCol }};animation:{{ p.hAnim }}"></i><span style="flex:1">{{ p.hText }}</span><span style="font-size:11px;color:var(--faint)">{{ p.ago }}</span></div>
+      </section>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:500">Writing defaults</h2><span style="font-size:12px;color:var(--faint)">Preselected on every new run · saved automatically</span><sc-if value="{{ wSaved }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--color-accent-300);display:flex;align-items:center;gap:4px"><i class="ph ph-check"></i>Saved</span></sc-if></div>
+  <div style="max-width:800px;padding:6px 14px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
+    <sc-for list="{{ setWFields }}" as="f" hint-placeholder-count="5">
+      <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:6px 0">
+        <label for="{{ f.id }}" style="font-size:12.5px;padding-top:7px">{{ f.label }}</label>
+        <div style="min-width:0">
+          <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
+          <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.ph }}" style="min-height:64px;font-size:13.5px"></textarea></sc-if>
+          <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span></div></sc-if>
+          <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:220px"><sc-for list="{{ f.options }}" as="o"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></sc-if>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:12px 0 0;font-weight:500">Security</h2>
+  <div style="max-width:800px;display:flex;flex-direction:column;gap:12px;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:200px"><div style="font-size:13px;font-weight:500">Session</div><div style="font-size:12px;color:var(--muted)">Signed in on this browser since Oct 3, 09:12.</div></div><button class="btn btn-secondary" onClick="{{ signOut }}"><i class="ph ph-sign-out"></i>Sign out</button></div>
+    <div style="height:1px;background:var(--line)"></div>
+    <div style="display:flex;flex-direction:column;gap:2px"><div style="font-size:13px;font-weight:500">API tokens</div><div style="font-size:12px;color:var(--muted)">For the CLI and scripts that call the local API, sent as <span style="font-family:var(--mono);font-size:11.5px">Authorization: Bearer &lt;token&gt;</span>.</div></div>
+    <form onSubmit="{{ createTok }}" style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" aria-label="Token name" placeholder="Token name, e.g. ci-runner" value="{{ tokName }}" onChange="{{ onTokName }}" style="flex:1;min-width:200px;max-width:320px"><button class="btn btn-primary" type="submit" disabled="{{ cantCreateTok }}"><i class="ph ph-plus"></i>Create token</button></form>
+    <sc-if value="{{ hasNewTok }}" hint-placeholder-val="{{ false }}">
+      <div role="status" style="display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:var(--radius-md);border:1px solid var(--color-accent);background:color-mix(in srgb,var(--color-accent) 7%,transparent)">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px"><i class="ph ph-key" style="color:var(--color-accent);font-size:16px"></i>Token “{{ newTok.name }}” created</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><code style="flex:1;min-width:220px;font-family:var(--mono);font-size:12.5px;padding:7px 10px;border-radius:var(--radius-md);background:var(--color-bg);box-shadow:var(--shadow-sm);overflow-x:auto;white-space:nowrap;user-select:all">{{ newTok.value }}</code><button class="btn btn-secondary" onClick="{{ copyTok }}"><i class="ph {{ copyTokIcon }}"></i>{{ copyTokLabel }}</button></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ph ph-eye-slash" style="color:var(--color-warn)"></i><span style="flex:1">Copy it now. It won't be shown again.</span><button class="btn btn-ghost" onClick="{{ dismissTok }}" style="font-size:12px">Done</button></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{ tokEmpty }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:var(--muted);padding:4px 0">No tokens. The local API only accepts requests from a signed-in browser.</div></sc-if>
+    <sc-if value="{{ tokHas }}" hint-placeholder-val="{{ true }}">
+    <div style="overflow-x:auto"><table class="table" style="font-size:13px;min-width:520px">
+      <thead><tr><th>Name</th><th>Token</th><th>Created</th><th>Last used</th><th style="text-align:right"><span style="position:absolute;left:-9999px">Actions</span></th></tr></thead>
+      <tbody><sc-for list="{{ tokens }}" as="k" hint-placeholder-count="3"><tr><td>{{ k.name }}</td><td style="font-family:var(--mono);font-size:11.5px;color:var(--muted)">{{ k.masked }}</td><td style="color:var(--muted);white-space:nowrap">{{ k.created }}</td><td style="color:var(--muted);white-space:nowrap">{{ k.last }}</td><td style="text-align:right"><button class="btn btn-ghost" onClick="{{ k.revoke }}" style="font-size:12.5px;color:var(--color-danger)">Revoke</button></td></tr></sc-for></tbody>
+    </table></div>
+    </sc-if>
+  </div>
+</div>
+</div>
+</sc-if>
+</main>
+
+<sc-if value="{{ rwOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" onClick="{{ closeRwBackdrop }}" style="position:absolute;z-index:20">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="rw-t" style="width:min(640px,100%);max-height:calc(100% - 24px);overflow:auto">
+    <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-pen-nib" style="color:var(--color-accent);font-size:18px"></i><div id="rw-t" class="dialog-title">Rewrite report</div><button class="btn btn-ghost btn-icon" aria-label="Close" onClick="{{ closeRw }}" style="margin-left:auto;width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></div>
+    <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);padding:8px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-accent) 7%,transparent)"><i class="ph ph-recycle" style="color:var(--color-accent);font-size:15px;margin-top:2px"></i><span>{{ rwNote }}</span></div>
+    <div>
+      <sc-for list="{{ rwFields }}" as="f" hint-placeholder-count="5">
+        <div style="display:grid;grid-template-columns:{{ dlgCols }};gap:6px 14px;align-items:start;padding:5px 0">
+          <div style="display:flex;flex-direction:column;gap:3px;padding-top:6px">
+            <label for="{{ f.id }}" style="font-size:12.5px">{{ f.label }}</label>
+            <sc-if value="{{ f.changed }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="tag tag-outline" style="font-size:10px;padding:0 6px">{{ f.mark }}</span><button class="btn btn-ghost" onClick="{{ f.reset }}" style="font-size:11.5px;padding:0 3px">Reset</button></div><span style="font-size:11px;color:var(--faint)">{{ f.baseText }}</span></sc-if>
+          </div>
+          <div style="min-width:0">
+            <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
+            <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.ph }}" style="min-height:60px;font-size:13.5px"></textarea></sc-if>
+            <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words</span></div></sc-if>
+            <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:220px"><sc-for list="{{ f.options }}" as="o"><option value="{{ o.v }}">{{ o.v }}</option></sc-for></select></sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div class="dialog-actions" style="align-items:center"><span style="font-size:12px;color:var(--faint);margin-right:auto">Creates <span style="font-family:var(--mono)">{{ rwNextLabel }}</span> linked to <span style="font-family:var(--mono)">{{ rwFromId }}</span></span><button class="btn btn-secondary" onClick="{{ closeRw }}">Cancel</button><button class="btn btn-primary" onClick="{{ confirmRw }}"><i class="ph ph-pen-nib"></i>Rewrite from write stage</button></div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ revokeOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" style="position:absolute;z-index:20">
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="rv-t">
+    <div id="rv-t" class="dialog-title">Revoke “{{ revokeName }}”?</div>
+    <div class="dialog-body">Anything using this token stops working immediately. This can't be undone.</div>
+    <div class="dialog-actions"><button class="btn btn-secondary" onClick="{{ closeRevoke }}">Cancel</button><button class="btn btn-secondary" onClick="{{ confirmRevoke }}" style="color:var(--color-danger);border-color:var(--color-danger)"><i class="ph ph-trash"></i>Revoke token</button></div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;z-index:40;background:radial-gradient(120% 80% at 0% 0%,color-mix(in srgb,var(--color-accent) 8%,transparent),transparent 60%),var(--color-bg);display:flex;align-items:center;padding:{{ loginPad }}">
+  <form onSubmit="{{ onLogin }}" style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-funnel-simple" style="font-size:22px;color:var(--color-accent)"></i><span style="font-size:19px;font-weight:500">Sift</span></div>
+    <div><h1 style="font-size:24px;margin:0 0 4px">Sign in</h1><p style="margin:0;color:var(--muted);font-size:13px">Enter the password for this Sift instance.</p></div>
+    <div class="field" style="margin:0">
+      <label for="pw">Password</label>
+      <div style="position:relative">
+        <input id="pw" ref="{{ pwRef }}" class="input" type="{{ pwType }}" autocomplete="current-password" value="{{ loginPw }}" onChange="{{ onLoginPw }}" disabled="{{ loginLimited }}" aria-invalid="{{ loginInvalid }}" aria-describedby="pw-msg" style="padding-right:42px;font-size:15px;min-height:40px;border-color:{{ pwBorder }}">
+        <button type="button" onClick="{{ togglePw }}" aria-label="{{ pwToggleLabel }}" style="position:absolute;right:3px;top:50%;transform:translateY(-50%);width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--muted);cursor:pointer" style-hover="color:var(--color-text)"><i class="ph {{ pwIcon }}" style="font-size:17px"></i></button>
+      </div>
+    </div>
+    <sc-if value="{{ loginErr }}" hint-placeholder-val="{{ false }}">
+      <div id="pw-msg" role="alert" style="display:flex;flex-direction:column;gap:8px;padding:9px 11px;border-radius:var(--radius-md);background:{{ loginMsgBg }};border:1px solid {{ loginMsgBd }};font-size:12.5px">
+        <div style="display:flex;gap:9px;align-items:flex-start"><i class="ph {{ loginMsgIcon }}" style="color:{{ loginMsgIc }};font-size:16px;margin-top:1px"></i><div><div style="font-weight:500">{{ loginMsgTitle }}</div><div style="color:var(--muted)">{{ loginMsgText }}</div></div></div>
+        <sc-if value="{{ loginLimited }}" hint-placeholder-val="{{ false }}"><div style="height:2px;border-radius:1px;background:var(--line)"><div style="height:100%;width:{{ loginWaitPct }}%;background:var(--color-warn);transition:width 1s linear"></div></div></sc-if>
+      </div>
+    </sc-if>
+    <button class="btn btn-primary" type="submit" disabled="{{ loginDisabled }}" style="height:40px"><i class="ph {{ loginBtnIcon }}"></i>{{ loginBtn }}</button>
+    <div style="font-size:11.5px;color:var(--faint);font-family:var(--mono)">localhost:8765</div>
+  </form>
+</div>
+</sc-if>
+
+<sc-if value="{{ citeOpen }}" hint-placeholder-val="{{ false }}">
+<div role="tooltip" style="position:fixed;z-index:30;left:{{ cite.x }}px;top:{{ cite.y }}px;transform:{{ cite.tf }};width:360px;max-width:calc(100vw - 16px);padding:10px 12px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:6px;pointer-events:none">
+  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="font-family:var(--mono);padding:0 4px;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-200)">{{ cite.label }}</span><span style="font-family:var(--mono);color:var(--color-accent-300)">{{ cite.score }}</span><div style="flex:1;max-width:90px;height:4px;border-radius:2px;background:var(--line)"><div style="height:100%;width:{{ cite.pct }}%;border-radius:2px;background:var(--color-accent)"></div></div><span style="margin-left:auto;color:var(--faint)">relevance</span></div>
+  <p style="margin:0;font-size:13px;line-height:1.55">“{{ cite.text }}”</p>
+  <div style="display:flex;flex-direction:column;gap:1px;padding-top:6px;border-top:1px solid var(--line)"><span style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ cite.title }}</span><span style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-family:var(--mono);font-size:11px">{{ cite.dom }}</span> · {{ cite.heading }}</span></div>
+</div>
+</sc-if>
+
+<sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="position:absolute;z-index:25;left:50%;bottom:52px;transform:translateX(-50%);display:flex;align-items:center;gap:12px;padding:7px 8px 7px 14px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-md);font-size:13px;white-space:nowrap"><i class="ph ph-check" style="color:var(--color-accent)"></i>{{ toast.msg }}<sc-if value="{{ toast.undo }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ toast.undo }}" style="font-size:12.5px;padding:2px 6px">Undo</button></sc-if></div>
+</sc-if>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc-logic" data-dc-script data-props='{"theme":{"editor":"enum","options":["dark","light"],"default":"dark","tsType":"'dark'|'light'"},"device":{"editor":"enum","options":["auto","phone"],"default":"auto","tsType":"string"},"scenario":{"editor":"enum","options":["live","loading","reconnecting","failure","cancelled","finished","versions","empty","new","login","login-wrong","login-limited"],"default":"live","tsType":"string"},"speed":{"editor":"range","min":0.5,"max":6,"step":0.5,"default":1,"tsType":"number"},"emptyHistory":{"editor":"boolean","default":false,"tsType":"boolean"}}'>
+const PH=[
+ {id:'plan',l:'Plan',s:0,r:0,e:2.5,gpu:'LLM'},
+ {id:'search',l:'Search',s:2.5,r:2.5,e:6.5},
+ {id:'fetch',l:'Fetch',s:3.5,r:3.5,e:16.2},
+ {id:'load',l:'Load',s:2.5,r:2.5,e:3.6},
+ {id:'chunk',l:'Chunk',s:16.2,r:16.2,e:17.6},
+ {id:'prefilter',l:'Prefilter',s:17.6,r:19.2,e:21,gpu:'embeddings',wait:'planner LLM unloading'},
+ {id:'score',l:'Score',s:21,r:23,e:31,gpu:'scorer',wait:'embeddings model unloading'},
+ {id:'select',l:'Select',s:31,r:31,e:32},
+ {id:'write',l:'Write',s:32,r:34,e:50,gpu:'LLM',wait:'scorer unloading'}];
+const END=50,TF=3,TH=0.6,PASSWORD='nocturne';
+const DQ='How do speculative decoding methods trade off acceptance rate against draft-model size on consumer GPUs (8–12 GB)?';
+const SUBQ=['speculative decoding acceptance rate vs draft model size','speculative decoding consumer GPU 8GB 12GB benchmark','Medusa EAGLE draft-free speculative decoding memory overhead','llama.cpp --draft speculative tokens performance','optimal number of speculative tokens gamma'];
+const WEB=[
+['arxiv.org/abs/2211.17192','Fast Inference from Transformers via Speculative Decoding','','Leviathan et al., 2023'],
+['arxiv.org/abs/2302.01318','Accelerating Large Language Model Decoding with Speculative Sampling','','Chen et al., 2023'],
+['arxiv.org/abs/2401.10774','Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads','','Cai et al., 2024'],
+['arxiv.org/abs/2401.15077','EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty','','Li et al., 2024'],
+['huggingface.co/blog/assisted-generation','Assisted Generation: a new direction toward low-latency text generation','','Hugging Face, 2023'],
+['docs.vllm.ai/en/latest/features/spec_decode.html','Speculative Decoding — vLLM','','vLLM docs'],
+['github.com/ggml-org/llama.cpp/pull/2926','speculative : PoC for speeding-up inference via speculative sampling','','llama.cpp #2926'],
+['lmsys.org/blog/2023-11-21-lookahead-decoding','Break the Sequential Dependency of LLM Inference Using Lookahead Decoding','','Fu et al., 2023'],
+['reddit.com/r/LocalLLaMA/comments/1c2x9qf','Speculative decoding on a 3060 — is it worth it?','','r/LocalLLaMA, 2024'],
+['pytorch.org/blog/hitchhikers-guide-speculative-decoding','A Hitchhiker’s Guide to Speculative Decoding','','PyTorch, 2024'],
+['arxiv.org/abs/2402.01528','Decoding Speculative Decoding','','Yan et al., 2024'],
+['research.google/blog/looking-back-at-speculative-decoding','Looking back at speculative decoding','',''],
+['developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization','Mastering LLM Techniques: Inference Optimization','',''],
+['medium.com/@mlops/speculative-decoding-explained-4b1e','Speculative decoding explained','403 Forbidden',''],
+['arxiv.org/abs/2310.07177','Online Speculative Decoding','','Liu et al., 2023'],
+['news.ycombinator.com/item?id=38201544','Speculative decoding in llama.cpp | Hacker News','',''],
+['docs.sglang.ai/advanced_features/speculative_decoding.html','Speculative Decoding — SGLang','',''],
+['towardsdatascience.com/speculative-decoding-a-practical-guide','Speculative decoding: a practical guide','Timed out after 10 s',''],
+['github.com/SafeAILab/EAGLE','SafeAILab/EAGLE — official implementation','',''],
+['paperswithcode.com/task/speculative-decoding','Speculative Decoding | Papers With Code','Disallowed by robots.txt',''],
+['fireworks.ai/blog/speculative-decoding-production','Speculative decoding in production','',''],
+['arxiv.org/abs/2404.19737','Better & Faster Large Language Models via Multi-token Prediction','','']];
+const DFILES=[['notes/bench-3060.md',4403],['notes/draft-models.txt',1946]];
+const PASS=[
+{s:10,h:'4 Results › 4.2 Draft size vs. latency',v:.94,x:'Throughput gains track draft latency more closely than draft accuracy: a draft four times smaller but ten points less accurate often wins end-to-end, because each rejected token costs only one extra target forward pass.'},
+{s:0,h:'3 Analysis › 3.1 Expected walltime',v:.91,x:'With acceptance rate α and γ drafted tokens, the expected tokens per target pass is (1 − α^(γ+1)) / (1 − α); the improvement factor shrinks as the draft’s relative cost c grows.'},
+{s:22,h:'Results › Llama-3-8B Q4 + 160M draft',v:.89,x:'On the RTX 3060 (12 GB), a 160M draft gave 1.6× tokens/s at γ=4. The 1B draft only fit with the target at Q4 and gave 1.3×, because both models contended for memory bandwidth.'},
+{s:3,h:'1 Introduction',v:.87,x:'Drafting at the feature level instead of the token level lifts acceptance to roughly 0.8 with a draft head under 1B parameters, and no separate draft model has to be loaded.'},
+{s:5,h:'Speculating with a draft model',v:.84,x:'The draft model must share the target’s tokenizer. A num_speculative_tokens value between 3 and 5 is a reasonable starting point.'},
+{s:2,h:'2 Method › 2.1 Medusa heads',v:.82,x:'Medusa adds decoding heads to the target itself, so no second model competes for VRAM; the cost is fine-tuning the heads and a tree-attention verification step.'},
+{s:8,h:'Top comment',v:.79,x:'On 8 GB cards I stopped using a separate draft — the KV cache for both models pushed me into offloading, which erased the gain. Prompt-lookup decoding was free and gave about 1.2× on code.'},
+{s:4,h:'Assisted generation in practice',v:.77,x:'Assistant models work best when the target is at least an order of magnitude larger; latency gains around 2× are typical for greedy decoding on a single GPU.'},
+{s:1,h:'2 Speculative sampling',v:.75,x:'The modified rejection-sampling scheme preserves the target distribution exactly, so the speedup comes with no change in output quality.'},
+{s:23,h:'TinyLlama-1.1B',v:.73,x:'TinyLlama as draft for Llama-2-7B: acceptance 0.61 on chat, 0.72 on code at temperature 0.'},
+{s:7,h:'Why lookahead',v:.70,x:'Lookahead decoding needs no draft model: it generates n-grams in parallel with Jacobi iterations, which helps when memory rather than compute is the constraint.'},
+{s:9,h:'Tuning γ',v:.68,x:'Speedup peaks at small γ when acceptance is low; past the peak, each extra speculated token adds verification cost that is rarely repaid.'},
+{s:14,h:'1 Introduction',v:.66,x:'Acceptance rates drop sharply under distribution shift; online distillation of the draft on live queries recovers much of the lost acceptance.'},
+{s:6,h:'PR description',v:.63,x:'--draft sets the number of tokens drafted per step. With a Q8 draft and a Q4_K_M target on consumer GPUs, gains are largest on low-entropy text such as code.'},
+{s:11,h:'Impact',v:.52,x:'Speculative decoding has since been adopted across several products, where it reduced latency without changing output.'},
+{s:12,h:'Batching',v:.47,x:'In-flight batching and paged KV caches raise GPU utilization in multi-user serving.'},
+{s:15,h:'Comment thread',v:.41,x:'We got about 1.5× on a 4090 but your mileage will vary with the prompt.'},
+{s:16,h:'Launch flags',v:.36,x:'Set --speculative-algorithm EAGLE and point --speculative-draft-model-path at the draft weights.'},
+{s:20,h:'Results',v:.31,x:'Speculative decoding cut p50 latency for code-completion traffic.'},
+{s:21,h:'5 Speculative decoding',v:.27,x:'Training with a multi-token prediction objective lets the model act as its own speculative drafter.'},
+{s:18,h:'Setup',v:.22,x:'Install with pip install -e . and download the EAGLE weights from the model hub.'},
+{s:4,h:'Usage',v:.14,x:'Assisted generation is available in transformers through the assistant_model argument.'}];
+PASS.forEach((p,k)=>{p.k=k;p.at=23+((k*7)%22)*(7.6/22);p.kept=p.v>=TH;p.n=p.kept?k+1:null;});
+const MD1=`## Summary
+On consumer GPUs the binding constraint for speculative decoding is usually memory, not draft accuracy. Smaller drafts tend to win end-to-end even with lower acceptance, because a rejected token costs only one extra target pass [1][2]. On 8–12 GB cards, draft-free methods are often the better trade [6][7][11].
+
+## Acceptance rate vs. draft size
+- Expected tokens per target pass rise with acceptance α, but the gain shrinks as the draft's relative cost grows [2].
+- A draft four times smaller and ten points less accurate often beats a larger one [1].
+- Acceptance is task-dependent: TinyLlama drafting for a 7B target reached 0.61 on chat and 0.72 on code [10], and it drops under distribution shift [13].
+
+## What changes on a small GPU
+Both models' weights and KV caches must fit. On a 12 GB RTX 3060, a 160M draft gave 1.6× while a 1B draft gave only 1.3× because of bandwidth contention [3]. Below 8 GB, users report that offloading erases the gain entirely [7].
+
+## Recommendations
+1. Start with a draft at least 10× smaller than the target that shares its tokenizer, with γ = 3–5 [5][8][12].
+2. If VRAM is tight, prefer heads on the target (Medusa, EAGLE) or draft-free lookahead [4][6][11].
+3. Expect the largest gains on low-entropy output such as code [14].
+
+Output quality is unchanged in every case: verification preserves the target distribution [9].`;
+const MD2=`## Summary
+Smaller drafts usually win on consumer GPUs: memory, not draft accuracy, is the constraint [1][3].
+
+## Key points
+- A rejected token costs one extra target pass, so a cheaper draft tolerates lower acceptance [1][2].
+- On a 12 GB RTX 3060, a 160M draft gave 1.6× against 1.3× for a 1B draft [3].
+- Below 8 GB, a second model's KV cache forces offloading; draft-free methods avoid it [4][6][7][11].
+- Start at γ = 3–5 with a tokenizer-compatible draft at least 10× smaller [5][8][12].
+
+Quality is unchanged: verification preserves the target distribution [9].`;
+const WDEF={tone:'Technical',custom:'',words:600,lang:'English',cite:'numeric'};
+const TONES=['Neutral','Technical','Concise','Explanatory'];
+const LANGS=['English','German','French','Spanish','Portuguese','Japanese','Chinese (Simplified)'];
+const CITES=[['numeric','[1] Numeric'],['super','¹ Superscript'],['authoryear','(Author, year)']];
+const SUP='⁰¹²³⁴⁵⁶⁷⁸⁹';
+const HIST=[
+{id:'r_7f3a',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',d:'Oct 2, 21:14',recipe:'report',status:'completed',dur:'3:12',cost:'$0.006'},
+{id:'r_7f41',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',d:'Oct 2, 21:31',recipe:'report',status:'completed',dur:'0:48',cost:'$0.000',parent:'r_7f3a',wnote:'Concise · 300 words'},
+{id:'r_7e90',q:'What changed in the Python 3.13 free-threaded build for C extensions?',d:'Oct 2, 16:40',recipe:'context',status:'completed',dur:'1:48',cost:'$0.003'},
+{id:'r_7e2c',q:'llama.cpp KV cache quantization quality impact, q8_0 vs q4_0',d:'Oct 1, 23:02',recipe:'report',status:'failed',dur:'0:41',cost:'$0.001'},
+{id:'r_7d11',q:'Rust async cancellation safety patterns with tokio::select!',d:'Oct 1, 10:15',recipe:'report',status:'completed',dur:'4:05',cost:'$0.008'},
+{id:'r_7c08',q:'Summarize my notes on WebGPU compute shader limits',d:'Sep 30, 19:30',recipe:'context',status:'completed',dur:'0:52',cost:'$0.000'},
+{id:'r_7b77',q:'Is SQLite WAL mode safe on network filesystems?',d:'Sep 29, 14:11',recipe:'report',status:'cancelled',dur:'0:37',cost:'$0.002'},
+{id:'r_7a3e',q:'Chunk size best practices for RAG over API reference docs',d:'Sep 28, 09:47',recipe:'report',status:'completed',dur:'2:58',cost:'$0.005'},
+{id:'r_79d0',q:'Embedding models under 500M params ranked on MTEB retrieval',d:'Sep 25, 18:20',recipe:'context',status:'failed',dur:'1:05',cost:'$0.002'}];
+const PROV=[
+{id:'search',role:'Search',name:'SearXNG',url:'http://localhost:8888',ml:'Engines',model:'duckduckgo, brave, arxiv'},
+{id:'fetch',role:'Fetch',name:'httpx + trafilatura',url:'in-process',ml:'Limits',model:'timeout 10s · 6 concurrent'},
+{id:'embeddings',role:'Embeddings',name:'Ollama',url:'http://localhost:11434',ml:'Model',model:'bge-small-en-v1.5'},
+{id:'scorer',role:'Scorer',name:'llama.cpp server',url:'http://localhost:8081',ml:'Model',model:'bge-reranker-v2-m3-Q8_0.gguf'},
+{id:'llm',role:'LLM',name:'llama.cpp server',url:'http://localhost:8080/v1',ml:'Model',model:'qwen2.5-7b-instruct-q4_k_m.gguf'}];
+const TOKENS=[{id:'t1',name:'cli · laptop',tail:'k9Qz',created:'Sep 12',last:'2 hours ago'},{id:'t2',name:'ci-runner',tail:'2fWb',created:'Aug 30',last:'Yesterday'},{id:'t3',name:'obsidian-plugin',tail:'Lm07',created:'Jul 4',last:'Never'}];
+const ERR=`RuntimeError: CUDA out of memory. Tried to allocate 1.12 GiB
+(GPU 0; 11.76 GiB total capacity; 10.31 GiB already allocated; 412.00 MiB free)
+  at scorer.score_batch  batch 7/12, batch_size=16, max_len=512`;
+const fmtT=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const fmtK=n=>n>=1000?(n/1000).toFixed(1)+'k':String(n);
+const fmtB=b=>b<1024?b+' B':(b/1024).toFixed(1)+' KB';
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const citeName=c=>(CITES.find(x=>x[0]===c)||CITES[0])[1];
+const wSum=w=>`${w.tone} · ${w.words} words · ${w.lang} · ${citeName(w.cite)}`;
+const WLABEL={tone:'Tone',custom:'Custom tone instructions',words:'Target length',lang:'Language',cite:'Citation style'};
+const fmtW=(k,v)=>k==='cite'?citeName(v):k==='custom'?(v?'“'+(v.length>28?v.slice(0,28)+'…':v)+'”':'none'):k==='words'?v+' words':String(v);
+const wDiff=(a,b)=>Object.keys(WLABEL).filter(k=>String(a[k])!==String(b[k])).map(k=>k==='custom'?'custom instructions':fmtW(k,b[k])).join(' · ');
+const B62='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+function sources(files){
+ const out=WEB.map(([u,t,f,ay],i)=>{const found=2.7+i*.17,fs=Math.max(found+.3,3.5+i*.45);let fe=fs+1.2+((i*37)%10)/5;if(f.startsWith('Timed'))fe=fs+3.6;return {i,u,t,fail:f,ay,found,fs,fe,dom:u.split('/')[0],file:false};});
+ const fl=files&&files.length?files.slice(0,2).map(f=>[f.name,f.bytes]):DFILES.slice();
+ while(fl.length<2)fl.push(DFILES[fl.length]);
+ fl.forEach(([n,b],k)=>out.push({i:22+k,u:n,t:n.split('/').pop(),fail:'',ay:n.split('/').pop(),found:2.6,fs:2.6+k*.4,fe:3.0+k*.4,dom:'local file',size:fmtB(b),file:true}));
+ return out;}
+const KEPTBY={};PASS.forEach(p=>{if(p.kept)KEPTBY[p.s]=(KEPTBY[p.s]||0)+1;});
+
+class Component extends DCLogic {
+  state={screen:'live',run:null,query:'',files:[],dragOver:false,dropErr:'',optsOpen:false,opts:{recipe:'report',sources:'both',profile:'low-vram'},wNew:{...WDEF},wDef:{...WDEF},wSaved:false,showRej:false,tab:'progress',cite:null,toast:null,hq:'',hf:'all',hr:'any',hist:HIST,versions:[],viewId:null,rw:null,theme:null,winW:window.innerWidth,
+    health:{search:{st:'degraded',ms:1840,at:Date.now()-12000},fetch:{st:'ok',ms:3,at:Date.now()-12000},embeddings:{st:'ok',ms:38,at:Date.now()-12000},scorer:{st:'ok',ms:61,at:Date.now()-12000},llm:{st:'ok',ms:212,at:Date.now()-12000}},now:Date.now(),
+    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null};
+  qRef=React.createRef();fileRef=React.createRef();hRef=React.createRef();repRef=React.createRef();pwRef=React.createRef();
+  componentDidMount(){
+    try{const s=JSON.parse(localStorage.getItem('sift-writing-defaults')||'null');if(s){const wd={...WDEF,...s};this.setState({wDef:wd,wNew:{...wd}});}}catch(e){}
+    this.iv=setInterval(()=>this.tick(),100);
+    this.onKey=e=>this.key(e);this.onResize=()=>this.setState({winW:window.innerWidth});
+    window.addEventListener('keydown',this.onKey);window.addEventListener('resize',this.onResize);
+    this.applyScenario(this.props.scenario||'live');
+  }
+  componentWillUnmount(){clearInterval(this.iv);window.removeEventListener('keydown',this.onKey);window.removeEventListener('resize',this.onResize);}
+  componentDidUpdate(pp){
+    if(pp.scenario!==this.props.scenario)this.applyScenario(this.props.scenario||'live');
+    if(pp.theme!==this.props.theme)this.setState({theme:null});
+    const el=this.repRef.current;const r=this.state.run;
+    if(el&&r&&r.status==='running'&&r.t>=34&&el.scrollHeight-el.scrollTop-el.clientHeight<140)el.scrollTop=el.scrollHeight;
+  }
+  baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',...o};}
+  applyScenario(sc){
+    const unlocked={...this.state.auth,locked:false,err:null,pw:'',left:5,until:0};
+    const S={cite:null,rw:null,tab:'progress',versions:[],auth:unlocked};
+    const v1={id:'r_8c21',v:1,query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},md:MD1,dur:fmtT(END*TF),date:'Today, 14:02',files:[]};
+    if(sc==='login')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true}});
+    if(sc==='login-wrong')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true,err:'wrong',left:3}});
+    if(sc==='login-limited')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true,err:'limited',left:0,until:Date.now()+30000}});
+    if(sc==='empty')return this.setState({...S,run:null,screen:'live'});
+    if(sc==='new')return this.setState({...S,run:null,screen:'new'});
+    if(sc==='loading')return this.setState({...S,run:this.baseRun({hold:true}),screen:'live'});
+    if(sc==='failure')return this.setState({...S,run:this.baseRun({status:'running',t:18,failAt:25.4}),screen:'live'});
+    if(sc==='cancelled')return this.setState({...S,run:this.baseRun({status:'cancelled',t:13.2,stopAt:13.2}),screen:'live'});
+    if(sc==='reconnecting')return this.setState({...S,run:this.baseRun({status:'running',t:10,reconAt:13}),screen:'live'});
+    if(sc==='finished')return this.setState({...S,run:this.baseRun({status:'done',t:END}),versions:[v1],viewId:'r_8c21',screen:'report'});
+    if(sc==='versions'){const v2={id:'r_8c4e',v:2,root:'r_8c21',parent:'r_8c21',query:DQ,opts:v1.opts,wopts:{...v1.wopts,tone:'Concise',words:250,cite:'super'},md:MD2,dur:'0:51',date:'Today, 14:09',files:[]};
+      return this.setState({...S,run:this.baseRun({status:'done',t:END,id:'r_8c4e',kind:'rewrite',rewriteOf:'r_8c21',t0:32,md:MD2,wopts:v2.wopts}),versions:[v1,v2],viewId:'r_8c4e',screen:'report'});}
+    this.setState({...S,run:this.baseRun(),screen:'live'});
+  }
+  setRun(u){this.setState(s=>s.run?{run:{...s.run,...u}}:null);}
+  tick(){
+    const now=Date.now();const st=this.state;
+    if((st.screen==='settings'||st.auth.until)&&now-st.now>=1000){const a=st.auth;this.setState(a.until&&now>=a.until?{now,auth:{...a,until:0,err:null,left:5}}:{now});}
+    const r=st.run;if(!r)return;
+    if(r.status==='connecting'){if(!r.hold&&now-r.startedReal>1200)this.setRun({status:'running'});return;}
+    if(r.status!=='running'){if(r.bannerUntil&&now>r.bannerUntil)this.setRun({bannerUntil:null});return;}
+    const dt=.1*(this.props.speed??1);const u={t:Math.min(END,r.t+dt)};
+    if(r.reconAt!=null&&!r.dropped&&u.t>=r.reconAt)Object.assign(u,{conn:'reconnecting',dropAt:r.reconAt,dropReal:now,dropped:true,attempt:1});
+    if(r.conn==='reconnecting'){const el=now-r.dropReal;u.attempt=1+Math.floor(el/2000);if(el>6500){u.conn='replaying';u.replayed=Math.round((r.t-r.dropAt)*27);u.replayReal=now;}}
+    if(r.conn==='replaying'&&now-r.replayReal>900){u.conn='connected';u.bannerUntil=now+4500;}
+    if(r.bannerUntil&&now>r.bannerUntil&&u.conn!=='connected')u.bannerUntil=null;
+    if(r.failAt!=null&&u.t>=r.failAt){u.t=r.failAt;u.status='failed';u.stopAt=r.failAt;}
+    if(u.t>=END){u.status='done';this.finish({...r,...u});}
+    this.setRun(u);
+  }
+  finish(r){
+    this.setState(s=>{if(s.versions.find(v=>v.id===r.id))return null;const par=r.rewriteOf?s.versions.find(v=>v.id===r.rewriteOf):null;const root=par?(par.root||par.id):null;
+      const v={id:r.id,v:root?s.versions.filter(x=>(x.root||x.id)===root).length+1:1,root,parent:r.rewriteOf||null,query:r.query,opts:r.opts,wopts:r.wopts,md:r.md,dur:fmtT((END-r.t0)*TF),date:'Today, now',files:r.files};
+      return {versions:[...s.versions,v],viewId:r.id};});
+  }
+  shownT(r){const t=r.conn==='reconnecting'?r.dropAt:r.t;return r.stopAt!=null?Math.min(t,r.stopAt):t;}
+  key(e){
+    if(this.state.auth.locked)return;
+    const tag=(e.target&&e.target.tagName)||'';const typing=/INPUT|TEXTAREA|SELECT/.test(tag);
+    if(e.altKey&&/^Digit[1-4]$/.test(e.code)){e.preventDefault();this.go(['new','live','history','settings'][+e.code.slice(5)-1]);return;}
+    if(e.key==='Escape'){if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
+    if(typing)return;
+    if(e.key==='r'&&this.state.screen==='live')this.setState(s=>({showRej:!s.showRej}));
+    if(e.key==='/'&&this.state.screen==='history'){e.preventDefault();this.hRef.current&&this.hRef.current.focus();}
+  }
+  go(id){this.setState({screen:id,cite:null});if(id==='new')setTimeout(()=>this.qRef.current&&this.qRef.current.focus(),50);}
+  toastMsg(msg,undo){clearTimeout(this.tt);this.setState({toast:{msg,undo}});this.tt=setTimeout(()=>this.setState({toast:null}),undo?6000:2200);}
+  copy(text,msg){try{navigator.clipboard.writeText(text);}catch(e){}if(msg)this.toastMsg(msg);}
+  start(q,opts,files,wopts){
+    const id='r_'+Math.random().toString(16).slice(2,6);
+    this.setState({run:this.baseRun({id,query:q,opts,files,wopts}),screen:'live',tab:'progress',showRej:false});
+  }
+  addFiles(list){
+    const ok=[],bad=[];[...list].forEach(f=>(/\.(md|txt)$/i.test(f.name)?ok:bad).push(f));
+    this.setState(s=>({files:[...s.files,...ok.filter(f=>!s.files.find(x=>x.name===f.name)).map(f=>({name:f.name,bytes:f.size}))],dropErr:bad.length?`Skipped ${bad.map(f=>f.name).join(', ')} — only .md and .txt are supported.`:'',dragOver:false}));
+  }
+  check(id){
+    this.setState(s=>({health:{...s.health,[id]:{...s.health[id],checking:true}}}));
+    setTimeout(()=>{const rnd=Math.random();let h;
+      if(id==='search')h=rnd<.7?{st:'degraded',ms:1500+Math.round(rnd*800)}:{st:'ok',ms:420+Math.round(rnd*300)};
+      else h={st:'ok',ms:{fetch:2,embeddings:30,scorer:55,llm:190}[id]+Math.round(rnd*40)};
+      this.setState(s=>({health:{...s.health,[id]:{...h,at:Date.now()}}}));},600+Math.random()*700);
+  }
+  login(e){
+    e&&e.preventDefault&&e.preventDefault();const a=this.state.auth;if(a.until||!a.pw)return;
+    if(a.pw===PASSWORD){this.setState({auth:{...a,locked:false,pw:'',err:null,left:5}});return;}
+    const left=a.left-1;
+    if(left<=0)this.setState({auth:{...a,pw:'',err:'limited',left:0,until:Date.now()+30000},now:Date.now()});
+    else{this.setState({auth:{...a,pw:'',err:'wrong',left}});setTimeout(()=>this.pwRef.current&&this.pwRef.current.focus(),30);}
+  }
+  showCite(e,n,style,files){
+    const rc=e.currentTarget.getBoundingClientRect();const p=PASS.find(x=>x.n===n);if(!p)return;const src=sources(files)[p.s];
+    const below=rc.bottom+230<window.innerHeight;
+    this.setState({cite:{x:clamp(rc.left-20,8,window.innerWidth-372),y:below?rc.bottom+6:rc.top-6,tf:below?'none':'translateY(-100%)',label:this.citeLabel(n,style,files),score:p.v.toFixed(2),pct:Math.round(p.v*100),text:p.x,title:src.t,dom:src.file?src.u:src.dom,heading:p.h}});
+  }
+  citeLabel(n,style,files){if(style==='super')return String(n).split('').map(d=>SUP[+d]).join('');if(style==='authoryear'){const p=PASS.find(x=>x.n===n);const s=sources(files)[p.s];return s.ay||s.dom;}return '['+n+']';}
+  blocks(text,style,caret,files){
+    const out=[];
+    text.split('\n').forEach(ln=>{
+      if(!ln.trim())return;
+      if(ln.startsWith('#')){out.push({isH:true,text:ln.replace(/^#+\s*/,'')});return;}
+      const b={isBody:true,bullet:'',indent:'0px'};let body=ln;const m=ln.match(/^(\d+)\.\s+/);
+      if(ln.startsWith('- ')){b.bullet='•';b.indent='4px';body=ln.slice(2);}else if(m){b.bullet=m[1]+'.';b.indent='2px';body=ln.slice(m[0].length);}
+      body=body.replace(/\[\d*$/,'');
+      const segs=[];body.split(/(\[\d+\])/).forEach(part=>{const c=part.match(/^\[(\d+)\]$/);
+        if(c){const n=+c[1];segs.push({isCite:true,n,label:this.citeLabel(n,style,files),aria:'Citation '+n+', show passage',fs:style==='super'?'12px':style==='authoryear'?'11px':'10.5px',pad:style==='super'?'1px 2px':'2px 4px',va:style==='super'?'5px':'1px',show:e=>this.showCite(e,n,style,files)});}
+        else if(part)segs.push({isText:true,text:part});});
+      b.segs=segs;out.push(b);});
+    if(caret){const last=out[out.length-1];if(last&&last.isBody)last.segs.push({isCaret:true});else out.push({isBody:true,bullet:'',indent:'0px',segs:[{isCaret:true}]});}
+    return out;
+  }
+  phaseSt(p,t,r){
+    if(r.kind==='rewrite'&&p.e<=r.t0)return 'reused';
+    if(t<p.s)return 'pending';if(t>=p.e)return 'done';
+    if(r.stopAt!=null&&t>=r.stopAt)return r.status==='failed'?'failed':'cancelled';
+    return t<p.r?'waiting':'running';
+  }
+  wFields(w,base,set,prefix,mark){
+    return Object.keys(WLABEL).map(k=>{const changed=!!base&&String(w[k])!==String(base[k]);
+      const f={id:prefix+'-'+k,label:WLABEL[k],changed,mark,baseText:changed?(prefix==='rw'?'was ':'default: ')+fmtW(k,base[k]):'',reset:()=>set(k,base[k])};
+      if(k==='tone'){f.isSeg=true;f.opts=TONES.map(o=>({label:o,name:prefix+'-tone',checked:w.tone===o,onPick:()=>set('tone',o)}));}
+      if(k==='cite'){f.isSeg=true;f.opts=CITES.map(([v,l])=>({label:l,name:prefix+'-cite',checked:w.cite===v,onPick:()=>set('cite',v)}));}
+      if(k==='custom'){f.isArea=true;f.value=w.custom;f.ph='e.g. Assume the reader knows CUDA. Prefer numbers to adjectives.';f.onChange=e=>set('custom',e.target.value);}
+      if(k==='words'){f.isNum=true;f.value=w.words;f.onChange=e=>set('words',+e.target.value||0);}
+      if(k==='lang'){f.isSelect=true;f.value=w.lang;f.options=LANGS.map(v=>({v}));f.onChange=e=>set('lang',e.target.value);}
+      return f;});
+  }
+  derive(r,phone){
+    const t=this.shownT(r);const conn=r.status==='connecting';const src=sources(r.files);const subN=SUBQ.filter((_,i)=>.5+i*.45<=t).length;
+    const P={};PH.forEach(p=>P[p.id]=p);const prog=p=>clamp((t-p.r)/(p.e-p.r),0,1);
+    const web=src.filter(s=>!s.file);const nok=web.filter(s=>!s.fail&&s.fe<=t).length,nfail=web.filter(s=>s.fail&&s.fe<=t).length,nfound=web.filter(s=>s.found<=t).length;
+    const chunks=Math.round(prog(P.chunk)*412),pre=Math.round(prog(P.prefilter)*412),scored=Math.round(prog(P.score)*96);
+    const chars=t<34?0:Math.floor(r.md.length*clamp((t-34)/(END-34.5),0,1));const writeTok=Math.round(chars/3.7);
+    const isRw=r.kind==='rewrite';const status=r.status;const running=status==='running';const files=r.files;
+    const ST={
+      pending:{icon:'ph-circle',ic:'var(--faint)',bg:'transparent',bd:'1px solid var(--line)',lc:'var(--muted)',tc:'var(--faint)',bar:'transparent'},
+      waiting:{icon:'ph-cpu',ic:'var(--color-warn)',bg:'repeating-linear-gradient(135deg,color-mix(in srgb,var(--color-warn) 14%,transparent) 0 5px,transparent 5px 10px)',bd:'1px dashed var(--color-warn)',lc:'var(--color-text)',tc:'var(--color-warn)',bar:'transparent'},
+      running:{icon:'ph-circle-notch',ic:'var(--color-accent)',bg:'color-mix(in srgb,var(--color-accent) 10%,transparent)',bd:'1px solid var(--color-accent)',lc:'var(--color-text)',tc:'var(--color-accent-300)',bar:'var(--color-accent)',anim:'sx-spin .9s linear infinite',glow:'0 0 16px -6px var(--color-accent)'},
+      done:{icon:'ph-check',ic:'var(--muted)',bg:'transparent',bd:'1px solid var(--color-divider)',lc:'var(--color-text)',tc:'var(--muted)',bar:'var(--faint)'},
+      reused:{icon:'ph-recycle',ic:'var(--muted)',bg:'transparent',bd:'1px dashed var(--color-divider)',lc:'var(--muted)',tc:'var(--muted)',bar:'var(--line)'},
+      failed:{icon:'ph-x-circle',ic:'var(--color-danger)',bg:'color-mix(in srgb,var(--color-danger) 10%,transparent)',bd:'1px solid var(--color-danger)',lc:'var(--color-text)',tc:'var(--color-danger)',bar:'var(--color-danger)'},
+      cancelled:{icon:'ph-stop-circle',ic:'var(--muted)',bg:'transparent',bd:'1px dashed var(--muted)',lc:'var(--color-text)',tc:'var(--muted)',bar:'var(--faint)'}};
+    const txt={plan:st=>st==='done'?'5 sub-queries':`${subN}/5 sub-queries`,search:st=>st==='done'?'22 URLs found':`found ${nfound}`,fetch:()=>`fetched ${nok}/22`+(nfail?` · ${nfail} failed`:''),
+      load:st=>st==='done'?'2/2 files':`loaded ${src.filter(s=>s.file&&s.fe<=t).length}/2 files`,chunk:()=>`${chunks} chunks`,prefilter:st=>st==='done'?'96 of 412 kept':`${pre}/412 embedded`,
+      score:st=>st==='done'?'96 scored':`scored ${scored}/96`,select:st=>st==='done'?'14 selected':'selecting',write:()=>`${fmtK(writeTok)} tokens`};
+    let gpuPhase=null,stopLabel='';
+    const phases=PH.map(p=>{const st=conn?'pending':this.phaseSt(p,t,r);const S=ST[st];
+      if((st==='running'||st==='waiting')&&p.gpu)gpuPhase={p,st};if(st==='cancelled'||st==='failed')stopLabel=p.l;
+      const text=st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+p.wait:st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](st);
+      const pct=st==='done'||st==='reused'?100:(st==='running'||st==='failed'||st==='cancelled')?Math.round(prog(p)*100):0;
+      return {label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text};});
+    const keptVisible=t>=P.select.e;
+    const sourcesV=conn?[]:src.filter(s=>s.found<=t).map(s=>{let st,icon,ic,sc='var(--muted)',anim='none';
+      if(s.file){if(s.fe<=t){st=s.size;icon='ph-file-text';ic='var(--muted)';}else{st='loading…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';}}
+      else if(t<s.fs){st=status==='cancelled'?'not fetched':'found';icon='ph-globe-simple';ic='var(--faint)';}
+      else if(t<s.fe){if(status==='cancelled'){st='cancelled';icon='ph-stop-circle';ic='var(--muted)';}else{st='fetching…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';sc='var(--color-accent-300)';}}
+      else if(s.fail){st=s.fail;icon='ph-x-circle';ic='var(--color-danger)';sc='var(--color-danger)';}
+      else{st=isRw?'cached':'fetched';icon='ph-check';ic='var(--muted)';}
+      return {icon,ic,anim,st,sc,title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:keptVisible&&KEPTBY[s.i]?KEPTBY[s.i]+' kept':''};}).reverse();
+    const scoredP=conn?[]:PASS.filter(p=>p.at<=t||t>=P.score.e).sort((a,b)=>b.v-a.v);
+    const passages=scoredP.filter(p=>p.kept||this.state.showRej).map(p=>({score:p.v.toFixed(2),pct:Math.round(p.v*100),sc:p.kept?'var(--color-accent-300)':'var(--muted)',bar:p.kept?'var(--color-accent)':'var(--faint)',op:p.kept?1:.5,heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom,
+      badge:p.kept?(keptVisible?this.citeLabel(p.n,r.wopts.cite,files):'above threshold'):'rejected · below 0.60',badgeCol:p.kept&&keptVisible?'var(--color-accent-300)':'var(--faint)',badgeFont:p.kept&&keptVisible?'var(--mono)':'inherit'}));
+    let passEmptyText='',passEmptyIcon='ph-hourglass',passEmptyIc='var(--faint)';
+    if(!passages.length){const sst=this.phaseSt(P.score,t,r);
+      if(conn)passEmptyText='Waiting for the run to start.';
+      else if(sst==='waiting'){passEmptyText='Scorer is waiting for the GPU while the embeddings model unloads.';passEmptyIcon='ph-cpu';passEmptyIc='var(--color-warn)';}
+      else if(status==='cancelled')passEmptyText='Cancelled before scoring.';
+      else if(scoredP.length)passEmptyText='No passages above 0.60 yet. Press R to show rejected ones.';
+      else passEmptyText=`Passages appear as they are scored. Prefilter narrows ${chunks||412} chunks to 96 for the scorer.`;}
+    const wst=conn?'pending':this.phaseSt(P.write,t,r);
+    let repEmptyText='The report streams here once passages are selected.',repEmptyIcon='ph-hourglass',repEmptyIc='var(--faint)';
+    if(wst==='waiting'){repEmptyText='Writer is waiting for the GPU while the scorer unloads.';repEmptyIcon='ph-cpu';repEmptyIc='var(--color-warn)';}
+    if(status==='cancelled'){repEmptyText='Cancelled before the write stage. Nothing was written.';repEmptyIcon='ph-stop-circle';}
+    const tokIn=isRw?(t>=34?6900:0):Math.round(1200*clamp(t/2.5,0,1)+38400*prog(P.score)+(t>=34?6900:0)),tokOut=Math.round((isRw?0:160*clamp(t/2.5,0,1))+writeTok);
+    const cost=isRw?0:.0008*SUBQ.filter((_,i)=>2.8+i*.7<=t).length;
+    const stm={connecting:['Connecting','var(--color-neutral-800)','var(--color-neutral-100)','sx-pulse 1.2s infinite'],running:['Running','var(--color-accent-800)','var(--color-accent-100)','sx-pulse 1.6s infinite'],done:['Completed','var(--color-neutral-800)','var(--color-neutral-100)','none'],failed:['Failed','color-mix(in srgb,var(--color-danger) 22%,transparent)','var(--color-text)','none'],cancelled:['Cancelled','var(--color-neutral-800)','var(--color-neutral-100)','none']}[status];
+    let bn=null;const tint=(c,a,b)=>[`color-mix(in srgb,${c} ${a}%,transparent)`,`color-mix(in srgb,${c} ${b}%,transparent)`];
+    if(r.conn==='reconnecting')bn=['ph-wifi-slash','var(--color-warn)',`Connection lost. Reconnecting (attempt ${r.attempt||1})… The run continues on the server; events replay from seq ${Math.floor(r.dropAt*27)}.`,...tint('var(--color-warn)',9,45),'sx-pulse 1.2s infinite'];
+    else if(r.conn==='replaying')bn=['ph-arrows-clockwise','var(--color-accent)',`Reconnected. Replaying ${r.replayed} missed events…`,...tint('var(--color-accent)',8,40),'sx-spin 1s linear infinite'];
+    else if(r.bannerUntil)bn=['ph-check-circle','var(--color-accent)',`Reconnected · replayed ${r.replayed} events, nothing lost.`,...tint('var(--color-accent)',7,30),'none'];
+    else if(status==='cancelled')bn=['ph-stop-circle','var(--muted)',`Cancelled at ${stopLabel||'Fetch'} after ${fmtT(t*TF)}. Completed stages are kept; nothing was written.`,...tint('var(--color-text)',5,16),'none'];
+    else if(conn)bn=['ph-circle-notch','var(--color-accent)',r.hold?'Connecting to ws://localhost:8765 · queued, waiting for a free worker…':'Connecting to ws://localhost:8765…',...tint('var(--color-accent)',6,25),'sx-spin 1s linear infinite'];
+    else if(isRw&&running&&t<34.5)bn=['ph-recycle','var(--color-accent)',`Rewrite of ${r.rewriteOf}: sources and passages are reused, only the write stage runs.`,...tint('var(--color-accent)',6,25),'none'];
+    const GPU={embeddings:'embeddings · 0.9 / 12 GB',scorer:'scorer · 2.3 / 12 GB',LLM:'LLM · 6.1 / 12 GB'};
+    const lowv=r.opts.profile==='low-vram';
+    let connText='Connected',connCol='var(--color-accent)',connAnim='none';
+    if(conn){connText='Connecting';connCol='var(--color-warn)';connAnim='sx-pulse 1s infinite';}
+    else if(r.conn==='reconnecting'){connText='Reconnecting';connCol='var(--color-warn)';connAnim='sx-pulse 1s infinite';}
+    else if(r.conn==='replaying'){connText='Replaying';connCol='var(--color-accent)';}
+    else if(!running){connText='Closed · run ended';connCol='var(--faint)';}
+    return {id:r.id,meta:`${r.opts.recipe} · ${r.opts.sources} · ${r.opts.profile}`+(files.length?` · ${files.length} file${files.length>1?'s':''}`:''),query:r.query,qSize:phone?'15px':'17px',
+      stLabel:stm[0],stBg:stm[1],stFg:stm[2],stAnim:stm[3],isRewrite:isRw,rewriteLabel:'rewrite of '+r.rewriteOf,
+      showGpu:lowv&&(running||conn)&&!phone,gpu:gpuPhase?(gpuPhase.st==='waiting'?'GPU · swapping models':GPU[gpuPhase.p.gpu]):'GPU idle',gpuCol:gpuPhase?(gpuPhase.st==='waiting'?'var(--color-warn)':'var(--color-accent)'):'var(--faint)',gpuTitle:'RTX 3060 · low-vram profile runs GPU stages one at a time',
+      canCancel:running||conn,isDone:status==='done',canRerun:status==='failed'||status==='cancelled',
+      banner:!!bn,bannerIcon:bn&&bn[0],bannerIc:bn&&bn[1],bannerText:bn&&bn[2],bannerBg:bn&&bn[3],bannerBd:bn&&bn[4],bannerAnim:bn&&bn[5],
+      phases,
+      subq:conn?[]:SUBQ.slice(0,subN).map((q,i)=>{const at=2.8+i*.7;let st,icon,anim='none';
+        if(isRw){st='reused';icon='ph-recycle';}else if(t<2.5){st='queued';icon='ph-clock';}else if(t<at){st=status==='cancelled'?'cancelled':'searching';icon=status==='cancelled'?'ph-stop-circle':'ph-circle-notch';anim=status==='cancelled'?'none':'sx-spin .9s linear infinite';}else{st=[8,7,6,5,6][i]+' results';icon='ph-check';}
+        return {n:i+1,text:q,st,icon,anim};}),
+      subqSummary:conn?'':`${subN}/5`,subqEmpty:subN===0,subqEmptyText:conn?'Waiting for the planner…':'Planning sub-queries…',
+      sources:sourcesV,srcSummary:conn?'':`${nok} of ${nfound} fetched · 2 files`,srcFailNote:nfail?`${nfail} failed · run continues`:'',loading:conn,srcEmpty:!conn&&!sourcesV.length,srcEmptyText:'Sources appear as search returns results.',
+      passages,passSummary:keptVisible?'14 kept of 96 scored':scoredP.length?`${scored}/96 scored`:'',passEmpty:!passages.length,passEmptyText,passEmptyIcon,passEmptyIc,
+      blocks:this.blocks(r.md.slice(0,chars),r.wopts.cite,running&&chars>0&&chars<r.md.length,files),
+      repSummary:chars?(running?`writing · ${fmtK(writeTok)} tokens`:`${fmtK(writeTok)} tokens`):'',repOpts:phone?'':`${r.wopts.tone} · ${r.wopts.words} words · ${r.wopts.lang}`,
+      repEmpty:chars===0&&status!=='failed',repEmptyText,repEmptyIcon,repEmptyIc,isFailed:status==='failed',errText:ERR,
+      elapsed:conn?'0:00':fmtT((t-r.t0)*TF),tokens:`${fmtK(tokIn)} in · ${fmtK(tokOut)} out`,tokTitle:'Prompt / completion tokens across all stages',cost:cost?'$'+cost.toFixed(4):'$0.0000 · local',
+      connText,connCol,connAnim,seq:'seq '+Math.floor(t*27),
+      tabCounts:{sources:conn?'':String(sourcesV.length),passages:keptVisible?'14':scoredP.length?String(scoredP.filter(p=>p.kept).length):'',report:chars?(running?'…':'✓'):''}};
+  }
+  renderVals(){
+    const S=this.state,P=this.props;const phone=P.device==='phone'||S.winW<720;const framed=P.device==='phone'&&S.winW>=720;
+    const theme=S.theme||P.theme||'dark';const r=S.run;const L=r?this.derive(r,phone):{};
+    const scr=S.screen;const muted='var(--muted)';
+    const nav=[['new','New run','ph-plus-circle','Alt 1'],['live','Live run','ph-pulse','Alt 2'],['history','History','ph-clock-counter-clockwise','Alt 3'],['settings','Settings','ph-gear-six','Alt 4']].map(([id,l,ic,k])=>{
+      const active=scr===id||(id==='live'&&scr==='report');const runDot=id==='live'&&r&&(r.status==='running'||r.status==='connecting');const healthDot=id==='settings'&&Object.values(S.health).some(h=>h.st!=='ok');
+      return {l,ic,k,cur:active?'page':undefined,bg:active?'color-mix(in srgb,var(--color-accent) 12%,transparent)':'transparent',col:active?'var(--color-accent-300)':'var(--color-text)',go:()=>this.go(id),dot:!!(runDot||healthDot),dotCol:runDot?'var(--color-accent)':'var(--color-warn)',dotAnim:runDot?'sx-pulse 1.4s infinite':'none'};});
+    const setNewW=(k,v)=>this.setState(s=>({wNew:{...s.wNew,[k]:v}}));
+    const setDefW=(k,v)=>{this.setState(s=>{const wDef={...s.wDef,[k]:v};try{localStorage.setItem('sift-writing-defaults',JSON.stringify(wDef));}catch(e){}
+      const wNew=String(s.wNew[k])===String(s.wDef[k])?{...s.wNew,[k]:v}:s.wNew;return {wDef,wNew,wSaved:true};});clearTimeout(this.ws);this.ws=setTimeout(()=>this.setState({wSaved:false}),1500);};
+    const newW=this.wFields(S.wNew,S.wDef,setNewW,'nw','overridden');const overN=newW.filter(f=>f.changed).length;
+    const RUNF=[['recipe','Recipe',['context','report']],['sources','Sources',['web','files','both']],['profile','Profile',['low-vram','workstation','cloud']]];
+    const runFields=RUNF.map(([k,label,os])=>({label,opts:os.map(o=>({label:o,name:'opt-'+k,checked:S.opts[k]===o,onPick:()=>this.setState(s=>({opts:{...s.opts,[k]:o}}))}))}));
+    const submit=()=>{const q=S.query.trim();if(q)this.start(q,{...S.opts},S.files,{...S.wNew});};
+    // report view
+    let R={};const cur=S.versions.find(v=>v.id===S.viewId)||S.versions[S.versions.length-1];
+    if(cur){const root=cur.root||cur.id;const sib=S.versions.filter(v=>(v.root||v.id)===root);const par=cur.parent&&S.versions.find(v=>v.id===cur.parent);
+      const src=sources(cur.files);const citesBy={};PASS.filter(p=>p.kept).forEach(p=>{(citesBy[p.s]=citesBy[p.s]||[]).push(this.citeLabel(p.n,cur.wopts.cite,cur.files));});
+      R={id:cur.id,query:cur.query,h1:phone?'21px':'26px',meta:`${cur.date} · ${cur.dur} · ${cur.opts.recipe} · 22 sources · 14 passages`,multi:sib.length>1,
+        versions:sib.map(v=>{const pv=v.parent&&S.versions.find(x=>x.id===v.parent);const c=v.id===cur.id;return {v:v.v,kind:v.parent?'rewrite':'research',id:v.id,desc:v.parent?(wDiff(pv.wopts,v.wopts)||'same options')+' · '+v.dur:'full run · '+v.dur,icon:v.parent?'ph-git-branch':'ph-magnifying-glass',cur:c?'true':undefined,bd:c?'var(--color-accent)':'var(--color-divider)',bg:c?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',go:()=>this.setState({viewId:v.id,cite:null})};}),
+        parentNote:par?`Rewritten from ${par.id} (v${par.v}): same sources and passages; changed ${wDiff(par.wopts,cur.wopts)||'nothing'}.`:'',
+        optsLine:'Written with '+wSum(cur.wopts)+(cur.wopts.custom?' · custom instructions':''),
+        blocks:this.blocks(cur.md,cur.wopts.cite,false,cur.files),srcCount:'21 · 3 failed',
+        sources:src.filter(s=>!s.fail).sort((a,b)=>(KEPTBY[b.i]||0)-(KEPTBY[a.i]||0)).map(s=>({title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:KEPTBY[s.i]?KEPTBY[s.i]+' kept':'',cites:(citesBy[s.i]||[]).join(' ')})),
+        passages:PASS.filter(p=>p.kept).map(p=>({label:this.citeLabel(p.n,cur.wopts.cite,cur.files),score:p.v.toFixed(2),heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom}))};}
+    const rwBase=S.rw&&S.versions.find(v=>v.id===S.rw.from);
+    const setRw=(k,v)=>this.setState(s=>({rw:{...s.rw,w:{...s.rw.w,[k]:v}}}));
+    const nextV=rwBase?S.versions.filter(v=>(v.root||v.id)===(rwBase.root||rwBase.id)).length+1:2;
+    // history
+    const session=[];S.versions.forEach(v=>{if(!HIST.find(h=>h.id===v.id))session.push({id:v.id,q:v.query,d:v.date,recipe:v.opts.recipe,status:'completed',dur:v.dur,cost:v.parent?'$0.000':'$0.004',parent:v.parent,wnote:v.parent?`${v.wopts.tone} · ${v.wopts.words} words`:''});});
+    if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?'running':r.status,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
+    const allH=P.emptyHistory?[]:[...session.reverse(),...S.hist];
+    const q=S.hq.trim().toLowerCase();
+    const shown=allH.filter(h=>(!q||h.q.toLowerCase().includes(q))&&(S.hf==='all'||h.status===S.hf)&&(S.hr==='any'||h.recipe===S.hr));
+    const HS={completed:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent'],running:['ph-circle-notch','var(--color-accent-800)','var(--color-accent-100)','transparent'],failed:['ph-x-circle','color-mix(in srgb,var(--color-danger) 18%,transparent)','var(--color-text)','transparent'],cancelled:['ph-stop-circle','transparent','var(--muted)','var(--color-divider)'],done:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent']};
+    const hist=shown.map(h=>{const s=HS[h.status]||HS.completed;return {...h,status:h.status==='done'?'completed':h.status,icon:s[0],bg:s[1],fg:s[2],bd:s[3],anim:h.status==='running'?'sx-spin .9s linear infinite':'none',parent:h.parent||'',
+      open:()=>{if(h.live){this.go('live');return;}if(S.versions.find(v=>v.id===h.id)){this.setState({viewId:h.id,screen:'report'});return;}
+        if(h.status==='completed')this.setState({versions:[...S.versions,{id:h.id,v:1,query:h.q,opts:{recipe:h.recipe,sources:'both',profile:'low-vram'},wopts:{...S.wDef},md:MD1,dur:h.dur,date:h.d,files:[]}],viewId:h.id,screen:'report'});
+        else this.applyScenario(h.status==='failed'?'failure':'cancelled');},
+      rerun:()=>this.start(h.q,{...S.opts,recipe:h.recipe},[],{...S.wDef}),
+      del:()=>{const prev=S.hist;this.setState({hist:S.hist.filter(x=>x.id!==h.id)});this.toastMsg('Run deleted',()=>{this.setState({hist:prev,toast:null});});}};});
+    const filtered=!!(q||S.hf!=='all'||S.hr!=='any');
+    // settings
+    const providers=PROV.map(p=>{const h=S.health[p.id];const ago=Math.max(0,Math.round((S.now-h.at)/1000));
+      const m={ok:['ph-check-circle','var(--color-accent)',`Healthy · ${h.ms} ms`+(p.id==='llm'?' · 41 tok/s':''),'color-mix(in srgb,var(--color-text) 4%,transparent)'],degraded:['ph-warning-circle','var(--color-warn)',`Slow · ${h.ms.toLocaleString()} ms (limit 1,000 ms)`,'color-mix(in srgb,var(--color-warn) 10%,transparent)'],down:['ph-x-circle','var(--color-danger)','Unreachable · ECONNREFUSED','color-mix(in srgb,var(--color-danger) 10%,transparent)']}[h.st];
+      return {...p,modelLabel:p.ml,check:()=>this.check(p.id),checking:!!h.checking,anim:h.checking?'sx-spin .8s linear infinite':'none',hIcon:h.checking?'ph-circle-dashed':m[0],hCol:h.checking?'var(--muted)':m[1],hAnim:h.checking?'sx-spin 1.2s linear infinite':'none',hText:h.checking?'Checking…':m[2],hBg:m[3],ago:h.checking?'':ago<5?'just now':ago<60?ago+' s ago':Math.round(ago/60)+' min ago'};});
+    // auth
+    const A=S.auth;const waitS=A.until?Math.max(0,Math.ceil((A.until-S.now)/1000)):0;const limited=A.err==='limited'&&waitS>0;
+    const setA=u=>this.setState(s=>({auth:{...s.auth,...u}}));
+    const tabs=[['progress','Progress',''],['sources','Sources',L.tabCounts&&L.tabCounts.sources],['passages','Passages',L.tabCounts&&L.tabCounts.passages],['report','Report',L.tabCounts&&L.tabCounts.report]].map(([id,label,count])=>{const sel=S.tab===id;return {label,count:count||'',sel:sel?'true':'false',bg:sel?'color-mix(in srgb,var(--color-accent) 10%,transparent)':'transparent',col:sel?'var(--color-accent-300)':'var(--color-text)',line:sel?'inset 0 -2px 0 var(--color-accent)':'none',go:()=>this.setState({tab:id})};});
+    const tab=phone?S.tab:null;
+    return {
+      theme,appW:framed?'390px':'100%',appH:framed?'min(844px, calc(100vh - 32px))':'100%',appR:framed?'28px':'0',appShadow:framed?'var(--shadow-lg)':'none',appDir:phone?'column':'row',
+      isPhone:phone,notPhone:!phone,nav,toggleTheme:()=>this.setState({theme:theme==='dark'?'light':'dark'}),themeIcon:theme==='dark'?'ph-sun':'ph-moon',themeLabel:theme==='dark'?'Light theme':'Dark theme',
+      pagePad:phone?'16px 14px 24px':'28px 32px 40px',formCols:phone?'1fr':'150px minmax(0,1fr)',dlgCols:phone?'1fr':'140px minmax(0,1fr)',
+      scrNew:scr==='new',scrLive:scr==='live',scrReport:scr==='report'&&!!cur,scrHistory:scr==='history',scrSettings:scr==='settings',
+      goNew:()=>this.go('new'),goSettings:()=>this.go('settings'),
+      // new run
+      qRef:this.qRef,fileRef:this.fileRef,query:S.query,onQuery:e=>this.setState({query:e.target.value}),
+      onQueryKey:e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();submit();}},cantRun:!S.query.trim(),submit,
+      browse:()=>this.fileRef.current&&this.fileRef.current.click(),dropKey:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();this.fileRef.current&&this.fileRef.current.click();}},
+      onDragOver:e=>{e.preventDefault();if(!S.dragOver)this.setState({dragOver:true});},onDragLeave:()=>this.setState({dragOver:false}),onDrop:e=>{e.preventDefault();this.addFiles(e.dataTransfer.files);},
+      onPick:e=>{this.addFiles(e.target.files);e.target.value='';},
+      dropBorder:S.dragOver?'var(--color-accent)':'var(--color-divider)',dropBg:S.dragOver?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',dropErr:S.dropErr,
+      hasFiles:S.files.length>0,files:S.files.map(f=>({name:f.name,size:fmtB(f.bytes),removeLabel:'Remove '+f.name,remove:()=>this.setState(s=>({files:s.files.filter(x=>x.name!==f.name)}))})),
+      optsOpen:S.optsOpen,toggleOpts:()=>this.setState(s=>({optsOpen:!s.optsOpen})),optsCaret:S.optsOpen?'ph-caret-down':'ph-caret-right',
+      optSummary:`${S.opts.recipe} · ${S.opts.sources} · ${S.opts.profile} · ${wSum(S.wNew)}`,wOverCount:overN>0,wOverLabel:overN+' overridden',
+      runFields,newWFields:newW,resetAllW:()=>this.setState(s=>({wNew:{...s.wDef}})),
+      // live
+      noRun:!r,hasRun:!!r,L,liveGap:phone?'8px':'10px',liveOverflow:phone?'auto':'hidden',gridFlex:phone?'none':'1',gridMinH:phone?'auto':'0',subqFlex:phone?'none':'0 1 auto',subqMax:phone?'none':'42%',livePad:phone?'10px 10px 8px':'14px 16px 10px',
+      tabs,showTimeline:!phone||tab==='progress',showSubq:!phone||tab==='progress',showSources:!phone||tab==='sources',showCol1:!phone||tab==='progress'||tab==='sources',showPassages:!phone||tab==='passages',showReport:!phone||tab==='report',
+      tlCols:phone?'1fr 1fr':'repeat(9,minmax(0,1fr))',liveCols:phone?'minmax(0,1fr)':(S.winW<1180?'minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)':'minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr)'),
+      skel:[{w:'72%'},{w:'58%'},{w:'80%'},{w:'64%'},{w:'70%'},{w:'52%'}],
+      showRej:S.showRej,toggleRej:()=>this.setState(s=>({showRej:!s.showRej})),rejTrack:S.showRej?'var(--color-accent)':'var(--color-divider)',rejKnob:S.showRej?'12px':'2px',
+      repRef:this.repRef,hideCite:()=>this.setState({cite:null}),footGap:phone?'10px':'18px',
+      cancel:()=>{const rr=S.run;if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
+      openReport:()=>this.setState({screen:'report',viewId:r&&r.id}),
+      rerun:()=>r&&this.start(r.query,r.opts,r.files,r.wopts),
+      retry:()=>this.setRun({status:'running',failAt:null,stopAt:null,t:21}),
+      retryCloud:()=>this.setRun({status:'running',failAt:null,stopAt:null,t:23,opts:{...r.opts,profile:'cloud'}}),
+      copyErr:()=>this.copy(ERR,'Error copied'),
+      // report
+      R,openRewrite:()=>cur&&this.setState({rw:{from:cur.id,w:{...cur.wopts}}}),
+      copyMd:()=>this.copy(cur?cur.md:'','Markdown copied'),
+      download:()=>{if(!cur)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([`# ${cur.query}\n\n`+cur.md],{type:'text/markdown'}));a.download=cur.id+'.md';a.click();this.toastMsg('Downloaded '+cur.id+'.md');},
+      copyJson:()=>{if(!cur)return;const src=sources(cur.files);this.copy(JSON.stringify({run:cur.id,parent:cur.parent||null,query:cur.query,options:{...cur.opts,writing:cur.wopts},passages:PASS.filter(p=>p.kept).map(p=>({cite:p.n,score:p.v,source:src[p.s].file?src[p.s].u:'https://'+src[p.s].u,heading_path:p.h.split(' › '),text:p.x}))},null,2),'Context JSON copied');},
+      repCols:phone||S.winW<1100?'minmax(0,1fr)':'minmax(0,1fr) minmax(300px,380px)',
+      rwOpen:!!(S.rw&&rwBase),rwFields:rwBase?this.wFields(S.rw.w,rwBase.wopts,setRw,'rw','changed'):[],rwFromId:rwBase?rwBase.id:'',rwNextLabel:'v'+nextV,
+      rwNote:'Reuses the 22 sources and 14 selected passages from this run. Only the write stage runs again; no searching or fetching.',
+      closeRw:()=>this.setState({rw:null}),closeRwBackdrop:e=>{if(e.target===e.currentTarget)this.setState({rw:null});},
+      confirmRw:()=>{const w=S.rw.w;const md=(w.tone==='Concise'||w.words<=400)?MD2:MD1;const id='r_'+Math.random().toString(16).slice(2,6);
+        this.setState({rw:null,screen:'live',tab:'report',run:this.baseRun({id,kind:'rewrite',rewriteOf:rwBase.id,t:32,t0:32,md,wopts:{...w},query:rwBase.query,opts:rwBase.opts,files:rwBase.files})});},
+      // history
+      hRef:this.hRef,hq:S.hq,onHq:e=>this.setState({hq:e.target.value}),histCount:allH.length?String(allH.length):'',
+      hfOpts:[['all','All'],['completed','Completed'],['failed','Failed'],['cancelled','Cancelled']].map(([v,l])=>({label:l,checked:S.hf===v,onPick:()=>this.setState({hf:v})})),
+      hrOpts:[['any','Any recipe'],['report','report'],['context','context']].map(([v,l])=>({label:l,checked:S.hr===v,onPick:()=>this.setState({hr:v})})),
+      hist,histHas:hist.length>0,histEmpty:!hist.length,histNone:!allH.length,histFiltered:!!allH.length&&filtered,
+      histEmptyTitle:allH.length?'No runs match':'No runs yet',histEmptyText:allH.length?(q?`Nothing matches “${S.hq}” with these filters.`:'Nothing matches these filters.'):'Finished, failed and cancelled runs are kept here with their reports.',
+      clearFilters:()=>this.setState({hq:'',hf:'all',hr:'any'}),
+      // settings
+      providers,checkAll:()=>PROV.forEach(p=>this.check(p.id)),setWFields:this.wFields(S.wDef,null,setDefW,'df',''),wSaved:S.wSaved,
+      signOut:()=>this.setState({auth:{...A,locked:true,pw:'',err:null,left:5,until:0},rw:null,cite:null}),
+      tokName:S.tokName,onTokName:e=>this.setState({tokName:e.target.value}),cantCreateTok:!S.tokName.trim(),
+      createTok:e=>{e.preventDefault();const name=S.tokName.trim();if(!name)return;let v='sift_';for(let i=0;i<36;i++)v+=B62[Math.floor(Math.random()*62)];
+        this.setState(s=>({tokens:[{id:'t'+Date.now(),name,tail:v.slice(-4),created:'Today',last:'Never'},...s.tokens],tokName:'',newTok:{name,value:v},tokCopied:false}));},
+      hasNewTok:!!S.newTok,newTok:S.newTok||{},copyTok:()=>{this.copy(S.newTok.value);this.setState({tokCopied:true});},copyTokIcon:S.tokCopied?'ph-check':'ph-copy',copyTokLabel:S.tokCopied?'Copied':'Copy',dismissTok:()=>this.setState({newTok:null}),
+      tokens:S.tokens.map(k=>({name:k.name,masked:'sift_••••'+k.tail,created:k.created,last:k.last,revoke:()=>this.setState({revoke:k})})),tokEmpty:!S.tokens.length,tokHas:S.tokens.length>0,
+      revokeOpen:!!S.revoke,revokeName:S.revoke?S.revoke.name:'',closeRevoke:()=>this.setState({revoke:null}),
+      confirmRevoke:()=>{const k=S.revoke;this.setState(s=>({tokens:s.tokens.filter(x=>x.id!==k.id),revoke:null,newTok:s.newTok&&s.newTok.name===k.name?null:s.newTok}));this.toastMsg(`Token “${k.name}” revoked`);},
+      // login
+      locked:A.locked,loginPad:phone?'24px':'0 0 0 max(48px, 12vw)',pwRef:this.pwRef,loginPw:A.pw,onLoginPw:e=>setA({pw:e.target.value}),onLogin:e=>this.login(e),
+      pwType:A.show?'text':'password',togglePw:()=>setA({show:!A.show}),pwIcon:A.show?'ph-eye-slash':'ph-eye',pwToggleLabel:A.show?'Hide password':'Show password',
+      loginErr:!!A.err&&(A.err!=='limited'||limited),loginLimited:limited,loginInvalid:A.err==='wrong'?'true':'false',pwBorder:A.err==='wrong'?'var(--color-danger)':limited?'var(--color-divider)':'var(--color-divider)',
+      loginMsgBg:limited?'color-mix(in srgb,var(--color-warn) 9%,transparent)':'color-mix(in srgb,var(--color-danger) 9%,transparent)',loginMsgBd:limited?'color-mix(in srgb,var(--color-warn) 40%,transparent)':'color-mix(in srgb,var(--color-danger) 40%,transparent)',
+      loginMsgIcon:limited?'ph-timer':'ph-warning-circle',loginMsgIc:limited?'var(--color-warn)':'var(--color-danger)',
+      loginMsgTitle:limited?'Too many attempts':'Wrong password',
+      loginMsgText:limited?`Sign-in is paused. Try again in ${fmtT(waitS)}.`:`${A.left} attempt${A.left===1?'':'s'} left before sign-in pauses for 30 seconds.`,
+      loginWaitPct:limited?Math.round(waitS/30*100):0,loginDisabled:limited||!A.pw,loginBtn:limited?`Try again in ${waitS} s`:'Sign in',loginBtnIcon:limited?'ph-lock-simple':'ph-sign-in',
+      // overlays
+      citeOpen:!!S.cite,cite:S.cite||{},toastOpen:!!S.toast,toast:S.toast||{}
+    };
+  }
+}
+
+</script>
+</body>
+</html>
