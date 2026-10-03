@@ -293,7 +293,7 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts: Query, Hit, Page, Chunk, Score, Context, Report, WriteOptions
+  models.py      # Pydantic contracts: Query, Hit, Page, Chunk, Score, Context, Report, WritingOptions
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM
   config.py      # settings, profiles, precedence, secret redaction
   http.py        # shared httpx client, retry with backoff, per-adapter semaphore, Costs
@@ -411,6 +411,8 @@ Cancel sends a signal.
 - `GET /runs/{id}/artifacts/{name}`: names from a fixed allowlist only.
 - `POST /runs/{id}/cancel`.
 - `POST /runs/{id}/fork` (stage plus overrides).
+- `POST /runs/{id}/rerun`: a new run with the original request and a
+  server-side copy of its attachments.
 - `WS /runs/{id}/events?since=<seq>`.
 - `GET /settings` and `PUT /settings`: global defaults, including writing
   options; each run can override them.
@@ -422,9 +424,10 @@ Cancel sends a signal.
   once), `DELETE /tokens/{id}`.
 
 Runs record lineage: `parent_run_id` and `version` (1 for a new run, parent
-version plus one for a fork), which the Versions screen shows. Rerun is a
-new run with the same request; "Retry from Score" is a fork from the score
-stage.
+version plus one for a fork) and `fork_from` (the stage a fork started
+from), which the Versions screen shows. Rerun is a new run (version 1, no
+parent) with the same request and attachments; "Retry from Score" is a
+fork from the score stage.
 
 `server.max_concurrent_runs` (default 1) limits runs in progress; further
 runs wait and emit `run.queued`.

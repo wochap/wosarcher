@@ -87,6 +87,19 @@ class LLM(Protocol):
     def stream(self, messages: list[Message], *, max_tokens: int) -> AsyncIterator[str]: ...
 ```
 
+`Message` and `Completion` are contracts in `models.py`:
+
+```python
+class Message(BaseModel):      # frozen, extra="forbid"
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+class Completion(BaseModel):
+    text: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+```
+
 Structural typing means adapters and fakes need no base class. Alternative:
 abstract base classes. Rejected: inheritance adds nothing here and the
 design avoids it. `release()` is not in this change; it arrives with the

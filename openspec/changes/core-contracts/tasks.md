@@ -10,7 +10,7 @@
 
 - [ ] 2.1 Implement URL normalisation in `models.py`; verify unit tests for lowercase scheme and host, fragment removal, trailing slash, tracking parameters removed, parameter order, and meaningful parameters kept (spec: URL normalisation)
 - [ ] 2.2 Implement `source_id` and `chunk_id` helpers; verify tests that normalised URLs share an ID, identical file content shares an ID, and chunking the same input twice gives the same IDs (spec: Source identity, Chunk identity)
-- [ ] 2.3 Implement the contract models (run request, query, hit, source, page, chunk, score, context, report, writing options) as frozen models with `extra="forbid"`; verify round-trip tests for every type and a test that an unknown field is rejected (spec: Contract types)
+- [ ] 2.3 Implement the contract models (run request, query, hit, source, page, chunk, score, context, report, writing options, and `Message` and `Completion` as in design.md) as frozen models with `extra="forbid"`; verify round-trip tests for every type and a test that an unknown field is rejected (spec: Contract types)
 - [ ] 2.4 Implement writing option defaults and validation; verify tests for the defaults, `words = 0` failing, and an unknown `citation_marker` failing (spec: Writing options)
 - [ ] 2.5 Verify a test that one chunk scored against two queries gives two scores naming the scorer (spec: Scores are pairs)
 
