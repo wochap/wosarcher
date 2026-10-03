@@ -1,3 +1,3 @@
-from wosarcher.cli import main
+from wosarcher.cli import app
 
-main()
+app()

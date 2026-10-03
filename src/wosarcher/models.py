@@ -1,10 +1,11 @@
 """Data contracts that flow between stages, and their stable identities."""
 
+from datetime import datetime
 from hashlib import sha256
-from typing import Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SerializerFunctionWrapHandler, TypeAdapter, model_serializer
 
 TRACKING_PARAMETERS = {"fbclid", "gclid"}
 
@@ -237,17 +238,18 @@ class Report(Contract):
     warnings: list[str] = []
 
 
-Stage = Literal["plan", "search", "fetch", "load", "chunk", "prefilter", "score", "select", "write"]
+Stage = Literal["load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write"]
+STAGES: tuple[Stage, ...] = ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write")
+"""Run order."""
 
 
 class RunRequest(Contract):
     query: str = Field(min_length=1)
     sources: Sources = "both"
-    attachments: tuple[str, ...] = ()
     until: Stage | None = None
-    profile: str | None = None
-    overrides: tuple[str, ...] = ()
-    writing: WritingOptions = WritingOptions()
+    """None runs to the report; `select` stops at the context."""
+    attachments: list[str] = []
+    """Paths under the run's `attachments/`, as copied."""
 
 
 class Message(Contract):
@@ -287,6 +289,338 @@ class DoctorReport(Contract):
     warnings: tuple[str, ...] = ()
 
 
+# Runs
+
+
+class RunRecord(Contract):
+    """`request.json`: what a run was asked, with which configuration, and where it came from."""
+
+    run_id: str
+    created_at: datetime
+    request: RunRequest
+    profile: str
+    overrides: list[str] = []
+    """Every `--set` value, the parent's first."""
+    changes: list[str] = []
+    """The overrides this fork added."""
+    settings: dict[str, Any]
+    """Resolved configuration, secrets as `***`."""
+    parent_run_id: str | None = None
+    fork_from: Stage | None = None
+    version: int = Field(default=1, ge=1)
+
+
+RunStatus = Literal["done", "failed", "cancelled", "interrupted"]
+
+
+class RunSummary(Contract):
+    """One row of `wosarcher runs`."""
+
+    run_id: str
+    created_at: datetime
+    status: RunStatus
+    version: int
+    parent_run_id: str | None
+    profile: str
+    query: str
+
+
+class RunOutput(Contract):
+    """What `wosarcher run --json` and `wosarcher fork --json` print."""
+
+    run_id: str
+    status: Literal["done", "failed", "cancelled"]
+    error: str | None = None
+    run_dir: str
+    context: Context | None = None
+    report: Report | None = None
+
+
+class UsageTotals(Contract):
+    input_tokens: int = 0
+    output_tokens: int = 0
+    requests: int = 0
+    units: float = 0
+    cost: float = 0
+    """Dollars; 0 when no price is configured."""
+
+
+class RunCosts(Contract):
+    """`costs.json`."""
+
+    stages: dict[str, UsageTotals]
+    providers: dict[str, UsageTotals]
+    total: UsageTotals
+
+
+# Events: `data` field names are contracts the server and the frontend read.
+
+
+class RunQueuedData(Contract):
+    position: int
+
+
+class RunStartedData(Contract):
+    query: str
+    profile: str
+    parent_run_id: str | None
+    version: int
+    until: Stage | None
+
+
+class RunDoneData(Contract):
+    until: Stage | None
+    totals: UsageTotals
+
+
+class RunFailedData(Contract):
+    stage: Stage | None
+    error: str
+
+
+class RunCancelledData(Contract):
+    stage: Stage | None
+
+
+class StageStartedData(Contract):
+    device: str | None
+    provider: str
+
+
+class StageProgressData(Contract):
+    done: int
+    total: int
+    failed: int
+
+
+class StageDoneData(Contract):
+    count: int
+    seconds: float
+    usage: UsageTotals = UsageTotals()
+    provider: str | None = None
+    skipped: bool = False
+    copied_from: str | None = None
+    warnings: list[str] = []
+
+
+class StageFailedData(Contract):
+    error: str
+    next: str
+    """The fallback that ran next; empty when none."""
+
+
+class ResourceData(Contract):
+    device: str
+    released_stage: Stage
+
+
+class PlanReadyData(Contract):
+    queries: list[Query]
+
+
+class HitFoundData(Contract):
+    url: str
+    title: str
+    query_ids: list[str]
+
+
+class PageFetchedData(Contract):
+    url: str
+    source_id: str
+    title: str
+    chars: int
+    cached: bool
+
+
+class PageFailedData(Contract):
+    url: str
+    reason: str
+
+
+class KeptPassage(Contract):
+    chunk_id: str
+    source_id: str
+    title: str
+    uri: str
+    heading_path: list[str] = []
+    text: str
+    display: float | None
+
+
+class PassagesScoredData(Contract):
+    query_id: str
+    scorer: str
+    scored: int
+    kept: int
+    threshold_display: float | None
+    passages: list[KeptPassage]
+
+
+class ReportTextData(Contract):
+    text: str
+
+
+class EventBase(Contract):
+    seq: int = Field(ge=0)
+    run_id: str
+    ts: datetime
+    stage: Stage | None = None
+    """Absent when the event is not about a stage."""
+
+    @model_serializer(mode="wrap")
+    def drop_empty_stage(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        out: dict[str, Any] = handler(self)
+        if out.get("stage") is None:
+            out.pop("stage", None)
+        return out
+
+
+class RunQueued(EventBase):
+    type: Literal["run.queued"] = "run.queued"
+    data: RunQueuedData
+
+
+class RunStarted(EventBase):
+    type: Literal["run.started"] = "run.started"
+    data: RunStartedData
+
+
+class RunDone(EventBase):
+    type: Literal["run.done"] = "run.done"
+    data: RunDoneData
+
+
+class RunFailed(EventBase):
+    type: Literal["run.failed"] = "run.failed"
+    data: RunFailedData
+
+
+class RunCancelled(EventBase):
+    type: Literal["run.cancelled"] = "run.cancelled"
+    data: RunCancelledData
+
+
+class StageStarted(EventBase):
+    type: Literal["stage.started"] = "stage.started"
+    data: StageStartedData
+
+
+class StageProgress(EventBase):
+    type: Literal["stage.progress"] = "stage.progress"
+    data: StageProgressData
+
+
+class StageDone(EventBase):
+    type: Literal["stage.done"] = "stage.done"
+    data: StageDoneData
+
+
+class StageFailed(EventBase):
+    type: Literal["stage.failed"] = "stage.failed"
+    data: StageFailedData
+
+
+class ResourceWaiting(EventBase):
+    type: Literal["resource.waiting"] = "resource.waiting"
+    data: ResourceData
+
+
+class ResourceReleased(EventBase):
+    type: Literal["resource.released"] = "resource.released"
+    data: ResourceData
+
+
+class PlanReady(EventBase):
+    type: Literal["plan.ready"] = "plan.ready"
+    data: PlanReadyData
+
+
+class HitFound(EventBase):
+    type: Literal["hit.found"] = "hit.found"
+    data: HitFoundData
+
+
+class PageFetched(EventBase):
+    type: Literal["page.fetched"] = "page.fetched"
+    data: PageFetchedData
+
+
+class PageFailed(EventBase):
+    type: Literal["page.failed"] = "page.failed"
+    data: PageFailedData
+
+
+class PassagesScored(EventBase):
+    type: Literal["passages.scored"] = "passages.scored"
+    data: PassagesScoredData
+
+
+class ReportDelta(EventBase):
+    type: Literal["report.delta"] = "report.delta"
+    data: ReportTextData
+
+
+class ReportSnapshot(EventBase):
+    type: Literal["report.snapshot"] = "report.snapshot"
+    data: ReportTextData
+
+
+EVENT_TYPES: tuple[type[EventBase], ...] = (
+    RunQueued,
+    RunStarted,
+    RunDone,
+    RunFailed,
+    RunCancelled,
+    StageStarted,
+    StageProgress,
+    StageDone,
+    StageFailed,
+    ResourceWaiting,
+    ResourceReleased,
+    PlanReady,
+    HitFound,
+    PageFetched,
+    PageFailed,
+    PassagesScored,
+    ReportDelta,
+    ReportSnapshot,
+)
+
+Event = Annotated[
+    RunQueued
+    | RunStarted
+    | RunDone
+    | RunFailed
+    | RunCancelled
+    | StageStarted
+    | StageProgress
+    | StageDone
+    | StageFailed
+    | ResourceWaiting
+    | ResourceReleased
+    | PlanReady
+    | HitFound
+    | PageFetched
+    | PageFailed
+    | PassagesScored
+    | ReportDelta
+    | ReportSnapshot,
+    Field(discriminator="type"),
+]
+EVENT: TypeAdapter[Event] = TypeAdapter(Event)
+
+
+def parse_event(line: str) -> Event:
+    return EVENT.validate_json(line)
+
+
+def make_event(seq: int, run_id: str, ts: datetime, event_type: str, stage: Stage | None, data: BaseModel) -> Event:
+    """Build the event named by `event_type`; `data` must be its data model."""
+    return EVENT.validate_python(
+        {"seq": seq, "run_id": run_id, "ts": ts, "type": event_type, "stage": stage, "data": data}
+    )
+
+
 CONTRACTS: tuple[type[Contract], ...] = (
     RunRequest,
     Query,
@@ -316,4 +650,9 @@ CONTRACTS: tuple[type[Contract], ...] = (
     EmbedderInfo,
     ProviderHealth,
     DoctorReport,
+    RunRecord,
+    RunSummary,
+    RunOutput,
+    RunCosts,
+    *EVENT_TYPES,
 )

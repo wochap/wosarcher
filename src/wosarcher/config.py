@@ -8,15 +8,29 @@ import json
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
+from pydantic_core import to_jsonable_python
 
-from wosarcher.models import WritingOptions
+from wosarcher.models import Stage, WritingOptions
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
 BUILTIN_PROFILES = Path(__file__).parent / "profiles"
+
+# Seconds each stage may take; `run.stage_timeouts` overrides single stages.
+DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
+    "load": 60,
+    "plan": 180,
+    "search": 120,
+    "fetch": 600,
+    "chunk": 60,
+    "prefilter": 600,
+    "score": 900,
+    "select": 60,
+    "write": 1800,
+}
 
 # Concurrency per adapter when a block leaves `concurrency` unset.
 DEFAULT_CONCURRENCY = {"searxng": 4, "firecrawl": 6, "embeddings": 4, "rerank": 4, "jev": 64, "llm": 1}
@@ -112,6 +126,20 @@ class SelectConfig(Block):
 
 class RunConfig(Block):
     gpu_policy: Literal["shared", "exclusive"] = "shared"
+    runs_dir: Path | None = None
+    """None: `$XDG_DATA_HOME/wosarcher/runs`."""
+    cache_dir: Path | None = None
+    """None: `$XDG_CACHE_HOME/wosarcher`."""
+    page_cache_ttl_hours: float = Field(default=24, ge=0)
+    """0 disables the page cache."""
+    stage_timeouts: dict[Stage, float] = DEFAULT_STAGE_TIMEOUTS
+
+    @field_validator("stage_timeouts", mode="before")
+    @classmethod
+    def fill_timeouts(cls, value: object) -> object:
+        if isinstance(value, Mapping):
+            return {**DEFAULT_STAGE_TIMEOUTS, **cast(Mapping[str, object], value)}
+        return value
 
 
 class Settings(Block):
@@ -275,7 +303,10 @@ def source_of(location: str, sources: Mapping[str, str]) -> str:
 
 def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str]) -> Settings:
     path, data = load_profile(select_profile(profile, env), env)
-    layers = [profile_layer(path, data), env_layer(env), override_layer(overrides)]
+    return validate([profile_layer(path, data), env_layer(env), override_layer(overrides)])
+
+
+def validate(layers: list[Layer]) -> Settings:
     merged: dict[str, Any] = {}
     sources: dict[str, str] = {}
     for tree, layer_sources in layers:
@@ -311,8 +342,30 @@ def redact(model: BaseModel) -> dict[str, Any]:
         elif is_secret(field.annotation):
             out[name] = "***" if value is not None else ""
         else:
-            out[name] = value
+            out[name] = to_jsonable_python(value)
     return out
+
+
+def unredact(saved: Mapping[str, Any], model: BaseModel) -> dict[str, Any]:
+    """`saved` with each `***` secret taken from `model` and each empty one unset."""
+    out = dict(saved)
+    for name, field in type(model).model_fields.items():
+        if name not in out:
+            continue
+        value = getattr(model, name)
+        if isinstance(value, BaseModel) and isinstance(out[name], Mapping):
+            out[name] = unredact(out[name], value)
+        elif is_secret(field.annotation) and out[name] == "***":
+            out[name] = value
+        elif is_secret(field.annotation) and out[name] == "":
+            out[name] = None
+    return out
+
+
+def restore_secrets(saved: Mapping[str, Any], current: Settings, overrides: list[str] | None = None) -> Settings:
+    """Validate saved (redacted) settings, secrets taken from `current`, then `overrides` on top."""
+    restored = unredact(saved, current)
+    return validate([(restored, {}), override_layer(overrides or [])])
 
 
 def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:

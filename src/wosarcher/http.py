@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from time import perf_counter
@@ -35,6 +35,13 @@ class Usage:
     cost: float = 0
 
 
+@dataclass(frozen=True)
+class UsageRow:
+    provider: str
+    stage: str
+    usage: Usage
+
+
 class UsageLedger:
     """Usage and cost summed per (provider, stage). Prices come from each provider block."""
 
@@ -56,6 +63,21 @@ class UsageLedger:
             + output_tokens / 1e6 * (prices.output_per_mtok or 0)
             + units * (prices.per_unit or 0)
         )
+
+    def total(self) -> Usage:
+        """Usage summed over every provider and stage."""
+        total = Usage()
+        for usage in self.totals.values():
+            total.requests += usage.requests
+            total.input_tokens += usage.input_tokens
+            total.output_tokens += usage.output_tokens
+            total.units += usage.units
+            total.cost += usage.cost
+        return total
+
+    def rows(self) -> list[UsageRow]:
+        """One row per (provider, stage), with a copy of its usage."""
+        return [UsageRow(provider, stage, replace(usage)) for (provider, stage), usage in self.totals.items()]
 
 
 def retry_delay(response: httpx.Response, attempt: int, backoff: float, cap: float) -> float:

@@ -111,7 +111,12 @@ URL and each fallback URL.
 - `shared` (default): models stay resident; this works with plain
   llama-server when the models fit.
 - `exclusive`: after a GPU stage, the runner releases its model only if the
-  next GPU stage uses the **same device label**. Stages on different devices
+  next GPU stage that runs uses the **same device label** and a different
+  block (`plan` and `write` use `llm`, `prefilter` uses `prefilter`, `score`
+  uses `score`). It emits `resource.waiting` for that next stage, calls
+  `release()`, then emits `resource.released`; a release error becomes a
+  warning on the next `stage.done`. A block with `release = "none"` is never
+  released. On cancellation the current GPU stage's model is released. Stages on different devices
   (for example the reranker on the desktop and the writer on the laptop)
   never wait for each other. Release needs a backend that can unload,
   called over HTTP so it works for remote hosts too: llama-swap
@@ -142,7 +147,10 @@ Remote endpoints:
   field of each provider block carries the key.
 - **Cache correctness.** The embedding cache key is content SHA-256 plus the
   model name reported by the endpoint plus vector dimension, so pointing at a
-  different machine with a different model never reuses wrong vectors.
+  different machine with a different model never reuses wrong vectors. The
+  runner reads model and dimension from `embedder.describe()` once before
+  the prefilter stage; when that fails it passes no cache. Vectors live in
+  `<cache_dir>/embeddings/<model>/<dim>/<sha[:2]>/<sha>.f32` (raw float32).
 - **Health.** `wosarcher doctor` checks each endpoint: reachable, model name,
   latency of one small request, unload support (llama-swap answers
   `GET <root>/running`, Ollama `GET <root>/api/version`).
@@ -205,7 +213,10 @@ scorers are allowed, because the score block configures one remote
 endpoint), so one run never mixes
 score scales. The terminal fallback is `passthrough`: chunks in search-rank
 order, then page order, capped by the token budget. A run never ends without
-context.
+context. The runner reports what the stages did: one `stage.failed` per
+scorer that failed (with the scorer that ran next) and `stage.done.provider`
+naming the scorer or prefilter method that actually ran. The prefilter falls
+back from embeddings to BM25 the same way, inside its stage.
 
 ### Select
 
@@ -351,9 +362,9 @@ Ports and adapters. Stages are pure functions over models and ports. The
 runner owns persistence and events. Interfaces sit at the edge.
 
 ```
-cli.py ── server.py (spawns `wosarcher run`, tails events.jsonl) ── skill (CLI + SKILL.md)
+cli/ ── server.py (spawns `wosarcher run`, tails events.jsonl) ── skill (CLI + SKILL.md)
    │
-runner.py  ── store.py (runs/<id>/) ── events.jsonl
+runner/  ── store/ (runs/<id>/) ── events.jsonl
    │
 stages/  plan search fetch load chunk prefilter score select write   (pure)
    │ ports.py (Protocols)
@@ -364,13 +375,14 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts (RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport) and ID helpers
+  models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, events) and ID helpers
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
   profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
-  store.py       # RunStore: run directory, artifacts, caches (pages by URL, embeddings by SHA-256)
-  runner.py      # runs stages in order, emits events, writes artifacts, handles cancel
+  store/         # __init__.py: RunStore (create, fork, artifacts, events.jsonl with seq, list_runs); caches.py: PageCache, EmbeddingCache
+  runner/        # __init__.py: Runner (stage loop, timeouts, costs, cancel); steps.py: one function per stage;
+                 # events.py: EventLog, snapshot_event; devices.py: needs_release; caches.py: CachedFetcher, EmbeddingMapping
   build.py       # composition root: config -> adapters (a dict, no registry)
   doctor.py      # provider health probes and exclusive-GPU warnings
   lexical.py     # BM25: tokenizer, scoring, relative threshold (pure functions)
@@ -378,7 +390,8 @@ src/wosarcher/
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
-  cli.py
+  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; progress.py: rich Live view
+  __main__.py    # python -m wosarcher
   server.py
 skill/SKILL.md
 evals/
@@ -394,8 +407,9 @@ tests/
   gets its inputs and ports, returns its output, and does not know about
   files or events. Tests need only fakes.
 - **Repository.** `RunStore` owns paths and serialisation.
-- **Append-only event log.** The runner assigns `seq`, writes the event to
-  `events.jsonl`, then publishes it.
+- **Append-only event log.** `RunStore.append_event` assigns `seq` (last
+  logged plus 1, also for another process appending later) and writes the
+  event to `events.jsonl`; the runner then publishes it.
 
 Cross-cutting concerns (retry, rate limits, costs) live in `http.py` as
 plain functions used by adapters, not as generic decorators.
@@ -407,36 +421,60 @@ trusted values (query, options). Scraped text never goes through templates.
 
 ```
 runs/<id>/
-  request.json       # query, options, resolved config (secrets redacted)
-  attachments/
-  plan.json
-  hits.jsonl
-  pages.jsonl
+  request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage
+  attachments/       # copies of --attach files, directories, and globs
+  files.jsonl        # load: attachment pages
+  plan.json          # plan
+  initial.jsonl      # plan: hits of the initial search for the main query
+  hits.jsonl         # search: all hits, initial ones merged in
+  pages.jsonl        # fetch: web pages
   chunks.jsonl
   candidates.jsonl
   scores.jsonl
   context.json
-  report.md
+  report.md          # written as the report streams, then replaced by the rendered report
+  report.json        # the structured Report
   events.jsonl
-  costs.json
+  costs.json         # usage and cost per stage, per provider, and in total
 ```
 
+`runs_dir` defaults to `$XDG_DATA_HOME/wosarcher/runs` (`run.runs_dir`);
+caches live in `$XDG_CACHE_HOME/wosarcher` (`run.cache_dir`): fetched pages
+by normalised URL for `run.page_cache_ttl_hours` (24; 0 disables) and
+embeddings. Run IDs are `YYYYMMDD-HHMMSS-xxxxxx` and sort by creation time.
+Directories starting with `.` (the server's `.queue/`) are not runs.
+
 A stage is finished when its `stage.done` event is in `events.jsonl`; a
-half-written artifact without that event is ignored.
+half-written artifact without that event is ignored. Artifacts are written
+to `<name>.tmp` and renamed. A stage skipped by `--sources` writes empty
+artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
+`run.stage_timeouts`.
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--tone ...] [--words ...] [--json]`
-- `wosarcher fork <id> --from <stage> [overrides]`: copies artifacts before
-  `<stage>` into a new run and continues with the saved config plus the
-  overrides. Used for resume, for changing writing options, and by the eval
-  harness.
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--tone ...] [--words ...] [--run-id ID] [--json]`:
+  writing flags act as `--set write.<field>=...` after the `--set` values.
+  `--run-id` lets a caller (the server) choose the ID; an existing directory
+  exits 2. `--json` prints one `RunOutput` document (status, error, run
+  directory, context when select finished, report when write finished). On a
+  terminal, progress goes to standard error; piped output is the report
+  Markdown. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM, SIGINT),
+  2 invalid arguments or configuration.
+- `wosarcher fork <id> --from <stage> [overrides] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
+  copies `attachments/` and the artifacts before `<stage>` into a new run
+  (version parent plus one), logs a copied `stage.done` per earlier stage,
+  and continues with the saved config (secrets taken from the current
+  environment) plus the overrides. With `--profile`, settings come from that
+  profile plus the parent's and the new overrides. Used for resume, for
+  changing writing options, and by the eval harness.
 - `wosarcher doctor [--profile <name>] [--set k=v] [--json]`: one row per
   block (provider, base URL, device, status, model, latency, unload support);
   built-in scorers are shown without a request. Warns about blocks that
   cannot unload. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
-- `wosarcher runs`: lists runs.
+- `wosarcher runs [--limit N] [--json]`: lists runs newest first with
+  status from the last `run.*` event: `done`, `failed`, `cancelled`, or
+  `interrupted` (started without an end).
 
 ### Events
 
@@ -455,9 +493,31 @@ half-written artifact without that event is ignored.
   artifact.
 - Write: `report.delta`.
 
-Each event: `{seq, run_id, ts, type, stage?, data}`.
+Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
+`models.py` and are part of `wosarcher schema`. `data` fields:
 
-`report.delta` is live only and not written to the log. A reconnecting client
+| Type | `data` |
+|---|---|
+| `run.queued` | `position` |
+| `run.started` | `query`, `profile`, `parent_run_id`, `version`, `until` |
+| `run.done` | `until`, `totals` |
+| `run.failed` | `stage`, `error` |
+| `run.cancelled` | `stage` |
+| `stage.started` | `device`, `provider` |
+| `stage.progress` | `done`, `total`, `failed` (at most every 250 ms, plus a final one) |
+| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`), `provider`, `skipped`, `copied_from`, `warnings` |
+| `stage.failed` | `error`, `next` (empty when none) |
+| `resource.waiting`, `resource.released` | `device`, `released_stage` |
+| `plan.ready` | `queries` |
+| `hit.found` | `url`, `title`, `query_ids` |
+| `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached` |
+| `page.failed` | `url`, `reason` |
+| `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
+| `report.delta`, `report.snapshot` | `text` |
+
+`seq` is assigned by the store's append, so the log has no gaps. `report.delta`
+is live only and not written to the log; it carries the last logged `seq`,
+and its text is appended to `report.md` as it streams. A reconnecting client
 gets all logged events after its `seq`, then a `report.snapshot` built from
 `report.md` so far.
 
@@ -474,8 +534,10 @@ gets all logged events after its `seq`, then a `report.snapshot` built from
 ### Costs
 
 Adapters add usage to a `UsageLedger` (per provider and stage): LLM and embedding tokens, Jev input
-tokens, Firecrawl credits. The runner writes `costs.json` and emits totals in
-`stage.done`.
+tokens, Firecrawl credits. A stage's usage is the ledger total after minus
+before the stage (stages never overlap); `stage.done` carries it. The runner
+writes `costs.json`: `{"stages": {...}, "providers": {...}, "total": ...}`,
+each a `UsageTotals` with `cost` in dollars.
 
 ### Server
 

@@ -75,7 +75,7 @@ HEALTH = ProviderHealth(
     unload="no",
 )
 SAMPLES: list[Contract] = [
-    RunRequest(query="what", attachments=("notes.md",), until="select", writing=WritingOptions(words=500)),
+    RunRequest(query="what", attachments=["notes.md"], until="select"),
     Query(id="q1", text="what"),
     Plan(queries=[Query(id="q0", text="what")], warnings=["planner answer had no query list"]),
     HIT,

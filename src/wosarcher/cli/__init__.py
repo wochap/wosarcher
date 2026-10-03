@@ -1,4 +1,4 @@
-"""Command line: `wosarcher profile list|show|use`, `wosarcher doctor`, and `wosarcher schema`."""
+"""Command line: `profile list|show|use`, `doctor`, `schema`; `run`, `fork`, and `runs` are in `cli/run.py`."""
 
 import asyncio
 import json
@@ -34,9 +34,9 @@ ProfileOption = Annotated[str | None, typer.Option("--profile", help="Profile to
 SetOption = Annotated[list[str] | None, typer.Option("--set", help="Override one field: dotted.key=value.")]
 
 
-def fail(error: ConfigError) -> typer.Exit:
-    Console(stderr=True).print(f"error: {error}", markup=False, highlight=False)
-    return typer.Exit(1)
+def fail(error: Exception, code: int = 1) -> typer.Exit:
+    Console(stderr=True, soft_wrap=True).print(f"error: {error}", markup=False, highlight=False)
+    return typer.Exit(code)
 
 
 @profile_app.command("list")
@@ -129,3 +129,10 @@ def schema() -> None:
 
 def main() -> None:
     app()
+
+
+from wosarcher.cli import run as run_commands  # noqa: E402  (registers run, fork, runs on `app`)
+
+app.command("run")(run_commands.run)
+app.command("fork")(run_commands.fork)
+app.command("runs")(run_commands.runs)
