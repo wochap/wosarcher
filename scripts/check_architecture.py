@@ -80,7 +80,9 @@ def check_file(path: Path) -> list[str]:
     part = part_of(path)
     where = path.relative_to(ROOT.parent.parent)
     if part not in ALLOWED:
-        return [f"{where}: '{part}' is not in ALLOWED in scripts/check_architecture.py; add it with its allowed imports"]
+        return [
+            f"{where}: '{part}' is not in ALLOWED in scripts/check_architecture.py; add it with its allowed imports"
+        ]
 
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     errors: list[str] = []

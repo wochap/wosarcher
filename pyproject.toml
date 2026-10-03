@@ -1,0 +1,48 @@
+[project]
+name = "wosarcher"
+version = "0.1.0"
+description = "Modular, scriptable research pipeline"
+readme = "docs/design.md"
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28",
+    "pydantic>=2.11",
+    "rich>=14",
+    "typer>=0.16",
+]
+
+[project.scripts]
+wosarcher = "wosarcher.cli:main"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.29",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.0",
+    "respx>=0.22",
+    "ruff>=0.12",
+]
+
+[build-system]
+requires = ["uv_build>=0.8,<0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["openspec", "docs", "design"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ASYNC", "PT"]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+# Makes the `pyright: ignore` in tests/test_ports_typing.py an assertion that the error exists.
+reportUnnecessaryTypeIgnoreComment = "error"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

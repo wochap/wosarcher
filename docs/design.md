@@ -293,10 +293,11 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 
 ```
 src/wosarcher/
-  models.py      # Pydantic contracts: Query, Hit, Page, Chunk, Score, Context, Report, WritingOptions
+  models.py      # Pydantic contracts (RunRequest, Query, Hit, Source, Page, Chunk, Score, Context, Report, WritingOptions, Message, Completion) and ID helpers
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM
   config.py      # settings, profiles, precedence, secret redaction
-  http.py        # shared httpx client, retry with backoff, per-adapter semaphore, Costs
+  http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore; UsageLedger
+  profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
   store.py       # RunStore: run directory, artifacts, caches (pages by URL, embeddings by SHA-256)
   runner.py      # runs stages in order, emits events, writes artifacts, handles cancel
   build.py       # composition root: config -> adapters (a dict, no registry)
@@ -396,7 +397,7 @@ gets all logged events after its `seq`, then a `report.snapshot` built from
 
 ### Costs
 
-Adapters add usage to a `Costs` object: LLM and embedding tokens, Jev input
+Adapters add usage to a `UsageLedger` (per provider and stage): LLM and embedding tokens, Jev input
 tokens, Firecrawl credits. The runner writes `costs.json` and emits totals in
 `stage.done`.
 
@@ -473,11 +474,19 @@ server is reachable from other devices. No accounts, roles, or sign-up.
 
 Precedence: built-in defaults < profile < environment < CLI flags or request
 fields. The profile name itself is read from the CLI or environment first,
-then the profile loads.
+then the profile loads. `config.resolve(profile, overrides, env)` does the
+whole resolution in one function and validates once; errors name the source
+of the bad value (profile file, environment variable, or `--set` override).
+
+Environment variables use the prefix `WOSARCHER_` and `__` for nesting
+(`WOSARCHER_SCORE__API_KEY`). `--set` values are parsed as TOML values, so
+`--set score.top_k=12` is an integer.
 
 Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `model`, `device`, `release` (none, llama-swap, ollama), `fallback_urls`,
-`batch_size`, `concurrency`, `connect_timeout`, `timeout`.
+`batch_size`, `concurrency`, `connect_timeout`, `timeout`, `prices`
+(optional `input_per_mtok`, `output_per_mtok`, `per_unit` for cost
+recording).
 
 Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
 `workstation` (shared), `cloud` (no local models, high concurrency).
@@ -538,7 +547,7 @@ orchestration; every model is behind HTTP.
 | Concern | Choice | Reason |
 |---|---|---|
 | Packaging | uv, `pyproject.toml`, `uv.lock` | fast, reproducible, works in the Nix dev shell |
-| Contracts, config | pydantic v2, pydantic-settings (TOML source) | one set of models for contracts, docs, config, and JSON Schema |
+| Contracts, config | pydantic v2; profiles read with stdlib `tomllib` and resolved by own code in `config.py` | one set of models for contracts, docs, config, and JSON Schema; precedence readable in one function |
 | HTTP | httpx | async, explicit timeouts, easy to mock |
 | CLI | typer, rich | readable commands and progress |
 | Server | FastAPI, uvicorn | native WebSocket; serves the frontend build |

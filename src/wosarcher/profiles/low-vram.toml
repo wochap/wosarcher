@@ -1,0 +1,39 @@
+# One small GPU: models take turns, so the backend must be able to unload.
+
+[run]
+gpu_policy = "exclusive"
+
+[search]
+provider = "searxng"
+base_url = "http://localhost:8888"
+
+[fetch]
+provider = "firecrawl"
+base_url = "http://localhost:3002"
+concurrency = 2
+
+[prefilter]
+provider = "embeddings"
+base_url = "http://localhost:8080/v1"
+model = "embeddings"
+device = "local:gpu0"
+release = "llama-swap"
+batch_size = 8
+concurrency = 1
+
+[score]
+provider = "rerank"
+base_url = "http://localhost:8080"
+model = "reranker"
+device = "local:gpu0"
+release = "llama-swap"
+batch_size = 8
+concurrency = 1
+
+[llm]
+provider = "openai"
+base_url = "http://localhost:8080/v1"
+model = "writer"
+device = "local:gpu0"
+release = "llama-swap"
+concurrency = 1

@@ -1,0 +1,32 @@
+# One machine with a GPU that fits every model at once; models stay resident.
+
+[run]
+gpu_policy = "shared"
+
+[search]
+provider = "searxng"
+base_url = "http://localhost:8888"
+
+[fetch]
+provider = "firecrawl"
+base_url = "http://localhost:3002"
+
+[prefilter]
+provider = "embeddings"
+base_url = "http://localhost:8002/v1"
+model = "embeddings"
+device = "local:gpu0"
+batch_size = 64
+
+[score]
+provider = "rerank"
+base_url = "http://localhost:8001"
+model = "reranker"
+device = "local:gpu0"
+batch_size = 32
+
+[llm]
+provider = "openai"
+base_url = "http://localhost:8080/v1"
+model = "writer"
+device = "local:gpu0"
