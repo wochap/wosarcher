@@ -1,0 +1,27 @@
+# Named ranking variants for `python -m evals.replay`. Each forks a recorded
+# run from `prefilter` or `score` with the given `--set` overrides. Model
+# variants disable fallback so a broken service shows as a failed result.
+
+[bm25]
+from = "score"
+set = ["score.provider=bm25"]
+
+[bm25-wide]
+from = "score"
+set = ["score.provider=bm25", "score.relative_threshold=0.3", "score.top_k=25"]
+
+[rerank]
+from = "score"
+set = ["score.provider=rerank", "score.fallback=[]"]
+
+[jev]
+from = "score"
+set = ["score.provider=jev", "score.fallback=[]"]
+
+[prefilter-embeddings]
+from = "prefilter"
+set = ["prefilter.provider=embeddings"]
+
+[prefilter-bm25]
+from = "prefilter"
+set = ["prefilter.provider=bm25"]

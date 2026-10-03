@@ -395,7 +395,14 @@ src/wosarcher/
   server.py
 skill/SKILL.md
 evals/
+  variants.toml  # named ranking variants: fork stage (prefilter or score) plus --set overrides
+  replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
+  metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
+  judge.py       # python -m evals.judge: precision judged by the configured llm
+  prompts/       # precision.md
 tests/
+  fixtures/      # recorded HTTP bodies (http/), profiles/e2e.toml, recorded.py (respx router),
+                 # runs/20260101-000000-fixture/ and make_recorded_run.py that regenerates it
 ```
 
 ### Patterns used, and only these
@@ -676,6 +683,48 @@ The skill documents the CLI and the JSON schema of `context.json` and the
 report. Agents usually want cited context: `wosarcher run "q" --until select
 --json` returns passages with sources and scores. A full report is the
 default `wosarcher run`.
+
+### Evals
+
+The eval harness measures prefilter and scorer choices over the same
+inputs. It drives the public CLI only, so it measures what users run.
+
+- `evals/variants.toml` names variants. Each forks from `prefilter` or
+  `score` (any other stage is rejected) with a list of `--set` overrides.
+  Model variants set `score.fallback=[]` so a broken service is a failed
+  result, not a silent BM25 measurement.
+- `python -m evals.replay (--runs ID... | --all) --variants NAME... --out
+  DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcher fork <id>
+  --from <stage> --until select --json` (through `write` with `--write`) in
+  a subprocess, one at a time, and appends `{parent_run_id, variant,
+  run_id, status, error, run_dir}` to `DIR/results.jsonl`. Search, fetch,
+  and chunk are copied from the parent, so only ranking changes. A failed
+  fork is recorded and the replay continues; finished pairs are skipped
+  unless `--force`. `--all` takes every run with `version == 1` that
+  finished `select`.
+- `python -m evals.metrics --results DIR [--baseline NAME]` needs no
+  model: selected passages, context characters and estimated tokens
+  (characters / 4, rounded up), seconds of each stage the fork ran (from
+  `stage.done` without `copied_from`), and the Jaccard overlap of selected
+  chunk IDs between variants on the same parent run. It writes
+  `DIR/metrics.json` and prints a Markdown table per variant with medians,
+  p90 tokens and seconds, and the median overlap with the baseline (default:
+  the first variant).
+- `python -m evals.judge --results DIR [--profile NAME] [--set ...]` asks
+  the profile's `llm` which selected passages are relevant to the query
+  and records precision (relevant / selected) in `DIR/judgements.jsonl`;
+  judged runs are skipped next time. Only the query goes through
+  `evals/prompts/precision.md`; passages go in a separate user message. An
+  unparsable answer records precision as missing.
+
+The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,
+a full `wosarcher run` of the `e2e` profile against recorded SearXNG,
+Firecrawl, and LLM responses in `tests/fixtures/http/` (served by the respx
+router in `tests/fixtures/recorded.py`; any other request fails naming its
+URL). When a contract changes, `test_fixture_parses` names the artifact
+that no longer parses; regenerate the fixture with `uv run python -m
+tests.fixtures.make_recorded_run`. `tests/test_e2e_run.py` runs the same
+pipeline with the real adapters and no network.
 
 ## Tech stack
 

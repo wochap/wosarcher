@@ -37,15 +37,20 @@ extend-exclude = ["openspec", "docs", "design"]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ASYNC", "PT"]
 
 [tool.basedpyright]
-include = ["src", "tests"]
+include = ["src", "tests", "evals"]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
 # Makes the `pyright: ignore` in tests/test_ports_typing.py an assertion that the error exists.
 reportUnnecessaryTypeIgnoreComment = "error"
 # Tests may exercise private helpers whose rules the specs fix (e.g. `lexical._select`).
-executionEnvironments = [{ root = "tests", extraPaths = [".", "src"], reportPrivateUsage = false }, { root = "src" }]
+executionEnvironments = [
+    { root = "tests", extraPaths = [".", "src"], reportPrivateUsage = false },
+    { root = "evals", extraPaths = [".", "src"] },
+    { root = "src" },
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

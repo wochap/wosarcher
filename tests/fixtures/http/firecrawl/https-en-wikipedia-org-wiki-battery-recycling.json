@@ -1,0 +1,14 @@
+{
+ "success": true,
+ "data": {
+  "markdown": "# Battery recycling\n\nBattery recycling is a recycling activity that aims to reduce the number of batteries being disposed of as municipal solid waste. Batteries contain a number of heavy metals and toxic chemicals, and disposing of them by the same process as regular household waste has raised concerns over soil contamination and water pollution.\n\n## Lead-acid batteries\n\nLead-acid batteries are the most recycled consumer product. In the United States the recycling rate of lead-acid batteries is about 99 percent. The batteries are broken apart in a hammer mill, the lead grids and paste are smelted, and the polypropylene cases are washed and turned into pellets for new cases. The sulfuric acid is neutralised or converted to sodium sulfate for use in detergent and glass manufacture.\n\n## Lithium-ion batteries\n\nLithium-ion batteries contain cobalt, nickel, manganese, lithium, copper and aluminium. Only a small share of lithium-ion batteries were recycled in the 2010s, although the rate is rising as electric vehicle packs reach the end of their life. Recycling recovers valuable metals and reduces the need for new mining.\n\nThe main industrial routes are pyrometallurgy, where cells are smelted and cobalt, nickel and copper are recovered as an alloy, and hydrometallurgy, where the black mass obtained by shredding is leached in acid and the metals are separated by solvent extraction and precipitation. Lithium is lost to the slag in most smelting processes, which is one reason hydrometallurgical plants have grown.\n\n## Collection\n\nCollection is the main obstacle to battery recycling. Small batteries are often thrown away with household waste, where they can start fires in waste trucks and sorting plants. Many countries require retailers to take back used batteries, and the European Union battery regulation sets collection targets for portable batteries of 63 percent by 2027 and 73 percent by 2030.\n\n## Second life\n\nElectric vehicle batteries that no longer meet vehicle requirements usually retain 70 to 80 percent of their capacity. Before recycling, such packs can be reused in stationary energy storage, which extends their useful life by several years.\n",
+  "metadata": {
+   "title": "Battery recycling - Wikipedia",
+   "sourceURL": "https://en.wikipedia.org/wiki/Battery_recycling",
+   "url": "https://en.wikipedia.org/wiki/Battery_recycling",
+   "statusCode": 200,
+   "contentType": "text/html",
+   "creditsUsed": 1
+  }
+ }
+}

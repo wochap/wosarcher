@@ -1,0 +1,14 @@
+{
+ "success": true,
+ "data": {
+  "markdown": "# Lithium-Ion Battery Recycling\n\nLithium-ion batteries power devices such as mobile phones, laptops, power tools and electric vehicles. When they are damaged or improperly disposed of, they can cause fires during transport and at recycling and waste facilities.\n\n## Why recycle lithium-ion batteries\n\nRecycling lithium-ion batteries conserves critical minerals such as cobalt, lithium and nickel, reduces the environmental impact of mining, and prevents fires caused by batteries placed in household trash or curbside recycling bins.\n\n## How to recycle\n\nDo not put lithium-ion batteries in the trash or in municipal recycling bins. Take them to separate recycling or household hazardous waste collection points. Many retailers that sell rechargeable batteries offer free drop-off. Tape the terminals or place each battery in a separate plastic bag to prevent short circuits.\n\nDamaged, defective or recalled batteries need special handling; contact the manufacturer or the local waste authority before transporting them.\n\n## Regulations\n\nMost lithium-ion batteries are managed under the universal waste regulations, which simplify collection and transport for businesses. Batteries that are sent for recycling are counted as universal waste until they reach the destination facility. EPA is developing best management practices for battery collection, sorting and transport as required by the Infrastructure Investment and Jobs Act.\n",
+  "metadata": {
+   "title": "Lithium-Ion Battery Recycling | US EPA",
+   "sourceURL": "https://www.epa.gov/hw/lithium-ion-battery-recycling",
+   "url": "https://www.epa.gov/hw/lithium-ion-battery-recycling",
+   "statusCode": 200,
+   "contentType": "text/html",
+   "creditsUsed": 1
+  }
+ }
+}

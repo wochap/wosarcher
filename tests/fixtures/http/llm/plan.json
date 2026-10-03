@@ -1,0 +1,21 @@
+{
+ "id": "chatcmpl-plan",
+ "object": "chat.completion",
+ "created": 1767225600,
+ "model": "recorded-llm",
+ "choices": [
+  {
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "{\"queries\": [\"lithium-ion battery recycling methods\", \"battery recycling economics\"]}"
+   },
+   "finish_reason": "stop"
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 412,
+  "completion_tokens": 24,
+  "total_tokens": 436
+ }
+}

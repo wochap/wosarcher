@@ -1,0 +1,14 @@
+{
+ "success": true,
+ "data": {
+  "markdown": "# Recycling of critical minerals\n\nRecycling can relieve pressure on primary supply of critical minerals. For batteries, the volume of spent electric vehicle packs remains small before 2030, but it grows rapidly afterwards.\n\n## Battery recycling capacity\n\nGlobal battery recycling capacity exceeded 1.6 million tonnes per year in 2023, with the large majority located in China. Announced projects in Europe and North America would expand capacity further, though many plants currently process manufacturing scrap rather than end-of-life batteries.\n\n## Costs and revenues\n\nThe profitability of a battery recycling plant depends on metal prices, the chemistry of the incoming batteries and the cost of collection and transport. When lithium and cobalt prices fell in 2023, margins for recyclers dropped sharply. Gate fees charged for low value chemistries help keep plants economic.\n\n## Policy\n\nExtended producer responsibility, minimum recycled content and recovery efficiency targets, such as those in the European Union battery regulation, give recyclers more certainty about feedstock and demand. Recycled supply could meet a meaningful share of lithium, nickel and cobalt demand by 2040 if collection rates improve.\n",
+  "metadata": {
+   "title": "Recycling of critical minerals - IEA",
+   "sourceURL": "https://www.iea.org/reports/recycling-of-critical-minerals",
+   "url": "https://www.iea.org/reports/recycling-of-critical-minerals",
+   "statusCode": 200,
+   "contentType": "text/html",
+   "creditsUsed": 1
+  }
+ }
+}

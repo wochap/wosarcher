@@ -1,0 +1,32 @@
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "## Battery recycling\n\nBattery "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "recycling recovers metals such "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "as lithium, cobalt and "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "nickel from spent cells "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "[1]. The main industrial "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "routes are pyrometallurgy and "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "hydrometallurgy, and their economics "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "depend on the cell "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "chemistry and on the "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "cost of collection [2].\n\n"}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "Collection and safe transport "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "remain the largest practical "}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {"content": "obstacles [1][2]."}, "finish_reason": null}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+
+data: {"id": "chatcmpl-write", "object": "chat.completion.chunk", "created": 1767225601, "model": "recorded-llm", "choices": [], "usage": {"prompt_tokens": 2310, "completion_tokens": 71, "total_tokens": 2381}}
+
+data: [DONE]
+
