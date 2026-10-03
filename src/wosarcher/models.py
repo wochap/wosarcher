@@ -218,9 +218,23 @@ class Context(Contract):
     used_tokens: int
 
 
+class Reference(Contract):
+    source_id: str
+    entry: str
+    """Formatted in the reference style."""
+    passages: list[int]
+    """Cited passage numbers from this source, ascending."""
+
+
 class Report(Contract):
+    body: str
+    """LLM text with `[n]` markers, as streamed."""
     markdown: str
-    sources: tuple[Source, ...] = ()
+    """Rendered markers plus `## References`."""
+    cited: list[int]
+    """Known cited numbers, in order of first citation."""
+    references: list[Reference]
+    warnings: list[str] = []
 
 
 Stage = Literal["plan", "search", "fetch", "load", "chunk", "prefilter", "score", "select", "write"]
@@ -294,6 +308,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ScoreResult,
     Passage,
     Context,
+    Reference,
     Report,
     WritingOptions,
     Message,

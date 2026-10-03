@@ -271,16 +271,18 @@ request, or the skill.
 
 | Option | Default | Values |
 |---|---|---|
-| `tone` | `objective` | objective, formal, analytical, persuasive, informative, explanatory, descriptive, critical, comparative, speculative, reflective, or a custom name |
+| `tone` | `objective` | objective, formal, analytical, persuasive, informative, explanatory, descriptive, critical, comparative, speculative, reflective, or a custom entry in `prompts/tones.toml`; case-insensitive |
 | `tone_instructions` | empty | free text added to the tone, for one-off styles |
 | `words` | 1200 | target length |
 | `language` | english | report language |
 | `citation_marker` | numeric | numeric (`[1]`), superscript, author-year: how citations appear in the text |
-| `reference_style` | APA | APA, MLA, Chicago, IEEE, ...: how the reference list is formatted |
+| `reference_style` | APA | APA, MLA, Chicago, IEEE (case-insensitive): how the reference list is formatted |
 
 Tones are data, not code: `prompts/tones.toml` maps each name to its
-description (the gpt-researcher list is the starting set). Adding a tone is
-one entry in that file.
+description (the gpt-researcher list is the starting set). A custom tone is
+one more entry in that file. The write stage checks `tone` against that file
+and `reference_style` against the four known styles before calling the LLM;
+an unknown name fails with the list of known names.
 
 Writing options affect only the write stage, so changing them on a finished
 run is cheap: `wosarcher fork <id> --from write --tone critical` reuses all context
@@ -295,11 +297,17 @@ behind each claim.
   `chunk_id` and its `source_id`.
 - The writer cites with `[n]`. Code renders the marker in the chosen
   `citation_marker` style.
-- After writing, the runner checks that every `[n]` exists and reports
-  unknown citations as warnings.
-- The reference list groups the cited passages by source and is formatted by
-  code in the chosen `reference_style`, with heading path or pdf-ingest page
-  ID for files.
+- After writing, the write stage checks that every `[n]` exists. Each
+  unknown number is a warning and is removed from the rendered report; a
+  report that cites no passage gets a warning. `[n](url)` is a link, not a
+  citation.
+- `Report.body` keeps the raw `[n]` markers as streamed (for the frontend's
+  hover); `Report.markdown` holds the rendered markers and the reference
+  list.
+- The reference list (`## References`) lists each cited source once, in
+  order of first citation for every style, formatted by code in the chosen
+  `reference_style`. Under each source, its cited passages are listed with
+  their heading path, or `p. <page ID>` and block IDs for pdf-ingest files.
 
 ### Prompt injection
 
@@ -369,7 +377,7 @@ src/wosarcher/
   attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
-  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, tones.toml
+  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
   cli.py
   server.py
 skill/SKILL.md

@@ -1,0 +1,14 @@
+# Writing tones for the report. Keys match `WritingOptions.tone` without
+# regard to case; a custom tone is one more entry here.
+[tones]
+objective = "Objective (impartial and unbiased presentation of facts and findings)"
+formal = "Formal (adheres to academic standards with sophisticated language and structure)"
+analytical = "Analytical (critical evaluation and detailed examination of data and theories)"
+persuasive = "Persuasive (convincing the audience of a particular viewpoint or argument)"
+informative = "Informative (providing clear and comprehensive information on a topic)"
+explanatory = "Explanatory (clarifying complex concepts and processes)"
+descriptive = "Descriptive (detailed depiction of phenomena, experiments, or case studies)"
+critical = "Critical (judging the validity and relevance of the research and its conclusions)"
+comparative = "Comparative (juxtaposing different theories, data, or methods to highlight differences and similarities)"
+speculative = "Speculative (exploring hypotheses and potential implications or future research directions)"
+reflective = "Reflective (considering the research process and personal insights or experiences)"
