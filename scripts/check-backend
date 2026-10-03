@@ -26,5 +26,5 @@ fi
 
 ruff format --check .
 ruff check .
-python3 scripts/check_architecture.py
+uv run --frozen python scripts/check_architecture.py
 echo "backend: ok"
