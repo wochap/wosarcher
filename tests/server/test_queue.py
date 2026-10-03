@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.server.conftest import MakeApp, create, events, finished, status, wait_until
+from tests.server.conftest import BASE_URL, MakeApp, create, events, finished, status, wait_until
 from wosarcher.server import staging
 
 
@@ -30,7 +30,7 @@ def test_second_run_waits(client: TestClient, runs_dir: Path) -> None:
 
 @pytest.mark.usefixtures("slow")
 def test_two_slots(make_app: MakeApp) -> None:
-    with TestClient(make_app(limit=2)) as client:
+    with TestClient(make_app(limit=2), base_url=BASE_URL) as client:
         runs = [create(client, {"query": "q"}) for _ in range(3)]
         assert [status(client, run_id) for run_id in runs] == ["running", "running", "queued"]
         assert position(client, runs[2]) == 1
@@ -81,12 +81,12 @@ def test_cancel_queued(client: TestClient, runs_dir: Path) -> None:
 
 @pytest.mark.usefixtures("slow")
 def test_restart_requeues_in_order(make_app: MakeApp, runs_dir: Path) -> None:
-    with TestClient(make_app()) as client:
+    with TestClient(make_app(), base_url=BASE_URL) as client:
         running = create(client, {"query": "ignore-term"})
         queued = [create(client, {"query": "q"}), create(client, {"query": "q"})]
         wait_until(lambda: (runs_dir / running / "report.md").is_file())
     assert events(runs_dir, running)[-1]["type"] == "run.cancelled"
-    with TestClient(make_app()) as client:
+    with TestClient(make_app(), base_url=BASE_URL) as client:
         listed = [run["run_id"] for run in client.get("/api/runs").json()]
         assert running in listed
         assert status(client, queued[0]) == "running"
@@ -97,7 +97,7 @@ def test_restart_requeues_in_order(make_app: MakeApp, runs_dir: Path) -> None:
 
 @pytest.mark.usefixtures("slow")
 def test_shutdown_cancels_running(make_app: MakeApp, runs_dir: Path) -> None:
-    with TestClient(make_app()) as client:
+    with TestClient(make_app(), base_url=BASE_URL) as client:
         run_id = create(client, {"query": "q"})
         wait_until(lambda: (runs_dir / run_id / "report.md").is_file())
     assert events(runs_dir, run_id)[-1]["type"] == "run.cancelled"

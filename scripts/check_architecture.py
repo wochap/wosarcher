@@ -26,6 +26,8 @@ ALLOWED: dict[str, set[str]] = {
     "config": {"models"},
     "http": {"models", "config"},
     "store": {"models", "config"},
+    # Password, token, and session handling is shared by the CLI and the server without FastAPI.
+    "auth": {"config"},
     # Prompt files are read-only package data; stages own their prompts, so they load them.
     "prompts": set(),
     # Attachment paths come from the user and must be read from disk outside the pure stages.
@@ -62,6 +64,7 @@ ALLOWED: dict[str, set[str]] = {
         "doctor",
         "prompts",
         "attachments",
+        "auth",
     },
     "cli": {
         "models",
@@ -78,6 +81,7 @@ ALLOWED: dict[str, set[str]] = {
         "server",
         "prompts",
         "attachments",
+        "auth",
     },
     "__main__": {"cli"},
 }

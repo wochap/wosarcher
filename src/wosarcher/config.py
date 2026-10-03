@@ -149,6 +149,14 @@ class ServerConfig(Block):
     static_dir: Path = Path("web/dist")
 
 
+class AuthConfig(Block):
+    password_hash: SecretStr | None = None
+    """None: the hash in `auth.json`, or no password at all."""
+    session_days: int = Field(default=30, gt=0)
+    allowed_origins: list[str] = []
+    """Origins besides the server's own that may send state-changing requests."""
+
+
 class Settings(Block):
     search: SearchConfig = SearchConfig(provider="searxng")
     fetch: FetchConfig = FetchConfig(provider="firecrawl")
@@ -162,6 +170,7 @@ class Settings(Block):
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
     server: ServerConfig = ServerConfig()
+    auth: AuthConfig = AuthConfig()
 
     @model_validator(mode="after")
     def check_blocks(self) -> "Settings":

@@ -37,3 +37,23 @@ def test_defaults(calls: list[dict[str, Any]], tmp_path: Path) -> None:
 def test_port_option(calls: list[dict[str, Any]]) -> None:
     assert CliRunner().invoke(app, ["serve", "--port", "9000"]).exit_code == 0
     assert (calls[0]["host"], calls[0]["port"]) == ("127.0.0.1", 9000)
+
+
+def test_lan_without_password_refused(calls: list[dict[str, Any]]) -> None:
+    result = CliRunner().invoke(app, ["serve", "--host", "0.0.0.0"])
+    assert result.exit_code == 2
+    assert "wosarcher auth set-password" in result.output
+    assert calls == []
+
+
+def test_lan_with_password_starts(calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_AUTH__PASSWORD_HASH", "scrypt$15$8$1$salt$key")
+    assert CliRunner().invoke(app, ["serve", "--host", "0.0.0.0"]).exit_code == 0
+    assert calls[0]["host"] == "0.0.0.0"
+
+
+def test_localhost_name_allowed(calls: list[dict[str, Any]]) -> None:
+    assert CliRunner().invoke(app, ["serve", "--host", "localhost"]).exit_code == 0
+    assert CliRunner().invoke(app, ["serve", "--host", "127.0.0.2"]).exit_code == 0
+    assert CliRunner().invoke(app, ["serve", "--host", "::1"]).exit_code == 0
+    assert len(calls) == 3

@@ -5,7 +5,9 @@ from pathlib import Path
 
 from starlette.requests import HTTPConnection
 
+from wosarcher.auth import AuthStore
 from wosarcher.config import Settings
+from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import RunManager
 from wosarcher.store import RunStore
 
@@ -18,6 +20,8 @@ class ServerState:
     command: list[str]
     store: RunStore
     manager: RunManager
+    auth: AuthStore
+    limiter: LoginLimiter
 
 
 def get_state(connection: HTTPConnection) -> ServerState:

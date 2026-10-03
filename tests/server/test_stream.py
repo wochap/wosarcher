@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from starlette.testclient import WebSocketTestSession
 from starlette.websockets import WebSocketDisconnect
 
-from tests.server.conftest import create, events, finished
+from tests.server.conftest import WS_URL, create, events, finished
 from tests.server.test_runs import on_disk
 
 Message = dict[str, Any]
@@ -37,14 +37,14 @@ def rebuilt(messages: list[Message]) -> str:
 
 
 def test_unknown_run_4404(client: TestClient) -> None:
-    with client.websocket_connect("/api/runs/missing/events") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/missing/events") as socket:
         assert read_to_close(socket) == ([], 4404)
 
 
 def test_finished_run_replay_snapshot_close(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
     (runs_dir / "r" / "report.md").write_text("# Report")
-    with client.websocket_connect("/api/runs/r/events?since=0") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/r/events?since=0") as socket:
         messages, code = read_to_close(socket)
     assert [m["type"] for m in messages] == ["run.started", "run.done", "report.snapshot"]
     assert set(messages[0]) == {"seq", "run_id", "ts", "type", "data"}
@@ -53,7 +53,7 @@ def test_finished_run_replay_snapshot_close(client: TestClient, runs_dir: Path) 
 
 def test_reconnect_since(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
-    with client.websocket_connect("/api/runs/r/events?since=1") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/r/events?since=1") as socket:
         messages, code = read_to_close(socket)
     assert ([m["seq"] for m in messages], code) == ([2], 1000)
 
@@ -62,11 +62,11 @@ def test_live_run_no_gaps(client: TestClient, runs_dir: Path, monkeypatch: pytes
     monkeypatch.setenv("FAKE_STEP", "0.1")
     run_id = create(client, {"query": "slow"})
     first: list[Message] = []
-    with client.websocket_connect(f"/api/runs/{run_id}/events") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/{run_id}/events") as socket:
         while sum(m["type"] == "report.delta" for m in first) < 3:
             first.append(socket.receive_json())
     since = max(logged(first))
-    with client.websocket_connect(f"/api/runs/{run_id}/events?since={since}") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/{run_id}/events?since={since}") as socket:
         second, code = read_to_close(socket)
     finished(client, run_id)
     assert code == 1000
@@ -80,7 +80,7 @@ def test_live_run_no_gaps(client: TestClient, runs_dir: Path, monkeypatch: pytes
 
 def test_queued_position_updates(client: TestClient) -> None:
     runs = [create(client, {"query": "slow"}) for _ in range(3)]
-    with client.websocket_connect(f"/api/runs/{runs[2]}/events") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/{runs[2]}/events") as socket:
         first = socket.receive_json()
         assert (first["type"], first["data"]["position"], first["seq"]) == ("run.queued", 2, 0)
         second = socket.receive_json()
@@ -92,7 +92,7 @@ def test_queued_position_updates(client: TestClient) -> None:
 def test_cancel_queued_notifies(client: TestClient) -> None:
     running = create(client, {"query": "slow"})
     queued = create(client, {"query": "slow"})
-    with client.websocket_connect(f"/api/runs/{queued}/events") as socket:
+    with client.websocket_connect(f"{WS_URL}/api/runs/{queued}/events") as socket:
         first = socket.receive_json()
         assert (first["type"], first["data"]["position"]) == ("run.queued", 1)
         assert client.post(f"/api/runs/{queued}/cancel").status_code == 200

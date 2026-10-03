@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.server.conftest import MakeApp
+from tests.server.conftest import BASE_URL, MakeApp
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def build(tmp_path: Path) -> Path:
 
 
 def test_spa_fallback(make_app: MakeApp, build: Path) -> None:
-    with TestClient(make_app(static_dir=build)) as client:
+    with TestClient(make_app(static_dir=build), base_url=BASE_URL) as client:
         assert client.get("/").text == "<html>app</html>"
         assert client.get("/assets/app.js").text == "console.log(1)"
         response = client.get("/runs/abc123")
@@ -24,7 +24,7 @@ def test_spa_fallback(make_app: MakeApp, build: Path) -> None:
 
 
 def test_api_not_shadowed(make_app: MakeApp, build: Path) -> None:
-    with TestClient(make_app(static_dir=build)) as client:
+    with TestClient(make_app(static_dir=build), base_url=BASE_URL) as client:
         assert client.get("/api/runs").json() == []
         response = client.get("/api/nothing")
         assert (response.status_code, response.json()["error"]) == (404, "not_found")

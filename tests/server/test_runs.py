@@ -50,7 +50,7 @@ def test_create_with_attachment(client: TestClient, runs_dir: Path) -> None:
 
 
 def test_missing_query_422(client: TestClient) -> None:
-    response = client.post("/api/runs", data={"request": '{"query": ""}'})
+    response = client.post("/api/runs", files={"request": (None, '{"query": ""}')})
     assert response.status_code == 422
     assert response.json()["detail"].startswith("query:")
 
@@ -63,7 +63,7 @@ def test_path_in_filename(client: TestClient, runs_dir: Path) -> None:
 
 def test_duplicate_attachments_422(client: TestClient) -> None:
     files = [("attachments", ("a/notes.md", b"1")), ("attachments", ("b/notes.md", b"2"))]
-    response = client.post("/api/runs", data={"request": '{"query": "q"}'}, files=files)
+    response = client.post("/api/runs", files=[("request", (None, '{"query": "q"}')), *files])
     assert response.status_code == 422
 
 

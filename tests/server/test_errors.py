@@ -10,7 +10,7 @@ def test_unknown_run_404(client: TestClient) -> None:
 
 
 def test_validation_names_field(client: TestClient) -> None:
-    response = client.post("/api/runs", data={"request": '{"query": "q", "writing": {"words": 0}}'})
+    response = client.post("/api/runs", files={"request": (None, '{"query": "q", "writing": {"words": 0}}')})
     assert response.status_code == 422
     assert response.json()["error"] == "invalid_request"
     assert "writing.words" in response.json()["detail"]

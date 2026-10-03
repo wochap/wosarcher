@@ -11,6 +11,8 @@ from wosarcher.models import (
     Contract,
     ForkCreate,
     HealthReport,
+    LoginError,
+    LoginRequest,
     ProfileInfo,
     ProviderCheck,
     RunCosts,
@@ -21,6 +23,10 @@ from wosarcher.models import (
     RunRequest,
     RunSummary,
     ServerSettings,
+    SessionInfo,
+    TokenCreate,
+    TokenCreated,
+    TokenInfo,
     UsageTotals,
     WritingOptions,
     WritingPatch,
@@ -60,6 +66,14 @@ EXAMPLES: list[Contract] = [
         warnings=["w"],
     ),
     ApiError(error="run_not_found", detail="no run r"),
+    LoginRequest(password="hunter22"),
+    SessionInfo(method="cookie", since=TS, expires=TS),
+    SessionInfo(method="token", token_name="laptop"),
+    TokenInfo(id="a1b2c3d4", name="laptop", masked="wosarcher_••••k9Qz", created=TS, last_used=TS),
+    TokenCreate(name="laptop"),
+    TokenCreated(id="a1b2c3d4", name="laptop", token="wosarcher_" + "a" * 36),
+    LoginError(error="wrong_password", detail="wrong password", attempts_left=4),
+    LoginError(error="rate_limited", detail="too many attempts", retry_after=30),
 ]
 
 
@@ -84,3 +98,9 @@ def test_schema_has_api_models() -> None:
     definitions = json.loads(CliRunner().invoke(app, ["schema"]).output)["$defs"]
     names = {"RunCreate", "ForkCreate", "RunCreated", "RunSummary", "RunDetail", "ServerSettings"}
     assert names | {"ProfileInfo", "ProviderCheck", "HealthReport", "ApiError"} <= set(definitions)
+
+
+def test_schema_has_auth_models() -> None:
+    definitions = json.loads(CliRunner().invoke(app, ["schema"]).output)["$defs"]
+    names = {"LoginRequest", "SessionInfo", "TokenInfo", "TokenCreate", "TokenCreated", "LoginError"}
+    assert names <= set(definitions)

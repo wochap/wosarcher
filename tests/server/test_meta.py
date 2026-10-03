@@ -4,18 +4,18 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.server.conftest import MakeApp
+from tests.server.conftest import BASE_URL, MakeApp
 from wosarcher.config import store_profile
 from wosarcher.models import DoctorReport, ProviderHealth
 from wosarcher.server.meta import health_report
 
 
 def test_settings_persist_across_apps(make_app: MakeApp) -> None:
-    with TestClient(make_app()) as first:
+    with TestClient(make_app(), base_url=BASE_URL) as first:
         body = first.get("/api/settings").json()
         body["writing"]["words"] = 800
         assert first.put("/api/settings", json=body).status_code == 200
-    with TestClient(make_app()) as second:
+    with TestClient(make_app(), base_url=BASE_URL) as second:
         assert second.get("/api/settings").json()["writing"]["words"] == 800
 
 

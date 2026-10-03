@@ -190,3 +190,16 @@ def test_server_defaults() -> None:
 def test_server_limit_from_environment(env: dict[str, str]) -> None:
     env["WOSARCHER_SERVER__MAX_CONCURRENT_RUNS"] = "2"
     assert resolve(None, [], env).server.max_concurrent_runs == 2
+
+
+def test_auth_defaults() -> None:
+    auth = Settings().auth
+    assert (auth.password_hash, auth.session_days, auth.allowed_origins) == (None, 30, [])
+
+
+def test_auth_password_hash_from_environment_is_redacted(env: dict[str, str]) -> None:
+    env["WOSARCHER_AUTH__PASSWORD_HASH"] = "scrypt$15$8$1$salt$key"
+    settings = resolve(None, [], env)
+    assert settings.auth.password_hash is not None
+    assert settings.auth.password_hash.get_secret_value() == "scrypt$15$8$1$salt$key"
+    assert redact(settings)["auth"]["password_hash"] == "***"

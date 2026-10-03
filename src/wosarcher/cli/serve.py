@@ -1,5 +1,6 @@
 """`wosarcher serve`: the HTTP API, the event socket, and the frontend build."""
 
+import ipaddress
 import os
 import sys
 from typing import Annotated
@@ -7,6 +8,7 @@ from typing import Annotated
 import typer
 import uvicorn
 
+from wosarcher.auth import AuthStore
 from wosarcher.cli import fail
 from wosarcher.config import ConfigError, config_dir, resolve
 from wosarcher.server import create_app
@@ -23,6 +25,19 @@ def serve(
         settings = resolve(None, [], env)
     except ConfigError as error:
         raise fail(error, 2) from None
+    bind = host or settings.server.host
+    if not is_loopback(bind) and not AuthStore.from_settings(settings, config_dir(env)).enabled():
+        message = f"refusing to listen on {bind} without a password; run `wosarcher auth set-password` first"
+        raise fail(ValueError(message), 2)
     store = RunStore.from_settings(settings, env)
     app = create_app(settings, store.runs_dir, config_dir(env), [sys.executable, "-m", "wosarcher"])
-    uvicorn.run(app, host=host or settings.server.host, port=port or settings.server.port, proxy_headers=True)
+    uvicorn.run(app, host=bind, port=port or settings.server.port, proxy_headers=True)
+
+
+def is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host.strip("[]")).is_loopback
+    except ValueError:
+        return False

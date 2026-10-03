@@ -460,6 +460,48 @@ class ApiError(Contract):
     detail: str
 
 
+class LoginRequest(Contract):
+    password: str
+
+
+class SessionInfo(Contract):
+    """`GET /api/session`: how this request is authenticated."""
+
+    method: Literal["cookie", "token", "none"]
+    since: datetime | None = None
+    expires: datetime | None = None
+    token_name: str | None = None
+
+
+class TokenInfo(Contract):
+    """A stored API token as listed; never the token or its hash."""
+
+    id: str
+    name: str
+    masked: str
+    created: datetime
+    last_used: datetime | None = None
+
+
+class TokenCreate(Contract):
+    name: str = Field(min_length=1)
+
+
+class TokenCreated(Contract):
+    """The new token, shown only in this response."""
+
+    id: str
+    name: str
+    token: str
+
+
+class LoginError(Contract):
+    error: str
+    detail: str
+    attempts_left: int | None = None
+    retry_after: int | None = None
+
+
 # Events: `data` field names are contracts the server and the frontend read.
 
 
@@ -771,5 +813,11 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ProviderCheck,
     HealthReport,
     ApiError,
+    LoginRequest,
+    SessionInfo,
+    TokenInfo,
+    TokenCreate,
+    TokenCreated,
+    LoginError,
     *EVENT_TYPES,
 )

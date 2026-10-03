@@ -379,6 +379,7 @@ src/wosarcher/
   models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, server API bodies, events) and ID helpers
   ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
+  auth.py        # password hashing, API tokens, session signing, auth.json (AuthStore); stdlib only, no FastAPI
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
   profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
   store/         # __init__.py: RunStore (create, fork, artifacts, events.jsonl with seq, list_runs); caches.py: PageCache, EmbeddingCache
@@ -391,11 +392,12 @@ src/wosarcher/
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
-  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; serve.py: serve; progress.py: rich Live view
+  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; serve.py: serve; auth.py: auth; progress.py: rich Live view
   __main__.py    # python -m wosarcher
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
                  # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health; stream.py: event socket;
-                 # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState
+                 # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState;
+                 # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
 skill/SKILL.md
 evals/
   variants.toml  # named ranking variants: fork stage (prefilter or score) plus --set overrides
@@ -612,14 +614,21 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   (60 s timeout; 502 when it times out or prints no report) and maps each
   row: failed is `down` (error as detail), built in is `skipped`, a model
   that cannot unload or a probe over 1000 ms is `degraded`, else `ok`.
-- `GET /session`, `GET /tokens`, `POST /tokens` (the new token is returned
-  once), `DELETE /tokens/{id}`.
+- `POST /api/login`, `POST /api/logout`, `GET /api/session`
+  (`SessionInfo`): see Authentication.
+- `GET /api/tokens` (`TokenInfo`: ID, name, masked last 4 characters,
+  created, last used; never the token or its hash), `POST /api/tokens`
+  with `{"name"}` (201 `TokenCreated`, the only time the token is shown),
+  `DELETE /api/tokens/{id}` (204, or 404 `token_not_found`). They need a
+  browser session (or disabled authentication); a request authenticated by
+  a token gets 403.
 - When `server.static_dir` (`web/dist`) exists, the frontend build is
   served at `/`, and any other `GET` outside `/api` answers `index.html`.
 
 Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
 `RunSummary`, `RunDetail`, `ServerSettings`, `ProfileInfo`,
-`ProviderCheck`, `HealthReport`, `ApiError`) are models in `models.py` and
+`ProviderCheck`, `HealthReport`, `ApiError`, `LoginRequest`,
+`SessionInfo`, `TokenInfo`, `TokenCreate`, `TokenCreated`, `LoginError`) are models in `models.py` and
 part of `wosarcher schema`.
 
 Runs record lineage: `parent_run_id` and `version` (1 for a new run, parent
@@ -643,38 +652,79 @@ process and waits up to 10 s; queued runs stay staged. Settings:
 
 One admin user, for local use: it keeps everyone but the owner out when the
 server is reachable from other devices. No accounts, roles, or sign-up.
+Authentication is enabled when a password hash is configured; without one,
+every request counts as authenticated (`method = "none"`) and the server
+stays loopback only.
 
-- **Bind.** The server binds to `127.0.0.1` by default. Binding to any other
-  address (`--host 0.0.0.0` or a LAN IP) is refused unless a password is set.
-- **Password.** `wosarcher auth set-password` prompts for a password and stores
-  only its scrypt hash (Python standard library `hashlib.scrypt`) in the
-  config directory, or in `WOSARCHER_AUTH__PASSWORD_HASH`. The plain password is
-  never stored.
-- **Browser session.** `POST /login` with the password sets a session cookie
-  (a failed login answers with the attempts left; a rate-limited one with
-  `retry_after` seconds):
-  random token, signed with an HMAC secret, `HttpOnly`, `SameSite=Strict`,
-  `Secure` when served over HTTPS, lifetime `auth.session_days` (30).
-  `POST /logout` clears it. Changing the password rotates the secret, which
-  ends every session.
-- **WebSocket.** Browsers cannot set headers on a WebSocket, so the cookie
-  is checked on the handshake, and the `Origin` header must match the
-  server's own origin (prevents cross-site WebSocket hijacking).
-- **CSRF.** `SameSite=Strict`, JSON-only request bodies (multipart only for
-  `POST /runs`), and the same `Origin` check on every state-changing
-  request.
+- **Bind.** The server binds to `127.0.0.1` by default. `wosarcher serve`
+  refuses (exit code 2) any host that is not loopback (`127.0.0.0/8`,
+  `::1`, `localhost`) unless a password is set.
+- **Password.** `wosarcher auth set-password` prompts twice for a password of
+  at least 8 characters and stores only its scrypt hash
+  (`hashlib.scrypt`, n = 2^15, r = 8, p = 1, 32-byte key, 16-byte salt, as
+  `scrypt$15$8$1$<salt>$<key>`) with a new session secret.
+  `set-password --print` prints the hash for
+  `WOSARCHER_AUTH__PASSWORD_HASH` instead of storing it; that variable (or
+  `auth.password_hash` in a profile) wins over the stored hash, and
+  `set-password` warns when it is set. The plain password is never stored
+  or logged.
+- **`auth.json`** in the config directory (mode 0600) holds the password
+  hash, the session secret, and the API tokens (ID, name, SHA-256 hash,
+  last 4 characters, created, last used). The server reloads it when its
+  modification time changes, so CLI changes apply without a restart;
+  writers lock `auth.json.lock` and replace the file atomically.
+- **Browser session.** `POST /api/login` with `{"password"}` sets the
+  `wosarcher_session` cookie and answers 200 with the session; a wrong
+  password answers 401 `wrong_password` with `attempts_left`; 409
+  `auth_disabled` when no password is set. The cookie holds a random
+  token, its issue and expiry times, and an HMAC-SHA256 signature keyed by
+  the session secret and the password hash; it is `HttpOnly`,
+  `SameSite=Strict`, `Path=/`, `Secure` when the request arrived over
+  HTTPS, and lasts `auth.session_days` (30). `POST /api/logout` clears it
+  (204). `GET /api/session` says how the request is authenticated
+  (`cookie` with `since` and `expires`, `token` with its name, or `none`).
+  Changing the password ends every session; API tokens stay valid.
+- **Brute force.** Failed logins are counted per client IP: the fifth
+  failure within 60 seconds pauses logins from that IP for 30 seconds, and
+  each further pause doubles, up to 15 minutes. While paused, every login,
+  even with the right password, answers 429 `rate_limited` with
+  `retry_after` and a `Retry-After` header. A successful login, or 15
+  minutes without a failure, resets the count and the pause. Each failure
+  is logged with the client IP. The limiter lives in memory.
 - **Scripts and agents on other machines.** `Authorization: Bearer <token>`
-  with a token from `wosarcher auth new-token`, stored hashed; tokens can be listed
-  and revoked. The local CLI and the skill run `wosarcher` directly and need no
-  auth.
-- **Brute force.** Login attempts are limited per client IP (5 per minute,
-  then exponential backoff), and failures are logged.
+  with a token (`wosarcher_` plus 36 base62 characters) from
+  `wosarcher auth new-token <name>` or `POST /api/tokens`, stored as a
+  SHA-256 hash; `wosarcher auth list-tokens` and `revoke-token <id>`. Each
+  use updates the token's last-used time at most once a minute. The local
+  CLI and the skill run `wosarcher` directly and need no auth.
+- **Request guard.** One ASGI middleware checks every `/api` request and
+  the event WebSocket, in order:
+  1. **Host**: without a password, the `Host` name must be `localhost`,
+     `127.0.0.1`, or `[::1]` (any port), else 403 `bad_host`, so a
+     DNS-rebound page cannot reach the open API.
+  2. **Origin**: on `POST`, `PUT`, `PATCH`, `DELETE`, and WebSocket
+     handshakes, an `Origin` header, when present, must equal the server's
+     own origin (request scheme and `Host`) or be in
+     `auth.allowed_origins`, else 403 `bad_origin`. Browsers always send
+     it on cross-site requests, which blocks CSRF and cross-site WebSocket
+     hijacking.
+  3. **Content type**: state-changing requests with a body must be
+     `application/json`, and `POST /api/runs` `multipart/form-data`, else
+     415 `unsupported_media_type`.
+  4. **Authentication**: a valid bearer token or session cookie, except
+     for `POST /api/login`, else 401 `unauthenticated`.
+  5. **Token routes**: `/api/tokens` with a token gets 403.
+
+  A refused WebSocket handshake is closed with 1008 before it is accepted.
+  The frontend build (including `/login`) is served without
+  authentication.
 - **Transport.** On plain HTTP over Wi-Fi, the password and cookie can be
   sniffed. Use Tailscale (encrypted, and limits access to your devices) or a
   local reverse proxy with TLS (for example Caddy). The server must not be
-  exposed to the internet.
-- **Every route** except `GET /login`, `POST /login`, and static assets
-  requires a valid session or token.
+  exposed to the internet. Behind a local proxy, uvicorn's proxy headers
+  supply the client IP and scheme.
+
+Settings: `auth.password_hash`, `auth.session_days`, `auth.allowed_origins`.
 
 ### Configuration
 

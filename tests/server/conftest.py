@@ -9,10 +9,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from wosarcher.config import ServerConfig, Settings
+from wosarcher.auth import AuthStore
+from wosarcher.config import AuthConfig, ServerConfig, Settings
 from wosarcher.server import create_app
 
 FAKE = Path(__file__).with_name("fake_wosarcher.py")
+# A loopback Host, so the guard's DNS-rebinding check passes without a password.
+BASE_URL = "http://127.0.0.1:8765"
+# `websocket_connect` ignores the client's base URL, so socket tests pass absolute URLs.
+WS_URL = "ws://127.0.0.1:8765"
 COMMAND = [sys.executable, str(FAKE)]
 
 MakeApp = Callable[..., FastAPI]
@@ -37,17 +42,27 @@ def config_dir(tmp_path: Path, runs_dir: Path) -> Path:
 
 @pytest.fixture
 def make_app(runs_dir: Path, config_dir: Path, tmp_path: Path) -> MakeApp:
-    def make(limit: int = 1, static_dir: Path | None = None, grace: float = 0.5) -> FastAPI:
+    def make(
+        limit: int = 1, static_dir: Path | None = None, grace: float = 0.5, auth: AuthConfig | None = None
+    ) -> FastAPI:
         server = ServerConfig(max_concurrent_runs=limit, static_dir=static_dir or tmp_path / "no-build")
-        return create_app(Settings(server=server), runs_dir, config_dir, COMMAND, grace=grace)
+        settings = Settings(server=server, auth=auth or AuthConfig())
+        return create_app(settings, runs_dir, config_dir, COMMAND, grace=grace)
 
     return make
 
 
 @pytest.fixture
 def client(make_app: MakeApp) -> Iterator[TestClient]:
-    with TestClient(make_app()) as test_client:
+    with TestClient(make_app(), base_url=BASE_URL) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def auth_app(make_app: MakeApp, config_dir: Path, password_hash: str) -> FastAPI:
+    """An app with the admin password `hunter22` stored in the temporary config directory."""
+    AuthStore(config_dir / "auth.json").set_password(password_hash)
+    return make_app()
 
 
 def wait_until(condition: Callable[[], object], timeout: float = 15.0) -> None:
@@ -59,8 +74,10 @@ def wait_until(condition: Callable[[], object], timeout: float = 15.0) -> None:
 
 
 def create(client: TestClient, request: dict[str, Any], files: Sequence[tuple[str, bytes]] = ()) -> str:
+    # A `None` file name makes a plain form field, so the body is always multipart.
+    fields = [("request", (None, json.dumps(request).encode()))]
     uploads = [("attachments", (name, data)) for name, data in files]
-    response = client.post("/api/runs", data={"request": json.dumps(request)}, files=uploads or None)
+    response = client.post("/api/runs", files=[*fields, *uploads])
     assert response.status_code == 201, response.text
     return response.json()["run_id"]
 
