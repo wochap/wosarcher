@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from wosarcher.models import (
     Attachment,
+    Candidate,
     Chunk,
     ChunkResult,
     Completion,
@@ -17,11 +18,14 @@ from wosarcher.models import (
     Page,
     Passage,
     Plan,
+    PrefilterResult,
     ProviderHealth,
     Query,
+    QueryScores,
     Report,
     RunRequest,
     Score,
+    ScoreResult,
     SearchResult,
     Skipped,
     Source,
@@ -42,7 +46,20 @@ CHUNK = Chunk(
     page_id="4",
     block_ids=["p4-b1"],
 )
-PASSAGE = Passage(n=1, chunk_id=CHUNK.chunk_id, source_id=SOURCE.source_id, query_id="q1", text="text", score=0.9)
+SCORE = Score(query_id="q1", chunk_id=CHUNK.chunk_id, value=2.4, scorer="jev", display=0.8, kept=True)
+PASSAGE = Passage(
+    n=1,
+    chunk_id=CHUNK.chunk_id,
+    source_id=SOURCE.source_id,
+    query_id="q1",
+    text="text",
+    heading_path=["Title"],
+    page_id="4",
+    block_ids=["p4-b1"],
+    scorer="jev",
+    display=0.8,
+)
+QUERY_SCORES = QueryScores(query_id="q1", scorer="jev", scored=3, kept=1, threshold_display=0.5, passages=[SCORE])
 HIT = Hit(url="https://example.com/a", title="A", snippet="s", rank=2, query_ids=["q1", "q2"])
 PAGE = Page(source=SOURCE, text="# A", truncated=True, rank=2, query_ids=["q1"])
 SKIPPED = Skipped(item="q2", reason="timeout")
@@ -70,9 +87,14 @@ SAMPLES: list[Contract] = [
     FetchResult(pages=[PAGE], failures=[SKIPPED]),
     LoadResult(pages=[PAGE], skipped=[SKIPPED]),
     ChunkResult(chunks=[CHUNK], duplicates=1),
-    Score(query_id="q1", chunk_id=CHUNK.chunk_id, value=2.5, scorer="jev"),
+    SCORE,
+    Candidate(query_id="q1", chunk_id=CHUNK.chunk_id, prefilter=0.7),
+    Candidate(query_id="q2", chunk_id=CHUNK.chunk_id, passthrough=True),
+    PrefilterResult(candidates=[], method="bm25", warnings=["embedder down"]),
+    QUERY_SCORES,
+    ScoreResult(scores=[SCORE], scorer="bm25", failed=[Skipped(item="rerank", reason="down")], queries=[QUERY_SCORES]),
     PASSAGE,
-    Context(passages=(PASSAGE,), sources=(SOURCE,), scorer="jev"),
+    Context(query="what", passages=[PASSAGE], sources=[SOURCE], budget_tokens=3792, used_tokens=20),
     Report(markdown="text [1]", sources=(SOURCE,)),
     WritingOptions(),
     Message(role="user", content="hi"),

@@ -66,14 +66,21 @@ class FetchConfig(Provider):
 
 
 class ScoreConfig(Provider):
-    min_score: float | None = None
+    min_score: float = 1.5
     relative_threshold: float = Field(default=0.5, ge=0, le=1)
     top_k: int = Field(default=10, gt=0)
     fallback: list[Literal["bm25", "passthrough"]] = ["bm25", "passthrough"]
 
 
+class PrefilterConfig(Provider):
+    provider: str = "bm25"
+    top_k: int = Field(default=50, gt=0)
+
+
 class LLMConfig(Provider):
     context_window: int = Field(default=32768, gt=0)
+    chars_per_token: float = Field(default=3.5, gt=0)
+    token_margin: float = Field(default=1.1, ge=1)
 
 
 class PlanConfig(Block):
@@ -96,10 +103,11 @@ class ChunkConfig(Block):
 
 
 class SelectConfig(Block):
-    max_chunks_per_source: int = Field(default=3, gt=0)
-    max_context_tokens: int | None = None
-    file_share: float = Field(default=0.5, ge=0, le=1)
     passthrough_chars: int = Field(default=8000, ge=0)
+    max_chunks_per_source: int = Field(default=5, gt=0)
+    max_context_tokens: int = Field(default=16000, gt=0)
+    file_share: float = Field(default=0.5, ge=0, le=1)
+    prompt_reserve_tokens: int = Field(default=2000, ge=0)
 
 
 class RunConfig(Block):
@@ -109,7 +117,7 @@ class RunConfig(Block):
 class Settings(Block):
     search: SearchConfig = SearchConfig(provider="searxng")
     fetch: FetchConfig = FetchConfig(provider="firecrawl")
-    prefilter: Provider = Provider(provider="bm25")
+    prefilter: PrefilterConfig = PrefilterConfig()
     score: ScoreConfig = ScoreConfig(provider="bm25")
     llm: LLMConfig = LLMConfig(provider="llm")
     plan: PlanConfig = PlanConfig()

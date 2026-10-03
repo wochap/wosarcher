@@ -147,6 +147,49 @@ class Score(Contract):
     chunk_id: str
     value: float
     scorer: str
+    display: float | None = None
+    """0 to 1 for the UI; None for passthrough."""
+    kept: bool = False
+
+
+class Candidate(Contract):
+    """A chunk and query pair that reaches the score stage."""
+
+    query_id: str
+    chunk_id: str
+    prefilter: float | None = None
+    """Similarity or BM25 value; None when not ranked."""
+    passthrough: bool = False
+    """Small-input passthrough: scored by `passthrough` whatever the scorer."""
+
+
+class PrefilterResult(Contract):
+    candidates: list[Candidate]
+    method: Literal["embeddings", "bm25", "none"]
+    """The method that actually ran."""
+    warnings: list[str] = []
+
+
+class QueryScores(Contract):
+    """One query's scoring report."""
+
+    query_id: str
+    scorer: str
+    scored: int
+    kept: int
+    threshold_display: float | None
+    passages: list[Score]
+    """Kept pairs, best first."""
+
+
+class ScoreResult(Contract):
+    scores: list[Score]
+    """Every pair, kept or not."""
+    scorer: str
+    """The chain entry that ran."""
+    failed: list[Skipped] = []
+    """`item` is the scorer name, `reason` the error."""
+    queries: list[QueryScores]
 
 
 class Passage(Contract):
@@ -156,15 +199,23 @@ class Passage(Contract):
     chunk_id: str
     source_id: str
     query_id: str
+    """The chunk's best query ID."""
     text: str
-    heading_path: tuple[str, ...] = ()
-    score: float
+    heading_path: list[str] = []
+    page_id: str | None = None
+    block_ids: list[str] = []
+    scorer: str
+    display: float | None = None
 
 
 class Context(Contract):
-    passages: tuple[Passage, ...] = ()
-    sources: tuple[Source, ...] = ()
-    scorer: str = ""
+    query: str
+    passages: list[Passage]
+    """Ordered by `n`."""
+    sources: list[Source]
+    """The source of each passage, once, in first-use order."""
+    budget_tokens: int
+    used_tokens: int
 
 
 class Report(Contract):
@@ -237,6 +288,10 @@ CONTRACTS: tuple[type[Contract], ...] = (
     LoadResult,
     ChunkResult,
     Score,
+    Candidate,
+    PrefilterResult,
+    QueryScores,
+    ScoreResult,
     Passage,
     Context,
     Report,

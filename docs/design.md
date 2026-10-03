@@ -67,7 +67,9 @@ fetched content never reaches the planner.
 ### Small-input passthrough
 
 When all pages for a query total less than `select.passthrough_chars`
-(default 8000), they skip prefilter and score. Applies to web and files.
+(default 8000), they skip prefilter and score: every pair is kept with
+`passthrough` scores, whatever scorer the run uses. Applies to web and
+files.
 
 ### GPU use
 
@@ -149,22 +151,31 @@ Remote endpoints:
 
 - A score is always for a pair: `Score(query_id, chunk_id, value, scorer)`.
 - Web chunks are paired with every query that found their page.
-- File chunks are paired with the main query and each sub-query, but only
-  pairs that survive the prefilter (top-K per query) reach the scorer. A
-  file chunk keeps its best pair; `best_query_id` is recorded so
-  per-query quotas still work.
+- File chunks are paired with the main query and each sub-query. Only
+  pairs that survive the prefilter (`prefilter.top_k` per query, default
+  50, by embedding similarity or BM25, or all with `none`) reach the
+  scorer. If the embedder fails, the prefilter uses BM25 for the whole
+  stage and records a warning. Embeddings are cached by the SHA-256 of the
+  text.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
     (default 1.5).
   - `rerank`: not calibrated across queries; relative threshold
     `score.relative_threshold` (keep pairs scoring at least this fraction of
-    the best pair for the same query, default 0.5).
-  - `bm25`: local, no model, no API; values are relative to the best chunk
-    for the query (best 1.0, others their fraction of it; when nothing
-    matches, the first 25 chunks score 1.0 and the rest 0.0); relative
-    threshold (default 0.5), up to 25 chunks per query.
-  - `passthrough`: every chunk 1.0, so input order is kept.
-  - All are capped by `score.top_k` per query.
+    the best pair for the same query, default 0.5). When no score of a
+    query is positive, only its best pair is kept.
+  - `bm25`: local, no model, no API; raw BM25 values, kept by the lexical
+    ranking rule: relative threshold (default 0.5), zero scores dropped, up
+    to 25 chunks per query, and the first chunks in page order when nothing
+    matches.
+  - `passthrough`: values `len - i` in search-rank, page, position order,
+    so that order is kept; every pair is kept.
+- After thresholds, every chunk (web or file) keeps only its best pair
+  across queries (highest display score, ties to the earlier query); that
+  query is its best query ID, so per-query quotas still work and no chunk
+  is selected twice.
+- Then every scorer except `passthrough` is capped at `score.top_k` per
+  query (default 10).
 
 **BM25** is pure Python with no dependencies (`wosarcher/lexical.py`, about 100
 lines, modelled on gpt-researcher's `gpt_researcher/context/lexical.py`):
@@ -186,8 +197,9 @@ BM25 has three roles:
   bounded candidate set.
 - **Fallback** for the scorer.
 
-**Fallback is per stage, not per call.** If the configured scorer fails, the
-whole score stage reruns with the next scorer in `score.fallback` (default
+**Fallback is per stage, not per call.** The chain lives inside the score
+stage. If any call of the configured scorer fails, the whole score stage
+reruns with the next scorer in `score.fallback` (default
 `["bm25", "passthrough"]` after the configured one; only these two built-in
 scorers are allowed, because the score block configures one remote
 endpoint), so one run never mixes
@@ -204,10 +216,22 @@ Order of rules:
 3. Round-robin across queries, best score first, until the token budget is
    full.
 
-The token budget is `llm.context_window` minus prompt and output tokens,
-or `select.max_context_tokens` if lower. File and web shares are soft
-(`select.file_share`, default 0.5): budget one side does not use flows to the
-other, so `--sources files` uses the whole budget.
+The per-source cap (default 5) keeps a source's passages ranked highest
+within their own query. Round-robin takes one passage per query per round,
+in plan order; a passage that does not fit is skipped and the next is
+tried.
+
+The token budget is
+`min(select.max_context_tokens, llm.context_window - select.prompt_reserve_tokens - output)`,
+where `output = max(1024, 2 * words)` is also the write call's
+`max_tokens` (defaults 16000 and 2000). A budget of zero or less is an
+error naming `llm.context_window`.
+
+File and web shares are soft and run in two phases: when both sides have
+passages, files first get `floor(select.file_share * budget)` (default
+0.5) and the web the rest; then the passages left on both sides share
+whatever budget is unused, by the same round-robin. `--sources files` uses
+the whole budget. Passages are numbered `1..N` in the order taken.
 
 ### Attachments
 
@@ -598,7 +622,7 @@ orchestration; every model is behind HTTP.
 | Markdown | markdown-it-py | real heading tree for chunking |
 | Prompts | `.md` files with stdlib `string.Template` (`$query`) | no brace bugs, no template engine |
 | Storage | JSONL and JSON files in `runs/` | no database; add a SQLite index only if listing gets slow |
-| Tokens | per-model character ratio with a safety margin; optional llama-server `/tokenize` | local models use different tokenizers |
+| Tokens | characters divided by `llm.chars_per_token` (default 3.5), times `llm.token_margin` (default 1.1), rounded up, plus 16 per passage label | local models use different tokenizers; a profile that switches models sets the ratio |
 | Tests | pytest, pytest-asyncio, respx | adapter tests without network |
 | Quality | ruff (lint and format), basedpyright (strict) | readability enforced by tools |
 
@@ -645,10 +669,13 @@ These override the prototype where they differ:
 - **Citation options:** two settings, `citation_marker` and
   `reference_style` (see Writing options).
 - **Tones:** the 11 tones in Writing options. Default length 1200 words.
-- **Scores:** shown as a 0 to 1 bar. Jev scores are divided by 3; rerank
-  scores are shown as returned; BM25 scores are relative to the best
-  passage of the same query. The threshold line comes from the scorer's
-  configured threshold, mapped the same way, not a fixed value.
+- **Scores:** shown as a 0 to 1 bar (`display`). `jev` scores are divided
+  by 3; `bm25` scores are divided by the best score of the same query;
+  other scorers (`rerank`) are shown as returned; all clamped to 0 to 1.
+  The threshold line is `score.min_score / 3` for `jev`,
+  `score.relative_threshold` for `bm25`, and `score.relative_threshold`
+  times the query's best display score for other scorers. `passthrough`
+  pairs have no score bar and no threshold line.
 - **Device chip:** shows the stage's `device` label. VRAM figures are not
   shown; no source provides them.
 - **Theme:** dark and light both kept; the first visit follows

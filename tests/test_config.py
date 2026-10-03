@@ -156,3 +156,26 @@ def test_collection_defaults() -> None:
 def test_chunk_overlap_must_be_below_size(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError, match=r"chunk\.overlap"):
         resolve(None, ["chunk.size=100", "chunk.overlap=100"], env)
+
+
+def test_ranking_defaults() -> None:
+    settings = Settings()
+    assert (settings.prefilter.provider, settings.prefilter.top_k) == ("bm25", 50)
+    assert (settings.score.min_score, settings.score.fallback) == (1.5, ["bm25", "passthrough"])
+    select = settings.select
+    assert (select.passthrough_chars, select.max_chunks_per_source, select.max_context_tokens) == (8000, 5, 16000)
+    assert (select.file_share, select.prompt_reserve_tokens) == (0.5, 2000)
+    llm = settings.llm
+    assert (llm.context_window, llm.chars_per_token, llm.token_margin) == (32768, 3.5, 1.1)
+
+
+def test_invalid_score_fallback_names_allowed_values(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve("workstation", ['score.fallback=["jev"]'], env)
+    assert "score.fallback" in str(error.value)
+    assert "'bm25' or 'passthrough'" in str(error.value)
+
+
+def test_file_share_above_one_fails(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"select\.file_share"):
+        resolve("workstation", ["select.file_share=1.5"], env)
