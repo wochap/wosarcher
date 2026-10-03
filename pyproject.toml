@@ -41,6 +41,8 @@ pythonVersion = "3.13"
 typeCheckingMode = "strict"
 # Makes the `pyright: ignore` in tests/test_ports_typing.py an assertion that the error exists.
 reportUnnecessaryTypeIgnoreComment = "error"
+# Tests may exercise private helpers whose rules the specs fix (e.g. `lexical._select`).
+executionEnvironments = [{ root = "tests", extraPaths = [".", "src"], reportPrivateUsage = false }, { root = "src" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

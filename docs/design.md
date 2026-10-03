@@ -153,8 +153,12 @@ Remote endpoints:
 **BM25** is pure Python with no dependencies (`wosarcher/lexical.py`, about 100
 lines, modelled on gpt-researcher's `gpt_researcher/context/lexical.py`):
 Unicode word tokens, English stopwords removed, light plural stemming,
-k1 = 1.5, b = 0.75, IDF over the query's own chunks. If no chunk matches any
-query term, the pages' opening chunks are used. In gpt-researcher's benchmark
+k1 = 1.5, b = 0.75, IDF over the query's own chunks. Three functions:
+`tokenize(text)`, `bm25_scores(query, texts)`, and `rank(query, texts)`,
+which returns kept positions best first (relative threshold 0.5, at most 25
+results). If no chunk matches any query term, or the query has only
+stopwords, `rank` returns the first texts in the order given (callers pass
+chunks in search-rank, then page order). In gpt-researcher's benchmark
 it kept 51% relevant passages against 46% for embeddings, in about 20 ms per
 sub-query.
 
