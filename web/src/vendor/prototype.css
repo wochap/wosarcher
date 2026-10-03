@@ -1,0 +1,13 @@
+/* The prototype's <style> additions (design/project/Sift Research.dc.html, lines 17 to 26),
+   with `.sx` rescoped to :root and its descendant rules made global. Vendored because the
+   light theme block is raw hex by nature. */
+:root{--muted:color-mix(in srgb,var(--color-text) 64%,transparent);--faint:color-mix(in srgb,var(--color-text) 42%,transparent);--line:color-mix(in srgb,var(--color-text) 9%,transparent);--mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;--color-danger:#e58a99;--color-warn:#d9b56c;font-variant-numeric:tabular-nums}
+:root[data-theme="light"]{--color-bg:#f2f2f6;--color-surface:#fbfbfd;--color-text:#1d1f2c;--color-accent:#6b5ec4;--color-divider:color-mix(in srgb,#1d1f2c 16%,transparent);--color-danger:#b23c50;--color-warn:#8f6514;--color-neutral-100:#292b31;--color-neutral-200:#3f424d;--color-neutral-300:#595d6c;--color-neutral-400:#75798c;--color-neutral-600:#b2b6ca;--color-neutral-700:#cfd3e5;--color-neutral-800:#e4e7f5;--color-neutral-900:#f3f5fe;--color-accent-100:#2b2741;--color-accent-200:#423a6a;--color-accent-300:#5d5294;--color-accent-400:#796cbf;--color-accent-600:#b5abfc;--color-accent-700:#d2cefd;--color-accent-800:#e7e5fe;--color-accent-900:#f5f4ff;--shadow-sm:0 0 0 1px #e1e3ee;--shadow-md:0 0 0 1px #d6d9e6,0 6px 18px rgba(29,31,44,.08);--shadow-lg:0 0 0 1px #c9cddd,0 16px 40px rgba(29,31,44,.14)}
+.seg{flex-wrap:wrap;max-width:100%}
+select.input{appearance:auto}
+@keyframes sx-spin{to{transform:rotate(360deg)}}
+@keyframes sx-pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes sx-blink{50%{opacity:0}}
+@keyframes sx-shimmer{0%{background-position:-240px 0}100%{background-position:240px 0}}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--color-divider);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+a{color:var(--color-accent);text-decoration:none}a:hover{color:var(--color-accent-300);text-decoration:underline}

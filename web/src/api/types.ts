@@ -1,0 +1,47 @@
+// Names the UI uses for the generated contracts. The event union narrows `type`, which the
+// schema marks optional because it has a default.
+import type * as G from "./generated";
+
+export type Stage = NonNullable<G.RunStarted["stage"]>;
+export type WritingOptions = Required<NonNullable<G.RunSummary["writing"]>>;
+export type RunStatus = "queued" | "running" | "done" | "failed" | "cancelled" | "interrupted";
+export type RunSummary = Omit<G.RunSummary, "status" | "writing"> & {
+  status: RunStatus;
+  writing: WritingOptions;
+};
+export type RunDetail = Omit<G.RunDetail, "status" | "writing"> & {
+  status: RunStatus;
+  writing: WritingOptions;
+};
+export type RunCreate = G.RunCreate;
+export type ForkCreate = G.ForkCreate;
+export type RunCreated = G.RunCreated;
+export type ServerSettings = { writing: WritingOptions; sources: string };
+export type ProfileInfo = G.ProfileInfo;
+export type ProviderCheck = G.ProviderCheck;
+export type HealthReport = G.HealthReport;
+export type SessionInfo = G.SessionInfo & { method: "cookie" | "token" | "none" };
+export type TokenInfo = G.TokenInfo;
+export type TokenCreated = G.TokenCreated;
+export type KeptPassage = G.KeptPassage;
+
+type Ev<T extends string, E> = Omit<E, "type"> & { type: T };
+export type RunEvent =
+  | Ev<"run.queued", G.RunQueued>
+  | Ev<"run.started", G.RunStarted>
+  | Ev<"run.done", G.RunDone>
+  | Ev<"run.failed", G.RunFailed>
+  | Ev<"run.cancelled", G.RunCancelled>
+  | Ev<"stage.started", G.StageStarted>
+  | Ev<"stage.progress", G.StageProgress>
+  | Ev<"stage.done", G.StageDone>
+  | Ev<"stage.failed", G.StageFailed>
+  | Ev<"resource.waiting", G.ResourceWaiting>
+  | Ev<"resource.released", G.ResourceReleased>
+  | Ev<"plan.ready", G.PlanReady>
+  | Ev<"hit.found", G.HitFound>
+  | Ev<"page.fetched", G.PageFetched>
+  | Ev<"page.failed", G.PageFailed>
+  | Ev<"passages.scored", G.PassagesScored>
+  | Ev<"report.delta", G.ReportDelta>
+  | Ev<"report.snapshot", G.ReportSnapshot>;

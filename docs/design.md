@@ -914,6 +914,46 @@ These override the prototype where they differ:
   URL, counts on the Report screen) is replaced by real data from the API
   and events. The socket URL is the page's own origin.
 
+#### Frontend structure
+
+The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
+`web/dist`, which the server serves at `/`.
+
+- **Routes** are URL fragments, parsed by `src/app/route.ts` with no router
+  library: `#/new`, `#/live`, `#/live/<id>`, `#/runs/<id>` (Report),
+  `#/history`, `#/settings`; anything else is `#/new`. Fragments never
+  reach the server, so a reload keeps the screen.
+- **Styles**: two vendored global sheets in `src/vendor/` (exempt from the
+  token check): `nocturne.css`, the bundle's `styles.css` without its
+  Google Fonts import, and `prototype.css`, the prototype's `<style>` block
+  rescoped from `.sx` to `:root` (extra tokens, the light theme as
+  `:root[data-theme="light"]`, keyframes, scrollbar, links). Every other
+  style is a CSS module next to its component; values the prototype
+  computes in JS (status, health, alert tints) are variants selected with
+  `data-state` or `data-tone`. Inter (`@fontsource/inter`) and Phosphor
+  (`@phosphor-icons/react`) are bundled.
+- **Types**: `web/scripts/gen-types.mjs` compiles `wosarcher schema` into
+  `src/api/generated.ts`; `src/api/types.ts` names what the UI uses and
+  narrows the event union. `scripts/check --full` fails on drift.
+- **Data layer**: `ApiClient` (`src/api/client.ts`) has one method per
+  endpoint; `httpApi` throws `ApiError` (status, code, field errors) on
+  non-2xx and locks the app on 401, and `login` returns `ok`, `wrong`, or
+  `limited`. `RunEvents` (`src/api/events.ts`) owns one run's WebSocket:
+  it reconnects 2 s after any close other than 1000 or 4404 (reading
+  `GET /api/runs/{id}` first, then `since` = the last logged `seq`) and
+  reports `connecting`, `connected`, `reconnecting` (attempt N),
+  `replaying` (N events), or `closed`. `runReducer` (`src/run/reducer.ts`)
+  folds events into one `RunView` (dedupe by `seq`; live-only events never
+  move it), and `useRun` combines both. The app keeps the followed run's
+  stream open on every screen for the Live run dot.
+- **State**: React state in `App` behind three contexts (API, auth, UI:
+  theme, toast, overlay stack for Escape, followed run, provider warning,
+  pending History deletes). No store library.
+- **Tests and preview**: screens are tested against `fakeApi` and
+  `FakeWebSocket` (`src/test/`). In `pnpm --dir web dev`,
+  `#/preview/<name>` renders the app on fixture data for side-by-side
+  comparison with the prototype; production builds leave it out.
+
 Nix: `flake.nix` dev shell with Python, uv, Node.js, and pnpm, loaded by
 direnv. uv uses the Nix Python (`UV_PYTHON_DOWNLOADS=never`), because
 downloaded Python builds do not run on NixOS without extra setup.

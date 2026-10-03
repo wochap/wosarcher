@@ -1,0 +1,136 @@
+// Typed client for the server's /api routes. Everything goes to the page's own origin.
+import type {
+  ForkCreate,
+  HealthReport,
+  ProfileInfo,
+  RunCreate,
+  RunCreated,
+  RunDetail,
+  RunSummary,
+  ServerSettings,
+  SessionInfo,
+  TokenCreated,
+  TokenInfo,
+} from "./types";
+
+export type LoginResult =
+  | { kind: "ok"; session: SessionInfo }
+  | { kind: "wrong"; attemptsLeft: number }
+  | { kind: "limited"; retryAfter: number };
+
+export interface ApiClient {
+  listRuns(): Promise<RunSummary[]>;
+  getRun(id: string): Promise<RunDetail>;
+  createRun(request: RunCreate, attachments: File[]): Promise<RunCreated>;
+  forkRun(id: string, body: ForkCreate): Promise<RunCreated>;
+  rerunRun(id: string): Promise<RunCreated>;
+  cancelRun(id: string): Promise<void>;
+  deleteRun(id: string): Promise<void>;
+  getArtifact(id: string, name: string): Promise<string>;
+  getSettings(): Promise<ServerSettings>;
+  putSettings(settings: ServerSettings): Promise<ServerSettings>;
+  listProfiles(): Promise<ProfileInfo[]>;
+  health(profile?: string): Promise<HealthReport>;
+  getSession(): Promise<SessionInfo>;
+  login(password: string): Promise<LoginResult>;
+  logout(): Promise<void>;
+  listTokens(): Promise<TokenInfo[]>;
+  createToken(name: string): Promise<TokenCreated>;
+  deleteToken(id: string): Promise<void>;
+}
+
+/** A non-2xx answer. `fields` maps each invalid field (`writing.words`) to its message. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+    readonly fields: Record<string, string> = {},
+  ) {
+    super(message);
+  }
+}
+
+type Body = { error?: string; detail?: string; attempts_left?: number; retry_after?: number };
+
+/** `writing.words: Input should be greater than 0`, one line per field, as the server writes it. */
+function fieldErrors(detail: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const line of detail.split("\n")) {
+    const match = /^([\w.]+): (.+)$/.exec(line);
+    if (match) fields[match[1]] = match[2];
+  }
+  return fields;
+}
+
+async function readBody(response: Response): Promise<Body> {
+  try {
+    return (await response.json()) as Body;
+  } catch {
+    return {};
+  }
+}
+
+export function httpApi(onUnauthorized: () => void): ApiClient {
+  async function send(method: string, path: string, body?: unknown): Promise<Response> {
+    const init: RequestInit = { method, credentials: "same-origin" };
+    if (body instanceof FormData) init.body = body;
+    else if (body !== undefined) {
+      init.body = JSON.stringify(body);
+      init.headers = { "Content-Type": "application/json" };
+    }
+    const response = await fetch(`/api${path}`, init);
+    if (response.ok) return response;
+    if (response.status === 401) onUnauthorized();
+    const error = await readBody(response);
+    const detail = error.detail ?? response.statusText;
+    throw new ApiError(response.status, error.error ?? "error", detail, fieldErrors(detail));
+  }
+
+  async function json<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return (await (await send(method, path, body)).json()) as T;
+  }
+
+  const run = (id: string) => `/runs/${encodeURIComponent(id)}`;
+
+  return {
+    listRuns: () => json("GET", "/runs"),
+    getRun: (id) => json("GET", run(id)),
+    createRun: (request, attachments) => {
+      const form = new FormData();
+      form.append("request", JSON.stringify(request));
+      for (const file of attachments) form.append("attachments", file, file.name);
+      return json("POST", "/runs", form);
+    },
+    forkRun: (id, body) => json("POST", `${run(id)}/fork`, body),
+    rerunRun: (id) => json("POST", `${run(id)}/rerun`),
+    cancelRun: async (id) => void (await send("POST", `${run(id)}/cancel`)),
+    deleteRun: async (id) => void (await send("DELETE", run(id))),
+    getArtifact: async (id, name) =>
+      (await send("GET", `${run(id)}/artifacts/${encodeURIComponent(name)}`)).text(),
+    getSettings: () => json("GET", "/settings"),
+    putSettings: (settings) => json("PUT", "/settings", settings),
+    listProfiles: () => json("GET", "/profiles"),
+    health: (profile) =>
+      json("GET", `/providers/health${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
+    getSession: () => json("GET", "/session"),
+    login: async (password) => {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (response.ok) return { kind: "ok", session: (await response.json()) as SessionInfo };
+      const error = await readBody(response);
+      if (response.status === 401) return { kind: "wrong", attemptsLeft: error.attempts_left ?? 0 };
+      if (response.status === 429) return { kind: "limited", retryAfter: error.retry_after ?? 30 };
+      const detail = error.detail ?? response.statusText;
+      throw new ApiError(response.status, error.error ?? "error", detail);
+    },
+    logout: async () => void (await send("POST", "/logout")),
+    listTokens: () => json("GET", "/tokens"),
+    createToken: (name) => json("POST", "/tokens", { name }),
+    deleteToken: async (id) => void (await send("DELETE", `/tokens/${encodeURIComponent(id)}`)),
+  };
+}

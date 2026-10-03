@@ -1,0 +1,25 @@
+.toast {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px 7px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.icon {
+  color: var(--color-accent);
+}
+
+.undo {
+  font-size: 12.5px;
+  padding: 2px 6px;
+}

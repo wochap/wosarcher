@@ -1,0 +1,9 @@
+.tag {
+  gap: 5px;
+  padding: 2px 8px;
+}
+
+.small {
+  font-size: 10px;
+  padding: 0 6px;
+}

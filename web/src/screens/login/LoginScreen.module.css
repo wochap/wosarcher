@@ -1,0 +1,163 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background:
+    radial-gradient(
+      120% 80% at 0% 0%,
+      color-mix(in srgb, var(--color-accent) 8%, transparent),
+      transparent 60%
+    ),
+    var(--color-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 0 0 max(48px, 12vw);
+}
+
+[data-phone="true"] .overlay {
+  padding: 24px;
+}
+
+.form {
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandIcon {
+  font-size: 22px;
+  color: var(--color-accent);
+}
+
+.brandName {
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.title {
+  font-size: 24px;
+  margin: 0 0 4px;
+}
+
+.lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field {
+  margin: 0;
+}
+
+.wrap {
+  position: relative;
+}
+
+.input {
+  padding-right: 42px;
+  font-size: 15px;
+  min-height: 40px;
+  border-color: var(--color-divider);
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.reveal {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.reveal:hover {
+  color: var(--color-text);
+}
+
+.alert {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+}
+
+.alert[data-tone="danger"] {
+  background: color-mix(in srgb, var(--color-danger) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 40%, transparent);
+}
+
+.alert[data-tone="warn"] {
+  background: color-mix(in srgb, var(--color-warn) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warn) 40%, transparent);
+}
+
+.alertRow {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+}
+
+.alertIcon {
+  font-size: 16px;
+  margin-top: 1px;
+  flex: none;
+}
+
+[data-tone="danger"] .alertIcon {
+  color: var(--color-danger);
+}
+
+[data-tone="warn"] .alertIcon {
+  color: var(--color-warn);
+}
+
+.alertTitle {
+  font-weight: 500;
+}
+
+.alertText {
+  color: var(--muted);
+}
+
+.track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line);
+}
+
+.bar {
+  height: 100%;
+  background: var(--color-warn);
+  transition: width 1s linear;
+}
+
+.submit {
+  height: 40px;
+}
+
+.host {
+  font-size: 11.5px;
+  color: var(--faint);
+  font-family: var(--mono);
+}

@@ -42,10 +42,10 @@ if [[ -d web/src ]]; then
     --exclude-dir=vendor '#[0-9a-fA-F]{3,8}\b' web/src || true)
 
   while IFS= read -r hit; do
-    echo "$hit: font-family must use var(--font-body) or var(--font-heading)"
+    echo "$hit: font-family must use var(--font-body), var(--font-heading), or var(--mono)"
     token_errors=$((token_errors + 1))
   done < <(grep -rnP --include='*.css' --exclude-dir=vendor \
-    'font-family\s*:\s*(?!var\(|inherit)' web/src || true)
+    'font-family\s*:\s*+(?!var\(--(font-body|font-heading|mono)\)|inherit)' web/src || true)
 fi
 
 if ((token_errors > 0)); then

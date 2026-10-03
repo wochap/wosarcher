@@ -1,0 +1,28 @@
+.status {
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+}
+
+.status[data-state="done"] {
+  background: var(--color-neutral-800);
+  color: var(--color-neutral-100);
+}
+
+.status[data-state="running"],
+.status[data-state="queued"] {
+  background: var(--color-accent-800);
+  color: var(--color-accent-100);
+}
+
+.status[data-state="failed"],
+.status[data-state="interrupted"] {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+  color: var(--color-text);
+}
+
+.status[data-state="cancelled"] {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--color-divider);
+}

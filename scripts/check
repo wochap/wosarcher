@@ -31,6 +31,7 @@ if $full; then
   if [[ -f web/package.json ]]; then
     pnpm --dir web exec tsc --noEmit
     pnpm --dir web run --if-present test
+    pnpm --dir web run check:types
   fi
 fi
 
