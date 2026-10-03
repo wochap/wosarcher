@@ -1,0 +1,39 @@
+# Tasks
+
+## 1. Commit the recorded-run fixture
+
+- [ ] 1.1 In `.gitignore`, change the line `runs/` to `/runs/`. Verify: `git check-ignore -v tests/fixtures/runs/20260101-000000-fixture/events.jsonl` prints nothing and `git check-ignore runs/x` still matches.
+- [ ] 1.2 In `tests/fixtures/make_recorded_run.py`, after copying the run, replace every occurrence of the temporary root path (`str(root)`) with `/fixture` in each text file of the copied run. Add `test_fixture_has_no_machine_paths` to `tests/test_fixture_run.py` asserting no fixture file contains `/tmp/` or the home directory (`str(Path.home())`). Verify: the new test passes after 1.3.
+- [ ] 1.3 Regenerate the fixture with `uv run python -m tests.fixtures.make_recorded_run` (after changes `server-robustness` and `provider-wire-formats` are applied) and `git add tests/fixtures/runs/20260101-000000-fixture`. Verify: `git ls-files tests/fixtures/runs` lists every fixture file; `uv run pytest tests/test_fixture_run.py tests/evals` passes.
+
+## 2. Architecture check
+
+- [ ] 2.1 In `scripts/check_architecture.py`, pass the package root as a parameter: `part_of(path, root)`, `module_name(path, root)`, `check_file(path, root)`, a new `check_tree(root: Path) -> list[str]`, and `main()` calling `check_tree(ROOT)`. Create `tests/test_check_architecture.py` that loads the script with `importlib.util.spec_from_file_location`, plus a helper `make_package(tmp_path, files: dict[str, str]) -> Path` writing a minimal `src/wosarcher` tree (an `__init__.py` per part used), and `test_clean_package` (no violations) and `test_repository_tree_is_clean` (`check_tree(ROOT) == []`). Verify: `uv run pytest tests/test_check_architecture.py` passes and `uv run python scripts/check_architecture.py` prints `architecture: ok`.
+- [ ] 2.2 Record `f"{base}.{alias.name}"` for every alias of every `ImportFrom` (in `imported_modules`), and remove the `adapters/__init__.py` exemption in `check_adapter_independence` (design decision 5). Tests in `tests/test_check_architecture.py`: `test_adapter_imports_adapter_through_package` (`from wosarcher.adapters import bm25` in `adapters/llm.py` → exactly one violation naming `llm` and `bm25`), `test_adapter_relative_import` (`from .bm25 import BM25Scorer`), `test_adapters_init_registry` (`from wosarcher.adapters import searxng` in `adapters/__init__.py`), `test_package_level_import` (`from wosarcher import adapters` in `stages/plan.py` names `stages` and `adapters`), `test_stage_imports_store`. Verify: those tests pass and fail when 2.2's code change is reverted.
+- [ ] 2.3 Replace `IO_LIBRARIES` with `PURE_FORBIDDEN` (spec "Pure parts do no I/O" list), add `PURE_EXCEPTIONS = {"prompts": {"importlib.resources"}}`, the `pathlib` name rule, and the `open`/`__import__` call check (design decision 6). Tests: `test_stage_open_builtin`, `test_stage_imports_subprocess`, `test_stage_imports_urllib_request`, `test_stage_imports_pathlib_path`, `test_stage_pure_path_allowed`, `test_stage_urllib_parse_allowed`, `test_prompts_importlib_resources_allowed`, `test_stage_importlib_resources_forbidden`, `test_stage_dunder_import`, `test_stage_imports_requests`. Verify: `uv run pytest tests/test_check_architecture.py` passes and `scripts/check` prints `architecture: ok`.
+- [ ] 2.4 Update docs/development.md "Commands" (the `check_architecture.py` bullet: adapter imports in any form, no adapter registry in `adapters/__init__.py`, the stdlib I/O ban with the `prompts` exception, and that the script has tests) and docs/design.md "Maintainability rules" (same rules, one sentence). Verify: the docs name `tests/test_check_architecture.py`.
+
+## 3. Skill commands parse like the CLI
+
+- [ ] 3.1 In `tests/test_skill.py`, extend `check_command` to call `command.make_context(path[-1], rest)` and turn a `click.UsageError` (`click.MissingParameter`, `click.NoSuchOption`, `click.BadParameter`) into an error string naming the line and click's message. Add `test_check_command_missing_option` (`["wosarcher", "fork", "<run_id>", "--json"]` → an error naming `--from`) and `test_check_command_missing_argument` (`["wosarcher", "run", "--json"]` → an error naming `QUERY`). Verify: both pass; `test_check_command_sample` still passes.
+- [ ] 3.2 Add `check_values(path, params) -> list[str]` used by `check_command` for `run` and `fork` (design decision 3): `sources` in `get_args(Sources)` and `files` only with `attach`; `until`/`from_` in `STAGES`; `tone` in `prompts.tones()` (case-insensitive); `stages.write.style(reference_style)` does not raise; `WritingOptions(citation_marker=…)` validates; `config.resolve(None, [*set_, *writing_overrides(...)], env)` with `env = {"XDG_CONFIG_HOME": <tmp dir>}` does not raise. Tests: `test_check_command_bad_values` (`run q --sources filez --until rank` → two errors naming `filez` and `rank`), `test_check_command_bad_override` (`run q --set select.no_such_field=1` → names `select.no_such_field`), `test_check_command_bad_tone` (`--tone sarcastic`). Verify: these pass and `test_skill_commands_exist` passes on the current `skill/SKILL.md` (fix the skill, not the test, if it fails).
+
+## 4. Reference punctuation and judge parsing
+
+- [ ] 4.1 In `src/wosarcher/stages/write.py`, add `end(text: str) -> str` (period only when missing) and use it in `mla`, `chicago`, and `ieee` where a period follows the year. Change `tests/stages/test_write.py` expectations from `n.d..` to `n.d.` and add `test_no_double_period` asserting `".." not in` every style's entry for an undated file source and an undated web source. Verify: `uv run pytest tests/stages/test_write.py` passes.
+- [ ] 4.2 In `evals/judge.py` `parse_answer`, return `None` when `json.loads` raises `json.JSONDecodeError` or the value is not a list of integers. Add to the judge tests in `tests/evals/` `test_parse_answer_malformed_list` (`"[1, 2,]"` → `None`) and a `judge_all` test where the first result's answer is `[1, 2,]` and the second's is `[0]`: first precision missing, second judged, exit code 0. Verify: `uv run pytest tests/evals` passes.
+
+## 5. Tests that could not fail
+
+- [ ] 5.1 `tests/adapters/test_firecrawl.py::test_credits_recorded`: use `creditsUsed=5` for the first answer and assert units `6` (5 + default 1). Verify: passes; fails if the adapter ignores `creditsUsed`.
+- [ ] 5.2 `tests/test_cli_doctor.py::test_doctor_json`: assert `result.exit_code == 0` before parsing. Verify: passes.
+- [ ] 5.3 `tests/runner/test_parts.py::test_progress_throttled`: replace `len(events) <= 2` with `[e.data.done for e in events if isinstance(e, StageProgress)] == [1, 1000]`. Verify: passes.
+- [ ] 5.4 `tests/server/test_queue.py::test_cancel_ignores_term_killed`: measure the time from the cancel request to `finished(...)` and assert it is at least the app's grace (0.5 s in `tests/server/conftest.py`). Verify: passes; fails if `cancel` sends SIGKILL at once.
+- [ ] 5.5 `tests/test_cli_run.py::test_sigterm_exits_130`: build `env` from `os.environ` without any `WOSARCHER_*` key. Verify: `WOSARCHER_PROFILE=cloud uv run pytest tests/test_cli_run.py -k sigterm` passes quickly.
+- [ ] 5.6 `tests/stages/test_prefilter.py`: add `test_embeddings_keep_nearest` with a fake embedder whose vectors make two known chunks closest to the query; assert exactly those chunk IDs are kept with `top_k=2`. Verify: passes; fails if the order of similarity is reversed.
+- [ ] 5.7 `tests/stages/test_plan.py`: add `test_truncated_json` (`FakeLLM(['{"queries": ["a", "b"'])`) asserting only `q0` and one warning. Verify: passes.
+
+## 6. Gate
+
+- [ ] 6.1 Update docs/design.md "Evals" (the fixture is tracked in git, holds no machine paths, and the judge records a malformed list as missing). Verify: the paragraph says so.
+- [ ] 6.2 Verify `scripts/check --full` passes and `openspec validate test-and-gate-hardening --strict` passes.
