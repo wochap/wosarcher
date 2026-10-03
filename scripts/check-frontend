@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Fast frontend check: Biome (formatting and lint) and design-token rules.
+#
+#   scripts/check-frontend          check only
+#   scripts/check-frontend --fix    apply Biome formatting and safe fixes, then check
+#
+# Must pass before an agent finishes its work. Type checking and the build
+# are not part of this fast check; run them with scripts/check --full.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+fix=false
+[[ "${1:-}" == "--fix" ]] && fix=true
+
+if [[ ! -f web/package.json ]]; then
+  echo "frontend: skipped (no web/package.json)"
+  exit 0
+fi
+
+if [[ ! -d web/node_modules ]]; then
+  echo "frontend: web/node_modules is missing; run: pnpm --dir web install" >&2
+  exit 1
+fi
+
+biome() { pnpm --dir web exec biome "$@"; }
+
+if $fix; then
+  biome check --write .
+fi
+
+biome check .
+
+# Design tokens: colors and fonts come from the vendored Nocturne variables
+# (docs/design.md, "Frontend design"). The vendored stylesheet itself is
+# exempt. Raw px values are allowed: the design uses them for fixed sizes.
+token_errors=0
+if [[ -d web/src ]]; then
+  while IFS= read -r hit; do
+    echo "$hit: raw hex color; use a Nocturne color variable"
+    token_errors=$((token_errors + 1))
+  done < <(grep -rnE --include='*.css' --include='*.ts' --include='*.tsx' \
+    --exclude-dir=vendor '#[0-9a-fA-F]{3,8}\b' web/src || true)
+
+  while IFS= read -r hit; do
+    echo "$hit: font-family must use var(--font-body) or var(--font-heading)"
+    token_errors=$((token_errors + 1))
+  done < <(grep -rnP --include='*.css' --exclude-dir=vendor \
+    'font-family\s*:\s*(?!var\(|inherit)' web/src || true)
+fi
+
+if ((token_errors > 0)); then
+  echo "frontend: $token_errors design-token violation(s)"
+  exit 1
+fi
+
+echo "frontend: ok"

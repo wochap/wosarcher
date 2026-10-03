@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fast backend check: formatting, lint, and architecture layering.
+#
+#   scripts/check-backend          check only
+#   scripts/check-backend --fix    format and apply safe lint fixes, then check
+#
+# Must pass before an agent finishes its work. Type checking and tests are
+# not part of this fast check; run them with scripts/check --full.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+fix=false
+[[ "${1:-}" == "--fix" ]] && fix=true
+
+if [[ ! -f pyproject.toml ]]; then
+  echo "backend: skipped (no pyproject.toml)"
+  exit 0
+fi
+
+ruff() { uv run --frozen ruff "$@"; }
+
+if $fix; then
+  ruff format .
+  ruff check --fix .
+fi
+
+ruff format --check .
+ruff check .
+python3 scripts/check_architecture.py
+echo "backend: ok"

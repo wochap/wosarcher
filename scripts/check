@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Sanity check that must pass before an agent finishes its work, and the
+# gate for openspec-pipeline (--gate scripts/check).
+#
+#   scripts/check           fast: format, lint, architecture (backend and frontend)
+#   scripts/check --fix     apply formatting and safe lint fixes first
+#   scripts/check --full    fast check, then type checks and tests
+#
+# Parts that do not exist yet (no pyproject.toml, no web/) are skipped.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+fix_flag=()
+full=false
+for arg in "$@"; do
+  case "$arg" in
+    --fix) fix_flag=(--fix) ;;
+    --full) full=true ;;
+    *) echo "usage: scripts/check [--fix] [--full]" >&2; exit 2 ;;
+  esac
+done
+
+scripts/check-backend "${fix_flag[@]}"
+scripts/check-frontend "${fix_flag[@]}"
+
+if $full; then
+  if [[ -f pyproject.toml ]]; then
+    uv run --frozen basedpyright
+    uv run --frozen pytest -q
+  fi
+  if [[ -f web/package.json ]]; then
+    pnpm --dir web exec tsc --noEmit
+    pnpm --dir web run --if-present test
+  fi
+fi
+
+echo "check: ok"

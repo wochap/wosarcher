@@ -1,32 +1,75 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  wosarcher is a modular, scriptable research pipeline (CLI `wosarcher`),
+  inspired by gpt-researcher but split into small stages with typed contracts. It is used
+  from the CLI, from a real-time WebSocket frontend, and by AI agents through
+  a skill. The reference design is docs/design.md; read it before proposing.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Alpha software: breaking changes are fine. No backward-compatibility shims.
+  Docs describe the current state only, never history.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  Pipeline: initial search, plan, search, fetch, load (attachments), chunk,
+  prefilter, score, select, write. Stages are pure functions over Pydantic
+  models and ports (Protocols); the runner owns persistence (runs/<id>/) and
+  events (events.jsonl). Phases run across all sub-queries so GPU stages run
+  one after another in large batches.
+
+  Adapters (only these): searxng (search), firecrawl (fetch, including PDFs),
+  embeddings (OpenAI-compatible /v1/embeddings), rerank (Cohere/Jina-style
+  /v1/rerank), jev (TypeSafe), bm25 (built in, pure Python), llm
+  (OpenAI-compatible chat). One adapter per wire format; base_url and api_key
+  select the provider, local, on another LAN machine, or in the cloud.
+  Provider choice is runtime configuration (profiles in
+  $XDG_CONFIG_HOME/wosarcher/profiles), never a system rebuild.
+
+  Tech stack: Python 3.13 with uv; pydantic v2 (config resolved by own code
+  with tomllib); httpx;
+  typer and rich; FastAPI and uvicorn; markdown-it-py; pytest,
+  pytest-asyncio, respx; ruff; basedpyright (strict). Frontend: Vite, React,
+  TypeScript, pnpm, Biome, Phosphor icons. Sanity gate: scripts/check (fast
+  format, lint, architecture layering); scripts/check --full adds type
+  checks and tests. See docs/development.md. Nix flake dev shell with direnv.
+  License MIT.
+
+  Frontend design: design/ is a Claude Design handoff bundle and the source
+  of truth for the UI. The frontend must match design/project/"Sift
+  Research.dc.html" screen by screen (all its scenario states, dark and
+  light, phone and desktop), styled with the bundle's Nocturne styles.css
+  (vendored) and CSS modules on its variables. No Tailwind or shadcn/ui.
+  Read design/README.md before any frontend change.
+
+  Maintainability and human readability are top priorities:
+  - One adapter per file, aim for under 200 lines; stages are pure.
+  - No globals, no registries, no generic decorators or metaclass magic;
+    a composition root (build.py) wires adapters from a dict.
+  - Prompts and tones live in prompts/, not in Python strings. Scraped text
+    never goes through a template.
+  - Plain httpx; no LangChain.
+  - Every adapter has a fake; tests never touch the network.
+
+  Reference implementation for ideas (read only):
+  /home/gean/Sandboxes/sandbox/forks/gpt-researcher, branches v3.6.1-fork
+  (fixes and llama-server reranker) and v3.7.0-fork (upstream v3.7.0: Jev,
+  BM25 keyword filter, context-filter evals).
+
+  Non-goals: search providers other than SearXNG, local PDF parsing,
+  multi-user accounts, multi-agent orchestration.
+
+rules:
+  proposal:
+    - Always include a Non-goals section.
+    - Name the docs/design.md sections the change implements or changes.
+  design:
+    - Prefer the simplest design that meets the spec; justify any new
+      dependency or abstraction.
+  specs:
+    - For frontend capabilities, each screen and state requirement names the
+      design/ scenario it must match.
+  tasks:
+    - Each task states the tests that prove it.
+    - The last task of every change is "scripts/check --full passes"; work
+      is not done while scripts/check fails.
+    - Frontend tasks name the design/ screen or scenario they implement and
+      are verified by comparing the built page with the prototype.
+    - Keep tasks small enough to review in one sitting.

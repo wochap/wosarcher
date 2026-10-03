@@ -7,3 +7,18 @@ RTK.md
 .direnv
 .pi
 .agents
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+node_modules/
+web/dist/
+
+# Runs and caches
+runs/
+.cache/
