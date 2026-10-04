@@ -22,6 +22,7 @@ from wosarcher.models import (
     RunOutput,
     RunRecord,
     Score,
+    SelectSkip,
     parse_event,
 )
 from wosarcher.store import STAGE_ARTIFACTS
@@ -41,6 +42,7 @@ LINES: dict[str, type[BaseModel]] = {
     "chunks.jsonl": Chunk,
     "candidates.jsonl": Candidate,
     "scores.jsonl": Score,
+    "select.jsonl": SelectSkip,
 }
 REGENERATE = "rerun `uv run python -m tests.fixtures.make_recorded_run`"
 

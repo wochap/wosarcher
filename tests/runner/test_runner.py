@@ -62,7 +62,7 @@ async def test_full_run(tmp_path: Path) -> None:
     assert await run(cfg, run_id, adapters(planner=planner)) == "done"
     directory = store.run_dir(run_id)
     expected = {"request.json", "attachments", "files.jsonl", "plan.json", "initial.jsonl", "hits.jsonl"}
-    expected |= {"pages.jsonl", "chunks.jsonl", "candidates.jsonl", "scores.jsonl", "context.json"}
+    expected |= {"pages.jsonl", "chunks.jsonl", "candidates.jsonl", "scores.jsonl", "context.json", "select.jsonl"}
     expected |= {"report.md", "report.json", "events.jsonl", "costs.json"}
     assert {path.name for path in directory.iterdir()} == expected
     events = store.read_events(run_id)

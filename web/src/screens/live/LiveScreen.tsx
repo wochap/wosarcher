@@ -12,7 +12,7 @@ import { LiveHeader } from "./LiveHeader";
 import css from "./LiveScreen.module.css";
 import { elapsedSeconds, settled, useNow } from "./model";
 import { NotFound } from "./NotFound";
-import { PassagesPanel } from "./PassagesPanel";
+import { FILTERS, type PassageFilter, PassagesPanel } from "./PassagesPanel";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
 import { ReportPanel } from "./ReportPanel";
@@ -32,6 +32,18 @@ function prefilterTopK(detail: RunDetail | null | undefined): number | undefined
   return prefilter?.top_k;
 }
 
+/** The run's caps the Passages funnel help quotes, from the settings in its `request.json`. */
+function funnelConfig(detail: RunDetail | null | undefined) {
+  const settings = detail?.request?.settings;
+  const score = settings?.score as { top_k?: number } | undefined;
+  const select = settings?.select as { max_chunks_per_source?: number } | undefined;
+  return {
+    prefilterTopK: prefilterTopK(detail),
+    scoreTopK: score?.top_k,
+    maxPerSource: select?.max_chunks_per_source,
+  };
+}
+
 const typing = (target: EventTarget | null) =>
   /^(INPUT|TEXTAREA|SELECT)$/.test((target as HTMLElement | null)?.tagName ?? "");
 
@@ -39,27 +51,28 @@ export function LiveScreen() {
   const api = useApi();
   const { followed, follow, live, isPhone, liveTab, setLiveTab, toast } = useUi();
   const data = useRunData(followed, live.view);
-  const [showRejected, setShowRejected] = useState(false);
+  const [filter, setFilter] = useState<PassageFilter>("kept");
   const [cancelling, setCancelling] = useState(false);
   const { cite, onCite, onLeave } = useCitation();
-  const { showRejected: loadRejected } = data;
+  const { loadNotKept } = data;
 
-  const toggleRejected = useCallback(() => {
-    setShowRejected((on) => {
-      if (!on) loadRejected();
-      return !on;
-    });
-  }, [loadRejected]);
+  const pickFilter = useCallback(
+    (next: PassageFilter) => {
+      if (next === "all") loadNotKept();
+      setFilter(next);
+    },
+    [loadNotKept],
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "r" || e.altKey || e.ctrlKey || e.metaKey || typing(e.target))
         return;
-      toggleRejected();
+      pickFilter(FILTERS[(FILTERS.indexOf(filter) + 1) % FILTERS.length]);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleRejected]);
+  }, [filter, pickFilter]);
 
   const view = data.view ?? live.view;
   const running = view?.status === "running";
@@ -146,10 +159,12 @@ export function LiveScreen() {
             run={run}
             context={context}
             marker={marker}
-            rejected={data.rejected}
-            showRejected={showRejected}
-            onToggle={toggleRejected}
+            notKept={data.notKept}
+            skips={data.skips}
+            filter={filter}
+            onFilter={pickFilter}
             configuredScorer={configuredScorer(detail)}
+            config={funnelConfig(detail)}
           />
         )}
         {shows("report") && (

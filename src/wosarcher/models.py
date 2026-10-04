@@ -159,6 +159,8 @@ class Score(Contract):
     display: float | None = None
     """0 to 1 for the UI; None for passthrough."""
     kept: bool = False
+    dropped: Literal["threshold", "query_cap", "other_query"] | None = None
+    """Why the pair is not kept: the first rule that dropped it; None when kept."""
 
 
 class Candidate(Contract):
@@ -225,6 +227,23 @@ class Context(Contract):
     """The source of each passage, once, in first-use order."""
     budget_tokens: int
     used_tokens: int
+
+
+class SelectSkip(Contract):
+    """A kept passage that select did not take."""
+
+    chunk_id: str
+    query_id: str
+    reason: Literal["source_cap", "budget"]
+    tokens_needed: int | None = None
+    """Estimated cost of the passage; `budget` only."""
+    tokens_left: int | None = None
+    """Budget left when selection ended; `budget` only."""
+
+
+class Selection(Contract):
+    context: Context
+    skipped: list[SelectSkip]
 
 
 class Reference(Contract):
@@ -820,6 +839,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ScoreResult,
     Passage,
     Context,
+    SelectSkip,
     Reference,
     Report,
     WritingOptions,

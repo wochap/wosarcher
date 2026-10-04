@@ -204,3 +204,35 @@ async def test_logit_best_pair_across_queries() -> None:
 async def test_raw_values_kept() -> None:
     result = await rerank_stage({"q0": [6.0, 2.0, -3.0]})
     assert [s.value for s in result.scores] == [6.0, 2.0, -3.0]
+
+
+def dropped(result: ScoreResult, query_id: str = "q0") -> list[str | None]:
+    return [s.dropped for s in result.scores if s.query_id == query_id]
+
+
+async def test_drop_reason_threshold() -> None:
+    assert dropped(await rerank_stage({"q0": [0.9, 0.4]})) == [None, "threshold"]
+
+
+async def test_drop_reason_query_cap() -> None:
+    result = await rerank_stage({"q0": [0.9 - n / 100 for n in range(11)]})
+    assert dropped(result) == [None] * 10 + ["query_cap"]
+
+
+async def test_drop_reason_other_query() -> None:
+    result = await rerank_stage({"q0": [0.6], "q1": [0.8]})
+    assert (dropped(result, "q0"), dropped(result, "q1")) == (["other_query"], [None])
+
+
+async def test_capped_in_best_query_kept_in_another() -> None:
+    result = await rerank_stage({"q1": [0.95] * 10 + [0.9], "q2": [0.1] * 10 + [0.8]})
+    last = [s for s in result.scores if s.chunk_id == result.scores[10].chunk_id]
+    assert [(s.query_id, s.kept, s.dropped) for s in last] == [("q1", False, "query_cap"), ("q2", True, None)]
+
+
+async def test_passthrough_is_not_capped() -> None:
+    pages, chunks = setup([f"c{n}" for n in range(14)], ["q0"])
+    qs = [Query(id="q0", text="x")]
+    candidates = every(qs, chunks, passthrough=True)
+    result = await score(candidates, qs, pages, chunks, None, cfg=ScoreConfig(provider="rerank", top_k=10))
+    assert sum(s.kept for s in result.scores) == 14

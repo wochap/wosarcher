@@ -43,6 +43,7 @@ ARTIFACTS: dict[str, str] = {
     "candidates.jsonl": JSONL,
     "scores.jsonl": JSONL,
     "context.json": JSON,
+    "select.jsonl": JSONL,
     "report.md": MARKDOWN,
     "report.json": JSON,
     "events.jsonl": JSONL,

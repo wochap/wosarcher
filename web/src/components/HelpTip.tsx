@@ -115,7 +115,20 @@ export function HelpPopover() {
     >
       <span aria-hidden="true" className={css.arrow} style={{ left: place.arrowX }} />
       <span className={css.title}>{entry.title}</span>
-      <span className={css.body}>{entry.body}</span>
+      {entry.items ? (
+        <ul className={css.items}>
+          {entry.items.map(({ icon: ItemIcon, term, text }) => (
+            <li key={term} className={css.item}>
+              <ItemIcon aria-hidden="true" className={css.itemIcon} />
+              <span>
+                <span className={css.itemTerm}>{term}</span> {text}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <span className={css.body}>{entry.body}</span>
+      )}
       {entry.example && (
         <span className={css.example}>
           Example: <span className={css.exampleText}>{entry.example}</span>

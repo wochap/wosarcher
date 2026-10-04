@@ -154,6 +154,15 @@ def test_artifact_allowed(client: TestClient, runs_dir: Path) -> None:
     assert client.get("/api/runs/r/artifacts/events.jsonl").headers["content-type"].startswith("application/x-ndjson")
 
 
+def test_artifact_select_skips(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True)
+    line = '{"chunk_id": "c", "query_id": "q1", "reason": "source_cap"}\n'
+    (runs_dir / "r" / "select.jsonl").write_text(line)
+    response = client.get("/api/runs/r/artifacts/select.jsonl")
+    assert (response.status_code, response.text) == (200, line)
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+
+
 def test_artifact_not_listed_404(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
     on_disk(runs_dir, "other", ends=True)

@@ -63,16 +63,26 @@ describe("useRunData", () => {
     await act(async () => {
       socketFor(RUN_ID).emit(...rest);
     });
-    expect(artifactsRead(api)).toEqual(["files.jsonl", "context.json", "report.json"]);
+    expect(artifactsRead(api)).toEqual([
+      "files.jsonl",
+      "context.json",
+      "select.jsonl",
+      "report.json",
+    ]);
     expect(data.context?.passages).toHaveLength(14);
     expect(data.report?.cited).toContain(14);
+    expect(data.skips?.map((s) => s.reason)).toEqual(["source_cap", "budget"]);
+    expect(artifactsRead(api)).not.toContain("scores.jsonl");
 
     await act(async () => {
-      data.showRejected();
+      data.loadNotKept();
     });
     expect(artifactsRead(api)).toContain("scores.jsonl");
-    expect(data.rejected?.map((p) => p.display)).toContain(0.52);
-    expect(data.rejected?.every((p) => !p.kept && p.threshold === 0.6)).toBe(true);
+    expect(artifactsRead(api)).toContain("chunks.jsonl");
+    expect(data.notKept?.map((p) => p.display)).toContain(0.52);
+    expect(data.notKept?.every((p) => !p.kept && p.threshold === 0.6)).toBe(true);
+    expect(data.notKept?.find((p) => p.chunk_id === "c17")?.dropped).toBe("query_cap");
+    expect(data.notKept?.some((p) => p.chunk_id === "c1")).toBe(false);
   });
 
   it("shows a fork's sources and passages from the run it copied them from", async () => {
@@ -85,7 +95,7 @@ describe("useRunData", () => {
     expect(sources).toHaveLength(22);
     expect(sources.filter((s) => s.cached)).toHaveLength(19);
     expect(data.view?.subQueries).toHaveLength(5);
-    expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(14);
+    expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(16);
   });
 
   it("follows each run named by copied_from in a two-hop lineage", async () => {
@@ -123,7 +133,7 @@ describe("useRunData", () => {
     const sources = Object.values(data.view?.sources ?? {});
     expect(sources).toHaveLength(22);
     expect(sources.filter((s) => s.cached)).toHaveLength(19);
-    expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(14);
+    expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(16);
     expect(FakeWebSocket.instances.filter((s) => s.url.includes(`/runs/${A}/`))).toHaveLength(1);
   });
 });

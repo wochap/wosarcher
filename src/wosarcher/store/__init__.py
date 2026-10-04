@@ -40,7 +40,7 @@ STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "chunk": ("chunks.jsonl",),
     "prefilter": ("candidates.jsonl",),
     "score": ("scores.jsonl",),
-    "select": ("context.json",),
+    "select": ("context.json", "select.jsonl"),
     "write": ("report.md", "report.json"),
 }
 END_STATUS: dict[str, RunStatus] = {"run.done": "done", "run.failed": "failed", "run.cancelled": "cancelled"}

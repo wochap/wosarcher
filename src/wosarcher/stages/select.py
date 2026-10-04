@@ -2,14 +2,16 @@
 
 Only kept pairs count. Rules in order: per-source cap by within-query rank,
 then round-robin across queries, best first, with soft file and web shares.
-Passages are numbered in the order taken.
+Passages are numbered in the order taken. Every kept passage not taken is
+reported as a skip: `source_cap` when the per-source cap removed it, `budget`
+when it was still left after the last round-robin pass.
 """
 
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from wosarcher.models import Chunk, Context, Page, Passage, Query, Score
+from wosarcher.models import Chunk, Context, Page, Passage, Query, Score, Selection, SelectSkip
 
 MIN_OUTPUT_TOKENS = 1024
 LABEL_TOKENS = 16
@@ -94,15 +96,33 @@ def _ranked(
     return items
 
 
-def _source_cap(items: Sequence[Item], max_per_source: int, plan_index: dict[str, int]) -> list[Item]:
+def _source_cap(
+    items: Sequence[Item], max_per_source: int, plan_index: dict[str, int]
+) -> tuple[list[Item], list[Item]]:
+    """The items within the cap of their source, and the items it removes."""
     by_source: dict[str, list[Item]] = {}
     for item in items:
         by_source.setdefault(item.chunk.source_id, []).append(item)
     capped: list[Item] = []
+    removed: list[Item] = []
     for group in by_source.values():
         group.sort(key=lambda item: (item.rank, -(item.score.display or 0.0), plan_index[item.score.query_id]))
         capped.extend(group[:max_per_source])
-    return capped
+        removed.extend(group[max_per_source:])
+    return capped, removed
+
+
+def _skip(item: Item, tokens_left: int | None = None) -> SelectSkip:
+    """`source_cap` without `tokens_left`, `budget` with it."""
+    if tokens_left is None:
+        return SelectSkip(chunk_id=item.chunk.chunk_id, query_id=item.score.query_id, reason="source_cap")
+    return SelectSkip(
+        chunk_id=item.chunk.chunk_id,
+        query_id=item.score.query_id,
+        reason="budget",
+        tokens_needed=item.cost,
+        tokens_left=tokens_left,
+    )
 
 
 def select(
@@ -117,7 +137,7 @@ def select(
     file_share: float,
     chars_per_token: float,
     margin: float,
-) -> Context:
+) -> Selection:
     chunk_of = {chunk.chunk_id: chunk for chunk in chunks}
     page_of = {page.source.source_id: page for page in pages}
     page_index = {page.source.source_id: i for i, page in enumerate(pages)}
@@ -132,7 +152,7 @@ def select(
         + LABEL_TOKENS
         for score in kept
     }
-    items = _source_cap(_ranked(kept, chunk_of, page_of, page_index, cost), max_per_source, plan_index)
+    items, removed = _source_cap(_ranked(kept, chunk_of, page_of, page_index, cost), max_per_source, plan_index)
 
     files = [item for item in items if item.page.source.kind == "file"]
     web = [item for item in items if item.page.source.kind == "web"]
@@ -141,8 +161,13 @@ def select(
     taken_web, left_web = _round_robin(_queues(web, queries), budget_tokens - file_budget)
     taken = [*taken_files, *taken_web]
     used = sum(item.cost for item in taken)
-    more, _ = _round_robin(_queues([*left_files, *left_web], queries), budget_tokens - used)
+    more, left = _round_robin(_queues([*left_files, *left_web], queries), budget_tokens - used)
     taken.extend(more)
+    used_tokens = sum(item.cost for item in taken)
+    skipped = [
+        *(_skip(item) for item in removed),
+        *(_skip(item, budget_tokens - used_tokens) for item in left),
+    ]
 
     passages = [
         Passage(
@@ -160,10 +185,7 @@ def select(
         for n, item in enumerate(taken, start=1)
     ]
     sources = list({item.chunk.source_id: item.page.source for item in taken}.values())
-    return Context(
-        query=query,
-        passages=passages,
-        sources=sources,
-        budget_tokens=budget_tokens,
-        used_tokens=sum(item.cost for item in taken),
+    context = Context(
+        query=query, passages=passages, sources=sources, budget_tokens=budget_tokens, used_tokens=used_tokens
     )
+    return Selection(context=context, skipped=skipped)

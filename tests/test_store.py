@@ -134,7 +134,7 @@ def test_stage_finished_only_with_done_event(store: RunStore) -> None:
 def finished_run(store: RunStore) -> str:
     run_id = create(store)
     finish(store, run_id, *STAGES)
-    for stage, names in (("context.json", "{}"), ("pages.jsonl", ""), ("report.md", "old")):
+    for stage, names in (("context.json", "{}"), ("select.jsonl", ""), ("pages.jsonl", ""), ("report.md", "old")):
         store.write_text(run_id, stage, names)
     return run_id
 
@@ -144,6 +144,7 @@ def test_fork_from_write(store: RunStore) -> None:
     record = store.fork(parent, "write", ["write.tone=critical"], Settings())
     child = store.run_dir(record.run_id)
     assert (child / "context.json").is_file()
+    assert (child / "select.jsonl").is_file()
     assert not (child / "report.md").exists()
     assert (record.version, record.parent_run_id, record.fork_from) == (2, parent, "write")
     assert record.changes == ["write.tone=critical"]

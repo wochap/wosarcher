@@ -99,3 +99,31 @@
   font-size: 11.5px;
   color: var(--color-text);
 }
+
+.items {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.itemIcon {
+  flex: none;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.itemTerm {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}

@@ -1,6 +1,6 @@
 // The prototype's sample run (its query, sub-queries, sources, failures, files, passages,
 // report, and error) as typed events and artifacts, for the run scenario fixtures.
-import type { Chunk, Context, Page, Report, Score, Source } from "../../api/generated";
+import type { Chunk, Context, Page, Report, Score, SelectSkip, Source } from "../../api/generated";
 import type { KeptPassage, RunEvent, RunSummary, WritingOptions } from "../../api/types";
 import type { Screen } from "../../app/route";
 import { ev, usage } from "../events";
@@ -278,6 +278,24 @@ const PASSAGES: [number, string, number, string][] = [
     "--draft sets the number of tokens drafted per step. With a Q8 draft and a Q4_K_M target on consumer GPUs, gains are largest on low-entropy text such as code.",
   ],
   [
+    1,
+    "6 Experiments",
+    0.62,
+    "Across the benchmark tasks, the 4× smaller draft accepted 0.68 of tokens on average.",
+  ],
+  [
+    10,
+    "Appendix B",
+    0.61,
+    "Full per-task tables for every draft and target pair, with acceptance, wall-clock time, and memory use at batch size one.",
+  ],
+  [
+    13,
+    "Benchmarks",
+    0.6,
+    "On an RTX 4070, a 68M draft for a 7B target reached 1.9× on code completion.",
+  ],
+  [
     11,
     "Impact",
     0.52,
@@ -334,14 +352,33 @@ export const CHUNKS: Chunk[] = PASSAGES.map(([s, heading, , text], k) => ({
   text,
 }));
 
-export const SCORES: Score[] = PASSAGES.map(([, , v], k) => ({
-  chunk_id: `c${k + 1}`,
-  query_id: queryOf(k),
-  scorer: "rerank",
-  value: v,
-  display: v,
-  kept: v >= THRESHOLD,
-}));
+/** Passages at or above the threshold that the per-query cap removed. */
+const QUERY_CAPPED = new Set([16]);
+const isKept = (k: number) => PASSAGES[k][2] >= THRESHOLD && !QUERY_CAPPED.has(k);
+
+export const SCORES: Score[] = [
+  ...PASSAGES.map(
+    ([, , v], k): Score => ({
+      chunk_id: `c${k + 1}`,
+      query_id: queryOf(k),
+      scorer: "rerank",
+      value: v,
+      display: v,
+      kept: isKept(k),
+      dropped: isKept(k) ? null : QUERY_CAPPED.has(k) ? "query_cap" : "threshold",
+    }),
+  ),
+  // The first chunk scored for a second query too; its better pair in q1 is the kept one.
+  {
+    chunk_id: "c1",
+    query_id: "q2",
+    scorer: "rerank",
+    value: 0.7,
+    display: 0.7,
+    kept: false,
+    dropped: "other_query",
+  },
+];
 
 function kept(k: number): KeptPassage {
   const [s, , v] = PASSAGES[k];
@@ -357,13 +394,26 @@ function kept(k: number): KeptPassage {
   };
 }
 
-const KEPT = PASSAGES.map((_, k) => k).filter((k) => PASSAGES[k][2] >= THRESHOLD);
+const KEPT = PASSAGES.map((_, k) => k).filter(isKept);
+
+/** Kept passages select did not take. */
+export const SELECT_SKIPS: SelectSkip[] = [
+  { chunk_id: "c15", query_id: queryOf(14), reason: "source_cap" },
+  {
+    chunk_id: "c16",
+    query_id: queryOf(15),
+    reason: "budget",
+    tokens_needed: 920,
+    tokens_left: 760,
+  },
+];
+const SELECTED = KEPT.filter((k) => !SELECT_SKIPS.some((s) => s.chunk_id === `c${k + 1}`));
 
 export const CONTEXT: Context = {
   query: QUERY,
   budget_tokens: 6000,
   used_tokens: 5240,
-  passages: KEPT.map((k) => ({
+  passages: SELECTED.map((k) => ({
     n: k + 1,
     chunk_id: CHUNKS[k].chunk_id,
     source_id: CHUNKS[k].source_id,
@@ -373,7 +423,7 @@ export const CONTEXT: Context = {
     text: CHUNKS[k].text,
     display: PASSAGES[k][2],
   })),
-  sources: SOURCES.filter((s) => KEPT.some((k) => CHUNKS[k].source_id === s.source_id)),
+  sources: SOURCES.filter((s) => SELECTED.some((k) => CHUNKS[k].source_id === s.source_id)),
 };
 
 export const MD1 = `## Summary
@@ -445,6 +495,7 @@ export function artifacts(body: string, marker: WritingOptions["citation_marker"
     "chunks.jsonl": jsonl(CHUNKS),
     "scores.jsonl": jsonl(SCORES),
     "context.json": JSON.stringify(CONTEXT),
+    "select.jsonl": jsonl(SELECT_SKIPS),
     "report.json": JSON.stringify(report),
     "report.md": report.markdown,
   };
@@ -560,7 +611,7 @@ export function researchEvents(runId: string): RunEvent[] {
   }
   log.done("score", 96, { usage: usage(38400, 0, 0) });
   log.add("stage.started", { device: null, provider: "select" }, "select");
-  log.done("select", KEPT.length);
+  log.done("select", SELECTED.length);
   writeEvents(log, MD1);
   return log.events;
 }

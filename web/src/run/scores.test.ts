@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Chunk, Score } from "../api/generated";
-import { displayScore, rejectedPassages } from "./scores";
+import { displayScore, notKeptPassages } from "./scores";
 
 describe("displayScore", () => {
   it("maps each scorer to 0..1", () => {
@@ -12,7 +12,7 @@ describe("displayScore", () => {
   });
 });
 
-describe("rejectedPassages", () => {
+describe("notKeptPassages", () => {
   const chunk = (id: string): Chunk => ({
     chunk_id: id,
     source_id: "s1",
@@ -26,6 +26,7 @@ describe("rejectedPassages", () => {
     scorer: "bm25",
     value,
     kept,
+    dropped: kept ? null : "threshold",
   });
 
   it("joins rows by chunk and skips chunks kept for any query", () => {
@@ -35,7 +36,7 @@ describe("rejectedPassages", () => {
       score("c1", "q2", 1, false),
       score("c3", "q2", 2, false),
     ];
-    const out = rejectedPassages(
+    const out = notKeptPassages(
       rows,
       [chunk("c1"), chunk("c2"), chunk("c3")],
       { q1: 0.5, q2: 0.5 },
@@ -45,6 +46,11 @@ describe("rejectedPassages", () => {
       ["c2", 0.4],
       ["c3", 1],
     ]);
-    expect(out[0]).toMatchObject({ title: "Doc", threshold: 0.5, kept: false });
+    expect(out[0]).toMatchObject({
+      title: "Doc",
+      threshold: 0.5,
+      kept: false,
+      dropped: "threshold",
+    });
   });
 });

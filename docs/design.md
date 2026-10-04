@@ -201,12 +201,18 @@ Remote endpoints:
     matches.
   - `passthrough`: values `len - i` in search-rank, page, position order,
     so that order is kept; every pair is kept.
-- After thresholds, every chunk (web or file) keeps only its best pair
-  across queries (highest display score, ties to the earlier query); that
-  query is its best query ID, so per-query quotas still work and no chunk
-  is selected twice.
-- Then every scorer except `passthrough` is capped at `score.top_k` per
-  query (default 10).
+- After thresholds, every scorer except `passthrough` is capped at
+  `score.top_k` kept pairs per query (default 10), best first.
+- Then every chunk (web or file) keeps only its best pair across queries
+  (highest display score, ties to the earlier query); that query is its
+  best query ID, so per-query quotas still work and no chunk is selected
+  twice. A pair the cap removed takes no part, so a chunk cut by the cap of
+  its best query stays kept through another query that kept it; a query
+  can end with fewer than `score.top_k` kept pairs.
+- Every pair that is not kept records the first rule that dropped it in
+  `Score.dropped`: `threshold` (the scorer's keep rule, including the BM25
+  rule), `query_cap`, or `other_query`. `kept` is unchanged; `dropped` only
+  explains it.
 
 **BM25** is pure Python with no dependencies (`wosarcher/lexical.py`, about 100
 lines, modelled on gpt-researcher's `gpt_researcher/context/lexical.py`):
@@ -266,6 +272,14 @@ passages, files first get `floor(select.file_share * budget)` (default
 0.5) and the web the rest; then the passages left on both sides share
 whatever budget is unused, by the same round-robin. `--sources files` uses
 the whole budget. Passages are numbered `1..N` in the order taken.
+
+`select` returns a `Selection`: the `Context` the writer reads, and one
+`SelectSkip` (chunk ID, best query ID, reason) for every kept passage it
+did not take. The reason is `source_cap` for passages the per-source cap
+removed, and `budget` for passages still left after the last round-robin
+pass; a `budget` skip also carries `tokens_needed` (the passage's cost) and
+`tokens_left` (the budget left at the end). The runner writes the context
+to `context.json` and the skips to `select.jsonl`.
 
 ### Attachments
 
@@ -482,6 +496,7 @@ runs/<id>/
   candidates.jsonl
   scores.jsonl
   context.json
+  select.jsonl       # select: kept passages not selected, with the reason
   report.md          # written as the report streams, then replaced by the rendered report
   report.json        # the structured Report
   events.jsonl
@@ -560,8 +575,8 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   error, at most 200 characters; the full text goes to standard error).
 - Score: `passages.scored`, one per query: counts, the scorer that actually
   ran, and the kept passages (text, heading path, source, display score).
-  The full list, including rejected passages, is the `scores.jsonl`
-  artifact.
+  The full list, including pairs that were not kept and why, is the
+  `scores.jsonl` artifact.
 - Write: `report.delta` and `report.snapshot` (server only, live).
 
 Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
@@ -659,7 +674,7 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
   `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`, `pages.jsonl`,
   `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `context.json`,
-  `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
+  `select.jsonl`, `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
 - `POST /api/runs/{id}/cancel`:
@@ -1051,10 +1066,17 @@ These override the prototype where they differ:
   written) and labelled by the client per `citation_marker`, with the
   report writer's author-year fallbacks (web host without `www.`, file
   name, "n.d."); the References list comes from `report.json`.
-- **Rejected passages:** read on demand from `scores.jsonl` joined with
-  `chunks.jsonl` by `chunk_id`, once score is done; display scores use the
-  server's mapping below, and a chunk kept for any query is not shown as
-  rejected.
+- **Passage fates:** every card shows one fate, derived in
+  `run/fates.ts` from the kept passages of `passages.scored`, `context.json`,
+  `select.jsonl`, and `Score.dropped`: cited, kept · selecting (score done,
+  select not), ≥ threshold (score not done), source cap, over budget, query
+  cap, or below threshold. The Cited | Kept | All filter (default Kept, R
+  cycles) lives in the Live screen. `select.jsonl` loads once select is
+  done; `scores.jsonl` and `chunks.jsonl` load on the first switch to All,
+  joined by `chunk_id`, one card per chunk not kept by any query (its best
+  display pair), with display scores from the server's mapping below. Runs
+  without `select.jsonl` show uncited kept passages as kept · selecting; a
+  missing `dropped` counts as the threshold.
 - **Forks:** a fork's log has only `stage.done` events with `copied_from`
   for the stages it copied, each naming the run that ran the stage. The
   browser opens one event stream per distinct `copied_from` and shows that

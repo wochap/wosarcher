@@ -1,11 +1,11 @@
 // What the Live and Report screens need beyond the run's own events: its summary, the
-// artifacts of finished stages, rejected passages on demand, and for a fork the data of the
+// artifacts of finished stages, the passages that were not kept on demand, and for a fork the data of the
 // runs it copied stages from (a fork's log has their `stage.done` events, not their hits,
 // pages, or passages).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError } from "../api/client";
 import { RunEvents } from "../api/events";
-import type { Chunk, Context, Page, Report, Score } from "../api/generated";
+import type { Chunk, Context, Page, Report, Score, SelectSkip } from "../api/generated";
 import type { RunDetail } from "../api/types";
 import { useServices } from "../app/context";
 import {
@@ -16,7 +16,7 @@ import {
   runReducer,
   type SourceView,
 } from "./reducer";
-import { type PassageItem, parseJsonl, rejectedPassages } from "./scores";
+import { notKeptPassages, type PassageItem, parseJsonl } from "./scores";
 
 export type FileRow = { sourceId: string; title: string; uri: string; size: number };
 
@@ -29,9 +29,11 @@ export type RunData = {
   files: FileRow[];
   context: Context | null;
   report: Report | null;
-  /** Null until requested with `showRejected` and loaded. */
-  rejected: PassageItem[] | null;
-  showRejected(): void;
+  /** Kept passages select did not take; null until select is done, or when the run has none. */
+  skips: SelectSkip[] | null;
+  /** Null until requested with `loadNotKept` and loaded. */
+  notKept: PassageItem[] | null;
+  loadNotKept(): void;
 };
 
 export const ran = (view: RunView, phase: PhaseId) =>
@@ -123,7 +125,7 @@ export function withAncestors(view: RunView, sources: Record<string, RunView>): 
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
 
-/** Fetches `name` once `ready` holds; null until then. */
+/** Fetches `name` once `ready` holds; null until then, and null when it does not exist. */
 function useArtifact<T>(
   runId: string | null,
   name: string,
@@ -157,17 +159,18 @@ const parseContext = (text: string) => JSON.parse(text) as Context;
 const parseReport = (text: string) => JSON.parse(text) as Report;
 const parseScores = (text: string) => parseJsonl<Score>(text);
 const parseChunks = (text: string) => parseJsonl<Chunk>(text);
+const parseSkips = (text: string) => parseJsonl<SelectSkip>(text);
 
 export function useRunData(runId: string | null, own: RunView | null): RunData {
   const { api } = useServices();
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [wantRejected, setWantRejected] = useState(false);
+  const [wantNotKept, setWantNotKept] = useState(false);
 
   useEffect(() => {
     setDetail(null);
     setNotFound(false);
-    setWantRejected(false);
+    setWantNotKept(false);
     if (!runId) return;
     let live = true;
     api.getRun(runId).then(
@@ -184,22 +187,34 @@ export function useRunData(runId: string | null, own: RunView | null): RunData {
 
   const loaded = !!own && ran(own, "load") && !own.phases.load.skipped;
   const files = useArtifact(runId, "files.jsonl", loaded, parseFiles);
-  const context = useArtifact(runId, "context.json", !!own && ran(own, "select"), parseContext);
+  const selected = !!own && ran(own, "select");
+  const context = useArtifact(runId, "context.json", selected, parseContext);
+  const skips = useArtifact(runId, "select.jsonl", selected, parseSkips);
   const report = useArtifact(runId, "report.json", !!own && ran(own, "write"), parseReport);
-  const scoreDone = wantRejected && !!own && ran(own, "score");
+  const scoreDone = wantNotKept && !!own && ran(own, "score");
   const scores = useArtifact(runId, "scores.jsonl", scoreDone, parseScores);
   const chunks = useArtifact(runId, "chunks.jsonl", scoreDone, parseChunks);
 
-  const rejected = useMemo(() => {
+  const notKept = useMemo(() => {
     if (!view || !scores || !chunks) return null;
     const thresholds = Object.fromEntries(view.passages.map((q) => [q.queryId, q.threshold]));
     const sources: Record<string, { title: string; uri: string }> = Object.fromEntries(
       Object.values(view.sources).map((s) => [s.sourceId, s]),
     );
     for (const f of files ?? []) sources[f.sourceId] = { title: f.title, uri: f.uri };
-    return rejectedPassages(scores, chunks, thresholds, sources);
+    return notKeptPassages(scores, chunks, thresholds, sources);
   }, [view, scores, chunks, files]);
 
-  const showRejected = useCallback(() => setWantRejected(true), []);
-  return { detail, notFound, view, files: files ?? [], context, report, rejected, showRejected };
+  const loadNotKept = useCallback(() => setWantNotKept(true), []);
+  return {
+    detail,
+    notFound,
+    view,
+    files: files ?? [],
+    context,
+    report,
+    skips,
+    notKept,
+    loadNotKept,
+  };
 }

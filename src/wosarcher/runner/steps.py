@@ -306,7 +306,7 @@ async def select(ctx: StepContext) -> Outcome:
         prompt_reserve_tokens=settings.select.prompt_reserve_tokens,
         words=settings.write.words,
     )
-    context = selecting.select(
+    selection = selecting.select(
         ctx.record.request.query,
         ctx.items("scores.jsonl", Score),
         ctx.pages(),
@@ -318,8 +318,9 @@ async def select(ctx: StepContext) -> Outcome:
         chars_per_token=settings.llm.chars_per_token,
         margin=settings.llm.token_margin,
     )
-    ctx.store.write_artifact(ctx.run_id, "context.json", context)
-    return Outcome(len(context.passages))
+    ctx.store.write_artifact(ctx.run_id, "context.json", selection.context)
+    ctx.store.write_artifact(ctx.run_id, "select.jsonl", selection.skipped)
+    return Outcome(len(selection.context.passages))
 
 
 async def write(ctx: StepContext) -> Outcome:

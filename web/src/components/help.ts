@@ -1,5 +1,17 @@
 // Inline help texts, verbatim from the prototype's HELP constant and keyed like it.
-export type Help = { title: string; body: string; example?: string };
+import {
+  ArrowDown,
+  Funnel,
+  Gauge,
+  type Icon,
+  MinusCircle,
+  Quotes,
+  Stack,
+} from "@phosphor-icons/react";
+
+/** One row of a legend: shown instead of the body. */
+export type HelpItem = { icon: Icon; term: string; text: string };
+export type Help = { title: string; body: string; example?: string; items?: HelpItem[] };
 
 export const HELP: Record<string, Help> = {
   recipe: {
@@ -91,14 +103,6 @@ export const HELP: Record<string, Help> = {
     body: "Which scorer ranked the passages. “fallback” means the configured scorer failed and a simpler one took over.",
     example: "jev · rerank · bm25 · fallback",
   },
-  score: {
-    title: "Score and threshold",
-    body: "Each passage scores from 0 to 1. Passages right of the line are kept; the line is the scorer's configured threshold.",
-  },
-  rejected: {
-    title: "Rejected passages",
-    body: "Shows passages that scored below the threshold or did not fit the budget.",
-  },
   tokens: {
     title: "Tokens and cost",
     body: "Prompt and completion tokens across all stages. Cost is $0 for local models.",
@@ -167,4 +171,73 @@ export function helpFor(key: string): Help {
     };
   }
   return HELP[key] ?? { title: key, body: "" };
+}
+
+/** The run's saved settings the funnel help quotes; unknown values read "–". */
+export type FunnelConfig = {
+  prefilterTopK?: number;
+  scoreTopK?: number;
+  maxPerSource?: number;
+  /** The shared display threshold; null when queries differ or none is known. */
+  threshold: number | null;
+};
+
+export type FunnelKey = "f-chunks" | "f-scored" | "f-kept" | "f-cited" | "legend";
+
+/** The Passages funnel steps and the fate legend, with the run's configured values. */
+export function funnelHelp(config: FunnelConfig): Record<FunnelKey, Help> {
+  const value = (n: number | undefined) => (n == null ? "–" : String(n));
+  const [P, K, S] = [config.prefilterTopK, config.scoreTopK, config.maxPerSource].map(value);
+  const T = config.threshold == null ? "the threshold" : config.threshold.toFixed(2);
+  const cited = config.maxPerSource === 1 ? "cited passage" : "cited passages";
+  return {
+    "f-chunks": {
+      title: "Chunks",
+      body: `Pages and files split along their headings. The prefilter ranks them per sub-query and passes the top ${P} of each to the scorer; the rest are “prefiltered” and never scored.`,
+    },
+    "f-scored": {
+      title: "Scored",
+      body: "Chunks the scorer rated from 0 to 1, after the prefilter.",
+    },
+    "f-kept": {
+      title: "Kept",
+      body: `Scored at least ${T} (threshold) and in the top ${K} of their sub-query (query cap).`,
+    },
+    "f-cited": {
+      title: "Cited",
+      body: `Kept passages that fit the writer’s selection: at most ${S} per source (source cap) and within the token budget. Numbered in the report.`,
+    },
+    legend: {
+      title: "Passage fates",
+      body: "",
+      items: [
+        {
+          icon: Quotes,
+          term: "cited [n]",
+          text: "Selected and cited in the report. The marker follows your citation setting.",
+        },
+        {
+          icon: Stack,
+          term: "source cap",
+          text: `Kept, but its source already has the maximum of ${S} ${cited}.`,
+        },
+        {
+          icon: Gauge,
+          term: "over budget",
+          text: "Kept, but too long for the tokens left in the writer’s budget.",
+        },
+        {
+          icon: Funnel,
+          term: "query cap · q1",
+          text: `At or above ${T}, but its sub-query already had ${K} better passages.`,
+        },
+        { icon: ArrowDown, term: `below ${T}`, text: "Scored under the threshold." },
+        {
+          icon: MinusCircle,
+          term: "prefiltered",
+          text: `Never scored: outside the top ${P} for every sub-query. Shown in the source view.`,
+        },
+      ],
+    },
+  };
 }

@@ -28,6 +28,7 @@ from wosarcher.models import (
     Score,
     ScoreResult,
     SearchResult,
+    SelectSkip,
     Skipped,
     Source,
     WritingOptions,
@@ -96,6 +97,9 @@ SAMPLES: list[Contract] = [
     ScoreResult(scores=[SCORE], scorer="bm25", failed=[Skipped(item="rerank", reason="down")], queries=[QUERY_SCORES]),
     PASSAGE,
     Context(query="what", passages=[PASSAGE], sources=[SOURCE], budget_tokens=3792, used_tokens=20),
+    Score(query_id="q1", chunk_id=CHUNK.chunk_id, value=0.4, scorer="rerank", display=0.4, dropped="query_cap"),
+    SelectSkip(chunk_id=CHUNK.chunk_id, query_id="q1", reason="source_cap"),
+    SelectSkip(chunk_id=CHUNK.chunk_id, query_id="q2", reason="budget", tokens_needed=420, tokens_left=96),
     Report(
         body="text [1]",
         markdown="text [1]\n\n## References",
@@ -175,3 +179,8 @@ def test_one_chunk_two_queries_gives_two_scores() -> None:
     scores = [Score(query_id=q, chunk_id=CHUNK.chunk_id, value=1.0, scorer="rerank") for q in ("q1", "q2")]
     assert {score.query_id for score in scores} == {"q1", "q2"}
     assert all(score.scorer == "rerank" for score in scores)
+
+
+def test_unknown_drop_reason() -> None:
+    with pytest.raises(ValidationError, match="dropped"):
+        Score.model_validate({"query_id": "q1", "chunk_id": "c", "value": 1.0, "scorer": "jev", "dropped": "budget"})

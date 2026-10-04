@@ -168,6 +168,7 @@ export type Source1 = ("builtin" | "user")
 export type Kept1 = number
 export type ChunkId4 = string
 export type Display2 = (number | null)
+export type Dropped = (("threshold" | "query_cap" | "other_query") | null)
 export type Kept2 = boolean
 export type QueryId3 = string
 export type Scorer2 = string
@@ -318,6 +319,11 @@ export type Scorer4 = string
 export type Scores = Score[]
 export type Failures1 = Skipped[]
 export type Hits = Hit[]
+export type ChunkId5 = string
+export type QueryId5 = string
+export type Reason2 = ("source_cap" | "budget")
+export type TokensLeft = (number | null)
+export type TokensNeeded = (number | null)
 export type Sources5 = ("both" | "web" | "files")
 export type Expires = (string | null)
 export type Method1 = ("cookie" | "token" | "none")
@@ -820,6 +826,7 @@ threshold_display: ThresholdDisplay1
 export interface Score {
 chunk_id: ChunkId4
 display?: Display2
+dropped?: Dropped
 kept?: Kept2
 query_id: QueryId3
 scorer: Scorer2
@@ -1211,6 +1218,19 @@ scores: Scores
 export interface SearchResult {
 failures?: Failures1
 hits: Hits
+}
+/**
+ * A kept passage that select did not take.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SelectSkip".
+ */
+export interface SelectSkip {
+chunk_id: ChunkId5
+query_id: QueryId5
+reason: Reason2
+tokens_left?: TokensLeft
+tokens_needed?: TokensNeeded
 }
 /**
  * Global defaults for runs started by the server (`server-settings.json`).

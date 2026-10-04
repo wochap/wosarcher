@@ -1,9 +1,14 @@
-"""Score: score the prefiltered pairs with one scorer per run, then threshold, dedupe, and cap.
+"""Score: score the prefiltered pairs with one scorer per run, then threshold, cap, and dedupe.
 
 The configured scorer runs first; when any call fails, every score from it is
 discarded and the stage starts again with the next entry of `score.fallback`,
 so one run never mixes score scales. `passthrough` never fails. Small-input
 candidates always get passthrough scores.
+
+Each pair goes through three rules in order: the scorer's threshold, the
+per-query cap (`score.top_k`, not for passthrough), and the best pair per
+chunk across queries. A pair one rule drops records it in `dropped` and takes
+no part in the later rules.
 """
 
 import asyncio
@@ -162,12 +167,13 @@ def scored_pairs(
             scorer=name,
             display=_display(name, shown[i], best),
             kept=i in kept,
+            dropped=None if i in kept else "threshold",
         )
         for i, chunk in enumerate(group.chunks)
     ]
 
 
-# Best pair per chunk and per-query cap
+# Per-query cap and best pair per chunk
 
 
 def best_pair_only(scores: list[Score], plan_index: dict[str, int]) -> list[Score]:
@@ -181,7 +187,9 @@ def best_pair_only(scores: list[Score], plan_index: dict[str, int]) -> list[Scor
         if current is None or order < (-(current.display or 0.0), plan_index[current.query_id]):
             best[score.chunk_id] = score
     return [
-        score.model_copy(update={"kept": False}) if score.kept and best[score.chunk_id] is not score else score
+        score.model_copy(update={"kept": False, "dropped": "other_query"})
+        if score.kept and best[score.chunk_id] is not score
+        else score
         for score in scores
     ]
 
@@ -191,7 +199,7 @@ def capped(scores: list[Score], top_k: int) -> list[Score]:
     kept = sorted((i for i, score in enumerate(scores) if score.kept), key=lambda i: (-scores[i].value, i))
     allowed = set(kept[:top_k])
     return [
-        score.model_copy(update={"kept": False}) if score.kept and i not in allowed else score
+        score.model_copy(update={"kept": False, "dropped": "query_cap"}) if score.kept and i not in allowed else score
         for i, score in enumerate(scores)
     ]
 
@@ -260,20 +268,15 @@ async def score(
         if group.passthrough:
             used[group.query.id] = ("passthrough", group, await raw_values("passthrough", group, None))
 
-    per_query = {
-        query_id: scored_pairs(entry, calibrated, group, vals, cfg, scale)
-        for query_id, (entry, group, vals) in used.items()
-    }
-    flat = best_pair_only([s for group in groups for s in per_query[group.query.id]], plan_index)
-    reports: list[QueryScores] = []
-    scores: list[Score] = []
-    for group in groups:
-        entry = used[group.query.id][0]
-        own = [s for s in flat if s.query_id == group.query.id]
-        if entry != "passthrough":
-            own = capped(own, cfg.top_k)
-        scores.extend(own)
-        reports.append(report(group, entry, own, cfg, scale))
+    per_query: dict[str, list[Score]] = {}
+    for query_id, (entry, group, vals) in used.items():
+        own = scored_pairs(entry, calibrated, group, vals, cfg, scale)
+        per_query[query_id] = own if entry == "passthrough" else capped(own, cfg.top_k)
+    scores = best_pair_only([s for group in groups for s in per_query[group.query.id]], plan_index)
+    reports = [
+        report(group, used[group.query.id][0], [s for s in scores if s.query_id == group.query.id], cfg, scale)
+        for group in groups
+    ]
     for item in reports:
         on_item(item)
     return ScoreResult(scores=scores, scorer=name, failed=failed, queries=reports)

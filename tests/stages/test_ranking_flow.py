@@ -47,7 +47,7 @@ async def test_ranking_flow() -> None:
         file_share=0.5,
         chars_per_token=3.5,
         margin=1.1,
-    )
+    ).context
 
     assert prefiltered.method == "embeddings"
     assert scored.scorer == "rerank"

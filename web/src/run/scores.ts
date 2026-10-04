@@ -1,5 +1,5 @@
-// Display scores (0 to 1) as the server maps them, and the rejected passages of a run, which
-// only its `scores.jsonl` and `chunks.jsonl` artifacts hold.
+// Display scores (0 to 1) as the server maps them, and the passages of a run that were not
+// kept, which only its `scores.jsonl` and `chunks.jsonl` artifacts hold.
 import type { Chunk, Score } from "../api/generated";
 import type { KeptPassage } from "../api/types";
 
@@ -14,12 +14,14 @@ export function displayScore(scorer: string, value: number, best: number): numbe
   return clamp(value);
 }
 
-/** One passage card of the Passages panel, kept or rejected. */
+/** One passage card of the Passages panel, kept or not. */
 export type PassageItem = KeptPassage & {
   queryId: string;
   scorer: string;
   threshold: number | null;
   kept: boolean;
+  /** Why the pair was not kept; null for kept pairs and runs from before drop reasons. */
+  dropped?: Score["dropped"];
 };
 
 export function parseJsonl<T>(text: string): T[] {
@@ -30,10 +32,10 @@ export function parseJsonl<T>(text: string): T[] {
 }
 
 /**
- * The scored pairs that were not kept, one per chunk (its best display), excluding chunks kept
- * for any query. `thresholds` maps a query to its scorer's display threshold.
+ * One card per chunk not kept by any query, from its pair with the best display, carrying that
+ * pair's drop reason. `thresholds` maps a query to its scorer's display threshold.
  */
-export function rejectedPassages(
+export function notKeptPassages(
   scores: Score[],
   chunks: Chunk[],
   thresholds: Record<string, number | null>,
@@ -63,6 +65,7 @@ export function rejectedPassages(
       scorer: s.scorer,
       threshold: thresholds[s.query_id] ?? null,
       kept: false,
+      dropped: s.dropped,
     });
   }
   return [...out.values()];
