@@ -15,9 +15,25 @@ per configured block (`search`, `fetch`, `prefilter`, `score`, `llm`):
 provider, base URL, device, status, model name, latency of one small
 request in milliseconds, and unload support (`yes`, `no`, or `n/a` when
 `release = "none"`). Built-in providers (`bm25`, `passthrough`) SHALL be
-shown as built in, without a request. Probes SHALL run concurrently.
-`--json` SHALL print the same report as JSON. The command SHALL exit 1 when
-any probe fails and 0 otherwise, warnings included.
+shown as built in, without a request. `--json` SHALL print the same report
+as JSON. The command SHALL exit 1 when any probe fails and 0 otherwise,
+warnings included.
+
+A repeatable `--block <name>` option SHALL limit the check to the named
+blocks: only their rows are printed and only they are probed, and the
+exclusive GPU warnings and the context window check apply only to them. An
+unknown block name SHALL stop the command with an error naming the valid
+blocks, before any request is sent.
+
+A block is local when its `release` is not `none` or it sets a `device`
+label; any other block with an endpoint is a cloud block. Cloud blocks
+SHALL be probed concurrently. Local blocks SHALL be probed one after
+another, in block order, alongside the cloud probes, so the doctor never
+has two local probes in flight at once. Under `run.gpu_policy =
+"exclusive"`, the doctor SHALL release a local block's model after its
+probe and before the next local probe when that block reports unload
+support `yes`; a failed release SHALL be added as a warning and SHALL NOT
+change the row's status.
 
 #### Scenario: All healthy
 - **WHEN** every configured endpoint answers its probe
@@ -34,6 +50,22 @@ any probe fails and 0 otherwise, warnings included.
 #### Scenario: Other profile
 - **WHEN** the user runs `wosarcher doctor --profile cloud`
 - **THEN** the providers of the `cloud` profile are checked, not the active profile
+
+#### Scenario: One block
+- **WHEN** the user runs `wosarcher doctor --block score --json`
+- **THEN** the report has only the score row and no request is sent to the search, fetch, prefilter, or llm endpoints
+
+#### Scenario: Unknown block
+- **WHEN** the user runs `wosarcher doctor --block scorer`
+- **THEN** the command fails naming `search`, `fetch`, `prefilter`, `score`, and `llm`, and sends no request
+
+#### Scenario: Local probes one at a time
+- **WHEN** `score` and `llm` both set `device = "desktop:gpu0"` and `search` is a cloud block
+- **THEN** the search probe runs concurrently with the local probes, and the llm probe starts only after the score probe has finished
+
+#### Scenario: Exclusive policy releases between local probes
+- **WHEN** `run.gpu_policy = "exclusive"`, `score` and `llm` are local with `release = "llama-swap"` and unload support `yes`
+- **THEN** the score model is released before the llm probe is sent
 
 ### Requirement: Probes
 Each probe SHALL make one small real request through the adapter:

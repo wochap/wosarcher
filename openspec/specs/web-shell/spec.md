@@ -320,47 +320,78 @@ inside the `plan` stage and SHALL count as part of Plan.
 - **THEN** the Score phase is not a fallback
 
 ### Requirement: Settings providers
-The Settings screen of the prototype (no dedicated scenario; reached with
-Alt+4 from any scenario) SHALL show the H1 "Settings" with a "Check all
-providers" button, the profile line, the GPU policy line, and a
-"Providers" grid with one card per configured provider block from
-`GET /api/providers/health`, in the order the server lists them, titled
-by role: `search` "Search", `fetch` "Fetch", `prefilter` "Embeddings" when
-its provider is `embeddings` and "Prefilter" otherwise (for example `bm25`
-or `none`), `score` "Scorer", `llm` "LLM" (any other block name
-capitalised). Each card SHALL show the provider name and a list with
-the prototype's 84px label column: Base URL, Model, Device (the device
-label, or "–"), and Unload (`none`, `llama-swap`, or `ollama`, the
-provider's `release`). Each card's health strip SHALL show the last
-result: `ok` as "Healthy · N ms", `degraded` as "Slow · N ms" with the
-detail, `down` as "Unreachable · <detail>", and `skipped` as "Skipped ·
-<detail>", with the matching prototype icon and tint, and how long ago the
-result arrived. The server checks all providers of the profile at once, so
-"Check" on a card and "Check all providers" SHALL both run one health
-request; while it runs, the cards SHALL show "Checking…" with the spinning
-dashed circle and the Check buttons SHALL be disabled.
+The Settings screen of the prototype (`design/project/wosarcher.dc.html`, no
+dedicated scenario; reached with Alt+4 from any scenario) SHALL show the H1
+"Settings" with a "Check all providers" button, the profile line, the GPU
+policy line, the "Providers" heading followed by the note "Checked only
+when you click, so idle GPU servers stay asleep.", and a grid with one card
+per configured provider block from `GET /api/providers/health`, in the
+order the server lists them, titled by role: `search` "Search", `fetch`
+"Fetch", `prefilter` "Embeddings" when its provider is `embeddings` and
+"Prefilter" otherwise (for example `bm25` or `none`), `score` "Scorer",
+`llm` "LLM" (any other block name capitalised). Each card SHALL show the
+provider name, a "Check" button labelled for screen readers "Check <role>
+provider", and a list with the prototype's 84px label column: Base URL,
+Model, Device (the device label, or "–"), and Unload (`none`,
+`llama-swap`, or `ollama`, the provider's `release`).
+
+Opening Settings SHALL NOT probe any provider: the screen reads
+`GET /api/providers/health`, which answers from the server's stored
+results. Each card's health strip SHALL follow the prototype: `unchecked`
+as "Not checked yet" with the faint dashed circle on a dashed, untinted
+strip; `ok` as "OK · checked <ago>" with the latency ("N ms") as the detail
+line; `degraded` as "Slow · checked <ago>" on the warn tint with "N ms,
+limit 1,000 ms" (or the server's detail when the latency is within the
+limit) as the detail line; `down` as "Down · checked <ago>" on the danger
+tint with the error detail in the mono font; and `skipped` as "Skipped ·
+<detail>". <ago> is "just now" under 10 s, "N s ago" under a minute, and
+otherwise "N m ago", computed from the check's `checked_at` and updated
+while the screen is open.
+
+"Check" on a card SHALL post a health check for that card's block only;
+while it runs, that card SHALL show "Checking…" with the spinning icon and
+its Check button SHALL be disabled, and other cards SHALL stay as they
+are. "Check all providers" SHALL post one health check for every block;
+while it runs, every card SHALL show "Checking…", every Check button and
+"Check all providers" SHALL be disabled. A failed check request SHALL show
+its error above the grid and leave the strips with their previous results.
 
 The profile line SHALL read "Active profile <name> · <description>" with
 the muted CPU icon, the name in the mono font, and the description of
-that profile from `GET /api/profiles`; the name is the profile of the last
-health result (the active profile before the first result), and " ·
-<description>" is left out when the description is empty. The GPU policy
-line SHALL show "GPU policy", a segmented control with Shared and
-Exclusive in which the health result's `gpu_policy` is selected and both
-options are disabled, and the text "Each model unloads before the next
-one loads on <devices>." for exclusive or "All models stay loaded on
+that profile from `GET /api/profiles`; the name is the profile of the
+health report, and " · <description>" is left out when the description is
+empty. The GPU policy line SHALL show "GPU policy", a segmented control
+with Shared and Exclusive in which the report's `gpu_policy` is selected
+and both options are disabled, and the text "Each model unloads before the
+next one loads on <devices>." for exclusive or "All models stay loaded on
 <devices>." for shared, where <devices> are the distinct device labels of
 the `prefilter`, `score`, and `llm` providers joined with ", " (without
 " on <devices>" when none has a device label). Secrets SHALL never be
 shown.
 
+#### Scenario: Opening Settings sends no check
+- **WHEN** the user opens Settings
+- **THEN** the app requests `GET /api/providers/health` and posts no health check
+
+#### Scenario: Not checked yet
+- **WHEN** the health report has the score block `unchecked`
+- **THEN** the Scorer card shows "Not checked yet" with the dashed strip
+
 #### Scenario: Slow provider
-- **WHEN** the health result for search is `degraded` at 1,840 ms
-- **THEN** the Search card shows the warn icon and "Slow · 1,840 ms" on the warn tint
+- **WHEN** the health result for search is `degraded` at 1,840 ms, checked 3 minutes ago
+- **THEN** the Search card shows the warn icon, "Slow · checked 3m ago", and "1,840 ms, limit 1,000 ms" on the warn tint
+
+#### Scenario: Down provider
+- **WHEN** the health result for fetch is `down` with detail `ECONNREFUSED`
+- **THEN** the Fetch card shows "Down · checked <ago>" on the danger tint and `ECONNREFUSED` in the mono font
+
+#### Scenario: Check one card
+- **WHEN** the user presses "Check" on the Scorer card
+- **THEN** a health check for `score` only is posted, only the Scorer card shows "Checking…" until the result arrives, and the other cards keep their strips
 
 #### Scenario: Check all
 - **WHEN** the user presses "Check all providers"
-- **THEN** every card shows "Checking…" until the new results arrive
+- **THEN** one health check for every block is posted and every card shows "Checking…" until the new results arrive
 
 #### Scenario: Server block names
 - **WHEN** the health report lists the blocks `search`, `fetch`, `prefilter` (provider `embeddings`), `score`, and `llm`
@@ -371,11 +402,11 @@ shown.
 - **THEN** its card is titled "Prefilter" and shows `bm25` as the provider name, never "Embeddings"
 
 #### Scenario: Profile line with description
-- **WHEN** the checked profile is `low-vram` and `GET /api/profiles` describes it as "Models take turns on one small GPU; slower, fits 8 GB."
+- **WHEN** the report's profile is `low-vram` and `GET /api/profiles` describes it as "Models take turns on one small GPU; slower, fits 8 GB."
 - **THEN** the line reads "Active profile low-vram · Models take turns on one small GPU; slower, fits 8 GB." as in the prototype's Settings screen
 
 #### Scenario: Exclusive policy
-- **WHEN** the health result has `gpu_policy` `exclusive` and the prefilter, score, and llm providers all use device `desktop:gpu0`
+- **WHEN** the health report has `gpu_policy` `exclusive` and the prefilter, score, and llm providers all use device `desktop:gpu0`
 - **THEN** Exclusive is selected, neither option can be changed, and the text reads "Each model unloads before the next one loads on desktop:gpu0."
 
 #### Scenario: Device and Unload rows
@@ -604,7 +635,7 @@ accessible label is "Help: <label>"):
 | After "GPU policy" | GPU policy | GPU policy | Shared keeps all models loaded. Exclusive unloads a model before the next one on the same GPU loads; it needs unload support. |
 | Provider card, after "Device" | Device | Device | Where this provider runs, as labelled in the profile. |
 | Provider card, after "Unload" | Unload | Unload | Whether the model can be released between phases: none, llama-swap or ollama. Exclusive GPU policy needs it. |
-| Provider card health strip, after the health text | Health | Health | ok · degraded (slow, or cannot unload) · down · skipped (not used by this profile). |
+| Provider card health strip, after the health text | Health | Health | Not checked yet, OK, slow (degraded), down, or skipped (built in, no endpoint). Checks run only when you click Check, so idle GPU servers are never woken by opening this page. |
 | After the "Writing defaults" heading | Writing defaults | Writing defaults | Used for every new run. Each run can override them in its options. |
 | After "API tokens" in the Security panel | API tokens | API tokens | For scripts and agents on other machines. A token is shown once, when you create it. |
 | History table header, after "Recipe" | Recipe | Recipe | Report wrote a cited report; context returned selected passages only. |
@@ -625,7 +656,7 @@ followed by a help button with these entries:
 
 #### Scenario: Health help on a card
 - **WHEN** the user hovers the help button in the Scorer card's health strip
-- **THEN** the tooltip reads "Health" and "ok · degraded (slow, or cannot unload) · down · skipped (not used by this profile)."
+- **THEN** the tooltip reads "Health" and "Not checked yet, OK, slow (degraded), down, or skipped (built in, no endpoint). Checks run only when you click Check, so idle GPU servers are never woken by opening this page."
 
 #### Scenario: Help in an uppercase header
 - **WHEN** the user opens the help after the History table's "Cost" header
@@ -634,3 +665,19 @@ followed by a help button with these entries:
 #### Scenario: Writing field help in Settings
 - **WHEN** the user focuses the help button after "Citation marker" in Writing defaults
 - **THEN** the tooltip shows "How citations look in the text." and "Example: [1] · ¹ · (Leviathan et al., 2023)"
+
+### Requirement: Provider warning without probing
+When the app starts after sign-in, it SHALL read `GET /api/providers/health`
+once, without posting a health check, and SHALL set the Settings warn dot
+when any entry has status `degraded` or `down`. Every later health report
+the app receives (from Settings or from a check) SHALL update the dot the
+same way. `unchecked` and `skipped` entries SHALL NOT set the dot. The app
+SHALL NOT poll health in the background.
+
+#### Scenario: Warn dot from a stored result
+- **WHEN** the server's stored result has the llm block `down` and the user signs in on the New run screen
+- **THEN** the Settings item shows the warn dot and no health check was posted
+
+#### Scenario: Nothing checked
+- **WHEN** every entry of the report is `unchecked` or `skipped`
+- **THEN** the Settings item shows no warn dot

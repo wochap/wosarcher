@@ -241,33 +241,51 @@ SHALL apply when the file does not exist.
 - **THEN** the `workstation` entry has `description` "One GPU fits all models; models stay loaded." and the `nixos` entry has `description` ""
 
 ### Requirement: Provider health
-`GET /api/providers/health` SHALL run the `wosarcher doctor` checks for the
-active profile, or for the profile named by the `profile` query parameter,
-and return them as JSON: the profile name, the profile's `gpu_policy`
-(`shared` or `exclusive`), the doctor's warnings, and one entry per
-provider with `role`, `provider`, `url`, `model`, `device`, `release`
-(`none`, `llama-swap`, or `ollama`), `status`, `latency_ms`, and `detail`.
-The status SHALL be `down` for a failed probe, `skipped` for a built-in
-provider, `degraded` for a probe that succeeded but took more than 1000 ms
-or whose model cannot be unloaded although a release is configured, and
-`ok` otherwise. No secret SHALL appear in the response. When the checks
-cannot run (timeout or unreadable output), the response SHALL be 502 with
-the reason.
+`GET /api/providers/health` SHALL return, without sending any probe, the
+provider report of the active profile, or of the profile named by the
+`profile` query parameter, as JSON: the profile name, the profile's
+`gpu_policy` (`shared` or `exclusive`), the warnings of the last check of
+that profile, and one entry per configured provider block with `role`,
+`provider`, `url`, `model`, `device`, `release` (`none`, `llama-swap`, or
+`ollama`), `status`, `latency_ms`, `detail`, and `checked_at`. The entries
+SHALL come from the resolved configuration of the profile, in block order,
+merged with the last check result the server holds for that profile and
+block.
+
+The status SHALL be `skipped` for a built-in provider (no endpoint, no
+check needed), `unchecked` for a block with no stored result, and
+otherwise the stored result: `down` for a failed probe, `degraded` for a
+probe that succeeded but took more than 1000 ms or whose model cannot be
+unloaded although a release is configured, and `ok` otherwise.
+`checked_at` SHALL be the time the stored result was taken, and null for
+`unchecked` and `skipped`. A stored result whose provider, URL, or model
+no longer matches the configuration SHALL be ignored. Stored results SHALL
+live in the server process only and SHALL be lost when the server
+restarts. No secret SHALL appear in the response. An invalid profile SHALL
+answer 400 with the reason.
 
 #### Scenario: Health of a named profile
 - **WHEN** a client requests `GET /api/providers/health?profile=cloud`
-- **THEN** the response lists the checks for the `cloud` profile
+- **THEN** the response lists the providers of the `cloud` profile
+
+#### Scenario: Never checked
+- **WHEN** the server has just started and a client requests `GET /api/providers/health`
+- **THEN** no request reaches any provider endpoint, every block with an endpoint has `status = "unchecked"` and `checked_at = null`, and built-in blocks have `status = "skipped"`
 
 #### Scenario: Slow provider
-- **WHEN** the search probe succeeds in 1840 ms
-- **THEN** the search entry has `status = "degraded"` and `latency_ms = 1840`
+- **WHEN** a check found the search probe succeeding in 1840 ms and a client then requests `GET /api/providers/health`
+- **THEN** no probe is sent, and the search entry has `status = "degraded"`, `latency_ms = 1840`, and the check's `checked_at`
 
 #### Scenario: Unreachable provider
-- **WHEN** the score probe fails with a connection error
+- **WHEN** a check found the score probe failing with a connection error and a client then requests `GET /api/providers/health`
 - **THEN** the response is 200 and the score entry has `status = "down"` and the error as `detail`
 
+#### Scenario: Configuration changed since the check
+- **WHEN** the score block was checked with model `bge-reranker-v2-m3` and the profile now sets another model
+- **THEN** the score entry is `unchecked`
+
 #### Scenario: Policy and release
-- **WHEN** the checked profile is `low-vram` (`gpu_policy = "exclusive"`, prefilter `release = "llama-swap"`)
+- **WHEN** the requested profile is `low-vram` (`gpu_policy = "exclusive"`, prefilter `release = "llama-swap"`)
 - **THEN** the response has `gpu_policy` `exclusive` and the `prefilter` entry has `release` `llama-swap`
 
 ### Requirement: Static frontend
@@ -283,3 +301,36 @@ directory does not exist, the API SHALL still work and `/` SHALL answer 404.
 #### Scenario: API not shadowed
 - **WHEN** the build exists and a client requests `GET /api/runs`
 - **THEN** the response is the JSON run list
+
+### Requirement: Provider health check
+`POST /api/providers/health/check` SHALL run the `wosarcher doctor` checks
+for the active profile, or for the profile named by the `profile` query
+parameter, limited to the blocks listed in the optional JSON body
+`{"blocks": [...]}` (every block when the body or the list is absent). It
+SHALL store each checked block's result, with the time of the check, for
+that profile, replace the profile's stored warnings with the check's
+warnings, and answer with the same report `GET /api/providers/health`
+would return afterwards. Blocks not checked SHALL keep their stored
+result. An unknown block name SHALL answer 400. When the checks cannot run
+(timeout or unreadable output), the response SHALL be 502 with the reason
+and stored results SHALL stay unchanged.
+
+#### Scenario: Check one block
+- **WHEN** a client posts `{"blocks": ["score"]}` to `/api/providers/health/check`
+- **THEN** only the score endpoint is probed, the score entry has a new `checked_at`, and the other entries keep their previous status
+
+#### Scenario: Check all
+- **WHEN** a client posts to `/api/providers/health/check` with no body
+- **THEN** every block with an endpoint is probed and every such entry has a new `checked_at`
+
+#### Scenario: Failed probe in a check
+- **WHEN** the score probe fails with a connection error during a check
+- **THEN** the check response is 200 and the score entry has `status = "down"`, the error as `detail`, and a new `checked_at`
+
+#### Scenario: Unknown block
+- **WHEN** a client posts `{"blocks": ["scorer"]}`
+- **THEN** the response is 400 and no provider is probed
+
+#### Scenario: Doctor timeout
+- **WHEN** the doctor does not finish within its timeout
+- **THEN** the response is 502 with the reason and a following `GET /api/providers/health` returns the previous results

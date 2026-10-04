@@ -174,3 +174,31 @@ to standard error while it runs.
 #### Scenario: Terminal run
 - **WHEN** a user runs `wosarcher run "q"` on a terminal and a page fails
 - **THEN** the progress view is shown and no diagnostic line is written below it
+
+### Requirement: Provider preflight
+`run.preflight` SHALL accept `off` (the default), `cloud`, and `all`. With
+`off`, a run SHALL send no probe. With `cloud` or `all`, before its first
+stage a run SHALL probe, as `wosarcher doctor` does, the provider blocks
+used by the stages it will run (skipped stages and stages after `--until`
+excluded, built-in providers never probed): with `cloud` only the cloud
+blocks, with `all` the cloud and the local blocks, where a block is local
+when its `release` is not `none` or it sets a `device` label. When a probe
+fails, the run SHALL fail with `run.failed` naming the first stage that
+uses that block and an error text that starts with `preflight:` and names
+the block and the probe error; no stage SHALL start.
+
+#### Scenario: Default sends no probe
+- **WHEN** a run starts with `run.preflight` unset
+- **THEN** no probe request is sent before the first stage
+
+#### Scenario: Cloud preflight skips local servers
+- **WHEN** `run.preflight = "cloud"`, `search` is a cloud block, and `llm` sets `device = "desktop:gpu0"`
+- **THEN** the search endpoint is probed before the first stage and the llm endpoint is not
+
+#### Scenario: Down provider fails the run early
+- **WHEN** `run.preflight = "all"` and the score endpoint refuses connections
+- **THEN** the run ends with `run.failed` naming stage `score` and an error starting with `preflight: score`, and no `stage.started` event is emitted
+
+#### Scenario: Skipped stages not probed
+- **WHEN** `run.preflight = "all"` and the run uses `--sources files`
+- **THEN** the search and fetch endpoints are not probed
