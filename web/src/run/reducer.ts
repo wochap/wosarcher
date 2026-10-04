@@ -1,6 +1,7 @@
 // One run's view state, folded from its event stream. Pure: the same reducer serves live runs,
 // reconnects, and finished runs (a finished run is its replayed event log).
-import type { KeptPassage, RunEvent, RunStatus, Stage } from "../api/types";
+import { ENDED, LIVE_ONLY, TERMINAL } from "../api/events";
+import type { KeptPassage, RunDetail, RunEvent, RunStatus, Stage } from "../api/types";
 
 /** The prototype's nine phases, in display order. The initial search runs inside `plan`. */
 export const PHASES = [
@@ -99,8 +100,6 @@ export function initialRunView(runId: string): RunView {
     cost: 0,
   };
 }
-
-const LIVE_ONLY = new Set(["run.queued", "report.delta", "report.snapshot"]);
 
 function isPhase(stage: string | null | undefined): stage is PhaseId {
   return !!stage && (PHASES as readonly string[]).includes(stage);
@@ -262,6 +261,33 @@ function apply(state: RunView, event: RunEvent): RunView {
 
 export function runReducer(state: RunView, event: RunEvent): RunView {
   if (LIVE_ONLY.has(event.type)) return apply(state, event);
+  // A terminal event that is not logged carries a seq already applied (0 when nothing was logged).
+  if (TERMINAL.has(event.type)) {
+    if (isEnded(state.status) && state.lastSeq >= event.seq) return state;
+    return { ...apply(state, event), lastSeq: Math.max(state.lastSeq, event.seq) };
+  }
   if (event.seq <= state.lastSeq) return state;
   return { ...apply(state, event), lastSeq: event.seq };
+}
+
+export function isEnded(status: RunStatus): boolean {
+  return ENDED.has(status);
+}
+
+/** What a run summary (or a cancel's 409 answer) says about how the run ended. */
+export type RunEnd = Pick<RunDetail, "status"> & Partial<Pick<RunDetail, "error" | "end_stage">>;
+
+/** Sets an ended status from the server's summary on a view that still shows the run open. */
+export function applySummary(state: RunView, summary: RunEnd): RunView {
+  if (!isEnded(summary.status) || isEnded(state.status)) return state;
+  if (summary.status === "failed") {
+    const stage = summary.end_stage ?? "";
+    const error = summary.error ?? "";
+    const failed = withPhase(state, stage, { state: "failed", error });
+    return { ...stopRunning(failed, "cancelled"), status: "failed", failure: { stage, error } };
+  }
+  if (summary.status === "cancelled") {
+    return { ...stopRunning(state, "cancelled"), status: "cancelled" };
+  }
+  return { ...state, status: summary.status };
 }

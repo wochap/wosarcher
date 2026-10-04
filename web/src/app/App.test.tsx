@@ -1,5 +1,6 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../api/client";
 import { fakeApi } from "../test/fakeApi";
 import { renderApp } from "../test/renderApp";
 import { newestActive } from "./App";
@@ -26,5 +27,42 @@ describe("App", () => {
     fireEvent.keyDown(window, { code: "Digit2", key: "2", altKey: true });
     await waitFor(() => expect(window.location.hash).toBe("#/live/r_new"));
     expect(await screen.findByText("r_new")).toBeTruthy();
+  });
+
+  it("follows the running run after signing in", async () => {
+    const api = fakeApi();
+    api.data.runs = [{ ...api.data.runs[1], run_id: "r_live", status: "running" }];
+    let signedIn = false;
+    renderApp({
+      hash: "#/new",
+      api,
+      wrap: (fake, unauthorized) => ({
+        ...fake,
+        getSession: async () => {
+          if (signedIn) return fake.data.session;
+          unauthorized();
+          throw new ApiError(401, "unauthenticated", "sign in");
+        },
+        login: async (password) => {
+          signedIn = true;
+          return fake.login(password);
+        },
+      }),
+    });
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "pw" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    });
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    await waitFor(() =>
+      expect(
+        within(nav)
+          .getByRole("button", { name: /Live run/ })
+          .querySelector('[data-tone="live"]'),
+      ).toBeTruthy(),
+    );
+    fireEvent.keyDown(window, { code: "Digit2", key: "2", altKey: true });
+    await waitFor(() => expect(window.location.hash).toBe("#/live/r_live"));
+    expect(screen.queryByRole("heading", { name: "No run in progress" })).toBeNull();
   });
 });

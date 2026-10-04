@@ -6,7 +6,7 @@ import { ApiContext } from "../app/context";
 import { FakeWebSocket } from "../test/FakeWebSocket";
 import { callsTo, type FakeApi, fakeApi } from "../test/fakeApi";
 import { finished } from "../test/fixtures/finished";
-import { FILE_PAGES, RUN_ID, upTo } from "../test/fixtures/sample";
+import { FILE_PAGES, Log, RUN_ID, summary, upTo } from "../test/fixtures/sample";
 import { REWRITE_ID, versions } from "../test/fixtures/versions";
 import { useRun } from "./useRun";
 import { type RunData, useRunData } from "./useRunData";
@@ -86,5 +86,44 @@ describe("useRunData", () => {
     expect(sources.filter((s) => s.cached)).toHaveLength(19);
     expect(data.view?.subQueries).toHaveLength(5);
     expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(14);
+  });
+
+  it("follows each run named by copied_from in a two-hop lineage", async () => {
+    // B forks A from score; C forks B from write. C's copied events name the run that ran each stage.
+    const [A, B, C] = [RUN_ID, "r_b", "r_c"];
+    const early = ["plan", "search", "load", "fetch", "chunk", "prefilter"];
+    const scoring = new Set(["score", "select"]);
+    const a = fakeApi(finished.data).data.events[A];
+    const started = (log: Log, parent: string, version: number) =>
+      log.add("run.started", {
+        query: "q",
+        profile: "p",
+        parent_run_id: parent,
+        until: null,
+        version,
+      });
+    const b = started(new Log(B), A, 2);
+    for (const stage of early) b.done(stage, 1, { copied_from: A });
+    for (const e of a) if (e.stage && scoring.has(e.stage)) b.add(e.type, e.data as never, e.stage);
+    b.add("run.done", { until: null, totals: {} as never });
+    const c = started(new Log(C), B, 3);
+    for (const stage of early) c.done(stage, 1, { copied_from: A });
+    for (const stage of scoring) c.done(stage, 1, { copied_from: B });
+    const api = fakeApi({
+      ...finished.data,
+      runs: [summary({ run_id: C }), summary({ run_id: B }), summary()],
+      events: { [A]: a, [B]: b.events, [C]: c.events },
+    });
+    mount(api, C);
+    await play(C, c.events);
+    await play(B, b.events);
+    expect(socketFor(A).closedByClient).toBe(false);
+    await play(A, a);
+    expect(socketFor(B).closedByClient).toBe(false);
+    const sources = Object.values(data.view?.sources ?? {});
+    expect(sources).toHaveLength(22);
+    expect(sources.filter((s) => s.cached)).toHaveLength(19);
+    expect(data.view?.passages.flatMap((q) => q.items)).toHaveLength(14);
+    expect(FakeWebSocket.instances.filter((s) => s.url.includes(`/runs/${A}/`))).toHaveLength(1);
   });
 });

@@ -505,8 +505,10 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   2 invalid arguments or configuration.
 - `wosarcher fork <id> --from <stage> [overrides] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
   copies `attachments/` and the artifacts before `<stage>` into a new run
-  (version parent plus one), logs a copied `stage.done` per earlier stage,
-  and continues with the saved config (secrets taken from the current
+  (version: the highest version in the parent's lineage plus one), logs a
+  copied `stage.done` per earlier stage whose `copied_from` names the run
+  that executed the stage (the parent's own `copied_from` when it copied the
+  stage too, else the parent), and continues with the saved config (secrets taken from the current
   environment) plus the overrides. With `--profile`, settings come from that
   profile plus the parent's and the new overrides. Used for resume, for
   changing writing options, and by the eval harness.
@@ -699,8 +701,10 @@ Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
 `SessionInfo`, `TokenInfo`, `TokenCreate`, `TokenCreated`, `LoginError`) are models in `models.py` and
 part of `wosarcher schema`.
 
-Runs record lineage: `parent_run_id` and `version` (1 for a new run, parent
-version plus one for a fork) and `fork_from` (the stage a fork started
+Runs record lineage: `parent_run_id` and `version` (1 for a new run; for a
+fork, the highest version among the runs of its lineage, the root and every
+run whose parent chain reaches it, plus one, so versions are unique in a
+lineage) and `fork_from` (the stage a fork started
 from), which the Versions screen shows. Rerun is a new run (version 1, no
 parent) with the same request and attachments; "Retry from Score" is a
 fork from the score stage.
@@ -1003,9 +1007,9 @@ These override the prototype where they differ:
   server's mapping below, and a chunk kept for any query is not shown as
   rejected.
 - **Forks:** a fork's log has only `stage.done` events with `copied_from`
-  for the stages it copied. The browser replays the parent's events,
-  following `copied_from` to the run that ran each stage, and shows the
-  parent's sub-queries, sources (marked "cached"), and passages for the
+  for the stages it copied, each naming the run that ran the stage. The
+  browser opens one event stream per distinct `copied_from` and shows that
+  run's sub-queries, sources (marked "cached"), and passages for the
   reused phases.
 - **Citation options:** two settings, `citation_marker` and
   `reference_style` (see Writing options).
@@ -1022,6 +1026,12 @@ These override the prototype where they differ:
   shown; no source provides them.
 - **Theme:** dark and light both kept; the first visit follows
   `prefers-color-scheme`, and the choice is remembered in the browser.
+- **Additions to the prototype:** "Live updates unavailable" is a banner
+  styled as the `reconnecting` scenario (warn tint, `ph-wifi-slash`), and
+  the footer shows the state with a static warn dot. "Run not found" (Live
+  run and Report screens) uses the `empty` scenario's layout with a
+  `ph-question` icon. Cancel answered 409 `run_not_active` is not an error:
+  the status from the answer is applied and the run refreshed.
 - **Sample data** in the prototype (fetch provider name, GPU model, socket
   URL, counts on the Report screen) is replaced by real data from the API
   and events. The socket URL is the page's own origin.
@@ -1051,12 +1061,19 @@ The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
   endpoint; `httpApi` throws `ApiError` (status, code, field errors) on
   non-2xx and locks the app on 401, and `login` returns `ok`, `wrong`, or
   `limited`. `RunEvents` (`src/api/events.ts`) owns one run's WebSocket:
-  it reconnects 2 s after any close other than 1000 or 4404 (reading
-  `GET /api/runs/{id}` first, then `since` = the last logged `seq`) and
-  reports `connecting`, `connected`, `reconnecting` (attempt N),
-  `replaying` (N events), or `closed`. `runReducer` (`src/run/reducer.ts`)
-  folds events into one `RunView` (dedupe by `seq`; live-only events never
-  move it), and `useRun` combines both. The app keeps the followed run's
+  it reads `GET /api/runs/{id}` at start and before each reconnect attempt
+  and emits each answer as a `summary` update. After any close other than
+  1000 or 4404 it reconnects with back-off (2, 4, 8, 16, then 30 s; back to
+  2 s once a socket opens) with `since` = the last logged `seq`. It reports
+  `connecting`, `connected`, `reconnecting` (attempt N), `replaying` (N
+  events, only once the new socket opened), `unavailable` (three sockets in
+  a row closed before opening; attempts continue every 30 s), or `closed`
+  (with `notFound` on 4404 or a 404 summary, which stops it). An ended
+  summary stops it once its `last_seq` is applied or while `unavailable`.
+  `runReducer` (`src/run/reducer.ts`) folds events into one `RunView`
+  (dedupe by `seq`, except terminal events, which always apply; live-only
+  events never move it), `applySummary` sets an ended status from a
+  summary, and `useRun` combines them; an ended status is never reopened. The app keeps the followed run's
   stream open on every screen for the Live run dot.
 - **State**: React state in `App` behind three contexts (API, auth, UI:
   theme, toast, overlay stack for Escape, followed run, provider warning,

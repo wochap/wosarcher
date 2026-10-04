@@ -2,7 +2,8 @@
 // artifacts of finished stages, rejected passages on demand, and for a fork the data of the
 // runs it copied stages from (a fork's log has their `stage.done` events, not their hits,
 // pages, or passages).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ApiError } from "../api/client";
 import { RunEvents } from "../api/events";
 import type { Chunk, Context, Page, Report, Score } from "../api/generated";
 import type { RunDetail } from "../api/types";
@@ -21,6 +22,8 @@ export type FileRow = { sourceId: string; title: string; uri: string; size: numb
 
 export type RunData = {
   detail: RunDetail | null;
+  /** The server does not know the run. */
+  notFound: boolean;
   /** The run's view with the data of reused phases taken from the runs that ran them. */
   view: RunView | null;
   files: FileRow[];
@@ -34,71 +37,86 @@ export type RunData = {
 export const ran = (view: RunView, phase: PhaseId) =>
   view.phases[phase].state === "done" || view.phases[phase].state === "reused";
 
-const copiedFrom = (view: RunView) =>
-  PHASES.map((id) => view.phases[id]).find((p) => p.state === "reused")?.copiedFrom;
+/** The runs that executed the view's reused phases: each copied `stage.done` names one. */
+const sourceIds = (view: RunView | null): string[] => {
+  if (!view) return [];
+  const ids = PHASES.map((id) => view.phases[id])
+    .filter((p) => p.state === "reused" && p.copiedFrom)
+    .map((p) => p.copiedFrom as string);
+  return [...new Set(ids)].sort();
+};
 
-/** The views of the runs a fork copied from, following `copied_from` to the first full run. */
-function useAncestors(view: RunView | null): RunView[] {
+/** The views of the runs a fork copied stages from, one stream each, kept until it ends. */
+function useSources(view: RunView | null): Record<string, RunView> {
   const { api, Socket } = useServices();
   const [views, setViews] = useState<Record<string, RunView>>({});
-  const [chain, setChain] = useState<string[]>([]);
-  const first = view ? copiedFrom(view) : undefined;
-
-  useEffect(() => setChain(first ? [first] : []), [first]);
-  const last = chain.at(-1);
-  const next = last && views[last] ? copiedFrom(views[last]) : undefined;
-  useEffect(() => {
-    if (next && !chain.includes(next)) setChain((c) => [...c, next]);
-  }, [next, chain]);
+  const streams = useRef(new Map<string, RunEvents>());
+  const key = sourceIds(view).join(",");
 
   useEffect(() => {
-    if (!last) return;
-    let state = initialRunView(last);
-    const stream = new RunEvents(
-      last,
-      api,
-      (update) => {
-        if (update.kind !== "event") return;
-        state = runReducer(state, update.event);
-        setViews((v) => ({ ...v, [last]: state }));
-      },
-      Socket,
-    );
-    stream.start();
-    return () => stream.close();
-  }, [last, api, Socket]);
+    const ids = new Set(key ? key.split(",") : []);
+    for (const [id, stream] of streams.current) {
+      if (ids.has(id)) continue;
+      stream.close();
+      streams.current.delete(id);
+    }
+    for (const id of ids) {
+      if (streams.current.has(id)) continue;
+      let state = initialRunView(id);
+      const stream = new RunEvents(
+        id,
+        api,
+        (update) => {
+          if (update.kind !== "event") return;
+          state = runReducer(state, update.event);
+          setViews((v) => ({ ...v, [id]: state }));
+        },
+        Socket,
+      );
+      streams.current.set(id, stream);
+      stream.start();
+    }
+  }, [key, api, Socket]);
 
-  return chain.map((id) => views[id]).filter(Boolean);
+  useEffect(() => {
+    const open = streams.current;
+    return () => {
+      for (const stream of open.values()) stream.close();
+      open.clear();
+    };
+  }, []);
+
+  return views;
 }
 
-/** The view where `phase` ran: the run itself, or the nearest ancestor that did not copy it. */
-function ranIn(views: RunView[], phase: PhaseId): RunView {
-  return views.find((v) => v.phases[phase].state !== "reused") ?? views[views.length - 1];
+/** The view where `phase` ran: the run named by its `copied_from`, else the run itself. */
+function ranIn(view: RunView, sources: Record<string, RunView>, phase: PhaseId): RunView {
+  const { state, copiedFrom } = view.phases[phase];
+  return (state === "reused" && copiedFrom && sources[copiedFrom]) || view;
 }
 
-export function withAncestors(view: RunView, ancestors: RunView[]): RunView {
-  if (!ancestors.length) return view;
-  const all = [view, ...ancestors];
-  const searched = ranIn(all, "search");
-  const fetched = ranIn(all, "fetch");
-  const scored = ranIn(all, "score");
+export function withAncestors(view: RunView, sources: Record<string, RunView>): RunView {
+  if (!sourceIds(view).length) return view;
+  const searched = ranIn(view, sources, "search");
+  const fetched = ranIn(view, sources, "fetch");
+  const scored = ranIn(view, sources, "score");
   const cached = fetched !== view;
-  const sources: Record<string, SourceView> = {};
+  const merged: Record<string, SourceView> = {};
   for (const [key, s] of Object.entries({ ...searched.sources, ...fetched.sources })) {
-    sources[key] = { ...s, cached: cached && s.state === "fetched", kept: 0 };
+    merged[key] = { ...s, cached: cached && s.state === "fetched", kept: 0 };
   }
-  const bySourceId = new Map(Object.entries(sources).map(([k, s]) => [s.sourceId, k]));
+  const bySourceId = new Map(Object.entries(merged).map(([k, s]) => [s.sourceId, k]));
   for (const q of scored.passages) {
     for (const p of q.items) {
       const key = bySourceId.get(p.source_id);
-      if (key) sources[key] = { ...sources[key], kept: sources[key].kept + 1 };
+      if (key) merged[key] = { ...merged[key], kept: merged[key].kept + 1 };
     }
   }
   const reusedSearch = view.phases.search.state === "reused";
   return {
     ...view,
     subQueries: reusedSearch ? searched.subQueries : view.subQueries,
-    sources,
+    sources: merged,
     passages: scored.passages,
   };
 }
@@ -143,24 +161,26 @@ const parseChunks = (text: string) => parseJsonl<Chunk>(text);
 export function useRunData(runId: string | null, own: RunView | null): RunData {
   const { api } = useServices();
   const [detail, setDetail] = useState<RunDetail | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [wantRejected, setWantRejected] = useState(false);
 
   useEffect(() => {
     setDetail(null);
+    setNotFound(false);
     setWantRejected(false);
     if (!runId) return;
     let live = true;
     api.getRun(runId).then(
       (d) => live && setDetail(d),
-      () => {},
+      (error) => live && error instanceof ApiError && error.status === 404 && setNotFound(true),
     );
     return () => {
       live = false;
     };
   }, [api, runId]);
 
-  const ancestors = useAncestors(own);
-  const view = useMemo(() => own && withAncestors(own, ancestors), [own, ancestors]);
+  const sources = useSources(own);
+  const view = useMemo(() => own && withAncestors(own, sources), [own, sources]);
 
   const loaded = !!own && ran(own, "load") && !own.phases.load.skipped;
   const files = useArtifact(runId, "files.jsonl", loaded, parseFiles);
@@ -181,5 +201,5 @@ export function useRunData(runId: string | null, own: RunView | null): RunData {
   }, [view, scores, chunks, files]);
 
   const showRejected = useCallback(() => setWantRejected(true), []);
-  return { detail, view, files: files ?? [], context, report, rejected, showRejected };
+  return { detail, notFound, view, files: files ?? [], context, report, rejected, showRejected };
 }

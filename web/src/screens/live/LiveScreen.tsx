@@ -10,6 +10,7 @@ import { LiveFooter } from "./LiveFooter";
 import { LiveHeader } from "./LiveHeader";
 import css from "./LiveScreen.module.css";
 import { elapsedSeconds, settled, useNow } from "./model";
+import { NotFound } from "./NotFound";
 import { PassagesPanel } from "./PassagesPanel";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
@@ -26,6 +27,7 @@ export function LiveScreen() {
   const { followed, follow, live, isPhone, liveTab, setLiveTab, toast } = useUi();
   const data = useRunData(followed, live.view);
   const [showRejected, setShowRejected] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const { cite, onCite, onLeave } = useCitation();
   const { showRejected: loadRejected } = data;
 
@@ -49,6 +51,7 @@ export function LiveScreen() {
   const view = data.view ?? live.view;
   const running = view?.status === "running";
   const now = useNow(running);
+  if (followed && (live.conn.notFound || data.notFound)) return <NotFound runId={followed} />;
   if (!followed || !view) return <EmptyLive />;
 
   const run = settled(view);
@@ -61,6 +64,20 @@ export function LiveScreen() {
       await action();
     } catch (e) {
       toast((e as Error).message);
+    }
+  }
+
+  async function cancel() {
+    setCancelling(true);
+    try {
+      const outcome = await api.cancelRun(run.runId);
+      // The run had already ended: show how, as the server tells it, instead of an error.
+      if (outcome.kind === "not_active") {
+        if (outcome.status) live.end({ status: outcome.status });
+        live.refresh();
+      }
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -89,7 +106,8 @@ export function LiveScreen() {
         detail={detail}
         files={attachments}
         isPhone={isPhone}
-        onCancel={() => void attempt(() => api.cancelRun(run.runId))}
+        cancelling={cancelling}
+        onCancel={() => void attempt(cancel)}
         onOpenReport={() => go({ screen: "report", runId: run.runId })}
         onRerun={() => void attempt(rerun)}
       />

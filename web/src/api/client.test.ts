@@ -62,4 +62,14 @@ describe("httpApi", () => {
     expect(calls[0].init.method).toBe("POST");
     expect(calls[0].init.body).toBeUndefined();
   });
+
+  it("resolves a cancel answered 409 run_not_active to not_active with its status", async () => {
+    stubFetch(409, { error: "run_not_active", detail: "…", run_id: "r1", status: "failed" });
+    expect(await httpApi(() => {}).cancelRun("r1")).toEqual({
+      kind: "not_active",
+      status: "failed",
+    });
+    stubFetch(500, { error: "internal", detail: "boom" });
+    await expect(httpApi(() => {}).cancelRun("r1")).rejects.toBeInstanceOf(ApiError);
+  });
 });

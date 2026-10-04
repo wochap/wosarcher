@@ -40,6 +40,15 @@ describe("LiveFooter", () => {
     expect(screen.getByText("Connected")).toBeTruthy();
     expect(screen.queryByText(/^seq/)).toBeNull();
   });
+
+  it("shows live updates unavailable with a static warn dot", () => {
+    const run = viewOf(all, RUN_ID);
+    const { container } = render(
+      <LiveFooter run={run} conn={conn("unavailable", 4)} elapsed={0} isPhone={false} />,
+    );
+    expect(screen.getByText("Live updates unavailable")).toBeTruthy();
+    expect(container.querySelector('[data-state="unavailable"]')).toBeTruthy();
+  });
 });
 
 describe("StatusBanner", () => {

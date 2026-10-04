@@ -24,6 +24,8 @@ type Scenario = {
   login?: () => LoginState;
   stream?: Fixture["stream"];
   dropAt?: number;
+  /** Every socket closes 1006 without opening, as behind a proxy that refuses the upgrade. */
+  refuse?: boolean;
 };
 
 const SCENARIOS: Record<string, Scenario> = {
@@ -45,6 +47,8 @@ const SCENARIOS: Record<string, Scenario> = {
   cancelled,
   finished,
   versions,
+  unavailable: { ...live, stream: undefined, refuse: true },
+  notFound: { screen: "live", runId: "r_deleted", data: { runs: otherRuns } },
 };
 
 const TERMINAL = new Set(["run.done", "run.failed", "run.cancelled"]);
@@ -53,8 +57,13 @@ const RECONNECTING_MS = 1500;
 /**
  * Plays each run's fixture events after `since`: at once (closing when the run has ended), one
  * by one on a timer (`timer`), or up to `dropAt`, then fails once more before replaying (`drop`).
+ * An unknown run closes 4404; with `refuse` no socket ever opens.
  */
-function previewSocket(events: Record<string, RunEvent[]>, scenario: Scenario): SocketFactory {
+function previewSocket(
+  events: Record<string, RunEvent[]>,
+  known: (runId: string) => boolean,
+  scenario: Scenario,
+): SocketFactory {
   const connections = new Map<string, number>();
   return class {
     onopen: (() => void) | null = null;
@@ -68,6 +77,14 @@ function previewSocket(events: Record<string, RunEvent[]>, scenario: Scenario): 
       const all = (events[runId] ?? []).filter((e) => e.seq > since || since === 0);
       const attempt = (connections.get(runId) ?? 0) + 1;
       connections.set(runId, attempt);
+      if (!known(runId)) {
+        this.later(50, () => this.onclose?.({ code: 4404 }));
+        return;
+      }
+      if (scenario.refuse) {
+        this.later(50, () => this.onclose?.({ code: 1006 }));
+        return;
+      }
       const drop = scenario.stream === "drop" && runId === scenario.runId;
       if (drop && attempt === 2) {
         this.later(50, () => this.onclose?.({ code: 1006 }));
@@ -121,7 +138,11 @@ export function Preview({ name }: { name: string }) {
     const api = fakeApi(scenario.data);
     return {
       makeApi: () => api,
-      Socket: previewSocket(api.data.events, scenario),
+      Socket: previewSocket(
+        api.data.events,
+        (runId) => api.data.runs.some((r) => r.run_id === runId),
+        scenario,
+      ),
       login: scenario.login?.(),
     };
   });

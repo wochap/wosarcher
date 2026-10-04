@@ -1,11 +1,26 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RunStatus } from "../../api/types";
+import { FakeWebSocket } from "../../test/FakeWebSocket";
 import { callsTo, fakeApi } from "../../test/fakeApi";
+import { failure } from "../../test/fixtures/failure";
 import { live } from "../../test/fixtures/live";
 import { loading } from "../../test/fixtures/loading";
 import { otherRuns, RUN_ID } from "../../test/fixtures/sample";
 import { renderApp } from "../../test/renderApp";
-import { openScenario } from "../../test/scenario";
+import { openScenario, socketsFor } from "../../test/scenario";
+
+afterEach(() => vi.useRealTimers());
+
+/** The failure scenario before its last two events, with the summary status `status()`. */
+async function failingRun(status: () => RunStatus) {
+  const api = fakeApi(failure.data);
+  const getRun = api.getRun.bind(api);
+  api.getRun = async (id) => ({ ...(await getRun(id)), status: status() });
+  const events = api.data.events[RUN_ID];
+  await openScenario(failure, { api, events: events.slice(0, -2) });
+  return api;
+}
 
 describe("LiveScreen", () => {
   it("shows the queued state", async () => {
@@ -58,5 +73,62 @@ describe("LiveScreen", () => {
       fireEvent.keyDown(window, { key: "Escape" });
     });
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("shows a run that already failed when Cancel answers run_not_active", async () => {
+    let status: RunStatus = "running";
+    const api = await failingRun(() => status);
+    expect(screen.getByText("Running")).toBeTruthy();
+    status = "failed";
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    expect(callsTo(api, "cancelRun")).toEqual([[RUN_ID]]);
+    expect(await screen.findByText("Failed")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Rerun" })).toBeTruthy();
+    expect(screen.queryByText(/not queued or running/)).toBeNull();
+  });
+
+  it("disables Cancel while the request is in flight", async () => {
+    const api = await failingRun(() => "running");
+    api.cancelRun = () => new Promise(() => {});
+    const button = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(button.disabled).toBe(true);
+  });
+
+  it("shows live updates unavailable when the upgrade is refused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const api = fakeApi(live.data);
+    renderApp({ hash: `#/live/${RUN_ID}`, api });
+    const texts: string[] = [];
+    const close = async (wait: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(wait);
+        socketsFor(RUN_ID).at(-1)?.serverClose(1006);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      texts.push(screen.queryByRole("status")?.textContent ?? "");
+    };
+    await close(0);
+    for (const wait of [2000, 4000, 8000]) await close(wait);
+    expect(texts.at(-1)).toMatch(/^Live updates unavailable\./);
+    expect(texts.some((t) => t.includes("Replaying"))).toBe(false);
+    expect(screen.getAllByText("Live updates unavailable").length).toBeGreaterThan(0);
+  });
+
+  it("shows Run not found when the socket closes 4404", async () => {
+    renderApp({ hash: "#/live/r_gone", api: fakeApi({ runs: otherRuns }) });
+    await act(async () => {
+      FakeWebSocket.last().serverClose(4404);
+    });
+    expect(await screen.findByRole("heading", { name: "Run not found" })).toBeTruthy();
+    expect(
+      screen.getByText("Run r_gone does not exist on this server. It may have been deleted."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/^seq /)).toBeNull();
   });
 });

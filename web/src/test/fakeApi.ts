@@ -53,7 +53,7 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
   const record = (method: keyof ApiClient, ...args: unknown[]) => calls.push({ method, args });
   const find = (id: string) => {
     const run = data.runs.find((r) => r.run_id === id);
-    if (!run) throw new Error(`no run ${id}`);
+    if (!run) throw new ApiError(404, "run_not_found", `run ${id} not found`);
     return run;
   };
   const created = (query: string): RunCreated => {
@@ -95,6 +95,10 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     },
     async cancelRun(id) {
       record("cancelRun", id);
+      const { status } = find(id);
+      if (status === "queued") return { kind: "dequeued" };
+      if (status === "running") return { kind: "signalled" };
+      return { kind: "not_active", status };
     },
     async deleteRun(id) {
       record("deleteRun", id);

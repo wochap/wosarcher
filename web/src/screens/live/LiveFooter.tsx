@@ -10,6 +10,7 @@ const CONN: Record<Conn["state"], string> = {
   connected: "Connected",
   reconnecting: "Reconnecting",
   replaying: "Replaying",
+  unavailable: "Live updates unavailable",
   closed: "Closed · run ended",
 };
 

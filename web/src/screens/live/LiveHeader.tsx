@@ -20,6 +20,8 @@ type Props = {
   detail: RunDetail | null;
   files: number;
   isPhone: boolean;
+  /** A cancel request is in flight. */
+  cancelling: boolean;
   onCancel: () => void;
   onOpenReport: () => void;
   onRerun: () => void;
@@ -30,6 +32,7 @@ export function LiveHeader({
   detail,
   files,
   isPhone,
+  cancelling,
   onCancel,
   onOpenReport,
   onRerun,
@@ -66,7 +69,12 @@ export function LiveHeader({
       <div className={css.actions}>
         {active && !isPhone && <DeviceChip run={run} />}
         {active && (
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={cancelling}
+            onClick={onCancel}
+          >
             <Stop aria-hidden="true" />
             Cancel
           </button>

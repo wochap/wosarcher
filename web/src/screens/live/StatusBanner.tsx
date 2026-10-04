@@ -1,4 +1,4 @@
-// One banner at a time, by priority: reconnecting > replaying > reconnected (4.5 s) >
+// One banner at a time, by priority: reconnecting > unavailable > replaying > reconnected (4.5 s) >
 // cancelled > connecting or queued > rewrite. A banner, never a modal: the screen stays usable.
 import {
   ArrowsClockwise,
@@ -53,6 +53,12 @@ export function StatusBanner({ run, conn, elapsed, rewriteOf }: Props) {
       tone: "warn",
       icon: WifiSlash,
       text: `Connection lost. Reconnecting (attempt ${conn.attempt})… The run continues on the server; events replay from seq ${run.lastSeq}.`,
+    };
+  } else if (conn.state === "unavailable") {
+    banner = {
+      tone: "warn",
+      icon: WifiSlash,
+      text: "Live updates unavailable. The server did not accept the event connection; the run continues on the server and its status is checked every 30 s.",
     };
   } else if (conn.state === "replaying") {
     banner = {

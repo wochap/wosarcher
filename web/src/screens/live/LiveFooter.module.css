@@ -39,6 +39,10 @@
   animation: sx-pulse 1s infinite;
 }
 
+.dot[data-state="unavailable"] {
+  background: var(--color-warn);
+}
+
 .dot[data-state="closed"] {
   background: var(--faint);
 }

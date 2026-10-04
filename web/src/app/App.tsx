@@ -72,17 +72,25 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
   const lock = useCallback(() => {
     if (methodRef.current !== "none") setLocked(true);
   }, []);
-  const unlock = useCallback(() => {
-    setLocked(false);
-    setEpoch((n) => n + 1);
-  }, []);
   const api = useMemo(() => makeApi(lock), [makeApi, lock]);
 
   const [followed, follow] = useState<string | null>(null);
+  /** Follows the newest queued or running run unless a run is followed already. */
+  const followActive = useCallback(() => {
+    api.listRuns().then(
+      (runs) => follow((f) => f ?? newestActive(runs)),
+      () => {},
+    );
+  }, [api]);
+  const unlock = useCallback(() => {
+    setLocked(false);
+    setEpoch((n) => n + 1);
+    followActive();
+  }, [followActive]);
   const [healthWarn, setHealthWarn] = useState(false);
   const services = useMemo(() => ({ api, Socket }), [api, Socket]);
-  const { view, conn } = useRun(followed, services);
-  const live = useMemo(() => ({ view, conn }), [view, conn]);
+  const live = useRun(followed, services);
+  const { view } = live;
   const [draft, setDraftState] = useState<Draft>(EMPTY_DRAFT);
   const setDraft = useCallback((update: (d: Draft) => Draft) => setDraftState(update), []);
   const [liveTab, setLiveTab] = useState<LiveTab>("progress");
@@ -117,14 +125,11 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
         setMethod(session.method);
         if (session.method === "none") setLocked(false);
         setReady(true);
-        api.listRuns().then(
-          (runs) => follow((f) => f ?? newestActive(runs)),
-          () => {},
-        );
+        followActive();
       },
       () => setReady(true),
     );
-  }, [api, login]);
+  }, [api, login, followActive]);
 
   useEffect(() => {
     if (route.screen === "live" && route.runId) follow(route.runId);

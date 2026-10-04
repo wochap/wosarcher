@@ -13,6 +13,7 @@ import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { useRun } from "../../run/useRun";
 import { useRunData } from "../../run/useRunData";
 import { recipeOf } from "../live/model";
+import { NotFound } from "../live/NotFound";
 import { contextJson, download, markdownFile } from "./exportReport";
 import { ReportAside, SelectedPassages } from "./ReportAside";
 import css from "./ReportScreen.module.css";
@@ -23,7 +24,7 @@ export function ReportScreen({ runId }: { runId: string }) {
   const api = useApi();
   const { toast } = useUi();
   const { view: own } = useRun(runId);
-  const { detail, view, files, context, report } = useRunData(runId, own);
+  const { detail, notFound, view, files, context, report } = useRunData(runId, own);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [rewriting, setRewriting] = useState(false);
   const { cite, onCite, onLeave } = useCitation();
@@ -32,6 +33,7 @@ export function ReportScreen({ runId }: { runId: string }) {
     api.listRuns().then(setRuns, () => {});
   }, [api]);
 
+  if (notFound) return <NotFound runId={runId} />;
   if (!detail) return null;
   const versions = lineage(runs, runId);
   const parent = runs.find((r) => r.run_id === detail.parent_run_id);

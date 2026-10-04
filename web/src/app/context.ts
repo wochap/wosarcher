@@ -1,9 +1,9 @@
 // The three app contexts: the API (client and socket factory), authentication, and UI state.
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
-import type { Conn, SocketFactory } from "../api/events";
+import type { SocketFactory } from "../api/events";
 import type { WritingOptions } from "../api/types";
-import type { RunView } from "../run/reducer";
+import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
 export type Services = { api: ApiClient; Socket?: SocketFactory };
@@ -49,7 +49,7 @@ export type Ui = {
   followed: string | null;
   follow(runId: string | null): void;
   /** The followed run's view and connection. */
-  live: { view: RunView | null; conn: Conn };
+  live: LiveRun;
   draft: Draft;
   setDraft(update: (draft: Draft) => Draft): void;
   /** The Live run tab shown below 720px. */

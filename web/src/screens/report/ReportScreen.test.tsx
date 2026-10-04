@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { finished } from "../../test/fixtures/finished";
 import { QUERY, RUN_ID, summary } from "../../test/fixtures/sample";
+import { versions } from "../../test/fixtures/versions";
+import { renderApp } from "../../test/renderApp";
 import { openScenario } from "../../test/scenario";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -57,6 +59,21 @@ describe("ReportScreen", () => {
     const article = screen.getByRole("article");
     expect(within(article).queryByRole("heading", { name: "Summary" })).toBeNull();
     expect(within(article).getByText(/Throughput gains track draft latency/)).toBeTruthy();
+  });
+});
+
+describe("ReportScreen states", () => {
+  it("shows Run not found for a deleted run", async () => {
+    renderApp({ hash: "#/runs/r_deleted" });
+    expect(await screen.findByRole("heading", { name: "Run not found" })).toBeTruthy();
+    expect(screen.getByText(/Run r_deleted does not exist on this server/)).toBeTruthy();
+  });
+
+  it("announces the lineage's next version when rewriting an older one", async () => {
+    await openScenario({ ...versions, runId: RUN_ID });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    await press("Rewrite");
+    expect(screen.getByRole("dialog").textContent).toContain(`Creates v3 linked to ${RUN_ID}`);
   });
 });
 

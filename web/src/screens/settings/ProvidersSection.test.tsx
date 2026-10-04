@@ -62,4 +62,13 @@ describe("ProvidersSection", () => {
     await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
     expect(container.textContent).not.toMatch(/api[_ ]?key|secret/i);
   });
+
+  it("titles the cards by the server's block names", async () => {
+    renderApp({ hash: "#/settings" });
+    await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
+    for (const title of ["Search", "Fetch", "Embeddings", "Scorer", "LLM"])
+      expect(card(title)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "prefilter" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "score" })).toBeNull();
+  });
 });

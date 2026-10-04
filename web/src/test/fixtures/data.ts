@@ -140,7 +140,7 @@ export const health: HealthReport = {
       detail: "built in",
     },
     {
-      role: "embeddings",
+      role: "prefilter",
       provider: "ollama",
       url: "http://localhost:11434",
       model: "bge-small-en-v1.5",
@@ -150,7 +150,7 @@ export const health: HealthReport = {
       detail: "",
     },
     {
-      role: "scorer",
+      role: "score",
       provider: "rerank",
       url: "http://localhost:8081",
       model: "bge-reranker-v2-m3-Q8_0.gguf",

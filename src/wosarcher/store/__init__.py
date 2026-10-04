@@ -181,16 +181,38 @@ class RunStore:
             settings=redact(settings),
             parent_run_id=parent_id,
             fork_from=from_stage,
-            version=parent.version + 1,
+            version=max(self.lineage_versions(parent_id)) + 1,
         )
         self.write_artifact(run_id, "request.json", record)
         for stage in earlier:
             for name in STAGE_ARTIFACTS[stage]:
                 if (source / name).is_file():
                     shutil.copyfile(source / name, path / name)
-            data = done[stage].data.model_copy(update={"copied_from": parent_id})
+            data = done[stage].data.model_copy(update={"copied_from": done[stage].data.copied_from or parent_id})
             self.append_event(run_id, "stage.done", stage, data)
         return record
+
+    def lineage_root(self, run_id: str) -> str:
+        """Follow `parent_run_id` up, stopping at a missing or repeated run."""
+        seen = [run_id]
+        while True:
+            path = self.run_dir(seen[-1]) / "request.json"
+            if not path.is_file():
+                return seen[-1]
+            parent = RunRecord.model_validate_json(path.read_text(encoding="utf-8")).parent_run_id
+            if parent is None or parent in seen or not (self.run_dir(parent) / "request.json").is_file():
+                return seen[-1]
+            seen.append(parent)
+
+    def lineage_versions(self, run_id: str) -> list[int]:
+        """Versions of every run whose parent chain reaches the root of `run_id`'s lineage."""
+        root = self.lineage_root(run_id)
+        records = {
+            path.name: RunRecord.model_validate_json((path / "request.json").read_text(encoding="utf-8"))
+            for path in self.runs_dir.iterdir()
+            if not path.name.startswith(".") and (path / "request.json").is_file()
+        }
+        return [record.version for name, record in records.items() if self.lineage_root(name) == root]
 
     def read_record(self, run_id: str) -> RunRecord:
         path = self.run_dir(run_id) / "request.json"

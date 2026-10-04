@@ -169,6 +169,31 @@ def test_lineage(store: RunStore) -> None:
     assert c.overrides == ["write.words=300"]
 
 
+def test_fork_of_fork_copied_from(store: RunStore) -> None:
+    a = finished_run(store)
+    b = store.fork(a, "score", [], Settings())
+    finish(store, b.run_id, *STAGES[STAGES.index("score") :])
+    c = store.fork(b.run_id, "write", [], Settings())
+    done = store.done_events(c.run_id)
+    before_score = STAGES[: STAGES.index("score")]
+    assert all(done[stage].data.copied_from == a for stage in before_score)
+    assert [done[stage].data.copied_from for stage in ("score", "select")] == [b.run_id, b.run_id]
+
+
+def test_second_fork_version(store: RunStore) -> None:
+    a = finished_run(store)
+    b = store.fork(a, "write", [], Settings())
+    c = store.fork(b.run_id, "write", [], Settings())
+    assert (store.read_record(a).version, b.version, c.version) == (1, 2, 3)
+
+
+def test_two_forks_of_first_version(store: RunStore) -> None:
+    a = finished_run(store)
+    b = store.fork(a, "write", [], Settings())
+    d = store.fork(a, "write", [], Settings())
+    assert (b.version, d.version, d.parent_run_id) == (2, 3, a)
+
+
 def test_list_statuses(store: RunStore) -> None:
     started = RunStartedData(query="q", profile="p", parent_run_id=None, version=1, until=None)
     ends = {

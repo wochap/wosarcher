@@ -22,6 +22,7 @@ function header(events: RunEvent[], isPhone = false) {
       detail={null}
       files={2}
       isPhone={isPhone}
+      cancelling={false}
       {...handlers}
     />,
   );

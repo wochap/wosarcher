@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../api/types";
 import { ev, stageDone, usage } from "../test/events";
-import { initialRunView, type RunView, runReducer } from "./reducer";
+import { applySummary, initialRunView, type RunView, runReducer } from "./reducer";
 
 const fold = (events: RunEvent[], from: RunView = initialRunView("r1")) =>
   events.reduce(runReducer, from);
@@ -144,5 +144,41 @@ describe("runReducer", () => {
     expect(state.sources["https://b"]).toMatchObject({ state: "failed", reason: "403 Forbidden" });
     expect(state.sources["https://c"].state).toBe("found");
     expect(state.passages[0]).toMatchObject({ scorer: "rerank", threshold: 0.6, kept: 2 });
+  });
+
+  it("applies a terminal event whatever its seq", () => {
+    const state = runReducer(initialRunView("r1"), ev(0, "run.cancelled", {} as never));
+    expect(state.status).toBe("cancelled");
+    expect(state.lastSeq).toBe(0);
+    const done = fold([started, ev(2, "run.done", { until: null, totals: {} as never })]);
+    expect(runReducer(done, ev(2, "run.done", { until: null, totals: {} as never }))).toEqual(done);
+  });
+});
+
+describe("applySummary", () => {
+  const running = () => fold([started, ev(2, "stage.started", { device: null } as never, "fetch")]);
+  const summary = (status: RunView["status"], extra = {}) => ({ status, ...extra });
+
+  it("fails the run and its stage from a failed summary", () => {
+    const state = applySummary(
+      running(),
+      summary("failed", { end_stage: "fetch", error: "no output" }),
+    );
+    expect(state.status).toBe("failed");
+    expect(state.phases.fetch).toMatchObject({ state: "failed", error: "no output" });
+    expect(state.failure).toEqual({ stage: "fetch", error: "no output" });
+  });
+
+  it("cancels the open phases from a cancelled summary", () => {
+    const state = applySummary(running(), summary("cancelled", { end_stage: "fetch" }));
+    expect(state.status).toBe("cancelled");
+    expect(state.phases.fetch.state).toBe("cancelled");
+  });
+
+  it("leaves the view alone for a running summary or an ended view", () => {
+    const view = running();
+    expect(applySummary(view, summary("running"))).toBe(view);
+    const ended = applySummary(view, summary("done"));
+    expect(applySummary(ended, summary("failed", { end_stage: "fetch" }))).toBe(ended);
   });
 });

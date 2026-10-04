@@ -19,10 +19,12 @@ import css from "./ProvidersSection.module.css";
 const ROLES: Record<string, string> = {
   search: "Search",
   fetch: "Fetch",
-  embeddings: "Embeddings",
-  scorer: "Scorer",
+  prefilter: "Embeddings",
+  score: "Scorer",
   llm: "LLM",
 };
+/** The card title for a server block name; an unknown block is capitalised. */
+const roleTitle = (role: string) => ROLES[role] ?? role.charAt(0).toUpperCase() + role.slice(1);
 const ICONS: Record<string, Icon> = {
   ok: CheckCircle,
   degraded: WarningCircle,
@@ -137,9 +139,9 @@ function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
   const state = checking ? "checking" : c.status;
   const Glyph = checking ? CircleDashed : (ICONS[c.status] ?? MinusCircle);
   return (
-    <section className={`card elev-sm ${css.card}`} aria-label={ROLES[c.role] ?? c.role}>
+    <section className={`card elev-sm ${css.card}`} aria-label={roleTitle(c.role)}>
       <div className={css.cardTop}>
-        <span className="card-kicker">{ROLES[c.role] ?? c.role}</span>
+        <span className="card-kicker">{roleTitle(c.role)}</span>
         <button
           type="button"
           className={`btn btn-ghost ${css.check}`}
