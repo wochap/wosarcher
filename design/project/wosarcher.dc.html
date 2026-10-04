@@ -18,6 +18,7 @@ html,body{margin:0;height:100%}
 .sx[data-theme=light]{--wa-ring:#c9cddd;--color-bg:#f2f2f6;--color-surface:#fbfbfd;--color-text:#1d1f2c;--color-accent:#6b5ec4;--color-divider:color-mix(in srgb,#1d1f2c 16%,transparent);--color-danger:#b23c50;--color-warn:#8f6514;--color-neutral-100:#292b31;--color-neutral-200:#3f424d;--color-neutral-300:#595d6c;--color-neutral-400:#75798c;--color-neutral-600:#b2b6ca;--color-neutral-700:#cfd3e5;--color-neutral-800:#e4e7f5;--color-neutral-900:#f3f5fe;--color-accent-100:#2b2741;--color-accent-200:#423a6a;--color-accent-300:#5d5294;--color-accent-400:#796cbf;--color-accent-600:#b5abfc;--color-accent-700:#d2cefd;--color-accent-800:#e7e5fe;--color-accent-900:#f5f4ff;--shadow-sm:0 0 0 1px #e1e3ee;--shadow-md:0 0 0 1px #d6d9e6,0 6px 18px rgba(29,31,44,.08);--shadow-lg:0 0 0 1px #c9cddd,0 16px 40px rgba(29,31,44,.14)}
 .sx .seg{flex-wrap:wrap;max-width:100%}
 .sx select.input{appearance:auto}
+.sx [data-card]:focus-visible,.sx [data-chunk]:focus-visible{outline:2px solid var(--color-accent);outline-offset:-2px}
 @keyframes sx-spin{to{transform:rotate(360deg)}}
 @keyframes sx-pulse{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes sx-blink{50%{opacity:0}}
@@ -176,7 +177,9 @@ html,body{margin:0;height:100%}
     <sc-for list="{{ L.phases }}" as="p" hint-placeholder-count="9">
       <li style="display:flex;flex-direction:column;gap:3px;padding:7px 9px 0;border-radius:var(--radius-md);background:{{ p.bg }};border:{{ p.bd }};box-shadow:{{ p.glow }};min-width:0;overflow:hidden">
         <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:{{ p.lc }}"><i class="ph {{ p.icon }}" style="color:{{ p.ic }};font-size:14px;flex:none;animation:{{ p.anim }}"></i><span style="flex:1;min-width:max-content;white-space:nowrap">{{ p.label }}</span><button type="button" data-help="{{ p.help }}" aria-label="{{ p.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
+        <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}"><button type="button" data-help="{{ p.tagHelp }}" aria-label="{{ p.tagAria }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="align-self:flex-start;max-width:100%;display:inline-flex;align-items:center;gap:3px;margin:1px 0;padding:0 5px;border-radius:4px;border:1px {{ p.tagBs }} {{ p.tagBd }};background:transparent;color:{{ p.tagCol }};font-family:var(--mono);font-size:10.5px;line-height:16px;cursor:help;white-space:nowrap;min-width:0;padding-right:6px" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><sc-if value="{{ p.tagFb }}" hint-placeholder-val="{{ false }}"><i class="ph ph-warning" style="font-size:11px;flex:none"></i></sc-if><span style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ p.tag }}</span></button></sc-if>
         <div style="font-size:11.5px;color:{{ p.tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.text }}</div>
+        <sc-if value="{{ p.detail }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.detail }}</div></sc-if>
         <div style="height:3px;margin:3px -9px 0;background:var(--line)"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.bar }};transition:width .2s linear"></div></div>
       </li>
     </sc-for>
@@ -218,22 +221,41 @@ html,body{margin:0;height:100%}
 
     <sc-if value="{{ showPassages }}" hint-placeholder-val="{{ true }}">
     <section aria-label="Passages" style="min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
-      <header style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--line);flex:none"><h2 style="margin:0;font-size:13px;letter-spacing:0">Passages</h2><span style="display:inline-flex;align-items:center;gap:3px"><span class="tag tag-neutral" style="font-family:var(--mono);font-size:10.5px;padding:1px 6px">{{ L.scorer }}</span><button type="button" data-help="scorer" aria-label="Help: Scorer" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span><span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:0;white-space:nowrap">{{ L.passSummary }}<button type="button" data-help="score" aria-label="Help: Score and threshold" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span>
-        <button onClick="{{ toggleRej }}" aria-pressed="{{ showRej }}" title="Toggle rejected passages (R)" style="display:flex;align-items:center;gap:6px;border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;cursor:pointer;padding:3px 6px;border-radius:var(--radius-sm)" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)"><span style="width:24px;height:14px;border-radius:7px;background:{{ rejTrack }};position:relative;transition:background .15s"><span style="position:absolute;top:2px;left:{{ rejKnob }};width:10px;height:10px;border-radius:50%;background:var(--color-text);transition:left .15s"></span></span>Rejected<span style="font-size:10.5px;color:var(--faint)">R</span></button><button type="button" data-help="rejected" aria-label="Help: Rejected passages" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button>
+      <header style="flex:none;display:flex;flex-direction:column;gap:4px;padding:6px 8px 6px 12px;border-bottom:1px solid var(--line)">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px">
+          <h2 style="margin:0;font-size:13px;letter-spacing:0">Passages</h2>
+          <span style="display:inline-flex;align-items:center;gap:3px"><span class="tag tag-neutral" style="font-family:var(--mono);font-size:10.5px;padding:1px 6px">{{ L.scorer }}</span><button type="button" data-help="scorer" aria-label="Help: Scorer" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:5px">
+            <div class="seg" role="radiogroup" aria-label="Show passages (R cycles)" style="padding:2px">
+              <sc-for list="{{ L.filters }}" as="o" hint-placeholder-count="3"><label class="seg-opt" style="padding:2px 8px;font-size:12px;gap:4px">{{ o.label }}<span style="color:var(--faint);font-size:11px">{{ o.count }}</span><input type="radio" name="pass-filter" checked="{{ o.checked }}" onChange="{{ o.onPick }}"></label></sc-for>
+            </div>
+            <kbd title="R cycles the filter" style="font-family:var(--mono);font-size:10.5px;color:var(--faint);padding:0 4px;border:1px solid var(--color-divider);border-radius:4px;line-height:15px">R</kbd>
+          </div>
+        </div>
+        <div aria-label="Pipeline" style="display:flex;align-items:center;flex-wrap:wrap;gap:0 1px;font-size:12px;margin-left:-5px">
+          <sc-for list="{{ L.funnel }}" as="f" hint-placeholder-count="4">
+            <sc-if value="{{ f.sep }}" hint-placeholder-val="{{ false }}"><i class="ph ph-caret-right" aria-hidden="true" style="font-size:10px;color:var(--faint)"></i></sc-if>
+            <button type="button" data-help="{{ f.help }}" aria-label="{{ f.aria }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="display:inline-flex;align-items:baseline;gap:4px;padding:1px 5px;border:0;border-radius:4px;background:transparent;color:var(--color-text);font:inherit;font-size:12px;cursor:help" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><span style="font-weight:500;color:{{ f.col }}">{{ f.n }}</span><span style="color:var(--muted);font-size:11.5px;text-decoration:underline dotted;text-decoration-color:var(--color-divider);text-underline-offset:3px">{{ f.label }}</span></button>
+          </sc-for>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted)">Fates<button type="button" data-help="legend" aria-label="Help: Passage fates" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span>
+        </div>
       </header>
       <div style="flex:1;min-height:0;overflow:auto">
         <sc-if value="{{ L.passEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:12px;display:flex;gap:8px;font-size:12.5px;color:var(--muted)"><i class="ph {{ L.passEmptyIcon }}" style="font-size:15px;color:{{ L.passEmptyIc }}"></i><span>{{ L.passEmptyText }}</span></div></sc-if>
         <sc-for list="{{ L.passages }}" as="p" hint-placeholder-count="6">
-          <article style="padding:9px 12px;border-bottom:1px solid var(--line);opacity:{{ p.op }};display:flex;flex-direction:column;gap:4px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-family:var(--mono);font-size:12px;color:{{ p.sc }}">{{ p.score }}</span>
-              <div style="position:relative;flex:1;max-width:120px;height:4px;border-radius:2px;background:var(--line)"><div style="width:{{ p.pct }}%;height:100%;border-radius:2px;background:{{ p.bar }}"></div><div title="{{ p.thTitle }}" style="position:absolute;left:{{ p.th }}%;top:-3px;bottom:-3px;width:1px;background:var(--muted)"></div></div>
-              <span style="margin-left:auto;font-size:11px;color:{{ p.badgeCol }};font-family:{{ p.badgeFont }}">{{ p.badge }}</span>
+          <article data-card="1" role="button" tabIndex="0" aria-label="{{ p.aria }}" onClick="{{ p.open }}" onKeyDown="{{ p.key }}" style="padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-text) 5%,transparent)">
+            <div style="display:flex;flex-direction:column;gap:4px;opacity:{{ p.op }}">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0">
+                <span style="font-family:var(--mono);font-size:12px;color:{{ p.sc }}">{{ p.score }}</span>
+                <div style="position:relative;flex:1;max-width:110px;min-width:40px;height:4px;border-radius:2px;background:var(--line)"><div style="width:{{ p.pct }}%;height:100%;border-radius:2px;background:{{ p.bar }}"></div><div title="{{ p.thTitle }}" style="position:absolute;left:{{ p.th }}%;top:-3px;bottom:-3px;width:1px;background:var(--muted)"></div></div>
+                <span style="margin-left:auto;min-width:0;max-width:64%;display:flex;justify-content:flex-end"><span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;overflow:hidden;padding:1px 6px;border-radius:4px;font-size:11px;line-height:16px;white-space:nowrap;background:{{ p.b.bg }};color:{{ p.b.col }};border:1px {{ p.b.bs }} {{ p.b.bd }}"><i class="ph {{ p.b.icon }}" style="font-size:12px;flex:none"></i><span style="flex:none">{{ p.b.label }}</span><sc-if value="{{ p.b.mark }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ p.b.mark }}</span></sc-if><sc-if value="{{ p.b.q }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10.5px;padding:0 3px;border-radius:3px;background:color-mix(in srgb,var(--color-text) 10%,transparent)">{{ p.b.q }}</span></sc-if></span></span>
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-family:var(--mono);font-size:11px">{{ p.dom }}</span> · {{ p.heading }}</div>
+              <p style="margin:0;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ p.text }}</p>
             </div>
-            <div style="font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="font-family:var(--mono);font-size:11px">{{ p.dom }}</span> · {{ p.heading }}</div>
-            <p style="margin:0;font-size:13px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">{{ p.text }}</p>
           </article>
         </sc-for>
+        <sc-if value="{{ L.passMore }}" hint-placeholder-val="{{ false }}"><div style="padding:10px 12px;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)"><i class="ph ph-arrow-down" style="font-size:13px"></i>{{ L.passMore }}</div></sc-if>
       </div>
     </section>
     </sc-if>
@@ -386,16 +408,16 @@ html,body{margin:0;height:100%}
 <sc-if value="{{ scrSettings }}" hint-placeholder-val="{{ false }}">
 <div style="flex:1;overflow:auto">
 <div style="padding:{{ pagePad }};display:flex;flex-direction:column;gap:16px;max-width:1240px">
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h1 style="font-size:26px;margin:0;margin-right:auto">Settings</h1><button class="btn btn-secondary" onClick="{{ checkAll }}"><i class="ph ph-heartbeat"></i>Check all providers</button></div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><h1 style="font-size:26px;margin:0;margin-right:auto">Settings</h1><button class="btn btn-secondary" onClick="{{ checkAll }}" disabled="{{ checkAllBusy }}"><i class="ph ph-heartbeat"></i>Check all providers</button></div>
   <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;font-size:12.5px">
     <span style="display:flex;align-items:center;gap:6px"><i class="ph ph-cpu" style="color:var(--muted);font-size:15px"></i><span style="color:var(--muted)">Active profile</span><span style="font-family:var(--mono);font-size:12px">{{ profName }}</span><button type="button" data-help="profile" aria-label="Help: Profile" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><span style="color:var(--muted)">· {{ profDesc }}</span></span>
     <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="display:flex;align-items:center;gap:5px">GPU policy<button type="button" data-help="gpupolicy" aria-label="Help: GPU policy" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span><div class="seg" role="radiogroup" aria-label="GPU policy"><sc-for list="{{ policyOpts }}" as="o"><label class="seg-opt" style="padding:4px 10px;font-size:12.5px"><input type="radio" name="gpu-policy" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div><span style="font-size:12px;color:var(--muted)">{{ policyDesc }}</span></span>
   </div>
-  <h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:8px 0 0;font-weight:500">Providers</h2>
+  <div style="display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin-top:8px"><h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:500">Providers</h2><span style="font-size:12px;color:var(--muted)">Checked only when you click, so idle GPU servers stay asleep.</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">
     <sc-for list="{{ providers }}" as="p" hint-placeholder-count="5">
       <section class="card elev-sm" style="gap:8px;padding:12px 14px">
-        <div style="display:flex;align-items:center;gap:8px"><span class="card-kicker">{{ p.role }}</span><button class="btn btn-ghost" onClick="{{ p.check }}" disabled="{{ p.checking }}" style="margin-left:auto;font-size:12px;padding:2px 6px"><i class="ph ph-arrow-clockwise" style="animation:{{ p.anim }}"></i>Check</button></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="card-kicker">{{ p.role }}</span><button class="btn btn-secondary" onClick="{{ p.check }}" disabled="{{ p.checking }}" aria-label="{{ p.checkAria }}" style="margin-left:auto;font-size:12px;padding:3px 9px"><i class="ph ph-arrow-clockwise" style="animation:{{ p.anim }}"></i>Check</button></div>
         <div class="card-title" style="font-size:16px">{{ p.name }}</div>
         <dl style="margin:0;display:grid;grid-template-columns:84px minmax(0,1fr);gap:3px 10px;font-size:12px">
           <dt style="color:var(--muted)">Base URL</dt><dd style="margin:0;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.url }}</dd>
@@ -403,7 +425,7 @@ html,body{margin:0;height:100%}
           <dt style="color:var(--muted);display:flex;align-items:center;gap:4px">Device<button type="button" data-help="pdevice" aria-label="Help: Device" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></dt><dd style="margin:0;font-family:var(--mono);font-size:11.5px">{{ p.dev }}</dd>
           <dt style="color:var(--muted);display:flex;align-items:center;gap:4px">Unload<button type="button" data-help="unload" aria-label="Help: Unload" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></dt><dd style="margin:0;font-family:var(--mono);font-size:11.5px">{{ p.unload }}</dd>
         </dl>
-        <div role="status" style="display:flex;align-items:center;gap:7px;padding:6px 9px;margin-top:2px;border-radius:var(--radius-md);background:{{ p.hBg }};font-size:12.5px"><i class="ph-fill {{ p.hIcon }}" style="color:{{ p.hCol }};animation:{{ p.hAnim }}"></i><span style="flex:1;display:flex;align-items:center;gap:5px">{{ p.hText }}<button type="button" data-help="health" aria-label="Help: Health" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span><span style="font-size:11px;color:var(--faint)">{{ p.ago }}</span></div>
+        <div role="status" style="display:flex;flex-direction:column;gap:2px;padding:6px 9px;margin-top:2px;border-radius:var(--radius-md);background:{{ p.hBg }};border:1px {{ p.hBs }} {{ p.hBd }};font-size:12.5px"><div style="display:flex;align-items:center;gap:7px"><i class="ph-fill {{ p.hIcon }}" style="color:{{ p.hCol }};animation:{{ p.hAnim }}"></i><span style="flex:1;display:flex;align-items:center;gap:5px;color:{{ p.hTxtCol }}">{{ p.hText }}<button type="button" data-help="health" aria-label="Help: Health" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span></div><sc-if value="{{ p.hDetail }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--muted);padding-left:21px;font-family:{{ p.hDetailFont }};overflow-wrap:anywhere">{{ p.hDetail }}</div></sc-if></div>
       </section>
     </sc-for>
   </div>
@@ -529,11 +551,74 @@ html,body{margin:0;height:100%}
 </div>
 </sc-if>
 
+<sc-if value="{{ srcOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" onClick="{{ closeSrcBackdrop }}" style="position:absolute;z-index:22;padding:{{ sd.pad }}">
+  <div role="dialog" aria-modal="true" aria-labelledby="sd-t" ref="{{ sdRef }}" tabIndex="-1" style="width:{{ sd.w }};height:{{ sd.h }};max-width:100%;max-height:100%;display:flex;flex-direction:column;background:var(--color-surface);border-radius:{{ sd.r }};box-shadow:var(--shadow-lg);overflow:hidden;outline:none">
+    <header style="flex:none;padding:12px 14px 12px 16px;display:flex;flex-direction:column;gap:10px;border-bottom:1px solid var(--line)">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <i class="ph {{ sd.icon }}" style="font-size:18px;color:var(--muted);margin-top:2px"></i>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <div id="sd-t" style="font-size:15px;font-weight:500;line-height:1.35;text-wrap:pretty">{{ sd.title }}</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;font-size:12px;color:var(--muted)">
+            <span style="font-family:var(--mono);font-size:11.5px;overflow-wrap:anywhere">{{ sd.dom }}</span>
+            <sc-if value="{{ sd.hasUrl }}" hint-placeholder-val="{{ true }}"><a href="{{ sd.href }}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:4px">Open original<i class="ph ph-arrow-square-out"></i></a></sc-if>
+            <sc-if value="{{ sd.isFile }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px"><i class="ph ph-paperclip"></i>Attached file · no URL</span></sc-if>
+            <span>{{ sd.meta }}</span>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-icon" aria-label="Close source" onClick="{{ closeSrc }}" style="width:{{ sd.btn }};height:{{ sd.btn }};color:var(--muted);flex:none"><i class="ph ph-x"></i></button>
+      </div>
+      <sc-if value="{{ sd.trunc }}" hint-placeholder-val="{{ false }}"><div role="note" style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:6px 10px;border-radius:var(--radius-md);border:1px dashed var(--color-warn);background:color-mix(in srgb,var(--color-warn) 8%,transparent)"><i class="ph ph-scissors" style="color:var(--color-warn);font-size:15px;margin-top:1px"></i><span>{{ sd.trunc }}</span></div></sc-if>
+      <sc-if value="{{ sd.loading }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)"><i class="ph ph-circle-notch" style="animation:sx-spin .9s linear infinite;color:var(--color-accent)"></i>Loading cleaned text…</div></sc-if>
+      <sc-if value="{{ sd.ready }}" hint-placeholder-val="{{ true }}">
+      <div aria-live="polite" style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-text) 4%,transparent)">
+        <div style="display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;min-width:0">
+          <span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;overflow:hidden;padding:1px 6px;border-radius:4px;font-size:11px;line-height:16px;white-space:nowrap;background:{{ sd.b.bg }};color:{{ sd.b.col }};border:1px {{ sd.b.bs }} {{ sd.b.bd }}"><i class="ph {{ sd.b.icon }}" style="font-size:12px;flex:none"></i><span style="flex:none">{{ sd.b.label }}</span><sc-if value="{{ sd.b.mark }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ sd.b.mark }}</span></sc-if><sc-if value="{{ sd.b.q }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10.5px;padding:0 3px;border-radius:3px;background:color-mix(in srgb,var(--color-text) 10%,transparent)">{{ sd.b.q }}</span></sc-if></span>
+          <sc-if value="{{ sd.hasScore }}" hint-placeholder-val="{{ true }}"><span style="font-family:var(--mono);font-size:12px;color:{{ sd.sc }}">{{ sd.score }}</span></sc-if>
+          <span style="font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ sd.heading }}</span>
+        </div>
+        <div style="font-size:13px;line-height:1.45;text-wrap:pretty">{{ sd.why }}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px 5px;font-size:11.5px">
+          <sc-for list="{{ sd.qrow }}" as="q" hint-placeholder-count="5"><span title="{{ q.title }}" style="display:inline-flex;align-items:center;gap:4px;padding:1px 6px;border-radius:4px;border:1px solid {{ q.bd }};color:{{ q.col }};white-space:nowrap"><span style="font-family:var(--mono);font-size:11px;font-weight:500">{{ q.q }}</span><sc-if value="{{ q.score }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:11px">{{ q.score }}</span></sc-if>{{ q.st }}</span></sc-for>
+        </div>
+      </div>
+      </sc-if>
+    </header>
+    <div ref="{{ sdBodyRef }}" style="flex:1;min-height:0;overflow:auto;position:relative;padding:6px 10px 18px">
+      <sc-if value="{{ sd.loading }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ sd.skel }}" as="k" hint-placeholder-count="5"><div style="padding:12px 8px;display:flex;flex-direction:column;gap:7px"><div style="height:9px;width:30%;border-radius:4px;background:var(--line)"></div><div style="height:10px;width:{{ k.w }};border-radius:4px;background:linear-gradient(90deg,var(--line),color-mix(in srgb,var(--color-text) 16%,transparent),var(--line));background-size:480px 100%;animation:sx-shimmer 1.4s linear infinite"></div><div style="height:10px;width:70%;border-radius:4px;background:var(--line)"></div></div></sc-for></sc-if>
+      <sc-for list="{{ sd.chunks }}" as="c" hint-placeholder-count="5">
+        <sc-if value="{{ c.hd }}" hint-placeholder-val="{{ false }}"><h3 style="font-size:14px;margin:14px 8px 4px;color:var(--color-text)">{{ c.hd }}</h3></sc-if>
+        <div data-chunk="{{ c.i }}" role="button" tabIndex="0" aria-current="{{ c.cur }}" aria-label="{{ c.aria }}" onClick="{{ c.pick }}" onKeyDown="{{ c.key }}" style="border-radius:var(--radius-md);cursor:pointer;margin:2px 0" style-hover="background:color-mix(in srgb,var(--color-text) 5%,transparent)">
+          <div style="display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:var(--radius-md);background:{{ c.bg }};box-shadow:{{ c.ring }};opacity:{{ c.op }}">
+            <div style="display:flex;align-items:center;gap:8px;min-width:0">
+              <span style="display:inline-flex;align-items:center;gap:4px;max-width:100%;min-width:0;overflow:hidden;padding:1px 6px;border-radius:4px;font-size:11px;line-height:16px;white-space:nowrap;background:{{ c.b.bg }};color:{{ c.b.col }};border:1px {{ c.b.bs }} {{ c.b.bd }}"><i class="ph {{ c.b.icon }}" style="font-size:12px;flex:none"></i><span style="flex:none">{{ c.b.label }}</span><sc-if value="{{ c.b.mark }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;min-width:0">{{ c.b.mark }}</span></sc-if><sc-if value="{{ c.b.q }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10.5px;padding:0 3px;border-radius:3px;background:color-mix(in srgb,var(--color-text) 10%,transparent)">{{ c.b.q }}</span></sc-if></span>
+              <sc-if value="{{ c.hasScore }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:11.5px;color:var(--muted)">{{ c.score }}</span></sc-if>
+              <sc-if value="{{ c.sub }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;color:var(--muted);margin-left:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.sub }}</span></sc-if>
+            </div>
+            <p style="margin:0;font-size:{{ sd.fs }};line-height:1.6;text-wrap:pretty">{{ c.text }}</p>
+          </div>
+        </div>
+      </sc-for>
+      <sc-if value="{{ sd.truncEnd }}" hint-placeholder-val="{{ false }}"><div style="margin:12px 8px 0;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-warn)"><i class="ph ph-scissors"></i>{{ sd.truncEnd }}</div></sc-if>
+    </div>
+    <footer style="flex:none;display:flex;align-items:center;gap:12px;padding:8px 12px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)">
+      <span>{{ sd.pos }}</span>
+      <sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}"><span style="display:inline-flex;align-items:center;gap:4px"><kbd style="font-family:var(--mono);font-size:10.5px;padding:0 4px;border:1px solid var(--color-divider);border-radius:4px">↑</kbd><kbd style="font-family:var(--mono);font-size:10.5px;padding:0 4px;border:1px solid var(--color-divider);border-radius:4px">↓</kbd>move<kbd style="font-family:var(--mono);font-size:10.5px;padding:0 4px;border:1px solid var(--color-divider);border-radius:4px;margin-left:6px">Esc</kbd>close</span></sc-if>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button class="btn btn-secondary" onClick="{{ sd.prev }}" disabled="{{ sd.prevDis }}" style="min-height:{{ sd.btn }};font-size:12.5px;padding:3px 10px"><i class="ph ph-caret-up"></i>Prev</button>
+        <button class="btn btn-secondary" onClick="{{ sd.next }}" disabled="{{ sd.nextDis }}" style="min-height:{{ sd.btn }};font-size:12.5px;padding:3px 10px">Next<i class="ph ph-caret-down"></i></button>
+      </div>
+    </footer>
+  </div>
+</div>
+</sc-if>
+
 <sc-if value="{{ helpOpen }}" hint-placeholder-val="{{ false }}">
-<div id="wa-help" role="tooltip" onMouseEnter="{{ hPopEnter }}" onMouseLeave="{{ hLeave }}" style="position:fixed;z-index:35;left:{{ hp.x }}px;top:{{ hp.y }}px;transform:{{ hp.tf }};width:272px;max-width:calc(100vw - 16px);padding:9px 12px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.45;font-weight:400;color:var(--color-text);text-transform:none;letter-spacing:0;text-align:left">
+<div id="wa-help" role="tooltip" onMouseEnter="{{ hPopEnter }}" onMouseLeave="{{ hLeave }}" style="position:fixed;z-index:35;left:{{ hp.x }}px;top:{{ hp.y }}px;transform:{{ hp.tf }};width:{{ hp.w }}px;max-width:calc(100vw - 16px);padding:9px 12px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:4px;font-size:13px;line-height:1.45;font-weight:400;color:var(--color-text);text-transform:none;letter-spacing:0;text-align:left">
   <span aria-hidden="true" style="position:absolute;left:{{ hp.ax }}px;top:{{ hp.at }};bottom:{{ hp.ab }};width:10px;height:10px;background:var(--color-surface);transform:rotate(45deg);border-top:{{ hp.bt }};border-left:{{ hp.bl }};border-bottom:{{ hp.bb }};border-right:{{ hp.br }}"></span>
   <span style="font-weight:600">{{ hp.t }}</span>
-  <span style="text-wrap:pretty">{{ hp.b }}</span>
+  <sc-if value="{{ hp.hasB }}" hint-placeholder-val="{{ true }}"><span style="text-wrap:pretty">{{ hp.b }}</span></sc-if>
+  <sc-if value="{{ hp.hasItems }}" hint-placeholder-val="{{ false }}"><ul style="list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:7px"><sc-for list="{{ hp.items }}" as="it"><li style="display:flex;flex-direction:column;gap:1px"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500"><i class="ph {{ it.icon }}" style="font-size:13px;color:var(--muted)"></i>{{ it.t }}</span><span style="font-size:12px;color:var(--muted);padding-left:18px;text-wrap:pretty">{{ it.b }}</span></li></sc-for></ul></sc-if>
   <sc-if value="{{ hp.hasEx }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--muted)">Example: <span style="font-family:var(--mono);font-size:11.5px;color:var(--color-text)">{{ hp.ex }}</span></span></sc-if>
 </div>
 </sc-if>
@@ -552,7 +637,7 @@ html,body{margin:0;height:100%}
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;finished&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;finished&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
 const PH=[
  {id:'plan',l:'Plan',s:0,r:0,e:2.5,gpu:'LLM'},
  {id:'search',l:'Search',s:2.5,r:2.5,e:6.5},
@@ -563,7 +648,7 @@ const PH=[
  {id:'score',l:'Score',s:21,r:23,e:31,gpu:'scorer',wait:'embeddings model unloading'},
  {id:'select',l:'Select',s:31,r:31,e:32},
  {id:'write',l:'Write',s:32,r:34,e:50,gpu:'LLM',wait:'scorer unloading'}];
-const END=50,TF=3,TH=0.6,PASSWORD='nocturne';
+const END=50,TF=3,TH=0.5,PASSWORD='nocturne';
 const DQ='How do speculative decoding methods trade off acceptance rate against draft-model size on consumer GPUs (8–12 GB)?';
 const SUBQ=['speculative decoding acceptance rate vs draft model size','speculative decoding consumer GPU 8GB 12GB benchmark','Medusa EAGLE draft-free speculative decoding memory overhead','llama.cpp --draft speculative tokens performance','optimal number of speculative tokens gamma'];
 const WEB=[
@@ -591,29 +676,67 @@ const WEB=[
 ['arxiv.org/abs/2404.19737','Better & Faster Large Language Models via Multi-token Prediction','','']];
 const DFILES=[['notes/bench-3060.md',4403],['notes/draft-models.txt',1946]];
 const PASS=[
-{s:10,h:'4 Results › 4.2 Draft size vs. latency',v:.94,x:'Throughput gains track draft latency more closely than draft accuracy: a draft four times smaller but ten points less accurate often wins end-to-end, because each rejected token costs only one extra target forward pass.'},
-{s:0,h:'3 Analysis › 3.1 Expected walltime',v:.91,x:'With acceptance rate α and γ drafted tokens, the expected tokens per target pass is (1 − α^(γ+1)) / (1 − α); the improvement factor shrinks as the draft’s relative cost c grows.'},
-{s:22,h:'Results › Llama-3-8B Q4 + 160M draft',v:.89,x:'On the RTX 3060 (12 GB), a 160M draft gave 1.6× tokens/s at γ=4. The 1B draft only fit with the target at Q4 and gave 1.3×, because both models contended for memory bandwidth.'},
-{s:3,h:'1 Introduction',v:.87,x:'Drafting at the feature level instead of the token level lifts acceptance to roughly 0.8 with a draft head under 1B parameters, and no separate draft model has to be loaded.'},
-{s:5,h:'Speculating with a draft model',v:.84,x:'The draft model must share the target’s tokenizer. A num_speculative_tokens value between 3 and 5 is a reasonable starting point.'},
-{s:2,h:'2 Method › 2.1 Medusa heads',v:.82,x:'Medusa adds decoding heads to the target itself, so no second model competes for VRAM; the cost is fine-tuning the heads and a tree-attention verification step.'},
-{s:8,h:'Top comment',v:.79,x:'On 8 GB cards I stopped using a separate draft — the KV cache for both models pushed me into offloading, which erased the gain. Prompt-lookup decoding was free and gave about 1.2× on code.'},
-{s:4,h:'Assisted generation in practice',v:.77,x:'Assistant models work best when the target is at least an order of magnitude larger; latency gains around 2× are typical for greedy decoding on a single GPU.'},
-{s:1,h:'2 Speculative sampling',v:.75,x:'The modified rejection-sampling scheme preserves the target distribution exactly, so the speedup comes with no change in output quality.'},
-{s:23,h:'TinyLlama-1.1B',v:.73,x:'TinyLlama as draft for Llama-2-7B: acceptance 0.61 on chat, 0.72 on code at temperature 0.'},
-{s:7,h:'Why lookahead',v:.70,x:'Lookahead decoding needs no draft model: it generates n-grams in parallel with Jacobi iterations, which helps when memory rather than compute is the constraint.'},
-{s:9,h:'Tuning γ',v:.68,x:'Speedup peaks at small γ when acceptance is low; past the peak, each extra speculated token adds verification cost that is rarely repaid.'},
-{s:14,h:'1 Introduction',v:.66,x:'Acceptance rates drop sharply under distribution shift; online distillation of the draft on live queries recovers much of the lost acceptance.'},
-{s:6,h:'PR description',v:.63,x:'--draft sets the number of tokens drafted per step. With a Q8 draft and a Q4_K_M target on consumer GPUs, gains are largest on low-entropy text such as code.'},
-{s:11,h:'Impact',v:.52,x:'Speculative decoding has since been adopted across several products, where it reduced latency without changing output.'},
-{s:12,h:'Batching',v:.47,x:'In-flight batching and paged KV caches raise GPU utilization in multi-user serving.'},
-{s:15,h:'Comment thread',v:.41,x:'We got about 1.5× on a 4090 but your mileage will vary with the prompt.'},
-{s:16,h:'Launch flags',v:.36,x:'Set --speculative-algorithm EAGLE and point --speculative-draft-model-path at the draft weights.'},
-{s:20,h:'Results',v:.31,x:'Speculative decoding cut p50 latency for code-completion traffic.'},
-{s:21,h:'5 Speculative decoding',v:.27,x:'Training with a multi-token prediction objective lets the model act as its own speculative drafter.'},
-{s:18,h:'Setup',v:.22,x:'Install with pip install -e . and download the EAGLE weights from the model hub.'},
-{s:4,h:'Usage',v:.14,x:'Assisted generation is available in transformers through the assistant_model argument.'}];
-PASS.forEach((p,k)=>{p.k=k;p.at=23+((k*7)%22)*(7.6/22);p.kept=p.v>=TH;p.n=p.kept?k+1:null;});
+{s:10,o:3,q:1,f:'cited',v:.94,h:'4 Results › 4.2 Draft size vs. latency',x:'Throughput gains track draft latency more closely than draft accuracy: a draft four times smaller but ten points less accurate often wins end-to-end, because each rejected token costs only one extra target forward pass.'},
+{s:0,o:4,q:1,f:'cited',v:.91,h:'3 Analysis › 3.1 Expected walltime',x:'With acceptance rate α and γ drafted tokens, the expected tokens per target pass is (1 − α^(γ+1)) / (1 − α); the improvement factor shrinks as the draft’s relative cost c grows.'},
+{s:22,o:3,q:2,f:'cited',v:.89,h:'Results › Llama-3-8B Q4 + 160M draft',x:'On the RTX 3060 (12 GB), a 160M draft gave 1.6× tokens/s at γ=4. The 1B draft only fit with the target at Q4 and gave 1.3×, because both models contended for memory bandwidth.'},
+{s:3,o:1,q:3,f:'cited',v:.87,h:'1 Introduction',x:'Drafting at the feature level instead of the token level lifts acceptance to roughly 0.8 with a draft head under 1B parameters, and no separate draft model has to be loaded.'},
+{s:5,o:2,q:5,f:'cited',v:.84,h:'Speculating with a draft model',x:'The draft model must share the target’s tokenizer. A num_speculative_tokens value between 3 and 5 is a reasonable starting point.'},
+{s:2,o:2,q:3,f:'cited',v:.82,h:'2 Method › 2.1 Medusa heads',x:'Medusa adds decoding heads to the target itself, so no second model competes for VRAM; the cost is fine-tuning the heads and a tree-attention verification step.'},
+{s:8,o:1,q:2,f:'cited',v:.79,h:'Top comment',x:'On 8 GB cards I stopped using a separate draft — the KV cache for both models pushed me into offloading, which erased the gain. Prompt-lookup decoding was free and gave about 1.2× on code.'},
+{s:4,o:2,q:1,f:'cited',v:.77,h:'Assisted generation in practice',x:'Assistant models work best when the target is at least an order of magnitude larger; latency gains around 2× are typical for greedy decoding on a single GPU.'},
+{s:1,o:2,q:1,f:'cited',v:.75,h:'2 Speculative sampling',x:'The modified rejection-sampling scheme preserves the target distribution exactly, so the speedup comes with no change in output quality.'},
+{s:23,o:2,q:1,f:'cited',v:.73,h:'TinyLlama-1.1B',x:'TinyLlama as draft for Llama-2-7B: acceptance 0.61 on chat, 0.72 on code at temperature 0.'},
+{s:7,o:1,q:3,f:'cited',v:.70,h:'Why lookahead',x:'Lookahead decoding needs no draft model: it generates n-grams in parallel with Jacobi iterations, which helps when memory rather than compute is the constraint.'},
+{s:9,o:3,q:5,f:'cited',v:.68,h:'Tuning γ',x:'Speedup peaks at small γ when acceptance is low; past the peak, each extra speculated token adds verification cost that is rarely repaid.'},
+{s:14,o:1,q:1,f:'cited',v:.66,h:'1 Introduction',x:'Acceptance rates drop sharply under distribution shift; online distillation of the draft on live queries recovers much of the lost acceptance.'},
+{s:6,o:1,q:4,f:'cited',v:.64,h:'PR description',x:'--draft sets the number of tokens drafted per step. With a Q8 draft and a Q4_K_M target on consumer GPUs, gains are largest on low-entropy text such as code.'},
+{s:10,o:4,q:1,f:'srccap',v:.81,h:'4 Results › 4.3 Acceptance by task',x:'Measured acceptance varies more with the task than with the draft: the same 68M draft accepts 0.71 of tokens on code and 0.52 on open-ended chat.'},
+{s:0,o:5,q:1,f:'srccap',v:.78,h:'4 Experiments › 4.1 T5-XXL',x:'With T5-small as the draft for T5-XXL, speculative decoding gave 2.6×–3.4× on translation and summarization with identical outputs.'},
+{s:8,o:2,q:2,f:'srccap',v:.71,h:'Reply',x:'Same card here: a 0.5B draft for a 7B Q4 target got about 1.4×, but only after I cut the context to 4k so both KV caches fit.'},
+{s:20,o:2,q:1,f:'budget',tok:410,left:260,v:.70,h:'Choosing a draft model',x:'In production we size the draft so its forward pass costs under 5% of the target’s. Below that, acceptance dominates; above it, the draft’s own latency eats the gain, so a smaller draft with lower acceptance often serves more tokens per second. We re-measure this whenever the target is quantized differently, because the ratio moves with it.'},
+{s:12,o:2,q:1,f:'budget',tok:380,left:205,v:.67,h:'Speculative decoding › Draft–target pairs',x:'A draft model is typically 10–100× smaller than the target and must share its vocabulary. The ratio matters more than absolute size, because verification cost is fixed per step while drafting cost grows with the draft.'},
+{s:11,o:2,q:1,f:'qcap',v:.65,h:'How it works',x:'The draft guesses several tokens ahead and the large model checks all of them in one pass; when the guesses are good, several tokens are produced for the cost of one.'},
+{s:16,o:1,q:1,f:'qcap',v:.55,h:'Choosing a draft',x:'Any small model that shares the tokenizer can act as a draft; smaller drafts lower the cost of a miss.'},
+{s:11,o:3,q:4,f:'below',v:.48,h:'Impact',x:'Speculative decoding has since been adopted across several products, where it reduced latency without changing output.'},
+{s:12,o:3,q:3,f:'below',v:.47,h:'Batching',x:'In-flight batching and paged KV caches raise GPU utilization in multi-user serving.'},
+{s:15,o:1,q:2,f:'below',v:.41,h:'Comment thread',x:'We got about 1.5× on a 4090 but your mileage will vary with the prompt.'},
+{s:16,o:2,q:4,f:'below',v:.36,h:'Launch flags',x:'Set --speculative-algorithm EAGLE and point --speculative-draft-model-path at the draft weights.'},
+{s:20,o:3,q:2,f:'below',v:.31,h:'Results',x:'Speculative decoding cut p50 latency for code-completion traffic.'},
+{s:21,o:1,q:3,f:'below',v:.27,h:'5 Speculative decoding',x:'Training with a multi-token prediction objective lets the model act as its own speculative drafter.'},
+{s:18,o:1,q:3,f:'below',v:.22,h:'Setup',x:'Install with pip install -e . and download the EAGLE weights from the model hub.'},
+{s:4,o:3,q:4,f:'below',v:.14,h:'Usage',x:'Assisted generation is available in transformers through the assistant_model argument.'}];
+let NCITE=0;PASS.forEach((p,k)=>{p.k=k;p.at=23+((k*7)%22)*(7.6/22);p.kept=p.f==='cited'||p.f==='srccap'||p.f==='budget';p.n=p.f==='cited'?++NCITE:null;
+  p.qs={};[1,2,3,4,5].forEach(q=>{if(q===p.q){p.qs[q]=p.v;return;}const hh=(k*7+q*3)%5;p.qs[q]=hh===2?Math.max(.02,+(p.v-.17).toFixed(2)):hh===3?Math.max(.02,+(p.v-.31).toFixed(2)):null;});});
+[1,2,3,4,5].forEach(q=>{const a=PASS.filter(p=>p.q===q&&p.v>=TH).sort((x,y)=>y.v-x.v);a.forEach((p,i)=>{p.rank=i+1;p.qn=a.length;p.qkept=Math.min(10,a.length);});});
+const EXTRA={
+0:[[1,'Abstract','Inference from large autoregressive models like Transformers is slow: decoding K tokens takes K serial runs of the model.'],[2,'1 Introduction','Hard language-modeling tasks often include easier subtasks that a much smaller model can approximate well.'],[3,'2 Speculative decoding › 2.3 Speculative sampling','To sample x ~ p(x), we sample x ~ q(x) instead, keep it if q(x) ≤ p(x), and otherwise reject it with probability 1 − p(x)/q(x).'],[6,'5 Related work','Blockwise parallel decoding also predicts several future tokens, but it requires changing the target model’s architecture.']],
+1:[[1,'Abstract','Speculative sampling generates multiple tokens from each transformer call by using a faster draft model.'],[3,'4 Results','With a 4B draft for Chinchilla 70B, decoding is 2–2.5× faster in a distributed setup.']],
+2:[[1,'Abstract','Medusa adds extra decoding heads that predict several subsequent tokens in parallel.'],[3,'3 Experiments','Medusa-1 reaches over 2.2× speedup on Vicuna-7B without changing generation quality.']],
+3:[[2,'3 Method','EAGLE autoregresses at the feature level, one layer below the LM head, and feeds in the sampled token from one step ahead.'],[3,'4 Experiments','On MT-bench, EAGLE gives a 2.7×–3.5× latency speedup on LLaMA2-Chat 70B.']],
+4:[[1,'Introduction','Assisted generation pairs a large model with a small assistant that proposes candidate tokens for the large model to verify.']],
+5:[[1,'Overview','Speculative decoding in vLLM improves inter-token latency in memory-bound workloads.'],[3,'Speculating with n-gram matching','The n-gram method matches against the prompt to propose tokens and needs no draft model.']],
+6:[[2,'Benchmarks','Tested with codellama-34b Q4_K_M as target and codellama-7b Q4 as draft on an M2 Ultra.']],
+7:[[2,'Lookahead decoding','Each step runs a lookahead branch that generates n-grams and a verification branch that checks them.']],
+8:[[3,'Reply','What draft did you use? Mine never got past 1.1× with a 1.1B draft.']],
+9:[[1,'Introduction','Speculative decoding lets a cheap model draft tokens that the expensive model verifies in parallel.'],[2,'Draft models in PyTorch','We trained a speculator head on top of the target instead of a separate draft network.']],
+10:[[1,'Abstract','Over 350 experiments with LLaMA-65B and OPT-66B identify which factors determine speculative decoding performance.'],[2,'3 Setup','Drafts range from 68M to 7B parameters; we measure throughput, not acceptance alone.'],[5,'5 Designing better drafts','Pruning a 1.3B model into a hardware-efficient draft improves throughput by 111% over existing drafts.']],
+11:[[1,'Looking back','Two years after publishing speculative decoding, we look at where it is used and why it works.']],
+12:[[1,'Inference optimization','At small batch sizes, LLM inference is limited by memory bandwidth rather than compute.']],
+14:[[2,'3 Method','The draft is distilled on the target’s outputs for real user queries and updated continuously during serving.']],
+22:[[1,'Bench: speculative decoding on RTX 3060','Setup: RTX 3060 12 GB, llama.cpp b3561, Llama-3-8B-Instruct Q4_K_M as target, context 4096.'],[2,'Method','Each config ran 5 times on 20 prompts; tokens/s is the median of decode time only.'],[4,'Results › Context length','Above 6k context the target’s KV cache alone filled 11 GB and the draft could not load.'],[5,'Notes','Prompt lookup (no draft) gave 1.2× on code and nothing on chat.']],
+23:[[1,'Candidates','Drafts tried: TinyLlama-1.1B, Qwen2-0.5B and a 160M llama-architecture model. All share the target tokenizer.'],[3,'Qwen2-0.5B','Qwen2-0.5B as draft for Qwen2-7B: acceptance 0.66 on chat.']]};
+const TRUNC={12:'Fetch stopped at the 512 KB limit. Sections after “Batching” were not scraped.'};
+const DOCS={};PASS.forEach(p=>{(DOCS[p.s]=DOCS[p.s]||[]).push({o:p.o,h:p.h,x:p.x,p});});Object.keys(EXTRA).forEach(s=>EXTRA[s].forEach(([o,hh,x])=>(DOCS[s]=DOCS[s]||[]).push({o,h:hh,x,p:null})));Object.values(DOCS).forEach(a=>a.sort((x,y)=>x.o-y.o));
+const PM={};PH.forEach(p=>PM[p.id]=p);
+const FATE={cited:{icon:'ph-quotes',label:'cited',bg:'var(--color-accent-900)',col:'var(--color-accent-200)',bs:'solid',bd:'transparent',op:1},
+ kept:{icon:'ph-check',label:'kept · selecting',bg:'transparent',col:'var(--color-text)',bs:'solid',bd:'var(--color-divider)',op:1},
+ above:{icon:'ph-hourglass',label:'≥ 0.50',bg:'transparent',col:'var(--muted)',bs:'solid',bd:'var(--color-divider)',op:1},
+ srccap:{icon:'ph-stack',label:'source cap',bg:'color-mix(in srgb,var(--color-text) 8%,transparent)',col:'var(--color-text)',bs:'solid',bd:'var(--color-divider)',op:.62},
+ budget:{icon:'ph-gauge',label:'over budget',bg:'color-mix(in srgb,var(--color-text) 8%,transparent)',col:'var(--color-text)',bs:'solid',bd:'var(--color-divider)',op:.62},
+ qcap:{icon:'ph-funnel',label:'query cap',bg:'transparent',col:'var(--color-text)',bs:'dashed',bd:'var(--muted)',op:.55},
+ below:{icon:'ph-arrow-down',label:'below 0.50',bg:'transparent',col:'var(--muted)',bs:'dashed',bd:'var(--color-divider)',op:.5},
+ pre:{icon:'ph-minus-circle',label:'prefiltered',bg:'transparent',col:'var(--muted)',bs:'dotted',bd:'var(--muted)',op:.5},
+ pending:{icon:'ph-circle-dashed',label:'not scored yet',bg:'transparent',col:'var(--muted)',bs:'dotted',bd:'var(--color-divider)',op:.7}};
 const MD1=`## Summary
 On consumer GPUs the binding constraint for speculative decoding is usually memory, not draft accuracy. Smaller drafts tend to win end-to-end even with lower acceptance, because a rejected token costs only one extra target pass [1][2]. On 8–12 GB cards, draft-free methods are often the better trade [6][7][11].
 
@@ -644,7 +767,7 @@ Quality is unchanged: verification preserves the target distribution [9].`;
 const WDEF={tone:'Objective',custom:'',words:1200,lang:'English',cite:'numeric',ref:'APA'};
 const TONES=[['Objective','neutral and evidence-first'],['Formal','precise, impersonal register'],['Analytical','breaks the question into causes and factors'],['Persuasive','argues for a recommendation'],['Informative','a plain, broad overview'],['Explanatory','teaches how and why, step by step'],['Descriptive','a detailed account of what exists'],['Critical','weighs strengths, weaknesses and gaps'],['Comparative','sets the options side by side'],['Speculative','explores likely futures and open questions'],['Reflective','considers implications and trade-offs']];
 const REFS=['APA','MLA','Chicago','IEEE'];
-const PROFILES=[{id:'workstation',desc:'One GPU fits all models; models stay loaded.',th:.55,scorer:'jev',gpuDev:'workstation:gpu0',cpuDev:'workstation:cpu'},{id:'low-vram',desc:'Models take turns on one small GPU; slower, fits 8 GB.',th:.6,scorer:'rerank',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'},{id:'cloud',desc:'Hosted APIs only; needs API keys.',th:.58,scorer:'rerank · hosted',gpuDev:'cloud',cpuDev:'cloud'},{id:'nixos',desc:'SearXNG on homelab, models on desktop:gpu0.',th:.62,scorer:'jev',gpuDev:'desktop:gpu0',cpuDev:'homelab',user:true}];
+const PROFILES=[{id:'workstation',desc:'One GPU fits all models; models stay loaded.',th:.5,scorer:'jev',gpuDev:'workstation:gpu0',cpuDev:'workstation:cpu'},{id:'low-vram',desc:'Models take turns on one small GPU; slower, fits 8 GB.',th:.5,scorer:'rerank',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'},{id:'cloud',desc:'Hosted APIs only; needs API keys.',th:.5,scorer:'rerank · hosted',gpuDev:'cloud',cpuDev:'cloud'},{id:'nixos',desc:'SearXNG on homelab, models on desktop:gpu0.',th:.5,scorer:'jev',gpuDev:'desktop:gpu0',cpuDev:'homelab',user:true}];
 const ARB='1px solid var(--wa-ring)';
 const LANGS=['English','German','French','Spanish','Portuguese','Japanese','Chinese (Simplified)'];
 const CITES=[['numeric','[1] Numeric'],['super','¹ Superscript'],['authoryear','(Author, year)']];
@@ -685,15 +808,15 @@ function sources(files){
  while(fl.length<2)fl.push(DFILES[fl.length]);
  fl.forEach(([n,b],k)=>out.push({i:22+k,u:n,t:n.split('/').pop(),fail:'',ay:n.split('/').pop(),found:2.6,fs:2.6+k*.4,fe:3.0+k*.4,dom:'local file',size:fmtB(b),file:true}));
  return out;}
-const HELP={recipe:{t:'Recipe',b:'Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.'},sources:{t:'Sources',b:'Web searches the internet. Files uses only your attachments. Both combines them; attachments get a share of the context budget.'},profile:{t:'Profile',b:'A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server.'},attach:{t:'Attachments',b:'Markdown or text files to research alongside the web, or instead of it.',ex:'pdf-ingest output (.md)'},'w-tone':{t:'Tone',b:'The writing style of the report. Each option in the list says what it emphasizes.'},'w-custom':{t:'Custom instructions',b:'Extra guidance added on top of the tone. Set a default here, or change it for one run.',ex:'Focus on costs; avoid jargon.'},'w-words':{t:'Length (words)',b:'Target length of the report. The writer aims for it; it is not an exact count.'},'w-lang':{t:'Language',b:'The language the report is written in. Sources can be in any language.'},'w-cite':{t:'Citation marker',b:'How citations look in the text.',ex:'[1] · ¹ · (Leviathan et al., 2023)'},'w-ref':{t:'Reference style',b:'Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE.'},overridden:{t:'Overridden',b:'This value differs from your default in Settings and applies to this run only.'},rwchanged:{t:'Changed',b:'This value differs from the version you are rewriting.'},'ph-plan':{t:'Plan',b:'Splits your question into focused sub-queries for search.'},'ph-search':{t:'Search',b:'Runs each sub-query against the search provider and collects candidate URLs.'},'ph-fetch':{t:'Fetch',b:'Downloads each URL and extracts its readable text. Failed pages are skipped and the run continues.'},'ph-load':{t:'Load',b:'Reads your attached files.'},'ph-chunk':{t:'Chunk',b:'Splits pages and files into passages along their headings.'},'ph-prefilter':{t:'Prefilter',b:'Quickly narrows chunks with embeddings or keyword ranking before the slower scorer.'},'ph-score':{t:'Score',b:'Rates how useful each passage is for its question.'},'ph-select':{t:'Select',b:'Picks the best passages that fit the writer\'s context budget.'},'ph-write':{t:'Write',b:'Writes the report from the selected passages and cites each claim.'},wait:{t:'Waiting for GPU',b:'Another model is unloading from the same GPU. This stage starts when it is free.'},device:{t:'Device',b:'The machine and GPU running the current stage, as labelled in the profile.',ex:'desktop:gpu0'},scorer:{t:'Scorer',b:'Which scorer ranked the passages. “fallback” means the configured scorer failed and a simpler one took over.',ex:'jev · rerank · bm25 · fallback'},score:{t:'Score and threshold',b:'Each passage scores from 0 to 1. Passages right of the line are kept; the line is the scorer\'s configured threshold.'},rejected:{t:'Rejected passages',b:'Shows passages that scored below the threshold or did not fit the budget.'},tokens:{t:'Tokens and cost',b:'Prompt and completion tokens across all stages. Cost is $0 for local models.'},rewrite:{t:'Rewrite',b:'Writes a new version from the same passages with different writing options. No new search; it creates a linked version.'},retry:{t:'Retry from Score',b:'Reruns scoring, selection and writing on the saved pages. Useful after changing the scorer or profile.'},rerun:{t:'Rerun',b:'Starts a fresh run with the same question and attachments.'},versions:{t:'Versions',b:'Reports that share the same research. v1 is the original; rewrites follow.'},pdevice:{t:'Device',b:'Where this provider runs, as labelled in the profile.'},unload:{t:'Unload',b:'Whether the model can be released between phases: none, llama-swap or ollama. Exclusive GPU policy needs it.'},health:{t:'Health',b:'ok · degraded (slow, or cannot unload) · down · skipped (not used by this profile).'},gpupolicy:{t:'GPU policy',b:'Shared keeps all models loaded. Exclusive unloads a model before the next one on the same GPU loads; it needs unload support.'},wdefaults:{t:'Writing defaults',b:'Used for every new run. Each run can override them in its options.'},apitokens:{t:'API tokens',b:'For scripts and agents on other machines. A token is shown once, when you create it.'},'h-recipe':{t:'Recipe',b:'Report wrote a cited report; context returned selected passages only.'},'h-version':{t:'Rewrite',b:'A new version written from an earlier run\'s passages. It opens next to its parent as linked versions.'},'h-cost':{t:'Cost',b:'Total for search and hosted APIs across all stages. $0 for local models.'}};
+const HELP={recipe:{t:'Recipe',b:'Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.'},sources:{t:'Sources',b:'Web searches the internet. Files uses only your attachments. Both combines them; attachments get a share of the context budget.'},profile:{t:'Profile',b:'A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server.'},attach:{t:'Attachments',b:'Markdown or text files to research alongside the web, or instead of it.',ex:'pdf-ingest output (.md)'},'w-tone':{t:'Tone',b:'The writing style of the report. Each option in the list says what it emphasizes.'},'w-custom':{t:'Custom instructions',b:'Extra guidance added on top of the tone. Set a default here, or change it for one run.',ex:'Focus on costs; avoid jargon.'},'w-words':{t:'Length (words)',b:'Target length of the report. The writer aims for it; it is not an exact count.'},'w-lang':{t:'Language',b:'The language the report is written in. Sources can be in any language.'},'w-cite':{t:'Citation marker',b:'How citations look in the text.',ex:'[1] · ¹ · (Leviathan et al., 2023)'},'w-ref':{t:'Reference style',b:'Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE.'},overridden:{t:'Overridden',b:'This value differs from your default in Settings and applies to this run only.'},rwchanged:{t:'Changed',b:'This value differs from the version you are rewriting.'},'ph-plan':{t:'Plan',b:'Splits your question into focused sub-queries for search.'},'ph-search':{t:'Search',b:'Runs each sub-query against the search provider and collects candidate URLs.'},'ph-fetch':{t:'Fetch',b:'Downloads each URL and extracts its readable text. Failed pages are skipped and the run continues.'},'ph-load':{t:'Load',b:'Reads your attached files.'},'ph-chunk':{t:'Chunk',b:'Splits pages and files into passages along their headings.'},'ph-prefilter':{t:'Prefilter',b:'Quickly narrows chunks with embeddings or keyword ranking before the slower scorer.'},'ph-score':{t:'Score',b:'Rates how useful each passage is for its question.'},'ph-select':{t:'Select',b:'Picks the best passages that fit the writer\'s context budget.'},'ph-write':{t:'Write',b:'Writes the report from the selected passages and cites each claim.'},wait:{t:'Waiting for GPU',b:'Another model is unloading from the same GPU. This stage starts when it is free.'},device:{t:'Device',b:'The machine and GPU running the current stage, as labelled in the profile.',ex:'desktop:gpu0'},scorer:{t:'Scorer',b:'Which scorer ranked the passages. “fallback” means the configured scorer failed and a simpler one took over.',ex:'jev · rerank · bm25 · fallback'},score:{t:'Score and threshold',b:'Each passage scores from 0 to 1. Passages right of the line are kept; the line is the scorer\'s configured threshold.'},rejected:{t:'Rejected passages',b:'Shows passages that scored below the threshold or did not fit the budget.'},tokens:{t:'Tokens and cost',b:'Prompt and completion tokens across all stages. Cost is $0 for local models.'},rewrite:{t:'Rewrite',b:'Writes a new version from the same passages with different writing options. No new search; it creates a linked version.'},retry:{t:'Retry from Score',b:'Reruns scoring, selection and writing on the saved pages. Useful after changing the scorer or profile.'},rerun:{t:'Rerun',b:'Starts a fresh run with the same question and attachments.'},versions:{t:'Versions',b:'Reports that share the same research. v1 is the original; rewrites follow.'},pdevice:{t:'Device',b:'Where this provider runs, as labelled in the profile.'},unload:{t:'Unload',b:'Whether the model can be released between phases: none, llama-swap or ollama. Exclusive GPU policy needs it.'},health:{t:'Health',b:'Not checked yet, OK, slow (degraded), or down. Checks run only when you click Check, so idle GPU servers are never woken by opening this page.'},gpupolicy:{t:'GPU policy',b:'Shared keeps all models loaded. Exclusive unloads a model before the next one on the same GPU loads; it needs unload support.'},wdefaults:{t:'Writing defaults',b:'Used for every new run. Each run can override them in its options.'},apitokens:{t:'API tokens',b:'For scripts and agents on other machines. A token is shown once, when you create it.'},'h-recipe':{t:'Recipe',b:'Report wrote a cited report; context returned selected passages only.'},'h-version':{t:'Rewrite',b:'A new version written from an earlier run\'s passages. It opens next to its parent as linked versions.'},'h-cost':{t:'Cost',b:'Total for search and hosted APIs across all stages. $0 for local models.'},'f-chunks':{t:'Chunks',b:'Pages and files split along their headings. The prefilter ranks them per sub-query and passes the top 50 of each to the scorer; the rest are “prefiltered” and never scored.'},'f-scored':{t:'Scored',b:'Chunks the scorer rated from 0 to 1, after the prefilter.'},'f-kept':{t:'Kept',b:'Scored at least 0.50 (threshold) and in the top 10 of their sub-query (query cap).'},'f-cited':{t:'Cited',b:'Kept passages that fit the writer’s selection: at most 1 per source (source cap) and within the token budget. Numbered in the report.'},legend:{t:'Passage fates',items:[{icon:'ph-quotes',t:'cited [n]',b:'Selected and cited in the report. The marker follows your citation setting.'},{icon:'ph-stack',t:'source cap',b:'Kept, but its source already has the maximum of 1 cited passage.'},{icon:'ph-gauge',t:'over budget',b:'Kept, but too long for the tokens left in the writer’s budget.'},{icon:'ph-funnel',t:'query cap · q1',b:'At or above 0.50, but its sub-query already had 10 better passages.'},{icon:'ph-arrow-down',t:'below 0.50',b:'Scored under the threshold.'},{icon:'ph-minus-circle',t:'prefiltered',b:'Never scored: outside the top 50 for every sub-query. Shown in the source view.'}]}};
 const PDEV={search:['homelab','none'],fetch:['desktop:cpu','none'],embeddings:['desktop:gpu0','ollama'],scorer:['desktop:gpu0','llama-swap'],llm:['desktop:gpu0','llama-swap']};
 const KEPTBY={};PASS.forEach(p=>{if(p.kept)KEPTBY[p.s]=(KEPTBY[p.s]||0)+1;});
 
 class Component extends DCLogic {
-  state={screen:'live',run:null,query:'',files:[],dragOver:false,dropErr:'',optsOpen:false,opts:{recipe:'report',sources:'both',profile:'low-vram'},wNew:{...WDEF},wDef:{...WDEF},wSaved:false,showRej:false,tab:'progress',cite:null,toast:null,hq:'',hf:'all',hr:'any',hist:HIST,versions:[],viewId:null,rw:null,theme:null,winW:window.innerWidth,
-    health:{search:{st:'degraded',ms:1840,at:Date.now()-12000},fetch:{st:'ok',ms:3,at:Date.now()-12000},embeddings:{st:'ok',ms:38,at:Date.now()-12000},scorer:{st:'ok',ms:61,at:Date.now()-12000},llm:{st:'ok',ms:212,at:Date.now()-12000}},now:Date.now(),
-    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive'};
-  qRef=React.createRef();fileRef=React.createRef();hRef=React.createRef();repRef=React.createRef();pwRef=React.createRef();
+  state={screen:'live',run:null,query:'',files:[],dragOver:false,dropErr:'',optsOpen:false,opts:{recipe:'report',sources:'both',profile:'low-vram'},wNew:{...WDEF},wDef:{...WDEF},wSaved:false,pf:'kept',tab:'progress',cite:null,toast:null,hq:'',hf:'all',hr:'any',hist:HIST,versions:[],viewId:null,rw:null,theme:null,winW:window.innerWidth,
+    health:{search:{st:'ok',ms:418,at:Date.now()-180000},fetch:{st:'none'},embeddings:{st:'down',detail:'ECONNREFUSED 127.0.0.1:11434 · is ollama running?',at:Date.now()-180000},scorer:{st:'none'},llm:{st:'none'}},now:Date.now(),
+    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive',src:null};
+  qRef=React.createRef();fileRef=React.createRef();hRef=React.createRef();repRef=React.createRef();pwRef=React.createRef();sdRef=React.createRef();sdBodyRef=React.createRef();
   componentDidMount(){
     try{const s=JSON.parse(localStorage.getItem('wosarcher-writing-defaults')||'null');if(s){const wd={...WDEF,...s};this.setState({wDef:wd,wNew:{...wd}});}}catch(e){}
     this.iv=setInterval(()=>this.tick(),100);
@@ -704,20 +827,27 @@ class Component extends DCLogic {
     this.applyScenario(this.props.scenario||'live');
   }
   componentWillUnmount(){document.removeEventListener('pointerdown',this.onPD);document.removeEventListener('scroll',this.onScroll,true);clearInterval(this.iv);window.removeEventListener('keydown',this.onKey);window.removeEventListener('resize',this.onResize);}
-  componentDidUpdate(pp){
+  componentDidUpdate(pp,ps){
     if(pp.scenario!==this.props.scenario)this.applyScenario(this.props.scenario||'live');
     if(pp.theme!==this.props.theme)this.setState({theme:null});
     const el=this.repRef.current;const r=this.state.run;
     if(el&&r&&r.status==='running'&&r.t>=34&&el.scrollHeight-el.scrollTop-el.clientHeight<140)el.scrollTop=el.scrollHeight;
+    const ss=this.state.src,p0=ps&&ps.src;
+    if(ss&&!p0)setTimeout(()=>this.sdRef.current&&this.sdRef.current.focus(),0);
+    if(ss&&!ss.loading&&(!p0||p0.sel!==ss.sel||p0.loading||p0.s!==ss.s)){const body=this.sdBodyRef.current;const ce=body&&body.querySelector('[data-chunk="'+ss.sel+'"]');
+      if(ce){const smooth=p0&&!p0.loading&&p0.s===ss.s;if(!smooth||ce.offsetTop<body.scrollTop+8||ce.offsetTop+ce.offsetHeight>body.scrollTop+body.clientHeight-8)body.scrollTo({top:Math.max(0,ce.offsetTop-body.clientHeight*.22),behavior:smooth?'smooth':'auto'});}}
   }
   baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',...o};}
   applyScenario(sc){
     const unlocked={...this.state.auth,locked:false,err:null,pw:'',left:5,until:0};
-    const S={cite:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked};
+    const S={cite:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null};
     const v1={id:'r_8c21',v:1,query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},md:MD1,dur:fmtT(END*TF),date:'Today, 14:02',files:[]};
     if(sc==='login')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true}});
     if(sc==='login-wrong')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true,err:'wrong',left:3}});
     if(sc==='login-limited')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true,err:'limited',left:0,until:Date.now()+30000}});
+    if(sc==='passages')return this.setState({...S,run:this.baseRun({status:'done',t:END}),screen:'live',tab:'passages',pf:'all'});
+    const SRC={source:[14],'source-loading':[14,true],'source-truncated':[18],'source-file':[2]}[sc];
+    if(SRC){const p=PASS[SRC[0]];this.setState({...S,run:this.baseRun({status:'done',t:END}),screen:'live',tab:'passages',pf:'all'});this.openSrc(p.s,DOCS[p.s].findIndex(c=>c.p===p),SRC[1]);return;}
     if(sc==='help')return this.setState({...S,run:null,screen:'helpspec'});
     if(sc==='empty')return this.setState({...S,run:null,screen:'live'});
     if(sc==='new')return this.setState({...S,run:null,screen:'new'});
@@ -756,20 +886,40 @@ class Component extends DCLogic {
     if(this.state.auth.locked)return;
     const tag=(e.target&&e.target.tagName)||'';const typing=/INPUT|TEXTAREA|SELECT/.test(tag);
     if(e.altKey&&/^Digit[1-4]$/.test(e.code)){e.preventDefault();this.go(['new','live','history','settings'][+e.code.slice(5)-1]);return;}
-    if(e.key==='Escape'){if(this.state.help){this.setState({help:null});return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
+    if(e.key==='Escape'){if(this.state.help){this.setState({help:null});return;}if(this.state.src){this.closeSrc();return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
+    if(this.state.src&&!typing&&/^Arrow(Down|Right|Up|Left)$/.test(e.key)){e.preventDefault();this.moveSrc(/Down|Right/.test(e.key)?1:-1);return;}
     if(typing)return;
-    if(e.key==='r'&&this.state.screen==='live')this.setState(s=>({showRej:!s.showRej}));
+    if(e.key==='r'&&this.state.screen==='live'&&!this.state.src&&!e.ctrlKey&&!e.metaKey){const o=['cited','kept','all'];this.setState(s=>({pf:o[(o.indexOf(s.pf)+1)%3]}));}
     if(e.key==='/'&&this.state.screen==='history'){e.preventDefault();this.hRef.current&&this.hRef.current.focus();}
   }
   go(id){this.setState({screen:id,cite:null});if(id==='new')setTimeout(()=>this.qRef.current&&this.qRef.current.focus(),50);}
-  openHelp(el,key,pinned){const rc=el.getBoundingClientRect();const W=272,vw=window.innerWidth,vh=window.innerHeight;const cx=rc.left+rc.width/2;const x=clamp(cx-W/2,8,vw-8-W);const below=rc.bottom+180<vh||rc.top<180;
+  openHelp(el,key,pinned){const rc=el.getBoundingClientRect();const W=key==='legend'?280:272,est=key==='legend'?330:180,vw=window.innerWidth,vh=window.innerHeight;const cx=rc.left+rc.width/2;const x=clamp(cx-W/2,8,vw-8-W);const below=rc.bottom+est<vh||rc.top<est;
     clearTimeout(this.hT);this.setState({help:{key,pinned:!!pinned,x,y:below?rc.bottom+9:rc.top-9,below,ax:clamp(cx-x-5,10,W-20)}});}
-  helpContent(key){if(key&&key.startsWith('wait-')){const p=HELP['ph-'+key.slice(5)]||{t:'',b:''};return {t:p.t+' · waiting for GPU',b:HELP.wait.b+' '+p.b};}return HELP[key]||{t:key,b:''};}
+  helpContent(key){const dh=this.dynHelp&&this.dynHelp[key];if(dh)return dh;if(key&&key.startsWith('wait-')){const p=HELP['ph-'+key.slice(5)]||{t:'',b:''};return {t:p.t+' · waiting for GPU',b:HELP.wait.b+' '+p.b};}return HELP[key]||{t:key,b:''};}
+  fb(){return this.props.fallback??true;}
+  fateKey(c,t){if(!c.p)return t>=PM.prefilter.e?'pre':'pending';const p=c.p,sd=t>=PM.score.e;if(!sd&&p.at>t)return 'pending';if(p.v<TH)return 'below';if(!sd)return 'above';if(p.f==='qcap')return 'qcap';if(t<PM.select.e)return 'kept';return p.f;}
+  badge(fk,p,r){const o={...(FATE[fk]||FATE.pending),mark:'',q:''};if(fk==='cited')o.mark=this.citeLabel(p.n,r.wopts.cite,r.files);if(fk==='qcap')o.q='q'+p.q;if(fk==='below')o.label='below '+TH.toFixed(2);if(fk==='above')o.label='≥ '+TH.toFixed(2);return o;}
+  why(fk,p,r){
+    if(fk==='pre')return 'Not scored: outside the top 50 for every sub-query.';
+    if(fk==='pending')return p?'Waiting for the scorer.':'Waiting for the prefilter.';
+    const q='q'+p.q,sc=p.v.toFixed(2),th=TH.toFixed(2);
+    if(fk==='below')return 'Scored '+sc+' in '+q+', below the '+th+' threshold.';
+    if(fk==='above')return 'Scored '+sc+' in '+q+'. Caps apply when scoring finishes.';
+    if(fk==='qcap')return 'Scored '+sc+' in '+q+' but ranked '+p.rank+' of '+p.qn+' above '+th+'; '+q+' keeps only its top 10.';
+    const base='Kept: rank '+p.rank+' of '+p.qkept+' in '+q;
+    if(fk==='kept')return base+'. Selection is running.';
+    if(fk==='cited')return base+'; cited as '+this.citeLabel(p.n,r.wopts.cite,r.files)+'.';
+    if(fk==='srccap')return base+'; not cited: this source already has 1 cited passage (cap 1 per source).';
+    if(fk==='budget')return base+'; not cited: needs '+p.tok+' tokens, '+p.left+' were left in the 6,000-token budget.';
+    return '';}
+  openSrc(s,i,hold){this.lastFocus=document.activeElement;clearTimeout(this.sdT);this.setState({src:{s,sel:Math.max(0,i),loading:true},help:null,cite:null});if(!hold)this.sdT=setTimeout(()=>this.setState(st=>st.src?{src:{...st.src,loading:false}}:null),420);}
+  closeSrc(){clearTimeout(this.sdT);this.setState({src:null});const f=this.lastFocus;if(f&&f.focus&&document.contains(f))setTimeout(()=>f.focus(),0);}
+  moveSrc(d){this.setState(st=>{if(!st.src||st.src.loading)return null;const n=(DOCS[st.src.s]||[]).length;const sel=clamp(st.src.sel+d,0,n-1);return sel===st.src.sel?null:{src:{...st.src,sel}};});}
   toastMsg(msg,undo){clearTimeout(this.tt);this.setState({toast:{msg,undo}});this.tt=setTimeout(()=>this.setState({toast:null}),undo?6000:2200);}
   copy(text,msg){try{navigator.clipboard.writeText(text);}catch(e){}if(msg)this.toastMsg(msg);}
   start(q,opts,files,wopts){
     const id='r_'+Math.random().toString(16).slice(2,6);
-    this.setState({run:this.baseRun({id,query:q,opts,files,wopts}),screen:'live',tab:'progress',showRej:false});
+    this.setState({run:this.baseRun({id,query:q,opts,files,wopts}),screen:'live',tab:'progress',pf:'kept'});
   }
   addFiles(list){
     const ok=[],bad=[];[...list].forEach(f=>(/\.(md|txt)$/i.test(f.name)?ok:bad).push(f));
@@ -777,10 +927,11 @@ class Component extends DCLogic {
   }
   check(id){
     this.setState(s=>({health:{...s.health,[id]:{...s.health[id],checking:true}}}));
-    setTimeout(()=>{const rnd=Math.random();let h;
-      if(id==='search')h=rnd<.7?{st:'degraded',ms:1500+Math.round(rnd*800)}:{st:'ok',ms:420+Math.round(rnd*300)};
-      else h={st:'ok',ms:{fetch:2,embeddings:30,scorer:55,llm:190}[id]+Math.round(rnd*40)};
-      this.setState(s=>({health:{...s.health,[id]:{...h,at:Date.now()}}}));},600+Math.random()*700);
+    setTimeout(()=>{const rnd=Math.random();let hh;
+      if(id==='embeddings')hh={st:'down',detail:'ECONNREFUSED 127.0.0.1:11434 · is ollama running?'};
+      else if(id==='search')hh=rnd<.25?{st:'degraded',ms:1500+Math.round(rnd*800)}:{st:'ok',ms:380+Math.round(rnd*120)};
+      else hh={st:'ok',ms:{fetch:2,scorer:55,llm:190}[id]+Math.round(rnd*40)};
+      this.setState(s=>({health:{...s.health,[id]:{...hh,at:Date.now()}},now:Date.now()}));},700+Math.random()*900);
   }
   login(e){
     e&&e.preventDefault&&e.preventDefault();const a=this.state.auth;if(a.until||!a.pw)return;
@@ -814,7 +965,7 @@ class Component extends DCLogic {
     if(r.kind==='rewrite'&&p.e<=r.t0)return 'reused';
     if(t<p.s)return 'pending';if(t>=p.e)return 'done';
     if(r.stopAt!=null&&t>=r.stopAt)return r.status==='failed'?'failed':'cancelled';
-    return t<p.r?'waiting':'running';
+    return t<((p.id==='prefilter'&&this.fb())?p.s:p.r)?'waiting':'running';
   }
   wFields(w,base,set,prefix,mark){
     return Object.keys(WLABEL).map(k=>{const changed=!!base&&String(w[k])!==String(base[k]);
@@ -832,9 +983,9 @@ class Component extends DCLogic {
     const t=this.shownT(r);const conn=r.status==='connecting';const src=sources(r.files);const subN=SUBQ.filter((_,i)=>.5+i*.45<=t).length;
     const P={};PH.forEach(p=>P[p.id]=p);const prog=p=>clamp((t-p.r)/(p.e-p.r),0,1);
     const web=src.filter(s=>!s.file);const nok=web.filter(s=>!s.fail&&s.fe<=t).length,nfail=web.filter(s=>s.fail&&s.fe<=t).length,nfound=web.filter(s=>s.found<=t).length;
-    const chunks=Math.round(prog(P.chunk)*412),pre=Math.round(prog(P.prefilter)*412),scored=Math.round(prog(P.score)*96);
+    const chunks=Math.round(prog(P.chunk)*612),pre=Math.round(prog(P.prefilter)*612),scored=Math.round(prog(P.score)*150);
     const chars=t<34?0:Math.floor(r.md.length*clamp((t-34)/(END-34.5),0,1));const writeTok=Math.round(chars/3.7);
-    const isRw=r.kind==='rewrite';const status=r.status;const running=status==='running';const files=r.files;const prof=PROFILES.find(x=>x.id===r.opts.profile)||PROFILES[1];const th=prof.th;
+    const isRw=r.kind==='rewrite';const status=r.status;const running=status==='running';const files=r.files;const prof=PROFILES.find(x=>x.id===r.opts.profile)||PROFILES[1];const th=prof.th;const fb=this.fb();const scoreDone=t>=P.score.e;
     const ST={
       pending:{icon:'ph-circle',ic:'var(--faint)',bg:'transparent',bd:'1px solid var(--line)',lc:'var(--muted)',tc:'var(--faint)',bar:'transparent'},
       waiting:{icon:'ph-cpu',ic:'var(--color-warn)',bg:'repeating-linear-gradient(135deg,color-mix(in srgb,var(--color-warn) 14%,transparent) 0 5px,transparent 5px 10px)',bd:'1px dashed var(--color-warn)',lc:'var(--color-text)',tc:'var(--color-warn)',bar:'transparent'},
@@ -844,14 +995,23 @@ class Component extends DCLogic {
       failed:{icon:'ph-x-circle',ic:'var(--color-danger)',bg:'color-mix(in srgb,var(--color-danger) 10%,transparent)',bd:'1px solid var(--color-danger)',lc:'var(--color-text)',tc:'var(--color-danger)',bar:'var(--color-danger)'},
       cancelled:{icon:'ph-stop-circle',ic:'var(--muted)',bg:'transparent',bd:'1px dashed var(--muted)',lc:'var(--color-text)',tc:'var(--muted)',bar:'var(--faint)'}};
     const txt={plan:st=>st==='done'?'5 sub-queries':`${subN}/5 sub-queries`,search:st=>st==='done'?'22 URLs found':`found ${nfound}`,fetch:()=>`fetched ${nok}/22`+(nfail?` · ${nfail} failed`:''),
-      load:st=>st==='done'?'2/2 files':`loaded ${src.filter(s=>s.file&&s.fe<=t).length}/2 files`,chunk:()=>`${chunks} chunks`,prefilter:st=>st==='done'?'96 of 412 kept':`${pre}/412 embedded`,
-      score:st=>st==='done'?'96 scored':`scored ${scored}/96`,select:st=>st==='done'?'14 selected':'selecting',write:()=>`${fmtK(writeTok)} tokens`};
+      load:st=>st==='done'?'2/2 files':`loaded ${src.filter(s=>s.file&&s.fe<=t).length}/2 files`,chunk:()=>`${chunks} chunks`,prefilter:st=>st==='done'?'150 of 612 kept':pre+'/612 ranked',
+      score:st=>st==='done'?'150 scored':'scored '+scored+'/150',select:st=>st==='done'?'14 of 19 cited':'selecting',write:()=>`${fmtK(writeTok)} tokens`};
+    const TG={plan:['qwen2.5-7b','m-plan',false],prefilter:fb?['BM25 · fallback','m-prefilter-fb',true]:['bge-small-en-v1.5','m-prefilter',false],score:[prof.scorer,'m-score',false],write:['qwen2.5-7b','m-write',false]};
+    const LLM='qwen2.5-7b-instruct-q4_k_m';
+    this.dynHelp={'m-plan':{t:'Planner · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},'m-write':{t:'Writer · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},
+      'm-prefilter':{t:'Prefilter · embeddings',b:'Ran bge-small-en-v1.5 as configured. Kept the top 50 chunks per sub-query: 150 of 612. q4 and q5 had fewer than 50 candidates and skipped ranking (small-input passthrough).'},
+      'm-prefilter-fb':{t:'Fallback · keyword (BM25)',b:'Configured: embeddings (bge-small-en-v1.5). The embedder was unreachable (ECONNREFUSED 127.0.0.1:11434), so BM25 ran instead. Kept the top 50 per sub-query: 150 of 612. q4 and q5 skipped ranking (small-input passthrough).'},
+      'm-score':{t:'Scorer · '+prof.scorer,b:'Ran '+prof.scorer+' as configured in the '+prof.id+' profile. Scores of '+th.toFixed(2)+' or more go on to the query cap.'}};
     let gpuPhase=null,stopLabel='';
     const phases=PH.map(p=>{const st=conn?'pending':this.phaseSt(p,t,r);const S=ST[st];
       if((st==='running'||st==='waiting')&&p.gpu)gpuPhase={p,st};if(st==='cancelled'||st==='failed')stopLabel=p.l;
-      const text=st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+p.wait:st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](st);
+      const text=st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+(fb&&p.id==='score'?'planner LLM unloading':p.wait):st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](st);
       const pct=st==='done'||st==='reused'?100:(st==='running'||st==='failed'||st==='cancelled')?Math.round(prog(p)*100):0;
-      return {help:(st==='waiting'?'wait-':'ph-')+p.id,helpLabel:'Help: '+p.l+(st==='waiting'?', waiting for GPU':''),label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text};});
+      return {help:(st==='waiting'?'wait-':'ph-')+p.id,helpLabel:'Help: '+p.l+(st==='waiting'?', waiting for GPU':''),label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text,
+        hasTag:!!TG[p.id]&&['running','done','failed','cancelled','reused'].includes(st),tag:TG[p.id]?TG[p.id][0]:'',tagHelp:TG[p.id]?TG[p.id][1]:'',tagFb:!!(TG[p.id]&&TG[p.id][2]),tagAria:TG[p.id]?'Method: '+TG[p.id][0]+', details':'',
+        tagBs:TG[p.id]&&TG[p.id][2]?'dashed':'solid',tagBd:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--color-divider)',tagCol:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--muted)',
+        detail:p.id==='prefilter'&&(st==='done'||st==='running'||st==='reused')?(st==='running'?'top 50 per sub-query':'top 50/sub-query · q4, q5 passthrough'):''};});
     const keptVisible=t>=P.select.e;
     const sourcesV=conn?[]:src.filter(s=>s.found<=t).map(s=>{let st,icon,ic,sc='var(--muted)',anim='none';
       if(s.file){if(s.fe<=t){st=s.size;icon='ph-file-text';ic='var(--muted)';}else{st='loading…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';}}
@@ -860,16 +1020,22 @@ class Component extends DCLogic {
       else if(s.fail){st=s.fail;icon='ph-x-circle';ic='var(--color-danger)';sc='var(--color-danger)';}
       else{st=isRw?'cached':'fetched';icon='ph-check';ic='var(--muted)';}
       return {icon,ic,anim,st,sc,title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:keptVisible&&KEPTBY[s.i]?KEPTBY[s.i]+' kept':''};}).reverse();
-    const scoredP=conn?[]:PASS.filter(p=>p.at<=t||t>=P.score.e).sort((a,b)=>b.v-a.v);
-    const passages=scoredP.filter(p=>p.kept||this.state.showRej).map(p=>({score:p.v.toFixed(2),pct:Math.round(p.v*100),sc:p.kept?'var(--color-accent-300)':'var(--muted)',bar:p.kept?'var(--color-accent)':'var(--faint)',op:p.kept?1:.5,heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom,
-      th:Math.round(th*100),thTitle:'threshold '+th.toFixed(2),badge:p.kept?(keptVisible?this.citeLabel(p.n,r.wopts.cite,files):'above threshold'):'rejected · below '+th.toFixed(2),badgeCol:p.kept&&keptVisible?'var(--color-accent-300)':'var(--faint)',badgeFont:p.kept&&keptVisible?'var(--mono)':'inherit'}));
+    const pf=this.state.pf;const KEEPK={cited:1,srccap:1,budget:1,kept:1};
+    const scoredP=conn?[]:PASS.filter(p=>p.at<=t||scoreDone).sort((a,b)=>b.v-a.v);
+    const passages=scoredP.map(p=>({p,fk:this.fateKey({p},t)})).filter(({fk})=>pf==='all'||(pf==='cited'?fk==='cited':KEEPK[fk])).map(({p,fk})=>{const b=this.badge(fk,p,r);const ab=p.v>=TH;const so=src[p.s];const open=()=>this.openSrc(p.s,DOCS[p.s].findIndex(c=>c.p===p));
+      return {score:p.v.toFixed(2),pct:Math.round(p.v*100),sc:ab?'var(--color-accent-300)':'var(--muted)',bar:ab?'var(--color-accent)':'var(--faint)',op:b.op,heading:p.h,text:p.x,dom:so.file?so.u:so.dom,th:Math.round(th*100),thTitle:'threshold '+th.toFixed(2),b,
+        aria:p.v.toFixed(2)+', '+b.label+(b.mark?' '+b.mark:'')+(b.q?' '+b.q:'')+'. '+(so.file?so.u:so.dom)+', '+p.h+'. Open source',open,key:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}};});
+    const funnel=[['chunks','f-chunks',t>=P.chunk.e?612:chunks],['scored','f-scored',scoredP.length?(scoreDone?150:scored):0],['kept','f-kept',scoreDone?19:0],['cited','f-cited',keptVisible?14:0]].map(([label,help,n],i)=>({label,help,sep:i>0,n:n?String(n):'–',col:n?'var(--color-text)':'var(--faint)',aria:(n?n:'pending')+' '+label+', help'}));
+    const filters=[['cited','Cited',keptVisible?'14':''],['kept','Kept',scoreDone?'19':''],['all','All',scoredP.length?String(scoreDone?150:scored):'']].map(([v,label,count])=>({label,count,checked:pf===v,onPick:()=>this.setState({pf:v})}));
+    const passMore=pf==='all'&&scoreDone?'121 more below '+TH.toFixed(2)+' not listed (0.02–0.13)':'';
     let passEmptyText='',passEmptyIcon='ph-hourglass',passEmptyIc='var(--faint)';
     if(!passages.length){const sst=this.phaseSt(P.score,t,r);
       if(conn)passEmptyText='Waiting for the run to start.';
-      else if(sst==='waiting'){passEmptyText='Scorer is waiting for the GPU while the embeddings model unloads.';passEmptyIcon='ph-cpu';passEmptyIc='var(--color-warn)';}
+      else if(sst==='waiting'){passEmptyText='Scorer is waiting for the GPU while the '+(fb?'planner LLM':'embeddings model')+' unloads.';passEmptyIcon='ph-cpu';passEmptyIc='var(--color-warn)';}
       else if(status==='cancelled')passEmptyText='Cancelled before scoring.';
-      else if(scoredP.length)passEmptyText='No passages above '+th.toFixed(2)+' yet. Press R to show rejected ones.';
-      else passEmptyText=`Passages appear as they are scored. Prefilter narrows ${chunks||412} chunks to 96 for the scorer.`;}
+      else if(scoredP.length&&pf==='cited')passEmptyText='Citations are assigned when Select finishes. Switch to All to watch scores arrive.';
+      else if(scoredP.length)passEmptyText='Kept passages are known once scoring finishes. Switch to All to watch scores arrive.';
+      else passEmptyText='Passages appear as they are scored. The prefilter narrows 612 chunks to 150 for the scorer.';}
     const wst=conn?'pending':this.phaseSt(P.write,t,r);
     let repEmptyText='The report streams here once passages are selected.',repEmptyIcon='ph-hourglass',repEmptyIc='var(--faint)';
     if(wst==='waiting'){repEmptyText='Writer is waiting for the GPU while the scorer unloads.';repEmptyIcon='ph-cpu';repEmptyIc='var(--color-warn)';}
@@ -902,20 +1068,20 @@ class Component extends DCLogic {
         return {n:i+1,text:q,st,icon,anim};}),
       subqSummary:conn?'':`${subN}/5`,subqEmpty:subN===0,subqEmptyText:conn?'Waiting for the planner…':'Planning sub-queries…',
       sources:sourcesV,srcSummary:conn?'':`${nok} of ${nfound} fetched · 2 files`,srcFailNote:nfail?`${nfail} failed · run continues`:'',loading:conn,srcEmpty:!conn&&!sourcesV.length,srcEmptyText:'Sources appear as search returns results.',
-      passages,passSummary:(keptVisible?'14 kept of 96':scoredP.length?scored+'/96 scored':'')+(scoredP.length?' · ≥ '+th.toFixed(2):''),scorer:prof.scorer,passEmpty:!passages.length,passEmptyText,passEmptyIcon,passEmptyIc,
+      passages,funnel,filters,passMore,scorer:prof.scorer,passEmpty:!passages.length,passEmptyText,passEmptyIcon,passEmptyIc,
       blocks:this.blocks(r.md.slice(0,chars),r.wopts.cite,running&&chars>0&&chars<r.md.length,files),
       repSummary:chars?(running?`writing · ${fmtK(writeTok)} tokens`:`${fmtK(writeTok)} tokens`):'',repOpts:phone?'':`${r.wopts.tone} · ${r.wopts.words} words · ${r.wopts.lang}`,
       repEmpty:chars===0&&status!=='failed',repEmptyText,repEmptyIcon,repEmptyIc,isFailed:status==='failed',errText:ERR,
       elapsed:conn?'0:00':fmtT((t-r.t0)*TF),tokens:`${fmtK(tokIn)} in · ${fmtK(tokOut)} out`,tokTitle:'Prompt / completion tokens across all stages',cost:cost?'$'+cost.toFixed(4):'$0.0000 · local',
       connText,connCol,connAnim,seq:'seq '+Math.floor(t*27),
-      tabCounts:{sources:conn?'':String(sourcesV.length),passages:keptVisible?'14':scoredP.length?String(scoredP.filter(p=>p.kept).length):'',report:chars?(running?'…':'✓'):''}};
+      tabCounts:{sources:conn?'':String(sourcesV.length),passages:keptVisible?'14':scoreDone?'19':'',report:chars?(running?'…':'✓'):''}};
   }
   renderVals(){
     const S=this.state,P=this.props;const phone=P.device==='phone'||S.winW<720;const framed=P.device==='phone'&&S.winW>=720;
     const theme=S.theme||P.theme||'dark';const r=S.run;const L=r?this.derive(r,phone):{};
     const scr=S.screen;const muted='var(--muted)';
     const nav=[['new','New run','ph-plus-circle','Alt 1'],['live','Live run','ph-pulse','Alt 2'],['history','History','ph-clock-counter-clockwise','Alt 3'],['settings','Settings','ph-gear-six','Alt 4']].map(([id,l,ic,k])=>{
-      const active=scr===id||(id==='live'&&scr==='report');const runDot=id==='live'&&r&&(r.status==='running'||r.status==='connecting');const healthDot=id==='settings'&&Object.values(S.health).some(h=>h.st!=='ok');
+      const active=scr===id||(id==='live'&&scr==='report');const runDot=id==='live'&&r&&(r.status==='running'||r.status==='connecting');const healthDot=id==='settings'&&Object.values(S.health).some(h=>h.st==='down'||h.st==='degraded');
       return {l,ic,k,cur:active?'page':undefined,bg:active?'color-mix(in srgb,var(--color-accent) 12%,transparent)':'transparent',col:active?'var(--color-accent-300)':'var(--color-text)',go:()=>this.go(id),dot:!!(runDot||healthDot),dotCol:runDot?'var(--color-accent)':'var(--color-warn)',dotAnim:runDot?'sx-pulse 1.4s infinite':'none'};});
     const setNewW=(k,v)=>this.setState(s=>({wNew:{...s.wNew,[k]:v}}));
     const setDefW=(k,v)=>{this.setState(s=>{const wDef={...s.wDef,[k]:v};try{localStorage.setItem('wosarcher-writing-defaults',JSON.stringify(wDef));}catch(e){}
@@ -929,17 +1095,17 @@ class Component extends DCLogic {
     // report view
     let R={};const cur=S.versions.find(v=>v.id===S.viewId)||S.versions[S.versions.length-1];
     if(cur){const root=cur.root||cur.id;const sib=S.versions.filter(v=>(v.root||v.id)===root);const par=cur.parent&&S.versions.find(v=>v.id===cur.parent);
-      const src=sources(cur.files);const citesBy={};PASS.filter(p=>p.kept).forEach(p=>{(citesBy[p.s]=citesBy[p.s]||[]).push(this.citeLabel(p.n,cur.wopts.cite,cur.files));});
+      const src=sources(cur.files);const citesBy={};PASS.filter(p=>p.n).forEach(p=>{(citesBy[p.s]=citesBy[p.s]||[]).push(this.citeLabel(p.n,cur.wopts.cite,cur.files));});
       R={id:cur.id,query:cur.query,h1:phone?'21px':'26px',meta:`${cur.date} · ${cur.dur} · ${cur.opts.recipe} · 22 sources · 14 passages`,multi:sib.length>1,
         versions:sib.map(v=>{const pv=v.parent&&S.versions.find(x=>x.id===v.parent);const c=v.id===cur.id;return {v:v.v,kind:v.parent?'rewrite':'research',id:v.id,desc:v.parent?(wDiff(pv.wopts,v.wopts)||'same options')+' · '+v.dur:'full run · '+v.dur,icon:v.parent?'ph-git-branch':'ph-magnifying-glass',cur:c?'true':undefined,bd:c?'var(--color-accent)':'var(--color-divider)',bg:c?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',go:()=>this.setState({viewId:v.id,cite:null})};}),
         parentNote:par?`Rewritten from ${par.id} (v${par.v}): same sources and passages; changed ${wDiff(par.wopts,cur.wopts)||'nothing'}.`:'',
         optsLine:'Written with '+wSum(cur.wopts)+(cur.wopts.custom?' · custom instructions':''),
         blocks:this.blocks(cur.md,cur.wopts.cite,false,cur.files),srcCount:'21 · 3 failed',
         sources:src.filter(s=>!s.fail).sort((a,b)=>(KEPTBY[b.i]||0)-(KEPTBY[a.i]||0)).map(s=>({title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:KEPTBY[s.i]?KEPTBY[s.i]+' kept':'',cites:(citesBy[s.i]||[]).join(' ')})),
-        refStyle:cur.wopts.ref||'APA',refs:(()=>{const ord=[];PASS.filter(p=>p.kept).forEach(p=>{if(!ord.includes(p.s))ord.push(p.s);});const st=cur.wopts.ref||'APA';return ord.map((si,i)=>{const s=src[si];const au=s.file?'Local notes':(s.ay?s.ay.replace(/,\s*\d{4}$/,''):s.dom);const yr=((s.ay||'').match(/\d{4}/)||['n.d.'])[0];let tx;
+        refStyle:cur.wopts.ref||'APA',refs:(()=>{const ord=[];PASS.filter(p=>p.n).forEach(p=>{if(!ord.includes(p.s))ord.push(p.s);});const st=cur.wopts.ref||'APA';return ord.map((si,i)=>{const s=src[si];const au=s.file?'Local notes':(s.ay?s.ay.replace(/,\s*\d{4}$/,''):s.dom);const yr=((s.ay||'').match(/\d{4}/)||['n.d.'])[0];let tx;
           if(st==='MLA')tx=au+'. “'+s.t+'.” '+s.dom+', '+yr+'.';else if(st==='Chicago')tx=au+'. '+yr+'. “'+s.t+'.” '+s.dom+'.';else if(st==='IEEE')tx=au+', “'+s.t+',” '+s.dom+', '+yr+'.';else tx=au+' ('+yr+'). '+s.t+'. '+s.dom+'.';
           return {mark:st==='IEEE'?'['+(i+1)+']':'',text:tx,url:s.file?s.u:'https://'+s.u};});})(),
-        passages:PASS.filter(p=>p.kept).map(p=>({label:this.citeLabel(p.n,cur.wopts.cite,cur.files),score:p.v.toFixed(2),heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom}))};}
+        passages:PASS.filter(p=>p.n).map(p=>({label:this.citeLabel(p.n,cur.wopts.cite,cur.files),score:p.v.toFixed(2),heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom}))};}
     const rwBase=S.rw&&S.versions.find(v=>v.id===S.rw.from);
     const setRw=(k,v)=>this.setState(s=>({rw:{...s.rw,w:{...s.rw.w,[k]:v}}}));
     const nextV=rwBase?S.versions.filter(v=>(v.root||v.id)===(rwBase.root||rwBase.id)).length+1:2;
@@ -958,14 +1124,38 @@ class Component extends DCLogic {
       del:()=>{const prev=S.hist;this.setState({hist:S.hist.filter(x=>x.id!==h.id)});this.toastMsg('Run deleted',()=>{this.setState({hist:prev,toast:null});});}};});
     const filtered=!!(q||S.hf!=='all'||S.hr!=='any');
     // settings
-    const providers=PROV.map(p=>{const h=S.health[p.id];const ago=Math.max(0,Math.round((S.now-h.at)/1000));
-      const m={ok:['ph-check-circle','var(--color-accent)',`Healthy · ${h.ms} ms`+(p.id==='llm'?' · 41 tok/s':''),'color-mix(in srgb,var(--color-text) 4%,transparent)'],degraded:['ph-warning-circle','var(--color-warn)',`Slow · ${h.ms.toLocaleString()} ms (limit 1,000 ms)`,'color-mix(in srgb,var(--color-warn) 10%,transparent)'],down:['ph-x-circle','var(--color-danger)','Unreachable · ECONNREFUSED','color-mix(in srgb,var(--color-danger) 10%,transparent)']}[h.st];
-      return {...p,dev:PDEV[p.id][0],unload:PDEV[p.id][1],modelLabel:p.ml,check:()=>this.check(p.id),checking:!!h.checking,anim:h.checking?'sx-spin .8s linear infinite':'none',hIcon:h.checking?'ph-circle-dashed':m[0],hCol:h.checking?'var(--muted)':m[1],hAnim:h.checking?'sx-spin 1.2s linear infinite':'none',hText:h.checking?'Checking…':m[2],hBg:m[3],ago:h.checking?'':ago<5?'just now':ago<60?ago+' s ago':Math.round(ago/60)+' min ago'};});
+    const providers=PROV.map(p=>{const hh=S.health[p.id];const ago=hh.at?Math.max(0,Math.round((S.now-hh.at)/1000)):0;const agoT=ago<10?'just now':ago<60?ago+'s ago':Math.round(ago/60)+'m ago';
+      let ic,col,txt,bg='color-mix(in srgb,var(--color-text) 4%,transparent)',bs='solid',bd='transparent',det='',mono=false,tc='var(--color-text)';
+      if(hh.checking){ic='ph-circle-notch';col='var(--color-accent)';txt='Checking…';det=p.url==='in-process'?'in-process self-test':'GET '+p.url+'/health';mono=p.url!=='in-process';}
+      else if(hh.st==='none'){ic='ph-circle-dashed';col='var(--faint)';txt='Not checked yet';bg='transparent';bs='dashed';bd='var(--color-divider)';tc='var(--muted)';}
+      else if(hh.st==='ok'){ic='ph-check-circle';col='var(--color-accent)';txt='OK · checked '+agoT;det=hh.ms+' ms'+(p.id==='llm'?' · 41 tok/s':'');}
+      else if(hh.st==='degraded'){ic='ph-warning-circle';col='var(--color-warn)';txt='Slow · checked '+agoT;bg='color-mix(in srgb,var(--color-warn) 10%,transparent)';det=hh.ms.toLocaleString()+' ms, limit 1,000 ms';}
+      else{ic='ph-x-circle';col='var(--color-danger)';txt='Down · checked '+agoT;bg='color-mix(in srgb,var(--color-danger) 10%,transparent)';det=hh.detail||'';mono=true;}
+      return {...p,dev:PDEV[p.id][0],unload:PDEV[p.id][1],modelLabel:p.ml,check:()=>this.check(p.id),checkAria:'Check '+p.role+' provider',checking:!!hh.checking,anim:hh.checking?'sx-spin .8s linear infinite':'none',hIcon:ic,hCol:col,hAnim:hh.checking?'sx-spin .9s linear infinite':'none',hText:txt,hTxtCol:tc,hBg:bg,hBs:bs,hBd:bd,hDetail:det,hDetailFont:mono?'var(--mono)':'inherit'};});
     // auth
     const A=S.auth;const waitS=A.until?Math.max(0,Math.ceil((A.until-S.now)/1000)):0;const limited=A.err==='limited'&&waitS>0;
     const setA=u=>this.setState(s=>({auth:{...s.auth,...u}}));
     const tabs=[['progress','Progress',''],['sources','Sources',L.tabCounts&&L.tabCounts.sources],['passages','Passages',L.tabCounts&&L.tabCounts.passages],['report','Report',L.tabCounts&&L.tabCounts.report]].map(([id,label,count])=>{const sel=S.tab===id;return {label,count:count||'',sel:sel?'true':'false',bg:sel?'color-mix(in srgb,var(--color-accent) 10%,transparent)':'transparent',col:sel?'var(--color-accent-300)':'var(--color-text)',line:sel?'inset 0 -2px 0 var(--color-accent)':'none',go:()=>this.setState({tab:id})};});
     const tab=phone?S.tab:null;
+    let sd={};
+    if(S.src&&r){const so=sources(r.files)[S.src.s];const doc=DOCS[S.src.s]||[];const t=this.shownT(r);const sel=clamp(S.src.sel,0,Math.max(0,doc.length-1));let prevTop='';
+      const fks=doc.map(c=>this.fateKey(c,t));
+      const chunks=S.src.loading?[]:doc.map((c,i)=>{const parts=c.h.split(' › ');const top=parts[0];const hd=top!==prevTop?top:'';prevTop=top;const cur=i===sel;const b=this.badge(fks[i],c.p,r);const pick=()=>this.setState(st=>({src:{...st.src,sel:i}}));
+        return {i:String(i),hd,sub:parts.slice(1).join(' › '),text:c.x,cur:cur?'true':undefined,op:cur?1:.5,bg:cur?'color-mix(in srgb,var(--color-accent) 9%,transparent)':'transparent',ring:cur?'inset 0 0 0 1px var(--color-accent)':'none',b,hasScore:!!c.p&&fks[i]!=='pending',score:c.p?c.p.v.toFixed(2):'',
+          aria:(c.p?c.p.v.toFixed(2)+', ':'')+b.label+(b.mark?' '+b.mark:'')+'. '+c.h+(cur?', selected':''),pick,key:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}}};});
+      const c=doc[sel]||{h:'',p:null};const fk=fks[sel]||'pending';const cp=c.p;
+      const qrow=[1,2,3,4,5].map(q=>{const s=cp?cp.qs[q]:null;const prim=!!cp&&cp.q===q;let st;
+        if(t<PM.prefilter.e)st='pending';
+        else if(s!=null){st=prim?{cited:'kept',srccap:'kept',budget:'kept',kept:'kept',qcap:'query cap',below:'below '+TH.toFixed(2),above:'≥ '+TH.toFixed(2),pending:'pending'}[fk]:(s>=TH?'counted in q'+cp.q:'below '+TH.toFixed(2));}
+        else st=q>=4?'not in results':'prefiltered';
+        return {q:'q'+q,score:s!=null&&t>=PM.prefilter.e&&fk!=='pending'?s.toFixed(2):'',st,title:'q'+q+': '+SUBQ[q-1],bd:prim?'var(--color-accent)':'var(--color-divider)',col:prim?'var(--color-text)':'var(--muted)'};});
+      const nScored=fks.filter(k=>k!=='pre'&&k!=='pending').length,nCited=fks.filter(k=>k==='cited').length;
+      sd={title:so.t,dom:so.file?so.u:so.dom,href:so.file?'#':'https://'+so.u,hasUrl:!so.file,isFile:!!so.file,icon:so.file?'ph-file-text':'ph-globe-simple',
+        meta:doc.length+' chunks · '+nScored+' scored · '+nCited+' cited',trunc:TRUNC[S.src.s]||'',truncEnd:TRUNC[S.src.s]&&!S.src.loading?'Fetch stopped here at 512 KB':'',
+        loading:!!S.src.loading,ready:!S.src.loading,skel:[{w:'92%'},{w:'84%'},{w:'88%'},{w:'76%'},{w:'90%'}],
+        b:this.badge(fk,cp,r),hasScore:!!cp&&fk!=='pending',score:cp?cp.v.toFixed(2):'',sc:cp&&cp.v>=TH?'var(--color-accent-300)':'var(--muted)',heading:c.h,why:this.why(fk,cp,r),qrow,chunks,
+        pos:'Chunk '+(sel+1)+' of '+doc.length,prev:()=>this.moveSrc(-1),next:()=>this.moveSrc(1),prevDis:sel<=0||!!S.src.loading,nextDis:sel>=doc.length-1||!!S.src.loading,
+        w:phone?'100%':'min(860px, 100%)',h:phone?'100%':'min(820px, 100%)',r:phone?'0':'var(--radius-md)',pad:phone?'0':'24px',btn:phone?'44px':'30px',fs:phone?'14px':'13.5px'};}
     return {
       theme,appW:framed?'390px':'100%',appH:framed?'min(844px, calc(100vh - 32px))':'100%',appR:framed?'28px':'0',appShadow:framed?'var(--shadow-lg)':'none',appDir:phone?'column':'row',
       isPhone:phone,notPhone:!phone,nav,toggleTheme:()=>this.setState({theme:theme==='dark'?'light':'dark'}),themeIcon:theme==='dark'?'ph-sun':'ph-moon',themeLabel:theme==='dark'?'Light theme':'Dark theme',
@@ -988,7 +1178,7 @@ class Component extends DCLogic {
       tabs,showTimeline:!phone||tab==='progress',showSubq:!phone||tab==='progress',showSources:!phone||tab==='sources',showCol1:!phone||tab==='progress'||tab==='sources',showPassages:!phone||tab==='passages',showReport:!phone||tab==='report',
       tlCols:phone?'1fr 1fr':'repeat(9,minmax(98px,1fr))',liveCols:phone?'minmax(0,1fr)':(S.winW<1180?'minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)':'minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr)'),
       skel:[{w:'72%'},{w:'58%'},{w:'80%'},{w:'64%'},{w:'70%'},{w:'52%'}],
-      showRej:S.showRej,toggleRej:()=>this.setState(s=>({showRej:!s.showRej})),rejTrack:S.showRej?'var(--color-accent)':'var(--color-divider)',rejKnob:S.showRej?'12px':'2px',
+      srcOpen:!!(S.src&&r),sd,sdRef:this.sdRef,sdBodyRef:this.sdBodyRef,closeSrc:()=>this.closeSrc(),closeSrcBackdrop:e=>{if(e.target===e.currentTarget)this.closeSrc();},checkAllBusy:Object.values(S.health).some(x=>x.checking),
       repRef:this.repRef,hideCite:()=>this.setState({cite:null}),footGap:phone?'10px':'18px',
       cancel:()=>{const rr=S.run;if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
       openReport:()=>this.setState({screen:'report',viewId:r&&r.id}),
@@ -1000,7 +1190,7 @@ class Component extends DCLogic {
       R,openRewrite:()=>cur&&this.setState({rw:{from:cur.id,w:{...cur.wopts}}}),
       copyMd:()=>this.copy(cur?cur.md:'','Markdown copied'),
       download:()=>{if(!cur)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([`# ${cur.query}\n\n`+cur.md],{type:'text/markdown'}));a.download=cur.id+'.md';a.click();this.toastMsg('Downloaded '+cur.id+'.md');},
-      copyJson:()=>{if(!cur)return;const src=sources(cur.files);this.copy(JSON.stringify({run:cur.id,parent:cur.parent||null,query:cur.query,options:{...cur.opts,writing:cur.wopts},passages:PASS.filter(p=>p.kept).map(p=>({cite:p.n,score:p.v,source:src[p.s].file?src[p.s].u:'https://'+src[p.s].u,heading_path:p.h.split(' › '),text:p.x}))},null,2),'Context JSON copied');},
+      copyJson:()=>{if(!cur)return;const src=sources(cur.files);this.copy(JSON.stringify({run:cur.id,parent:cur.parent||null,query:cur.query,options:{...cur.opts,writing:cur.wopts},passages:PASS.filter(p=>p.n).map(p=>({cite:p.n,score:p.v,source:src[p.s].file?src[p.s].u:'https://'+src[p.s].u,heading_path:p.h.split(' › '),text:p.x}))},null,2),'Context JSON copied');},
       repCols:phone||S.winW<1100?'minmax(0,1fr)':'minmax(0,1fr) minmax(300px,380px)',
       rwOpen:!!(S.rw&&rwBase),rwFields:rwBase?this.wFields(S.rw.w,rwBase.wopts,setRw,'rw','changed'):[],rwFromId:rwBase?rwBase.id:'',rwNextLabel:'v'+nextV,
       rwNote:'Reuses the 22 sources and 14 selected passages from this run. Only the write stage runs again; no searching or fetching.',
@@ -1038,7 +1228,7 @@ class Component extends DCLogic {
       hLeave:()=>{const hh=this.state.help;if(hh&&hh.pinned)return;clearTimeout(this.hT);this.hT=setTimeout(()=>{const x=this.state.help;if(x&&!x.pinned)this.setState({help:null});},140);},
       hPopEnter:()=>clearTimeout(this.hT),
       hTap:e=>{e.stopPropagation();const k=e.currentTarget.dataset.help;const hh=this.state.help;if(hh&&hh.key===k&&hh.pinned){this.setState({help:null});return;}this.openHelp(e.currentTarget,k,true);},
-      helpOpen:!!S.help,hp:S.help?(()=>{const c=this.helpContent(S.help.key);const b=S.help.below;return {t:c.t,b:c.b,ex:c.ex||'',hasEx:!!c.ex,x:S.help.x,y:S.help.y,tf:b?'none':'translateY(-100%)',ax:S.help.ax,at:b?'-6px':'auto',ab:b?'auto':'-6px',bt:b?ARB:'0',bl:b?ARB:'0',bb:b?'0':ARB,br:b?'0':ARB};})():{},
+      helpOpen:!!S.help,hp:S.help?(()=>{const c=this.helpContent(S.help.key);const b=S.help.below;return {t:c.t,b:c.b||'',hasB:!!c.b,items:c.items||[],hasItems:!!c.items,w:c.items?280:272,ex:c.ex||'',hasEx:!!c.ex,x:S.help.x,y:S.help.y,tf:b?'none':'translateY(-100%)',ax:S.help.ax,at:b?'-6px':'auto',ab:b?'auto':'-6px',bt:b?ARB:'0',bl:b?ARB:'0',bb:b?'0':ARB,br:b?'0':ARB};})():{},
       scrHelpSpec:scr==='helpspec',
       profName:S.opts.profile,profDesc:prof.desc,
       policyOpts:[['shared','Shared'],['exclusive','Exclusive']].map(([v,l])=>({label:l,checked:S.gpuPolicy===v,onPick:()=>this.setState({gpuPolicy:v})})),
