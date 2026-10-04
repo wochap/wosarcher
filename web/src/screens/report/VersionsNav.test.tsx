@@ -10,7 +10,10 @@ describe("VersionsNav", () => {
     await play(RUN_ID, api.data.events[RUN_ID]);
     await screen.findByRole("heading", { level: 1, name: QUERY });
     const nav = await screen.findByRole("navigation", { name: "Report versions" });
-    const buttons = within(nav).getAllByRole("button");
+    expect(within(nav).getByRole("button", { name: "Help: Versions" })).toBeTruthy();
+    const buttons = within(nav)
+      .getAllByRole("button")
+      .filter((b) => !b.dataset.help);
     expect(buttons.map((b) => b.textContent)).toEqual([
       `v1 · research${RUN_ID}full run · 2:30`,
       `v2 · rewrite${REWRITE_ID}Concise · 250 words · ¹ Superscript · 0:51`,

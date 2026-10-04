@@ -1,3 +1,4 @@
+description = "Hosted APIs only; needs API keys."
 # No local models: hosted APIs with high concurrency. Keys come from the
 # environment, for example WOSARCHER_LLM__API_KEY.
 

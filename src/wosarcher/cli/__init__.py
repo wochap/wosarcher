@@ -17,6 +17,7 @@ from wosarcher.config import (
     ConfigError,
     Settings,
     list_profiles,
+    profile_description,
     redact,
     resolve,
     select_profile,
@@ -41,11 +42,16 @@ def fail(error: Exception, code: int = 1) -> typer.Exit:
 
 @profile_app.command("list")
 def profile_list(profile: ProfileOption = None) -> None:
-    """List profiles with their source; `*` marks the active one."""
+    """List profiles with their source and description; `*` marks the active one."""
     env = os.environ
     active = select_profile(profile, env)
     for name, (_, source) in list_profiles(env).items():
-        typer.echo(f"{'*' if name == active else ' '} {name}  ({source})")
+        try:
+            description = profile_description(name, env)
+        except ConfigError as error:
+            raise fail(error) from None
+        line = f"{'*' if name == active else ' '} {name}  ({source})"
+        typer.echo(f"{line}  {description}" if description else line)
 
 
 @profile_app.command("show")

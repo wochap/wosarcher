@@ -10,6 +10,7 @@ import {
   StopCircle,
   XCircle,
 } from "@phosphor-icons/react";
+import { HelpTip } from "../../components/HelpTip";
 import { fmtK } from "../../run/format";
 import { PHASES, type Phase, type PhaseId, type PhaseState, type RunView } from "../../run/reducer";
 import { skippedByRecipe, stageLabel } from "./model";
@@ -108,16 +109,16 @@ export function PhaseTimeline({ run }: { run: RunView }) {
         const card = phaseCard(id, run);
         const Glyph = ICONS[card.state];
         const label = stageLabel(id);
+        const waiting = card.state === "waiting";
         return (
-          <li
-            key={id}
-            className={css.card}
-            data-state={card.state}
-            title={`${label} — ${card.text}`}
-          >
+          <li key={id} className={css.card} data-state={card.state}>
             <div className={css.head}>
               <Glyph className={css.icon} aria-hidden="true" />
               <span className={css.label}>{label}</span>
+              <HelpTip
+                help={`${waiting ? "wait" : "ph"}-${id}`}
+                label={waiting ? `${label}, waiting for GPU` : label}
+              />
             </div>
             <div className={css.text}>{card.text}</div>
             <div className={css.track}>

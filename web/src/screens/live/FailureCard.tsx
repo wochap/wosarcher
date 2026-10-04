@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { ForkCreate } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
+import { HelpTip } from "../../components/HelpTip";
 import { PHASES, type PhaseId, type RunView } from "../../run/reducer";
 import css from "./FailureCard.module.css";
 import { INTERRUPTED, stageLabel, stoppedAt } from "./model";
@@ -55,14 +56,17 @@ export function FailureCard({ run }: { run: RunView }) {
       <pre className={css.error}>{error}</pre>
       <p className={css.hint}>{keptHint(stage)}</p>
       <div className={css.actions}>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => void retry({ from: stage })}
-        >
-          <ArrowClockwise aria-hidden="true" />
-          Retry from {stageLabel(stage)}
-        </button>
+        <span className={css.withHelp}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => void retry({ from: stage })}
+          >
+            <ArrowClockwise aria-hidden="true" />
+            Retry from {stageLabel(stage)}
+          </button>
+          <HelpTip help={stage === "score" ? "retry" : `retry-${stage}`} />
+        </span>
         {cloud && (
           <button
             type="button"

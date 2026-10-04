@@ -1,6 +1,7 @@
 // The runs of one lineage, oldest first; pressing one shows its report.
 import { GitBranch, MagnifyingGlass } from "@phosphor-icons/react";
 import { go } from "../../app/route";
+import { HelpTip } from "../../components/HelpTip";
 import type { Version } from "../../run/lineage";
 import css from "./ReportScreen.module.css";
 
@@ -8,7 +9,10 @@ export function VersionsNav({ versions }: { versions: Version[] }) {
   if (versions.length < 2) return null;
   return (
     <nav aria-label="Report versions" className={css.versions}>
-      <span className={css.kicker}>Versions</span>
+      <span className={`${css.kicker} ${css.withHelp}`}>
+        Versions
+        <HelpTip help="versions" />
+      </span>
       <div className={css.versionList}>
         {versions.map((v) => {
           const Glyph = v.run.parent_run_id ? GitBranch : MagnifyingGlass;

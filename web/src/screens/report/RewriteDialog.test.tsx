@@ -18,10 +18,14 @@ describe("RewriteDialog", () => {
     const dialog = screen.getByRole("dialog", { name: "Rewrite report" });
     expect(dialog.textContent).toContain("Reuses the 21 sources and 14 selected passages");
     expect(dialog.textContent).toContain(`Creates v2 linked to ${RUN_ID}`);
-    const words = screen.getByLabelText("Target length");
+    const words = screen.getByLabelText("Length (words)");
     fireEvent.change(words, { target: { value: "250" } });
     fireEvent.blur(words);
     expect(screen.getByText("changed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Help: Changed" }));
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "This value differs from the version you are rewriting.",
+    );
     expect(screen.getByText("was 1200 words")).toBeTruthy();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Rewrite from write stage" }));

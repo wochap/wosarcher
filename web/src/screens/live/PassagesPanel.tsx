@@ -3,6 +3,7 @@
 import { Cpu, Hourglass, type Icon, StopCircle } from "@phosphor-icons/react";
 import type { Context } from "../../api/generated";
 import type { WritingOptions } from "../../api/types";
+import { HelpTip } from "../../components/HelpTip";
 import { domain, label } from "../../run/citations";
 import type { RunView } from "../../run/reducer";
 import type { PassageItem } from "../../run/scores";
@@ -17,10 +18,26 @@ type Props = {
   rejected: PassageItem[] | null;
   showRejected: boolean;
   onToggle: () => void;
+  /** The run's configured `score.provider`; another scorer in the results is a fallback. */
+  configuredScorer?: string;
   className?: string;
 };
 
 const fixed = (n: number) => n.toFixed(2);
+
+/** The scorer that produced the scores: the first query's other than `passthrough`. */
+export function scorerTag(run: RunView, configured?: string): string | null {
+  if (!run.passages.length) return null;
+  const scorer = run.passages.find((q) => q.scorer !== "passthrough")?.scorer ?? "passthrough";
+  return configured && scorer !== configured ? `${scorer} · fallback` : scorer;
+}
+
+/** " · ≥ 0.60" when every scored query shares one display threshold. */
+function thresholdText(run: RunView): string {
+  const thresholds = new Set(run.passages.map((q) => q.threshold));
+  const [only] = thresholds;
+  return thresholds.size === 1 && only != null ? ` · ≥ ${fixed(only)}` : "";
+}
 
 function keptItems(run: RunView): PassageItem[] {
   return run.passages.flatMap((q) =>
@@ -75,6 +92,8 @@ export function PassagesPanel(props: Props) {
   if (selected) summary = `${kept.length} kept of ${scored} scored`;
   else if (run.passages.length)
     summary = `${counters.done ?? scored}/${counters.total ?? scored} scored`;
+  if (summary) summary += thresholdText(run);
+  const tag = scorerTag(run, props.configuredScorer);
   const empty = items.length ? null : emptyText(run, run.passages.length > 0);
   const EmptyIcon = empty?.icon ?? Hourglass;
 
@@ -82,7 +101,16 @@ export function PassagesPanel(props: Props) {
     <section aria-label="Passages" className={`${panel.panel} ${props.className ?? ""}`}>
       <header className={`${panel.header} ${css.header}`}>
         <h2 className={panel.title}>Passages</h2>
-        <span className={`${panel.summary} ${css.summary}`}>{summary}</span>
+        {tag && (
+          <span className={css.scorer}>
+            <span className={`tag tag-neutral ${css.tag}`}>{tag}</span>
+            <HelpTip help="scorer" />
+          </span>
+        )}
+        <span className={`${panel.summary} ${css.summary}`}>
+          {summary}
+          {summary && <HelpTip help="score" />}
+        </span>
         <button
           type="button"
           className={css.toggle}
@@ -95,6 +123,7 @@ export function PassagesPanel(props: Props) {
           </span>
           Rejected<span className={css.key}>R</span>
         </button>
+        <HelpTip help="rejected" />
       </header>
       <div className={panel.body}>
         {empty && (

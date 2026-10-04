@@ -1,6 +1,7 @@
 // The Run history table. Every column comes from the one GET /api/runs response.
 import { ArrowClockwise, ArrowElbowDownRight, ArrowSquareOut, Trash } from "@phosphor-icons/react";
 import type { RunSummary } from "../../api/types";
+import { HelpTip } from "../../components/HelpTip";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime, minSec } from "../../format";
 import { wDiff } from "../../run/format";
@@ -27,10 +28,20 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
           <tr>
             <th className={css.queryCol}>Query</th>
             <th>Date</th>
-            <th>Recipe</th>
+            <th>
+              <span className={css.thHelp}>
+                Recipe
+                <HelpTip help="h-recipe" />
+              </span>
+            </th>
             <th>Status</th>
             <th className={css.num}>Duration</th>
-            <th className={css.num}>Cost</th>
+            <th className={css.num}>
+              <span className={css.thHelp}>
+                Cost
+                <HelpTip help="h-cost" />
+              </span>
+            </th>
             <th className={css.num}>
               <span className="visually-hidden">Actions</span>
             </th>
@@ -52,6 +63,7 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
                       <ArrowElbowDownRight aria-hidden="true" />
                       rewrite of <span className={css.id}>{run.parent_run_id}</span> ·{" "}
                       {parent ? wDiff(parent.writing, run.writing) || "same options" : "–"}
+                      <HelpTip help="h-version" label="Rewrite marker" />
                     </div>
                   )}
                 </td>

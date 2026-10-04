@@ -26,6 +26,12 @@
   font-weight: 500;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .muted {
   font-size: 12px;
   color: var(--muted);

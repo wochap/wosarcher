@@ -29,12 +29,13 @@ describe("ReportScreen", () => {
     expect(screen.getByText("Completed")).toBeTruthy();
     expect(screen.getByText(/· 2:30 · report · 21 sources · 14 passages$/)).toBeTruthy();
     expect(
-      screen.getByText("Written with Analytical · 1200 words · English · [1] Numeric"),
+      screen.getByText("Written with Analytical · 1200 words · English · [1] Numeric · APA"),
     ).toBeTruthy();
     const article = screen.getByRole("article");
     expect(within(article).getByRole("heading", { name: "Recommendations" })).toBeTruthy();
     expect(within(article).getAllByRole("button", { name: /^Citation 1,/ })).toHaveLength(2);
-    expect(within(article).getByRole("heading", { name: "References" })).toBeTruthy();
+    expect(within(article).getByRole("heading", { name: /^References/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Rewrite" })).toBeTruthy();
     const aside = screen.getByRole("complementary");
     expect(within(aside).getByText("21 · 3 failed")).toBeTruthy();
     const eagle = within(aside).getByText(
@@ -45,6 +46,16 @@ describe("ReportScreen", () => {
     expect(within(aside).getByText("Selected passages")).toBeTruthy();
     expect(within(aside).getAllByText("0.94").length).toBe(1);
     expect(screen.queryByRole("navigation", { name: "Report versions" })).toBeNull();
+  });
+
+  it("names the reference style after References and in Written with", async () => {
+    const run = summary({ writing: { ...summary().writing, reference_style: "MLA" } });
+    await openScenario({ ...finished, data: { ...finished.data, runs: [run] } });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    const heading = screen.getByRole("heading", { name: /^References/ });
+    expect(within(heading).getByText("MLA")).toBeTruthy();
+    expect(within(heading).getByRole("button", { name: "Help: Reference style" })).toBeTruthy();
+    expect(screen.getByText(/^Written with .* · MLA$/)).toBeTruthy();
   });
 
   it("shows the selected passages instead of a report for the context recipe", async () => {

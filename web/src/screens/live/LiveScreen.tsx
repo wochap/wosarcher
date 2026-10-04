@@ -1,6 +1,7 @@
 // Live run: the followed run's header, banner, phase timeline, panels, and footer; one panel
 // at a time on phones. Nothing followed shows the empty state.
 import { useCallback, useEffect, useState } from "react";
+import type { RunDetail } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
@@ -18,6 +19,12 @@ import { ReportPanel } from "./ReportPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBanner } from "./StatusBanner";
 import { SubQueriesPanel } from "./SubQueriesPanel";
+
+/** The run's configured `score.provider`, from the settings in its `request.json`. */
+function configuredScorer(detail: RunDetail | null | undefined): string | undefined {
+  const score = detail?.request?.settings.score as { provider?: string } | undefined;
+  return score?.provider;
+}
 
 const typing = (target: EventTarget | null) =>
   /^(INPUT|TEXTAREA|SELECT)$/.test((target as HTMLElement | null)?.tagName ?? "");
@@ -136,6 +143,7 @@ export function LiveScreen() {
             rejected={data.rejected}
             showRejected={showRejected}
             onToggle={toggleRejected}
+            configuredScorer={configuredScorer(detail)}
           />
         )}
         {shows("report") && (

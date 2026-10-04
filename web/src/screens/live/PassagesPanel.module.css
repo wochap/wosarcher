@@ -1,9 +1,28 @@
 .header {
+  flex-wrap: wrap;
+  gap: 4px 8px;
   padding: 6px 8px 6px 12px;
+}
+
+.scorer {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tag {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 6px;
 }
 
 .summary {
   flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .toggle {

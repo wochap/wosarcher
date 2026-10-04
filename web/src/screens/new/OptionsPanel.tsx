@@ -2,9 +2,10 @@
 // from the saved defaults and mark per-run overrides.
 import { ArrowCounterClockwise, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
-import type { WritingOptions } from "../../api/types";
+import type { ProfileInfo, WritingOptions } from "../../api/types";
 import type { RunOptions } from "../../app/context";
 import { go } from "../../app/route";
+import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
 import { type WritingField, WritingOptionsForm } from "../../components/WritingOptionsForm";
 import { wSummary } from "../../run/format";
@@ -23,7 +24,7 @@ export function overriddenFields(
 
 type Props = {
   options: RunOptions;
-  profiles: string[];
+  profiles: ProfileInfo[];
   onOption: <K extends keyof RunOptions>(key: K, value: RunOptions[K]) => void;
   writing: WritingOptions;
   defaults: WritingOptions;
@@ -36,6 +37,7 @@ export function OptionsPanel(props: Props) {
   const [open, setOpen] = useState(false);
   const overridden = Object.keys(overriddenFields(writing, defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
+  const description = profiles.find((p) => p.name === options.profile)?.description;
   const summary = `${options.recipe} · ${options.sources} · ${options.profile} · ${wSummary(writing)}`;
   return (
     <div className={css.panel}>
@@ -55,19 +57,19 @@ export function OptionsPanel(props: Props) {
       {open && (
         <div className={css.body}>
           <div className={css.group}>Run</div>
-          <Row label="Recipe">
+          <Row label="Recipe" help="recipe">
             <Seg
               label="Recipe"
               name="opt-recipe"
               value={options.recipe}
               options={[
-                { value: "context", label: "context" },
                 { value: "report", label: "report" },
+                { value: "context", label: "context" },
               ]}
               onChange={(v) => onOption("recipe", v)}
             />
           </Row>
-          <Row label="Sources">
+          <Row label="Sources" help="sources">
             <Seg
               label="Sources"
               name="opt-sources"
@@ -76,14 +78,20 @@ export function OptionsPanel(props: Props) {
               onChange={(v) => onOption("sources", v)}
             />
           </Row>
-          <Row label="Profile">
-            <Seg
-              label="Profile"
-              name="opt-profile"
+          <Row label="Profile" help="profile" htmlFor="opt-profile">
+            <select
+              id="opt-profile"
+              className={`input ${css.profile}`}
               value={options.profile}
-              options={profiles.map((p) => ({ value: p, label: p }))}
-              onChange={(v) => onOption("profile", v)}
-            />
+              onChange={(e) => onOption("profile", e.target.value)}
+            >
+              {profiles.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.source === "user" ? `${p.name}  (user profile)` : p.name}
+                </option>
+              ))}
+            </select>
+            {description && <div className={css.description}>{description}</div>}
           </Row>
           <div className={css.writingHead}>
             <span className={css.group}>Writing</span>
@@ -120,11 +128,17 @@ export function OptionsPanel(props: Props) {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+type RowProps = { label: string; help: string; htmlFor?: string; children: ReactNode };
+
+function Row({ label, help, htmlFor, children }: RowProps) {
+  const Label = htmlFor ? "label" : "span";
   return (
     <div className={css.row}>
-      <span className={css.rowLabel}>{label}</span>
-      {children}
+      <div className={css.rowLabel}>
+        <Label htmlFor={htmlFor}>{label}</Label>
+        <HelpTip help={help} />
+      </div>
+      <div className={css.rowControl}>{children}</div>
     </div>
   );
 }

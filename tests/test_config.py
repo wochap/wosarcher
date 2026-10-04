@@ -2,7 +2,16 @@ from pathlib import Path
 
 import pytest
 
-from wosarcher.config import ConfigError, Settings, list_profiles, redact, resolve, store_profile
+from wosarcher.config import (
+    ConfigError,
+    Settings,
+    list_profiles,
+    profile_description,
+    redact,
+    resolve,
+    store_profile,
+    to_toml,
+)
 
 
 @pytest.fixture
@@ -253,3 +262,28 @@ def test_local_profiles_llm_timeout(name: str, env: dict[str, str]) -> None:
 
 def test_cloud_reasoning_tokens(env: dict[str, str]) -> None:
     assert resolve("cloud", [], env).llm.reasoning_tokens == 4096
+
+
+def test_description_is_not_a_setting(env: dict[str, str]) -> None:
+    user_profile(env, "nixos", 'description = "x"\n[run]\ngpu_policy = "exclusive"\n')
+    settings = resolve("nixos", [], env)
+    assert settings.run.gpu_policy == "exclusive"
+    assert "description" not in to_toml(redact(settings))
+    assert profile_description("nixos", env) == "x"
+
+
+def test_description_must_be_a_string(env: dict[str, str]) -> None:
+    path = user_profile(env, "nixos", "description = 3\n")
+    with pytest.raises(ConfigError, match=f"profile {path}: description must be a string"):
+        profile_description("nixos", env)
+
+
+def test_description_unset_is_empty(env: dict[str, str]) -> None:
+    user_profile(env, "nixos", "[run]\n")
+    assert profile_description("nixos", env) == ""
+
+
+def test_builtin_descriptions(env: dict[str, str]) -> None:
+    assert profile_description("workstation", env) == "One GPU fits all models; models stay loaded."
+    assert profile_description("low-vram", env) == "Models take turns on one small GPU; slower, fits 8 GB."
+    assert profile_description("cloud", env) == "Hosted APIs only; needs API keys."

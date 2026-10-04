@@ -28,6 +28,7 @@ export function wSummary(w: WritingOptions): string {
     describeValue("words", w.words),
     describeValue("language", w.language),
     describeValue("citation_marker", w.citation_marker),
+    w.reference_style,
   ].join(" · ");
 }
 

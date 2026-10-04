@@ -234,7 +234,8 @@ def unknown_profile(name: str, available: Mapping[str, object]) -> ConfigError:
     return ConfigError(f"unknown profile '{name}'; available: {', '.join(available)}")
 
 
-def load_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any]]:
+def read_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any]]:
+    """The profile file as written, `description` included."""
     available = list_profiles(env)
     if name not in available:
         raise unknown_profile(name, available)
@@ -243,6 +244,22 @@ def load_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any
         return path, tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"profile {path}: {error}") from error
+
+
+def load_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any]]:
+    """The profile's settings; the top-level `description` is file metadata, not a setting."""
+    path, data = read_profile(name, env)
+    data.pop("description", None)
+    return path, data
+
+
+def profile_description(name: str, env: Mapping[str, str]) -> str:
+    """The profile's one-line `description`, empty when it sets none."""
+    path, data = read_profile(name, env)
+    description = data.get("description", "")
+    if not isinstance(description, str):
+        raise ConfigError(f"profile {path}: description must be a string")
+    return description
 
 
 # Layers: each is a nested dict plus the source of every leaf key.

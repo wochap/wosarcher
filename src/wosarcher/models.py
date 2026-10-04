@@ -289,12 +289,14 @@ class ProviderHealth(Contract):
     model: str | None = None
     latency_ms: float | None = None
     unload: Literal["yes", "no", "n/a"] = "n/a"
+    release: Literal["none", "llama-swap", "ollama"] = "none"
     error: str | None = None
     context_window: int | None = None
     note: str | None = None
 
 
 class DoctorReport(Contract):
+    gpu_policy: Literal["shared", "exclusive"] = "shared"
     providers: tuple[ProviderHealth, ...] = ()
     warnings: tuple[str, ...] = ()
 
@@ -442,6 +444,7 @@ class ProfileInfo(Contract):
     name: str
     source: Literal["builtin", "user"]
     active: bool
+    description: str = ""
 
 
 class ProviderCheck(Contract):
@@ -450,6 +453,7 @@ class ProviderCheck(Contract):
     url: str = ""
     model: str | None = None
     device: str | None = None
+    release: Literal["none", "llama-swap", "ollama"] = "none"
     status: Literal["ok", "degraded", "down", "skipped"]
     latency_ms: float | None = None
     detail: str = ""
@@ -457,6 +461,7 @@ class ProviderCheck(Contract):
 
 class HealthReport(Contract):
     profile: str
+    gpu_policy: Literal["shared", "exclusive"] = "shared"
     checks: list[ProviderCheck]
     warnings: list[str] = []
 

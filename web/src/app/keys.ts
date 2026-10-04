@@ -5,11 +5,11 @@ import type { OverlayKind } from "./context";
 import type { Screen } from "./route";
 
 const SCREENS: Screen[] = ["new", "live", "history", "settings"];
-const PRIORITY: OverlayKind[] = ["alertdialog", "dialog", "tooltip"];
+const PRIORITY: OverlayKind[] = ["help", "alertdialog", "dialog", "tooltip"];
 
 export type Overlay = { kind: OverlayKind; close: () => void };
 
-/** The overlay Escape closes: alert dialogs first, then form dialogs, then tooltips. */
+/** The overlay Escape closes: help first, then alert dialogs, then form dialogs, then tooltips. */
 export function topOverlay(open: Overlay[]): Overlay | undefined {
   for (const kind of PRIORITY) {
     const match = open.filter((o) => o.kind === kind).at(-1);

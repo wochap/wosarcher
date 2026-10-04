@@ -23,6 +23,18 @@
   font-size: 12.5px;
 }
 
+.label,
+.mark {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mark {
+  display: inline-flex;
+  gap: 3px;
+}
+
 .marks {
   display: flex;
   align-items: center;
@@ -69,7 +81,7 @@
 }
 
 .select {
-  width: 220px;
+  width: min(380px, 100%);
 }
 
 .error {

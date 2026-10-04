@@ -46,7 +46,7 @@ describe("NewRunScreen", () => {
     fireEvent.change(question, { target: { value: "q" } });
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
     fireEvent.click(screen.getByLabelText("context"));
-    const words = screen.getByLabelText("Target length");
+    const words = screen.getByLabelText("Length (words)");
     fireEvent.change(words, { target: { value: "600" } });
     fireEvent.blur(words);
     const notes = new File(["# n"], "notes.md");

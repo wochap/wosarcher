@@ -1,4 +1,4 @@
-// Settings: provider cards with their last health result, and the profile line.
+// Settings: the profile and GPU policy lines, and provider cards with their last health result.
 import {
   ArrowClockwise,
   CheckCircle,
@@ -11,20 +11,41 @@ import {
   XCircle,
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
-import type { HealthReport, ProviderCheck } from "../../api/types";
+import type { HealthReport, ProfileInfo, ProviderCheck } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
+import { HelpTip } from "../../components/HelpTip";
 import page from "../../components/Page.module.css";
+import { Seg } from "../../components/Seg";
 import css from "./ProvidersSection.module.css";
 
 const ROLES: Record<string, string> = {
   search: "Search",
   fetch: "Fetch",
-  prefilter: "Embeddings",
+  prefilter: "Prefilter",
   score: "Scorer",
   llm: "LLM",
 };
-/** The card title for a server block name; an unknown block is capitalised. */
-const roleTitle = (role: string) => ROLES[role] ?? role.charAt(0).toUpperCase() + role.slice(1);
+/** The card title for a server block; an unknown block is capitalised. */
+function roleTitle(c: ProviderCheck): string {
+  if (c.role === "prefilter" && c.provider === "embeddings") return "Embeddings";
+  return ROLES[c.role] ?? c.role.charAt(0).toUpperCase() + c.role.slice(1);
+}
+/** The blocks whose models share a GPU, which the GPU policy line names. */
+const GPU_ROLES = new Set(["prefilter", "score", "llm"]);
+const POLICIES = [
+  { value: "shared", label: "Shared" },
+  { value: "exclusive", label: "Exclusive" },
+] as const;
+
+export function policyText(report: HealthReport): string {
+  const devices = [
+    ...new Set(report.checks.flatMap((c) => (GPU_ROLES.has(c.role) && c.device ? [c.device] : []))),
+  ];
+  const on = devices.length ? ` on ${devices.join(", ")}` : "";
+  return report.gpu_policy === "exclusive"
+    ? `Each model unloads before the next one loads${on}.`
+    : `All models stay loaded${on}.`;
+}
 const ICONS: Record<string, Icon> = {
   ok: CheckCircle,
   degraded: WarningCircle,
@@ -62,7 +83,7 @@ export function ProvidersSection() {
   const [checkedAt, setCheckedAt] = useState(0);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
-  const [active, setActive] = useState("");
+  const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [now, setNow] = useState(Date.now);
 
   // The server checks every provider of the profile at once: one request serves every card.
@@ -84,10 +105,7 @@ export function ProvidersSection() {
 
   useEffect(() => {
     void check();
-    api.listProfiles().then(
-      (ps) => setActive(ps.find((p) => p.active)?.name ?? ""),
-      () => {},
-    );
+    api.listProfiles().then(setProfiles, () => {});
   }, [api, check]);
 
   useEffect(() => {
@@ -95,7 +113,8 @@ export function ProvidersSection() {
     return () => clearInterval(timer);
   }, []);
 
-  const devices = [...new Set((report?.checks ?? []).flatMap((c) => (c.device ? [c.device] : [])))];
+  const profile = report?.profile ?? profiles.find((p) => p.active)?.name ?? "";
+  const description = profiles.find((p) => p.name === profile)?.description;
   return (
     <>
       <div className={css.header}>
@@ -105,12 +124,33 @@ export function ProvidersSection() {
           Check all providers
         </button>
       </div>
-      <div className={css.profile}>
-        <Cpu className={css.cpu} aria-hidden="true" />
-        <span>
-          Profile <b>{report?.profile ?? active}</b>
-          {report && (devices.length ? ` · devices ${devices.join(", ")}` : " · no device labels")}
+      <div className={css.lines}>
+        <span className={css.profile}>
+          <Cpu className={css.cpu} aria-hidden="true" />
+          <span className={css.muted}>Active profile</span>
+          <span className={css.profileName}>{profile}</span>
+          <HelpTip help="profile" />
+          {description && <span className={css.muted}>· {description}</span>}
         </span>
+        {report && (
+          <span className={css.policy}>
+            <span className={css.policyLabel}>
+              GPU policy
+              <HelpTip help="gpupolicy" />
+            </span>
+            <div className={css.policySeg}>
+              <Seg
+                label="GPU policy"
+                name="gpu-policy"
+                value={report.gpu_policy ?? "shared"}
+                options={[...POLICIES]}
+                onChange={() => {}}
+                disabled
+              />
+            </div>
+            <span className={css.policyText}>{policyText(report)}</span>
+          </span>
+        )}
       </div>
       <h2 className={`${page.section} ${css.providersTitle}`}>Providers</h2>
       {error && (
@@ -139,9 +179,9 @@ function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
   const state = checking ? "checking" : c.status;
   const Glyph = checking ? CircleDashed : (ICONS[c.status] ?? MinusCircle);
   return (
-    <section className={`card elev-sm ${css.card}`} aria-label={roleTitle(c.role)}>
+    <section className={`card elev-sm ${css.card}`} aria-label={roleTitle(c)}>
       <div className={css.cardTop}>
-        <span className="card-kicker">{roleTitle(c.role)}</span>
+        <span className="card-kicker">{roleTitle(c)}</span>
         <button
           type="button"
           className={`btn btn-ghost ${css.check}`}
@@ -158,10 +198,23 @@ function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
         <dd title={c.url}>{c.url || "–"}</dd>
         <dt>Model</dt>
         <dd title={c.model ?? undefined}>{c.model || "–"}</dd>
+        <dt className={css.helpTerm}>
+          Device
+          <HelpTip help="pdevice" />
+        </dt>
+        <dd>{c.device || "–"}</dd>
+        <dt className={css.helpTerm}>
+          Unload
+          <HelpTip help="unload" />
+        </dt>
+        <dd>{c.release ?? "none"}</dd>
       </dl>
       <div role="status" className={css.health} data-state={state}>
         <Glyph weight="fill" className={css.healthIcon} aria-hidden="true" />
-        <span className={css.healthText}>{checking ? "Checking…" : healthText(c)}</span>
+        <span className={css.healthText}>
+          {checking ? "Checking…" : healthText(c)}
+          <HelpTip help="health" />
+        </span>
         <span className={css.ago}>{checking ? "" : when}</span>
       </div>
     </section>

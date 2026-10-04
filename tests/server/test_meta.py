@@ -86,3 +86,19 @@ def test_health_failure_502(client: TestClient, monkeypatch: pytest.MonkeyPatch)
     response = client.get("/api/providers/health")
     assert response.status_code == 502
     assert response.json()["error"] == "health_unavailable"
+
+
+def test_profile_descriptions(client: TestClient, tmp_path: Path) -> None:
+    profiles = tmp_path / "config" / "wosarcher" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "nixos.toml").write_text("[run]\n")
+    described = {p["name"]: p["description"] for p in client.get("/api/profiles").json()}
+    assert described["workstation"] == "One GPU fits all models; models stay loaded."
+    assert described["nixos"] == ""
+
+
+def test_health_release_and_policy() -> None:
+    rows = (ProviderHealth(block="prefilter", provider="embeddings", status="ok", release="llama-swap"),)
+    report = health_report("low-vram", DoctorReport(gpu_policy="exclusive", providers=rows))
+    assert report.gpu_policy == "exclusive"
+    assert report.checks[0].release == "llama-swap"

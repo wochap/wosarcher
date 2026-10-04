@@ -1,6 +1,9 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { finished } from "../test/fixtures/finished";
+import { QUERY } from "../test/fixtures/sample";
 import { renderApp } from "../test/renderApp";
+import { openScenario } from "../test/scenario";
 import { topOverlay } from "./keys";
 
 describe("keys", () => {
@@ -36,10 +39,26 @@ describe("keys", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/history"));
   });
 
-  it("closes the confirmation before the form dialog before the tooltip", () => {
+  it("closes the help tooltip before the dialog", async () => {
+    await openScenario(finished);
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    fireEvent.click(screen.getByRole("button", { name: "Rewrite" }));
+    const dialog = screen.getByRole("dialog", { name: "Rewrite report" });
+    fireEvent.focus(within(dialog).getByRole("button", { name: "Help: Tone" }));
+    expect(screen.getByRole("tooltip").textContent).toContain("Tone");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("closes help first, then the confirmation, the form dialog, and the tooltip", () => {
+    const help = { kind: "help" as const, close: vi.fn() };
     const tooltip = { kind: "tooltip" as const, close: vi.fn() };
     const form = { kind: "dialog" as const, close: vi.fn() };
     const confirm = { kind: "alertdialog" as const, close: vi.fn() };
+    expect(topOverlay([tooltip, confirm, help, form])).toBe(help);
     expect(topOverlay([tooltip, confirm, form])).toBe(confirm);
     expect(topOverlay([tooltip, form])).toBe(form);
     expect(topOverlay([tooltip])).toBe(tooltip);

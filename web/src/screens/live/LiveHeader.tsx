@@ -1,6 +1,7 @@
 // The Live run header: status tag, rewrite tag, id, meta, query, device chip, and actions.
 import { ArrowClockwise, Article, Circle, GitBranch, Stop } from "@phosphor-icons/react";
 import type { RunDetail, RunStatus } from "../../api/types";
+import { HelpTip } from "../../components/HelpTip";
 import type { RunView } from "../../run/reducer";
 import { DeviceChip } from "./DeviceChip";
 import css from "./LiveHeader.module.css";
@@ -86,10 +87,13 @@ export function LiveHeader({
           </button>
         )}
         {ended && (
-          <button type="button" className="btn btn-secondary" onClick={onRerun}>
-            <ArrowClockwise aria-hidden="true" />
-            Rerun
-          </button>
+          <span className={css.rerun}>
+            <button type="button" className="btn btn-secondary" onClick={onRerun}>
+              <ArrowClockwise aria-hidden="true" />
+              Rerun
+            </button>
+            <HelpTip help="rerun" />
+          </span>
         )}
       </div>
     </header>

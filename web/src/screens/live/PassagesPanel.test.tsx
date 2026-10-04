@@ -11,7 +11,11 @@ import { PassagesPanel } from "./PassagesPanel";
 
 const all = live.data.events?.[RUN_ID] as RunEvent[];
 
-function panel(events: RunEvent[], context = null as typeof CONTEXT | null) {
+function panel(
+  events: RunEvent[],
+  context = null as typeof CONTEXT | null,
+  configuredScorer?: string,
+) {
   render(
     <PassagesPanel
       run={viewOf(events, RUN_ID)}
@@ -20,6 +24,7 @@ function panel(events: RunEvent[], context = null as typeof CONTEXT | null) {
       rejected={null}
       showRejected={false}
       onToggle={() => {}}
+      configuredScorer={configuredScorer}
     />,
   );
 }
@@ -58,7 +63,7 @@ describe("PassagesPanel", () => {
     expect(screen.getByText("above threshold")).toBeTruthy();
     expect(screen.getByText("example.org")).toBeTruthy();
     expect(screen.getByText(/Intro › Scope/)).toBeTruthy();
-    expect(screen.getByText("3/3 scored")).toBeTruthy();
+    expect(screen.getByText("3/3 scored · ≥ 0.50")).toBeTruthy();
   });
 
   it("shows a passthrough passage with a dash and no bar", () => {
@@ -69,7 +74,7 @@ describe("PassagesPanel", () => {
 
   it("labels selected passages with their citation and summarizes kept of scored", () => {
     panel(all, CONTEXT);
-    expect(screen.getByText("14 kept of 96 scored")).toBeTruthy();
+    expect(screen.getByText("14 kept of 96 scored · ≥ 0.60")).toBeTruthy();
     const best = screen.getAllByRole("article")[0];
     expect(within(best).getByText("0.94")).toBeTruthy();
     expect(within(best).getByText("[1]")).toBeTruthy();
@@ -93,8 +98,36 @@ describe("PassagesPanel", () => {
     const card = rejected[0].closest("article") as HTMLElement;
     expect(card.dataset.kept).toBe("false");
     expect(within(card).getByText("0.52")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Rejected/ }).getAttribute("aria-pressed")).toBe(
+    expect(screen.getByRole("button", { name: /^Rejected/ }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  it("tags the scorer and the threshold with their help", () => {
+    panel(all, CONTEXT, "rerank");
+    expect(screen.getByText("rerank")).toBeTruthy();
+    expect(screen.getByText("14 kept of 96 scored · ≥ 0.60")).toBeTruthy();
+    for (const label of ["Scorer", "Score and threshold", "Rejected passages"])
+      expect(screen.getByRole("button", { name: `Help: ${label}` })).toBeTruthy();
+  });
+
+  it("tags the scorer jev", () => {
+    panel([scored(0.6, 0.8)], null, "jev");
+    expect(screen.getByText("jev")).toBeTruthy();
+  });
+
+  it("marks a fallback scorer", () => {
+    panel([scored(0.5, 0.8, "bm25")], null, "rerank");
+    expect(screen.getByText("bm25 · fallback")).toBeTruthy();
+  });
+
+  it("leaves out the threshold when queries differ", () => {
+    const second = {
+      ...scored(0.7, 0.9),
+      seq: 6,
+      data: { ...scored(0.7, 0.9).data, query_id: "q2" },
+    } as RunEvent;
+    panel([scored(0.5, 0.8), second]);
+    expect(screen.queryByText(/≥/)).toBeNull();
   });
 });

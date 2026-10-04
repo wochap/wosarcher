@@ -7,7 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 
-from wosarcher.config import list_profiles, select_profile
+from wosarcher.config import list_profiles, profile_description, select_profile
 from wosarcher.models import DoctorReport, HealthReport, ProfileInfo, ProviderCheck, ProviderHealth, ServerSettings
 from wosarcher.server import settings as global_settings
 from wosarcher.server.errors import RouteError
@@ -35,7 +35,12 @@ async def put_settings(state: State, body: ServerSettings) -> ServerSettings:
 async def profiles() -> list[ProfileInfo]:
     active = select_profile(None, os.environ)
     return [
-        ProfileInfo(name=name, source="builtin" if source == "built-in" else "user", active=name == active)
+        ProfileInfo(
+            name=name,
+            source="builtin" if source == "built-in" else "user",
+            active=name == active,
+            description=profile_description(name, os.environ),
+        )
         for name, (_, source) in list_profiles(os.environ).items()
     ]
 
@@ -57,6 +62,7 @@ def provider_check(row: ProviderHealth) -> ProviderCheck:
         url=row.base_url,
         model=row.model,
         device=row.device,
+        release=row.release,
         status=status,
         latency_ms=row.latency_ms,
         detail=detail,
@@ -65,7 +71,7 @@ def provider_check(row: ProviderHealth) -> ProviderCheck:
 
 def health_report(profile: str, doctor: DoctorReport) -> HealthReport:
     checks = [provider_check(row) for row in doctor.providers]
-    return HealthReport(profile=profile, checks=checks, warnings=list(doctor.warnings))
+    return HealthReport(profile=profile, gpu_policy=doctor.gpu_policy, checks=checks, warnings=list(doctor.warnings))
 
 
 async def run_doctor(command: list[str], profile: str | None) -> DoctorReport:

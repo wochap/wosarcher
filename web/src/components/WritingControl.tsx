@@ -1,4 +1,4 @@
-// One writing field's control: segmented, textarea, number, or select.
+// One writing field's control: select, textarea, number, or segmented.
 import { type ReactNode, useEffect, useState } from "react";
 import { Seg } from "./Seg";
 import {
@@ -23,13 +23,21 @@ export function Control({
   switch (field) {
     case "tone":
       return (
-        <Seg
-          label="Tone"
-          name={`${idPrefix}-tone`}
+        <select
+          id={id}
+          className={`input ${css.select}`}
           value={value.tone}
-          options={withCurrent(TONES, value.tone).map((t) => ({ value: t, label: capitalize(t) }))}
-          onChange={(v) => onChange("tone", v)}
-        />
+          onChange={(e) => onChange("tone", e.target.value)}
+        >
+          {TONES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {`${t.label} — ${t.description}`}
+            </option>
+          ))}
+          {!TONES.some((t) => t.value === value.tone) && (
+            <option value={value.tone}>{value.tone}</option>
+          )}
+        </select>
       );
     case "citation_marker":
       return (
@@ -51,7 +59,7 @@ export function Control({
               id={id}
               className={`input ${css.area}`}
               value={draft}
-              placeholder="e.g. Assume the reader knows CUDA. Prefer numbers to adjectives."
+              placeholder="e.g. Focus on costs; avoid jargon."
               onChange={(e) => set(e.target.value)}
               onBlur={done}
             />
@@ -99,18 +107,16 @@ export function Control({
       );
     case "reference_style":
       return (
-        <select
-          id={id}
-          className={`input ${css.select}`}
+        <Seg
+          label="Reference style"
+          name={`${idPrefix}-ref`}
           value={listed(REFERENCE_STYLES, value.reference_style)}
-          onChange={(e) => onChange("reference_style", e.target.value)}
-        >
-          {withCurrent(REFERENCE_STYLES, value.reference_style).map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          options={withCurrent(REFERENCE_STYLES, value.reference_style).map((s) => ({
+            value: s,
+            label: s,
+          }))}
+          onChange={(v) => onChange("reference_style", v)}
+        />
       );
   }
 }

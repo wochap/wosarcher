@@ -110,13 +110,30 @@ export const runs: RunSummary[] = [
 ];
 
 export const profiles: ProfileInfo[] = [
-  { name: "low-vram", source: "builtin", active: true },
-  { name: "workstation", source: "builtin", active: false },
-  { name: "cloud", source: "user", active: false },
+  {
+    name: "low-vram",
+    source: "builtin",
+    active: true,
+    description: "Models take turns on one small GPU; slower, fits 8 GB.",
+  },
+  {
+    name: "workstation",
+    source: "builtin",
+    active: false,
+    description: "One GPU fits all models; models stay loaded.",
+  },
+  {
+    name: "cloud",
+    source: "builtin",
+    active: false,
+    description: "Hosted APIs only; needs API keys.",
+  },
+  { name: "nixos", source: "user", active: false, description: "" },
 ];
 
 export const health: HealthReport = {
   profile: "low-vram",
+  gpu_policy: "exclusive",
   warnings: [],
   checks: [
     {
@@ -125,6 +142,7 @@ export const health: HealthReport = {
       url: "http://localhost:8888",
       model: null,
       device: null,
+      release: "none",
       status: "degraded",
       latency_ms: 1840,
       detail: "probe over 1000 ms",
@@ -135,16 +153,18 @@ export const health: HealthReport = {
       url: "in-process",
       model: null,
       device: null,
+      release: "none",
       status: "skipped",
       latency_ms: null,
       detail: "built in",
     },
     {
       role: "prefilter",
-      provider: "ollama",
+      provider: "embeddings",
       url: "http://localhost:11434",
       model: "bge-small-en-v1.5",
-      device: "gpu0",
+      device: "desktop:gpu0",
+      release: "llama-swap",
       status: "ok",
       latency_ms: 38,
       detail: "",
@@ -154,7 +174,8 @@ export const health: HealthReport = {
       provider: "rerank",
       url: "http://localhost:8081",
       model: "bge-reranker-v2-m3-Q8_0.gguf",
-      device: "gpu0",
+      device: "desktop:gpu0",
+      release: "llama-swap",
       status: "ok",
       latency_ms: 61,
       detail: "",
@@ -164,7 +185,8 @@ export const health: HealthReport = {
       provider: "llama.cpp",
       url: "http://localhost:8080/v1",
       model: "qwen2.5-7b-instruct-q4_k_m.gguf",
-      device: "gpu0",
+      device: "desktop:gpu0",
+      release: "llama-swap",
       status: "ok",
       latency_ms: 212,
       detail: "",

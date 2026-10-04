@@ -48,6 +48,13 @@ describe("HistoryScreen", () => {
     await open();
     const fork = screen.getByText("r_7f3a").closest("div") as HTMLElement;
     expect(fork.textContent).toBe("rewrite of r_7f3a · Explanatory · 300 words");
+    expect(within(fork).getByRole("button", { name: "Help: Rewrite marker" })).toBeTruthy();
+  });
+
+  it("has help after the Recipe and Cost headers", async () => {
+    await open();
+    expect(screen.getByRole("button", { name: "Help: Recipe" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Cost" })).toBeTruthy();
   });
 
   it("filters by search, status, and recipe, and clears the filters", async () => {

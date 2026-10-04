@@ -14,15 +14,42 @@ describe("OptionsPanel", () => {
     await openOptions();
     const header = screen.getByRole("button", { name: /Options/ });
     expect(header.textContent).toContain(
-      "report · both · low-vram · Analytical · 1200 words · English · [1] Numeric",
+      "report · both · low-vram · Analytical · 1200 words · English · [1] Numeric · APA",
     );
-    expect((screen.getByLabelText("low-vram") as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByLabelText("cloud")).toBeTruthy();
+    const profile = screen.getByLabelText("Profile") as HTMLSelectElement;
+    expect(profile.value).toBe("low-vram");
+    expect([...profile.options].map((o) => o.textContent)).toEqual([
+      "low-vram",
+      "workstation",
+      "cloud",
+      "nixos  (user profile)",
+    ]);
+  });
+
+  it("lists report before context", async () => {
+    await openOptions();
+    const recipe = screen.getByRole("radiogroup", { name: "Recipe" });
+    expect(recipe.textContent).toBe("reportcontext");
+  });
+
+  it("shows the selected profile's description", async () => {
+    await openOptions();
+    expect(screen.getByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "nixos" } });
+    expect(screen.queryByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "cloud" } });
+    expect(screen.getByText("Hosted APIs only; needs API keys.")).toBeTruthy();
+  });
+
+  it("has one help button per Run row", async () => {
+    await openOptions();
+    for (const label of ["Recipe", "Sources", "Profile"])
+      expect(screen.getAllByRole("button", { name: `Help: ${label}` })).toHaveLength(1);
   });
 
   it("marks one override and resets it", async () => {
     await openOptions();
-    const words = screen.getByLabelText("Target length");
+    const words = screen.getByLabelText("Length (words)");
     fireEvent.change(words, { target: { value: "600" } });
     fireEvent.blur(words);
     expect(screen.getByText("overridden")).toBeTruthy();
@@ -42,7 +69,7 @@ describe("OptionsPanel", () => {
       window.location.hash = "#/new";
     });
     fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
-    expect((screen.getByLabelText("Formal") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Tone") as HTMLSelectElement).value).toBe("formal");
     expect(screen.queryByText("overridden")).toBeNull();
   });
 });

@@ -9,23 +9,56 @@
   margin-right: auto;
 }
 
+.lines {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  font-size: 12.5px;
+}
+
 .profile {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
+  gap: 6px;
+}
+
+.muted {
   color: var(--muted);
 }
 
-.profile b {
-  font-weight: 500;
-  color: var(--color-text);
+.profileName {
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .cpu {
-  color: var(--color-warn);
-  font-size: 16px;
+  color: var(--muted);
+  font-size: 15px;
   flex: none;
+}
+
+.policy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.policyLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.policySeg :global(.seg-opt) {
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+
+.policyText {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .providersTitle {
@@ -62,13 +95,19 @@
 .dl {
   margin: 0;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 84px minmax(0, 1fr);
   gap: 3px 10px;
   font-size: 12px;
 }
 
 .dl dt {
   color: var(--muted);
+}
+
+.dl .helpTerm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .dl dd {
@@ -123,6 +162,9 @@
 .healthText {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .ago {

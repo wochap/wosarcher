@@ -11,6 +11,11 @@ function Harness() {
 const file = (name: string, size: number) => new File(["x".repeat(size)], name);
 
 describe("Attachments", () => {
+  it("has the Attachments help", () => {
+    render(<Harness />);
+    expect(screen.getByRole("button", { name: "Help: Attachments" })).toBeTruthy();
+  });
+
   it("adds .md and .txt files, skips others, ignores duplicates, and removes", () => {
     render(<Harness />);
     const zone = screen.getByRole("button", { name: "Add .md or .txt files" });

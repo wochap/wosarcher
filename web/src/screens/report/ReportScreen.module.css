@@ -60,6 +60,16 @@
   gap: 6px;
 }
 
+.withHelp {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rewrite {
+  margin-right: 6px;
+}
+
 .kicker {
   font-size: 11px;
   letter-spacing: 0.08em;

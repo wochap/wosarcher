@@ -1,3 +1,4 @@
+description = "Models take turns on one small GPU; slower, fits 8 GB."
 # One small GPU: models take turns, so the backend must be able to unload.
 
 [run]

@@ -31,6 +31,7 @@ describe("LiveFooter", () => {
     expect(screen.getByText("$0.0000 · local")).toBeTruthy();
     expect(screen.getByText("Closed · run ended")).toBeTruthy();
     expect(screen.getByText(`seq ${run.lastSeq}`)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Tokens and cost" })).toBeTruthy();
   });
 
   it("shows a paid cost and hides seq on phones", () => {

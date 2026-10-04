@@ -1,6 +1,7 @@
 // The New run drop zone: drag and drop or browse for .md and .txt files, listed with size.
 import { FileArrowUp, FileText, Warning, X } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
+import { HelpTip } from "../../components/HelpTip";
 import { fmtBytes } from "../../run/format";
 import css from "./Attachments.module.css";
 
@@ -35,7 +36,10 @@ export function Attachments({ files, onChange }: Props) {
 
   return (
     <div className={css.attachments}>
-      <div className={css.label}>Attachments</div>
+      <div className={css.label}>
+        Attachments
+        <HelpTip help="attach" />
+      </div>
       {/* biome-ignore lint/a11y/useSemanticElements: the prototype's drop zone is a div with button role around a two-line description */}
       <div
         role="button"

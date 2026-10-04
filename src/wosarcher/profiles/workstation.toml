@@ -1,3 +1,4 @@
+description = "One GPU fits all models; models stay loaded."
 # One machine with a GPU that fits every model at once; models stay resident.
 
 [run]

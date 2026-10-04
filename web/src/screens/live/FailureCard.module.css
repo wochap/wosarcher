@@ -38,6 +38,12 @@
   color: var(--muted);
 }
 
+.withHelp {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .actions {
   display: flex;
   gap: 8px;

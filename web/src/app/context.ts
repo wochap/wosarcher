@@ -18,7 +18,7 @@ export type Auth = {
 };
 export const AuthContext = createContext<Auth | null>(null);
 
-export type OverlayKind = "alertdialog" | "dialog" | "tooltip";
+export type OverlayKind = "help" | "alertdialog" | "dialog" | "tooltip";
 export type ToastOptions = { undo?: () => void };
 
 export type RunOptions = {
@@ -65,6 +65,20 @@ export type Ui = {
 };
 export const UiContext = createContext<Ui | null>(null);
 
+/** The open help tooltip: its key, the button it belongs to, and that button's rectangle. */
+export type HelpState = { key: string; owner: string; rect: DOMRect; pinned: boolean };
+
+export type HelpUi = {
+  help: HelpState | null;
+  openHelp(help: HelpState): void;
+  closeHelp(): void;
+  /** Closes the tooltip after 140 ms unless it is pinned or `keepHelp` runs first. */
+  leaveHelp(): void;
+  keepHelp(): void;
+};
+/** Optional: components rendered without the app show their help buttons inert. */
+export const HelpContext = createContext<HelpUi | null>(null);
+
 function useRequired<T>(context: Context<T | null>, name: string): T {
   const value = useContext(context);
   if (!value) throw new Error(`${name} is not provided`);
@@ -75,3 +89,4 @@ export const useServices = () => useRequired(ApiContext, "ApiContext");
 export const useApi = () => useServices().api;
 export const useAuth = () => useRequired(AuthContext, "AuthContext");
 export const useUi = () => useRequired(UiContext, "UiContext");
+export const useHelp = () => useContext(HelpContext);

@@ -76,7 +76,9 @@ export function NewRunScreen() {
     });
   }
 
-  const profileNames = profiles.length ? profiles.map((p) => p.name) : [options.profile];
+  const profileList: ProfileInfo[] = profiles.length
+    ? profiles
+    : [{ name: options.profile, source: "builtin", active: true, description: "" }];
   return (
     <div className={css.page}>
       <div className={css.inner}>
@@ -128,7 +130,7 @@ export function NewRunScreen() {
         {defaults && writing && (
           <OptionsPanel
             options={options}
-            profiles={profileNames}
+            profiles={profileList}
             onOption={(key, value) =>
               setDraft((d) => ({ ...d, options: { ...d.options, [key]: value } }))
             }

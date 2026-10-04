@@ -4,8 +4,10 @@
   padding: 0;
   flex: none;
   display: grid;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-columns: repeat(9, minmax(98px, 1fr));
   gap: 5px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 [data-phone="true"] .timeline {
@@ -44,8 +46,8 @@
 }
 
 .label {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex: 1;
+  min-width: max-content;
   white-space: nowrap;
 }
 

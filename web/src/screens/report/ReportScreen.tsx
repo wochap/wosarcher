@@ -4,6 +4,7 @@ import { BracketsCurly, Copy, DownloadSimple, GitBranch, PenNib } from "@phospho
 import { useEffect, useState } from "react";
 import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
+import { HelpTip } from "../../components/HelpTip";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
@@ -77,14 +78,17 @@ export function ReportScreen({ runId }: { runId: string }) {
           <div className={css.actions}>
             {recipe === "report" && (
               <>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setRewriting(true)}
-                >
-                  <PenNib aria-hidden="true" />
-                  Rewrite
-                </button>
+                <span className={`${css.withHelp} ${css.rewrite}`}>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => setRewriting(true)}
+                  >
+                    <PenNib aria-hidden="true" />
+                    Rewrite
+                  </button>
+                  <HelpTip help="rewrite" />
+                </span>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -153,7 +157,11 @@ export function ReportScreen({ runId }: { runId: string }) {
                       onCite={onCite}
                       onLeave={onLeave}
                     />
-                    <References entries={report.references.map((r) => r.entry)} variant="article" />
+                    <References
+                      entries={report.references.map((r) => r.entry)}
+                      style={detail.writing.reference_style}
+                      variant="article"
+                    />
                   </>
                 )}
               </>

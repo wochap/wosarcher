@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ApiClient, httpApi } from "../api/client";
 import type { SocketFactory } from "../api/events";
 import type { RunSummary } from "../api/types";
+import { HelpPopover, useHelpState } from "../components/HelpTip";
 import { Toast, UNDO_MS, useToastState } from "../components/Toast";
 import { useRun } from "../run/useRun";
 import { HistoryScreen } from "../screens/history/HistoryScreen";
@@ -17,6 +18,7 @@ import {
   AuthContext,
   type Draft,
   EMPTY_DRAFT,
+  HelpContext,
   type LiveTab,
   type OverlayKind,
   type Ui,
@@ -62,6 +64,7 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
   const isPhone = useIsPhone();
   const { shown, toast, dismiss } = useToastState();
   const { open: overlays, overlay } = useOverlays();
+  const help = useHelpState(overlay);
 
   const [ready, setReady] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -190,19 +193,22 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
     <ApiContext.Provider value={services}>
       <AuthContext.Provider value={auth}>
         <UiContext.Provider value={ui}>
-          <Shell
-            screen={screen}
-            liveDot={liveDot}
-            onGo={goTo}
-            overlays={
-              <>
-                <Toast shown={shown} dismiss={dismiss} />
-                {locked && <LoginScreen initial={login} onSignedIn={unlock} />}
-              </>
-            }
-          >
-            {ready && <Current key={epoch} route={route} />}
-          </Shell>
+          <HelpContext.Provider value={help}>
+            <Shell
+              screen={screen}
+              liveDot={liveDot}
+              onGo={goTo}
+              overlays={
+                <>
+                  <Toast shown={shown} dismiss={dismiss} />
+                  <HelpPopover />
+                  {locked && <LoginScreen initial={login} onSignedIn={unlock} />}
+                </>
+              }
+            >
+              {ready && <Current key={epoch} route={route} />}
+            </Shell>
+          </HelpContext.Provider>
         </UiContext.Provider>
       </AuthContext.Provider>
     </ApiContext.Provider>

@@ -513,7 +513,9 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   profile plus the parent's and the new overrides. Used for resume, for
   changing writing options, and by the eval harness.
 - `wosarcher doctor [--profile <name>] [--set k=v] [--json]`: one row per
-  block (provider, base URL, device, status, model, latency, unload support);
+  block (provider, base URL, device, status, model, latency, unload support;
+  `--json` adds each block's configured `release` and the profile's
+  `gpu_policy`);
   built-in scorers are shown without a request. Warns about blocks that
   cannot unload. After a successful LLM probe it reads the server's `n_ctx`
   from `GET <root>/props` (or `<root>/upstream/<model>/props` behind
@@ -679,11 +681,13 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 - `DELETE /api/runs/{id}`: 204 for a finished run, a queued one, or one
   that ended without a run directory (forgotten), 409 `run_active` for a
   running one.
-- `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`.
+- `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`,
+  `description` (empty when the profile sets none).
 - `GET /api/providers/health[?profile=P]`: runs `wosarcher doctor --json`
   (60 s timeout; 502 when it times out or prints no report) and maps each
   row: failed is `down` (error as detail), built in is `skipped`, a model
-  that cannot unload or a probe over 1000 ms is `degraded`, else `ok`.
+  that cannot unload or a probe over 1000 ms is `degraded`, else `ok`. The
+  report carries the profile's `gpu_policy` and each check its `release`.
 - `POST /api/login`, `POST /api/logout`, `GET /api/session`
   (`SessionInfo`): see Authentication.
 - `GET /api/tokens` (`TokenInfo`: ID, name, masked last 4 characters,
@@ -839,6 +843,10 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 reasoning models that count hidden reasoning tokens); the `score` block adds
 `rerank_scale` (`auto`, `probability`, `logit`).
 
+A profile may start with a top-level `description` string, one line that
+says what it is for. It is file metadata, not a setting: it is not part of
+the resolved configuration and cannot be set by environment or `--set`.
+
 Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
 `workstation` (shared), `cloud` (no local models, high concurrency;
 `llm.reasoning_tokens = 4096` for `gpt-5-mini`). The local profiles set
@@ -867,8 +875,9 @@ config directory; it does not contain provider URLs or model names.
   `wosarcher run` subprocess), so changing a profile file or the default never needs
   a server restart. The frontend's New run screen lists profiles and accepts
   per-run overrides.
-- `wosarcher profile list`, `wosarcher profile show <name>` (resolved, secrets redacted),
-  and `wosarcher doctor --profile <name>` make switching safe.
+- `wosarcher profile list` (with each profile's `description`),
+  `wosarcher profile show <name>` (resolved, secrets redacted), and
+  `wosarcher doctor --profile <name>` make switching safe.
 
 **Model host side (each GPU machine).** One llama-swap service per machine,
 in front of every model that machine may serve (rerankers, embedders, LLMs).
@@ -974,10 +983,11 @@ The visual design is the Claude Design handoff bundle in `design/`. It is
 the source of truth for the frontend: the built UI matches it screen by
 screen, in both themes and on phone and desktop.
 
-- Primary file: `design/project/Sift Research.dc.html`. Its `scenario`
+- Primary file: `design/project/wosarcher.dc.html`. Its `scenario`
   values (live, loading, reconnecting, failure, cancelled, finished,
   versions, empty, new, login, login-wrong, login-limited) are the states the
-  frontend must implement.
+  frontend must implement. The `help` scenario specifies the inline help
+  component (the `?` button and its tooltip); it is not a screen.
 - Styling uses the bundle's Nocturne design system directly:
   `design/project/_ds/*/styles.css` is vendored into the frontend as the
   token sheet and component classes, with the prototype's light-theme
@@ -997,8 +1007,7 @@ screen, in both themes and on phone and desktop.
 
 These override the prototype where they differ:
 
-- **Name:** "wosarcher" everywhere the prototype says "Sift" (brand, token
-  prefix `wosarcher_`, storage keys). No version string is hard-coded.
+- **Name:** wosarcher everywhere; no version string.
 - **Citations:** `[n]` points to a passage; hover shows the passage text,
   source, and score. Citation chips are built from the body with `[n]`
   markers (the streamed text while writing, `report.json` `body` once
@@ -1027,6 +1036,10 @@ These override the prototype where they differ:
   pairs have no score bar and no threshold line.
 - **Device chip:** shows the stage's `device` label. VRAM figures are not
   shown; no source provides them.
+- **GPU policy:** shown from the checked profile, not editable in the
+  browser; to change it, edit the profile's `run.gpu_policy`.
+- **Prefilter card:** titled Embeddings only for the `embeddings` provider,
+  Prefilter otherwise (for example `bm25`).
 - **Theme:** dark and light both kept; the first visit follows
   `prefers-color-scheme`, and the choice is remembered in the browser.
 - **Additions to the prototype:** "Live updates unavailable" is a banner

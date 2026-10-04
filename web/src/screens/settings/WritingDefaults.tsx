@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import type { ServerSettings, WritingOptions } from "../../api/types";
 import { useApi } from "../../app/context";
+import { HelpTip } from "../../components/HelpTip";
 import page from "../../components/Page.module.css";
 import { type WritingField, WritingOptionsForm } from "../../components/WritingOptionsForm";
 import css from "./WritingDefaults.module.css";
@@ -46,6 +47,7 @@ export function WritingDefaults() {
     <>
       <div className={css.header}>
         <h2 className={page.section}>Writing defaults</h2>
+        <HelpTip help="wdefaults" />
         <span className={css.note}>Preselected on every new run · saved automatically</span>
         {saved && (
           <span className={css.saved}>

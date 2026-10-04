@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import type { TokenCreated, TokenInfo } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { Dialog } from "../../components/Dialog";
+import { HelpTip } from "../../components/HelpTip";
 import { dateTime, shortDate } from "../../format";
 import css from "./SecuritySection.module.css";
 
@@ -44,7 +45,10 @@ export function Tokens() {
   return (
     <>
       <div className={css.stack}>
-        <div className={css.strong}>API tokens</div>
+        <div className={`${css.strong} ${css.titleRow}`}>
+          API tokens
+          <HelpTip help="apitokens" />
+        </div>
         <div className={css.muted}>
           For the CLI and scripts that call the local API, sent as{" "}
           <span className={css.code}>Authorization: Bearer &lt;token&gt;</span>.

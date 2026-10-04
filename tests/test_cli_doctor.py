@@ -105,3 +105,15 @@ def test_doctor_context_warning_keeps_exit_0() -> None:
     assert result.exit_code == 0, result.output
     assert "llm: server context 4096 tokens" in result.output
     assert "below llm.context_window = 32768" in result.output
+
+
+@respx.mock
+def test_doctor_json_reports_release_and_gpu_policy(config_home: Path) -> None:
+    healthy_routes()
+    text = PROFILE.replace('provider = "bm25"', 'provider = "bm25"\nrelease = "llama-swap"')
+    (config_home / "wosarcher" / "profiles" / "exclusive.toml").write_text(text + '\n[run]\ngpu_policy = "exclusive"\n')
+    result = runner.invoke(app, ["doctor", "--profile", "exclusive", "--json"])
+    report = json.loads(result.output)
+    assert report["gpu_policy"] == "exclusive"
+    releases = {row["block"]: row["release"] for row in report["providers"]}
+    assert releases == {"search": "none", "fetch": "none", "prefilter": "llama-swap", "score": "none", "llm": "none"}

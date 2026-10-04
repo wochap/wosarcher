@@ -1,6 +1,7 @@
 // The six writing fields in the prototype's form grid. Used by Settings (defaults), New run
 // (marks "overridden" against the defaults), and the Rewrite dialog (marks "changed").
 import type { WritingOptions } from "../api/types";
+import { HelpTip } from "./HelpTip";
 import { Tag } from "./Tag";
 import { CITATION_MARKERS, capitalize } from "./tones";
 import { Control } from "./WritingControl";
@@ -10,20 +11,33 @@ export type WritingField = keyof WritingOptions;
 
 const LABELS: Record<WritingField, string> = {
   tone: "Tone",
-  tone_instructions: "Custom tone instructions",
-  words: "Target length",
+  tone_instructions: "Custom instructions",
+  words: "Length (words)",
   language: "Language",
   citation_marker: "Citation marker",
   reference_style: "Reference style",
 };
 const FIELDS = Object.keys(LABELS) as WritingField[];
+const HELP_KEYS: Record<WritingField, string> = {
+  tone: "w-tone",
+  tone_instructions: "w-custom",
+  words: "w-words",
+  language: "w-lang",
+  citation_marker: "w-cite",
+  reference_style: "w-ref",
+};
+const SHORT = 28;
 
 /** How a value reads in "default: …" and "was …". */
 export function describeValue(field: WritingField, value: WritingOptions[WritingField]): string {
   if (field === "citation_marker") {
     return CITATION_MARKERS.find((m) => m.value === value)?.label ?? String(value);
   }
-  if (field === "tone_instructions") return value ? `“${value}”` : "none";
+  if (field === "tone_instructions") {
+    const text = String(value);
+    if (!text) return "none";
+    return `“${text.length > SHORT ? `${text.slice(0, SHORT)}…` : text}”`;
+  }
   if (field === "words") return `${value} words`;
   return capitalize(String(value));
 }
@@ -46,18 +60,24 @@ export function WritingOptionsForm(props: Props) {
       {FIELDS.map((field) => {
         const changed = !!base && String(value[field]) !== String(base[field]);
         const id = `${idPrefix}-${field}`;
-        const segmented = field === "tone" || field === "citation_marker";
+        const segmented = field === "citation_marker" || field === "reference_style";
         const Label = segmented ? "span" : "label";
         return (
           <div key={field} className={css.row}>
             <div className={css.head}>
-              <Label htmlFor={segmented ? undefined : id}>{LABELS[field]}</Label>
+              <div className={css.label}>
+                <Label htmlFor={segmented ? undefined : id}>{LABELS[field]}</Label>
+                <HelpTip help={HELP_KEYS[field]} />
+              </div>
               {changed && base && (
                 <>
                   <div className={css.marks}>
-                    <Tag variant="outline" small>
-                      {mark}
-                    </Tag>
+                    <span className={css.mark}>
+                      <Tag variant="outline" small>
+                        {mark}
+                      </Tag>
+                      <HelpTip help={mark === "changed" ? "rwchanged" : "overridden"} />
+                    </span>
                     <button
                       type="button"
                       className={`btn btn-ghost ${css.reset}`}

@@ -19,6 +19,12 @@
   align-items: center;
 }
 
+.cost {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .conn {
   margin-left: auto;
   display: flex;

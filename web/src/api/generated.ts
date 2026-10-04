@@ -41,6 +41,7 @@ export type Title = string
 export type Uri = string
 export type Sources = Source[]
 export type UsedTokens = number
+export type GpuPolicy = ("shared" | "exclusive")
 export type BaseUrl = string
 export type Block = string
 export type ContextWindow = (number | null)
@@ -50,6 +51,7 @@ export type LatencyMs = (number | null)
 export type Model = (string | null)
 export type Note = (string | null)
 export type Provider = string
+export type Release = ("none" | "llama-swap" | "ollama")
 export type Status = ("ok" | "failed" | "built-in")
 export type Unload = ("yes" | "no" | "n/a")
 export type Providers = ProviderHealth[]
@@ -79,10 +81,12 @@ export type Device1 = (string | null)
 export type LatencyMs1 = (number | null)
 export type Model2 = (string | null)
 export type Provider1 = string
+export type Release1 = ("none" | "llama-swap" | "ollama")
 export type Role = string
 export type Status1 = ("ok" | "degraded" | "down" | "skipped")
 export type Url = string
 export type Checks = ProviderCheck[]
+export type GpuPolicy1 = ("shared" | "exclusive")
 export type Profile1 = string
 export type Warnings1 = string[]
 export type QueryIds1 = string[]
@@ -156,6 +160,7 @@ export type Candidates = Candidate[]
 export type Method = ("embeddings" | "bm25" | "none")
 export type Warnings3 = string[]
 export type Active = boolean
+export type Description = string
 export type Name1 = string
 export type Source1 = ("builtin" | "user")
 export type Kept1 = number
@@ -468,6 +473,7 @@ uri: Uri
  * via the `definition` "DoctorReport".
  */
 export interface DoctorReport {
+gpu_policy?: GpuPolicy
 providers?: Providers
 warnings?: Warnings
 }
@@ -487,6 +493,7 @@ latency_ms?: LatencyMs
 model?: Model
 note?: Note
 provider: Provider
+release?: Release
 status: Status
 unload?: Unload
 }
@@ -559,6 +566,7 @@ words?: Words
  */
 export interface HealthReport {
 checks: Checks
+gpu_policy?: GpuPolicy1
 profile: Profile1
 warnings?: Warnings1
 }
@@ -572,6 +580,7 @@ device?: Device1
 latency_ms?: LatencyMs1
 model?: Model2
 provider: Provider1
+release?: Release1
 role: Role
 status: Status1
 url?: Url
@@ -773,6 +782,7 @@ warnings?: Warnings3
  */
 export interface ProfileInfo {
 active: Active
+description?: Description
 name: Name1
 source: Source1
 }

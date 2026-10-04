@@ -15,7 +15,7 @@ describe("run formats", () => {
   });
 
   it("summarizes and diffs writing options", () => {
-    expect(wSummary(writing)).toBe("Analytical · 1200 words · English · [1] Numeric");
+    expect(wSummary(writing)).toBe("Analytical · 1200 words · English · [1] Numeric · APA");
     const next = { ...writing, tone: "concise", words: 250, tone_instructions: "Short." };
     expect(wDiff(writing, next)).toBe("Concise · custom instructions · 250 words");
     expect(wDiff(writing, writing)).toBe("");

@@ -59,10 +59,20 @@ EXAMPLES: list[Contract] = [
         }
     ),
     ServerSettings(writing=WritingOptions(words=800), sources="web"),
-    ProfileInfo(name="cloud", source="builtin", active=True),
+    ProfileInfo(name="cloud", source="builtin", active=True, description="Hosted APIs only; needs API keys."),
     HealthReport(
         profile="cloud",
-        checks=[ProviderCheck(role="search", provider="searxng", status="degraded", latency_ms=1840, detail="slow")],
+        gpu_policy="exclusive",
+        checks=[
+            ProviderCheck(
+                role="search",
+                provider="searxng",
+                release="llama-swap",
+                status="degraded",
+                latency_ms=1840,
+                detail="slow",
+            )
+        ],
         warnings=["w"],
     ),
     ApiError(error="run_not_found", detail="no run r"),

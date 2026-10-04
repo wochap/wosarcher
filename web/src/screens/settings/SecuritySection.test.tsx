@@ -48,6 +48,11 @@ describe("SecuritySection", () => {
     expect(screen.queryByText(/^wosarcher_x{32}/)).toBeNull();
   });
 
+  it("has the API tokens help", async () => {
+    renderApp({ hash: "#/settings" });
+    expect(await screen.findByRole("button", { name: "Help: API tokens" })).toBeTruthy();
+  });
+
   it("shows the empty text without tokens", async () => {
     renderApp({ hash: "#/settings", api: fakeApi({ tokens: [] }) });
     expect(

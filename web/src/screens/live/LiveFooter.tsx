@@ -1,6 +1,7 @@
 // Elapsed time, tokens, cost, and the event connection with its dot.
 import { Timer } from "@phosphor-icons/react";
 import type { Conn } from "../../api/events";
+import { HelpTip } from "../../components/HelpTip";
 import { fmtCost, fmtElapsed, fmtK } from "../../run/format";
 import type { RunView } from "../../run/reducer";
 import css from "./LiveFooter.module.css";
@@ -26,7 +27,10 @@ export function LiveFooter({ run, conn, elapsed, isPhone }: Props) {
       <span title="Prompt / completion tokens across all stages">
         {fmtK(run.tokensIn)} in · {fmtK(run.tokensOut)} out
       </span>
-      <span>{fmtCost(run.cost)}</span>
+      <span className={css.cost}>
+        {fmtCost(run.cost)}
+        <HelpTip help="tokens" />
+      </span>
       <span className={css.conn}>
         <span className={css.dot} data-state={conn.state} />
         {CONN[conn.state]}

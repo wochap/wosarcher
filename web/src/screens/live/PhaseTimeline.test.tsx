@@ -24,6 +24,10 @@ describe("PhaseTimeline", () => {
     expect(card("Prefilter").textContent).toContain("96 of 412 kept");
     expect(card("Fetch").textContent).toContain("fetched 19/22 · 3 failed");
     expect(screen.getAllByRole("listitem")).toHaveLength(9);
+    expect(screen.getByRole("button", { name: "Help: Score, waiting for GPU" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Prefilter" })).toBeTruthy();
+    for (const item of screen.getAllByRole("listitem"))
+      expect(item.hasAttribute("title")).toBe(false);
   });
 
   it("shows running with its progress", () => {

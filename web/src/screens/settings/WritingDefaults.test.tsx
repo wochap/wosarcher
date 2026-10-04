@@ -9,7 +9,7 @@ describe("WritingDefaults", () => {
   it("saves a changed length once, on blur, and shows Saved", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
-    const words = await screen.findByLabelText("Target length");
+    const words = await screen.findByLabelText("Length (words)");
     fireEvent.change(words, { target: { value: "800" } });
     expect(callsTo(api, "putSettings")).toHaveLength(0);
     await act(async () => {
@@ -22,13 +22,28 @@ describe("WritingDefaults", () => {
     expect(screen.getByText("Saved")).toBeTruthy();
   });
 
+  it("has the Writing defaults help", async () => {
+    renderApp({ hash: "#/settings" });
+    expect(await screen.findByRole("button", { name: "Help: Writing defaults" })).toBeTruthy();
+  });
+
   it("saves a tone at once", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
     await act(async () => {
-      fireEvent.click(await screen.findByLabelText("Critical"));
+      fireEvent.change(await screen.findByLabelText("Tone"), { target: { value: "critical" } });
     });
     expect((callsTo(api, "putSettings")[0][0] as ServerSettings).writing.tone).toBe("critical");
+  });
+
+  it("sends a reference style picked in the segments", async () => {
+    const api = fakeApi();
+    renderApp({ hash: "#/settings", api });
+    await act(async () => {
+      fireEvent.click(await screen.findByLabelText("MLA"));
+    });
+    const puts = callsTo(api, "putSettings") as [ServerSettings][];
+    expect(puts[0][0].writing.reference_style).toBe("MLA");
   });
 
   it("shows the server's error and restores the earlier value", async () => {

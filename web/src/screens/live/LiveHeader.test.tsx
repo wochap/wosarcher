@@ -29,7 +29,11 @@ function header(events: RunEvent[], isPhone = false) {
   return handlers;
 }
 
-const buttons = () => screen.queryAllByRole("button").map((b) => b.textContent);
+const buttons = () =>
+  screen
+    .queryAllByRole("button")
+    .filter((b) => !b.dataset.help)
+    .map((b) => b.textContent);
 
 describe("LiveHeader", () => {
   it("shows Connecting with Cancel while queued", () => {
@@ -43,7 +47,7 @@ describe("LiveHeader", () => {
     expect(screen.getByText("Running")).toBeTruthy();
     expect(screen.getByText("report · both · low-vram · 2 files")).toBeTruthy();
     expect(screen.getByText(/How do speculative decoding/)).toBeTruthy();
-    expect(screen.getByText("score · desktop:gpu0")).toBeTruthy();
+    expect(screen.getByText("desktop:gpu0")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(handlers.onCancel).toHaveBeenCalled();
   });
@@ -53,7 +57,7 @@ describe("LiveHeader", () => {
       upTo(all, (e) => e.type === "passages.scored"),
       true,
     );
-    expect(screen.queryByText("score · desktop:gpu0")).toBeNull();
+    expect(screen.queryByText("desktop:gpu0")).toBeNull();
   });
 
   it("offers Open report when completed", () => {
@@ -70,6 +74,11 @@ describe("LiveHeader", () => {
     expect(buttons()).toEqual(["Rerun"]);
   });
 
+  it("has the Rerun help when failed", () => {
+    header(failure.data.events?.[RUN_ID] as RunEvent[]);
+    expect(screen.getByRole("button", { name: "Help: Rerun" })).toBeTruthy();
+  });
+
   it("offers Rerun when cancelled", () => {
     header(cancelled.data.events?.[RUN_ID] as RunEvent[]);
     expect(screen.getByText("Cancelled")).toBeTruthy();
@@ -80,13 +89,13 @@ describe("LiveHeader", () => {
 describe("deviceLabel", () => {
   it("names the running stage, a wait, or idle, without memory figures", () => {
     expect(deviceLabel(at((e) => e.type === "passages.scored"))).toEqual({
-      text: "score · desktop:gpu0",
+      text: "desktop:gpu0",
       tone: "busy",
     });
     const waiting = at((e) => e.type === "stage.started" && e.stage === "score");
-    expect(deviceLabel(waiting)).toEqual({ text: "desktop:gpu0 · swapping models", tone: "wait" });
+    expect(deviceLabel(waiting)).toEqual({ text: "desktop:gpu0 · waiting", tone: "wait" });
     const idle = at((e) => e.type === "stage.started" && e.stage === "select");
-    expect(deviceLabel(idle)).toEqual({ text: "desktop:gpu0 · idle", tone: "idle" });
+    expect(deviceLabel(idle)).toEqual({ text: "desktop:gpu0", tone: "idle" });
     expect(deviceLabel(viewOf([ev(1, "run.started", {} as never, null, RUN_ID)]))).toBeNull();
   });
 });

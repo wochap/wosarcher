@@ -23,7 +23,6 @@ describe("ProvidersSection", () => {
     expect(strip("Embeddings").textContent).toContain("Healthy · 38 ms");
     expect(strip("LLM").textContent).toContain("just now");
     expect(within(card("Scorer")).getByText("bge-reranker-v2-m3-Q8_0.gguf")).toBeTruthy();
-    expect(screen.getByText(/devices gpu0/)).toBeTruthy();
   });
 
   it("shows skipped providers", async () => {
@@ -70,5 +69,42 @@ describe("ProvidersSection", () => {
       expect(card(title)).toBeTruthy();
     expect(screen.queryByRole("region", { name: "prefilter" })).toBeNull();
     expect(screen.queryByRole("region", { name: "score" })).toBeNull();
+  });
+
+  it("titles a keyword prefilter Prefilter", async () => {
+    const api = fakeApi();
+    api.data.health.checks[2] = { ...api.data.health.checks[2], provider: "bm25" };
+    renderApp({ hash: "#/settings", api });
+    await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
+    expect(within(card("Prefilter")).getByText("bm25")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Embeddings" })).toBeNull();
+  });
+
+  it("lists Device and Unload with their help", async () => {
+    renderApp({ hash: "#/settings" });
+    await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
+    const scorer = within(card("Scorer"));
+    expect(scorer.getByText("desktop:gpu0")).toBeTruthy();
+    expect(scorer.getByText("llama-swap")).toBeTruthy();
+    for (const label of ["Device", "Unload", "Health"])
+      expect(scorer.getByRole("button", { name: `Help: ${label}` })).toBeTruthy();
+  });
+
+  it("shows the active profile with its description and the GPU policy", async () => {
+    const { container } = renderApp({ hash: "#/settings" });
+    await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
+    await screen.findByText("· Models take turns on one small GPU; slower, fits 8 GB.");
+    expect(container.textContent).toContain(
+      "Active profilelow-vram· Models take turns on one small GPU; slower, fits 8 GB.",
+    );
+    expect(screen.getByRole("button", { name: "Help: Profile" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: GPU policy" })).toBeTruthy();
+    const exclusive = screen.getByLabelText("Exclusive") as HTMLInputElement;
+    expect(exclusive.checked).toBe(true);
+    expect(exclusive.disabled).toBe(true);
+    expect((screen.getByLabelText("Shared") as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.getByText("Each model unloads before the next one loads on desktop:gpu0."),
+    ).toBeTruthy();
   });
 });

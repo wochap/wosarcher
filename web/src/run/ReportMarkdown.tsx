@@ -4,6 +4,7 @@ import { type ComponentProps, useMemo } from "react";
 import Markdown from "react-markdown";
 import type { Context } from "../api/generated";
 import type { WritingOptions } from "../api/types";
+import { HelpTip } from "../components/HelpTip";
 import { label, prepare } from "./citations";
 import css from "./ReportMarkdown.module.css";
 
@@ -72,25 +73,31 @@ function link({ marker, context, onCite, onLeave }: Omit<Props, "body" | "stream
   };
 }
 
-/** A report's References list, rendered after the body in the report's style. */
+/** A report's References list under a heading naming its reference style. */
 export function References({
   entries,
+  style,
   variant,
 }: {
   entries: string[];
+  style: string;
   variant: "live" | "article";
 }) {
   if (!entries.length) return null;
   return (
     <div className={css.report} data-variant={variant}>
-      <h2>References</h2>
-      <ul className={css.references}>
+      <h2 className={css.referencesHeading}>
+        References
+        <span className={css.referenceStyle}>{style}</span>
+        <HelpTip help="w-ref" />
+      </h2>
+      <ol className={css.references}>
         {entries.map((entry) => (
           <li key={entry}>
             <Markdown components={{ p: ({ children }) => <>{children}</> }}>{entry}</Markdown>
           </li>
         ))}
-      </ul>
+      </ol>
     </div>
   );
 }
