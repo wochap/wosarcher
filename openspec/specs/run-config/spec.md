@@ -111,10 +111,13 @@ SHALL accept the same fields: `provider`, `base_url`, `api_key`, `model`,
 `connect_timeout`, `timeout`, `retry_budget` (seconds of waiting for
 retries, default 60, not negative), and `prices` (optional per-unit prices
 for cost recording). The `llm` block SHALL also accept `max_tokens_field`
-(`max_completion_tokens`, the default, or `max_tokens`) and
+(`max_completion_tokens`, the default, or `max_tokens`),
 `reasoning_tokens` (an integer, default 0, not negative, added to every
-LLM request's output limit), and the `score`
-block `rerank_scale` (`auto`, the default, `probability`, or `logit`).
+LLM request's output limit), and `max_continuations` (an integer, default
+2, not negative: how many times the writer continues a report cut at the
+output limit; 0 turns continuation off). The `score`
+block SHALL also accept `rerank_scale` (`auto`, the default, `probability`,
+or `logit`).
 Fields a provider does not use SHALL be ignored by it, not rejected.
 
 #### Scenario: Remote endpoint
@@ -128,6 +131,10 @@ Fields a provider does not use SHALL be ignored by it, not rejected.
 #### Scenario: Invalid token field
 - **WHEN** a profile sets `llm.max_tokens_field = "n_predict"`
 - **THEN** loading fails with an error that names the field and the allowed values `max_completion_tokens`, `max_tokens`
+
+#### Scenario: Continuations
+- **WHEN** no source sets `llm.max_continuations`
+- **THEN** the resolved value is 2, and `--set llm.max_continuations=-1` fails with an error that names the field
 
 ### Requirement: Validation
 Configuration SHALL be validated when it is resolved. An invalid value SHALL

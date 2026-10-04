@@ -627,6 +627,43 @@ report and SHALL NOT offer Rewrite or Copy markdown or Download.
 - **WHEN** the run's reference style is `MLA`
 - **THEN** the heading reads "References" followed by "MLA" and a help button, and the "Written with" line ends with "· MLA"
 
+### Requirement: Report continuation notes
+The Report screen SHALL show the report's continuation state between the
+"Written with" line and the report, as in the prototype:
+
+- When the report has `continuations` of 1 or more and is not truncated
+  (scenario `finished`), it SHALL show a muted line with the bend-arrow
+  icon: "Continued <N>× after reaching the output limit.", followed by a
+  help button. The button's label is "Continued", its title "Continued",
+  and its body "The writer reached its output limit, so it was asked to
+  continue from where it stopped. The parts are joined into one report."
+- When the report is truncated (scenario `report-cut`), it SHALL show the
+  warn-styled note with the scissors icon (dashed warn border, warn tint):
+  "Still cut off after <N> continuations. The last section may be
+  incomplete." When N is 0, the note reads "Cut off at the output limit.
+  The last section may be incomplete." After the last block of the report
+  and before References, it SHALL show the warn-coloured end marker with
+  the scissors icon, "Output limit reached here".
+- A report with no continuations that is not truncated SHALL show neither.
+
+The notes SHALL use the Nocturne variables only.
+
+#### Scenario: Continued report
+- **WHEN** the user opens a report with `continuations` 1 and `truncated` false
+- **THEN** the screen shows "Continued 1× after reaching the output limit." with its help button, and no cut note or end marker
+
+#### Scenario: Cut report
+- **WHEN** the user opens a report with `continuations` 2 and `truncated` true
+- **THEN** the screen shows "Still cut off after 2 continuations. The last section may be incomplete." above the report and "Output limit reached here" after its last block
+
+#### Scenario: Cut without continuation
+- **WHEN** the user opens a report with `continuations` 0 and `truncated` true
+- **THEN** the note reads "Cut off at the output limit. The last section may be incomplete." and the end marker is shown
+
+#### Scenario: Normal report
+- **WHEN** the user opens a report with `continuations` 0 and `truncated` false
+- **THEN** no continuation note, cut note, or end marker is shown
+
 ### Requirement: Citations
 Citations in the report SHALL render as citation chips, one per cited
 passage (a group `[1, 2]` gives two chips), labelled per the run's citation
