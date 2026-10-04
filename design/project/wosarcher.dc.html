@@ -101,6 +101,28 @@ html,body{margin:0;height:100%}
     <sc-if value="{{ optsOpen }}" hint-placeholder-val="{{ false }}">
     <div style="padding:4px 14px 14px;display:flex;flex-direction:column;gap:4px">
       <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:8px 0 2px">Run</div>
+      <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:4px 0 6px">
+        <div style="display:flex;align-items:center;gap:5px;padding-top:6px"><span id="depth-l" style="font-size:12.5px">Depth</span><button type="button" data-help="depth" aria-label="Help: Depth" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
+        <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div class="seg" role="radiogroup" aria-labelledby="depth-l"><sc-for list="{{ depthOpts }}" as="o" hint-placeholder-count="5"><label class="seg-opt"><input type="radio" name="opt-depth" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
+          <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px">{{ depthDesc }}</span><span aria-live="polite" style="font-size:12px;color:var(--muted)">{{ depthEst }}</span></div>
+          <button type="button" class="btn btn-ghost" onClick="{{ toggleAdv }}" aria-expanded="{{ advExp }}" style="align-self:flex-start;font-size:12px;padding:1px 4px;gap:4px;margin-left:-4px"><i class="ph {{ advCaret }}"></i>Advanced<span style="color:var(--faint)">{{ advHint }}</span></button>
+          <sc-if value="{{ advOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px;padding:8px 10px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-text) 3%,transparent)">
+            <span style="font-size:12px;color:var(--muted)">{{ advNote }}</span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 14px">
+              <sc-for list="{{ depthFields }}" as="d" hint-placeholder-count="6">
+                <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                  <div style="display:flex;align-items:center;gap:5px"><label for="{{ d.id }}" style="font-size:12px">{{ d.label }}</label><button type="button" data-help="{{ d.help }}" aria-label="{{ d.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
+                  <input id="{{ d.id }}" class="input" type="number" min="{{ d.min }}" max="{{ d.max }}" step="{{ d.step }}" value="{{ d.value }}" onChange="{{ d.onChange }}" disabled="{{ d.dis }}" style="width:100%;max-width:150px;border-style:{{ d.bs }};color:{{ d.col }}">
+                  <sc-if value="{{ d.note }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:flex-start;gap:4px;font-size:11.5px;line-height:1.35;color:var(--muted)"><i class="ph {{ d.noteIcon }}" style="font-size:12px;flex:none;margin-top:1px"></i>{{ d.note }}</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
       <sc-for list="{{ runFields }}" as="f" hint-placeholder-count="3">
         <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:4px 0">
           <div style="display:flex;align-items:center;gap:5px;padding-top:6px"><div style="display:flex;align-items:center;gap:5px"><label for="{{ f.id }}" style="font-size:12.5px">{{ f.label }}</label><button type="button" data-help="{{ f.help }}" aria-label="{{ f.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div><button type="button" data-help="{{ f.help }}" aria-label="{{ f.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
@@ -120,7 +142,7 @@ html,body{margin:0;height:100%}
           <div style="min-width:0">
             <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
             <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.ph }}" style="min-height:64px;font-size:13.5px"></textarea></sc-if>
-            <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span></div></sc-if>
+            <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span><sc-if value="{{ f.numHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--faint)">· {{ f.numHint }}</span></sc-if></div></sc-if>
             <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:min(380px,100%)"><sc-for list="{{ f.options }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select><sc-if value="{{ f.desc }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--muted);margin-top:4px">{{ f.desc }}</div></sc-if></sc-if>
           </div>
         </div>
@@ -146,7 +168,7 @@ html,body{margin:0;height:100%}
   <header style="display:flex;align-items:flex-start;gap:14px;flex:none">
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
-        <span class="tag" style="background:{{ L.stBg }};color:{{ L.stFg }};gap:5px;padding:2px 8px"><i class="ph-fill ph-circle" style="font-size:7px;animation:{{ L.stAnim }}"></i>{{ L.stLabel }}</span>
+        <span class="tag" style="background:{{ L.stBg }};color:{{ L.stFg }};gap:5px;padding:2px 8px"><i class="ph-fill ph-circle" style="font-size:7px;animation:{{ L.stAnim }}"></i>{{ L.stLabel }}</span><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ L.depthLabel }}</span>
         <sc-if value="{{ L.isRewrite }}" hint-placeholder-val="{{ false }}"><span class="tag tag-outline" style="gap:5px;padding:1px 8px"><i class="ph ph-git-branch"></i>{{ L.rewriteLabel }}</span></sc-if>
         <span style="font-family:var(--mono);font-size:11.5px">{{ L.id }}</span><span>{{ L.meta }}</span>
       </div>
@@ -179,7 +201,7 @@ html,body{margin:0;height:100%}
         <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:{{ p.lc }}"><i class="ph {{ p.icon }}" style="color:{{ p.ic }};font-size:14px;flex:none;animation:{{ p.anim }}"></i><span style="flex:1;min-width:max-content;white-space:nowrap">{{ p.label }}</span><button type="button" data-help="{{ p.help }}" aria-label="{{ p.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
         <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}"><button type="button" data-help="{{ p.tagHelp }}" aria-label="{{ p.tagAria }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="align-self:flex-start;max-width:100%;display:inline-flex;align-items:center;gap:3px;margin:1px 0;padding:0 5px;border-radius:4px;border:1px {{ p.tagBs }} {{ p.tagBd }};background:transparent;color:{{ p.tagCol }};font-family:var(--mono);font-size:10.5px;line-height:16px;cursor:help;white-space:nowrap;min-width:0;padding-right:6px" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><sc-if value="{{ p.tagFb }}" hint-placeholder-val="{{ false }}"><i class="ph ph-warning" style="font-size:11px;flex:none"></i></sc-if><span style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ p.tag }}</span></button></sc-if>
         <div style="font-size:11.5px;color:{{ p.tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.text }}</div>
-        <sc-if value="{{ p.detail }}" hint-placeholder-val="{{ false }}"><div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.detail }}</div></sc-if>
+        <sc-if value="{{ p.detail }}" hint-placeholder-val="{{ false }}"><div title="{{ p.detail }}" style="font-size:11px;color:{{ p.dc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.detail }}</div></sc-if>
         <div style="height:3px;margin:3px -9px 0;background:var(--line)"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.bar }};transition:width .2s linear"></div></div>
       </li>
     </sc-for>
@@ -200,6 +222,27 @@ html,body{margin:0;height:100%}
         </ol>
       </section>
       </sc-if>
+      <sc-if value="{{ showRounds }}" hint-placeholder-val="{{ false }}">
+      <section aria-label="Research rounds" style="flex:{{ subqFlex }};max-height:{{ roundsMax }};min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
+        <header style="flex:none;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line)"><span style="display:flex;align-items:center;gap:5px"><h2 style="margin:0;font-size:13px;letter-spacing:0">Research rounds</h2><button type="button" data-help="rounds" aria-label="Help: Research rounds" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span><span style="font-size:12px;color:var(--muted)">{{ L.roundsSummary }}</span></header>
+        <sc-if value="{{ L.roundsEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:10px 12px;font-size:12.5px;color:var(--muted)">{{ L.roundsEmptyText }}</div></sc-if>
+        <ol style="list-style:none;margin:0;padding:0;flex:1;min-height:0;overflow:auto">
+          <sc-for list="{{ L.rounds }}" as="x" hint-placeholder-count="2">
+            <li style="display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line)">
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px"><i class="ph {{ x.icon }}" style="color:{{ x.ic }};font-size:14px;flex:none;animation:{{ x.anim }}"></i><span style="font-weight:500">{{ x.title }}</span><span style="font-size:11.5px;color:var(--faint)">{{ x.kind }}</span><span style="margin-left:auto;font-size:11.5px;color:{{ x.statCol }};white-space:nowrap">{{ x.stat }}</span></div>
+              <sc-if value="{{ x.note }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;line-height:1.45;color:var(--muted);padding-left:21px;text-wrap:pretty">{{ x.note }}</div></sc-if>
+              <ol style="list-style:none;margin:0;padding:0 0 0 21px;display:flex;flex-direction:column;gap:1px">
+                <sc-for list="{{ x.qs }}" as="q" hint-placeholder-count="2"><li style="display:flex;align-items:flex-start;gap:7px;font-size:12px"><span style="font-family:var(--mono);font-size:11px;color:var(--faint);width:22px;flex:none;padding-top:1px">{{ q.n }}</span><span style="flex:1;min-width:0">{{ q.text }}</span><span style="font-size:11px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:3px"><i class="ph {{ q.icon }}" style="animation:{{ q.anim }}"></i>{{ q.st }}</span></li></sc-for>
+              </ol>
+              <sc-if value="{{ x.more }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ x.toggle }}" aria-expanded="{{ x.exp }}" style="align-self:flex-start;margin-left:17px;font-size:11.5px;padding:0 4px">{{ x.more }}</button></sc-if>
+              <sc-if value="{{ x.gap }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;padding-left:21px;font-size:11.5px;color:{{ x.gapCol }}"><i class="ph {{ x.gapIcon }}" style="font-size:12px;animation:{{ x.gapAnim }}"></i>{{ x.gap }}</div></sc-if>
+            </li>
+          </sc-for>
+          <sc-if value="{{ L.roundsStop }}" hint-placeholder-val="{{ false }}"><li style="display:flex;flex-direction:column;gap:2px;padding:8px 12px"><div style="display:flex;align-items:center;gap:7px;font-size:12.5px"><i class="ph {{ L.stopIcon }}" style="color:var(--muted);font-size:14px;flex:none"></i><span>{{ L.roundsStop }}</span><button type="button" data-help="r-stop" aria-label="Help: Why research stopped" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div><sc-if value="{{ L.stopNote }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--muted);padding-left:21px;text-wrap:pretty">{{ L.stopNote }}</div></sc-if></li></sc-if>
+          <sc-if value="{{ L.roundsNext }}" hint-placeholder-val="{{ false }}"><li style="display:flex;align-items:center;gap:7px;padding:8px 12px;font-size:12px;color:var(--faint)"><i class="ph ph-circle-dashed" style="font-size:14px"></i>{{ L.roundsNext }}</li></sc-if>
+        </ol>
+      </section>
+      </sc-if>
       <sc-if value="{{ showSources }}" hint-placeholder-val="{{ true }}">
       <section aria-label="Sources" style="flex:1;min-height:0;display:flex;flex-direction:column;background:var(--color-surface);border-radius:var(--radius-md);box-shadow:var(--shadow-sm);overflow:hidden">
         <header style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);flex:none"><h2 style="margin:0;font-size:13px;letter-spacing:0">Sources</h2><span style="font-size:12px;color:var(--muted)">{{ L.srcSummary }}</span><sc-if value="{{ L.srcFailNote }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:11.5px;color:var(--color-danger);display:flex;align-items:center;gap:4px"><i class="ph ph-warning"></i>{{ L.srcFailNote }}</span></sc-if></header>
@@ -210,7 +253,7 @@ html,body{margin:0;height:100%}
             <div style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:0 9px;padding:6px 12px;border-bottom:1px solid var(--line)">
               <i class="ph {{ s.icon }}" style="color:{{ s.ic }};font-size:15px;margin-top:2px;animation:{{ s.anim }}"></i>
               <div style="min-width:0"><a href="{{ s.href }}" target="_blank" rel="noreferrer" style="display:block;color:var(--color-text);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.title }}</a><div style="font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.url }}</div></div>
-              <div style="text-align:right;font-size:11.5px;white-space:nowrap;padding-top:1px"><div style="color:{{ s.sc }}">{{ s.st }}</div><sc-if value="{{ s.kept }}" hint-placeholder-val="{{ false }}"><div style="color:var(--color-accent-300)">{{ s.kept }}</div></sc-if></div>
+              <div style="text-align:right;font-size:11.5px;white-space:nowrap;padding-top:1px"><div style="color:{{ s.sc }}">{{ s.st }}</div><sc-if value="{{ s.kept }}" hint-placeholder-val="{{ false }}"><div style="color:var(--color-accent-300)">{{ s.kept }}</div></sc-if><sc-if value="{{ s.rtag }}" hint-placeholder-val="{{ false }}"><div style="color:var(--faint);font-size:11px">{{ s.rtag }}</div></sc-if></div>
             </div>
           </sc-for>
         </div>
@@ -297,12 +340,13 @@ html,body{margin:0;height:100%}
 <div style="padding:{{ pagePad }};display:flex;flex-direction:column;gap:16px;max-width:1240px">
   <header style="display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
-      <span class="tag tag-neutral" style="gap:5px;padding:2px 8px"><i class="ph ph-check"></i>Completed</span>
+      <span class="tag tag-neutral" style="gap:5px;padding:2px 8px"><i class="ph ph-check"></i>Completed</span><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ R.depthL }}</span>
       <span style="font-family:var(--mono);font-size:11.5px">{{ R.id }}</span><span>{{ R.meta }}</span>
     </div>
     <h1 style="font-size:{{ R.h1 }};margin:0;line-height:1.25;max-width:880px;text-wrap:pretty">{{ R.query }}</h1>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
       <span style="display:flex;align-items:center;gap:5px;margin-right:6px"><button class="btn btn-primary" onClick="{{ openRewrite }}"><i class="ph ph-pen-nib"></i>Rewrite</button><button type="button" data-help="rewrite" aria-label="Help: Rewrite" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span>
+      <span style="display:flex;align-items:center;gap:6px"><button class="btn btn-secondary" onClick="{{ openDig }}"><i class="ph ph-magnifying-glass-plus"></i>Dig deeper</button><span class="tag tag-outline" style="font-size:10px;padding:0 6px">later</span></span>
       <button class="btn btn-secondary" onClick="{{ copyMd }}"><i class="ph ph-copy"></i>Copy markdown</button>
       <button class="btn btn-secondary" onClick="{{ download }}"><i class="ph ph-download-simple"></i>Download .md</button>
       <button class="btn btn-secondary" onClick="{{ copyJson }}"><i class="ph ph-brackets-curly"></i>Copy JSON (context)</button>
@@ -327,10 +371,13 @@ html,body{margin:0;height:100%}
     <article style="max-width:720px;min-width:0">
       <sc-if value="{{ R.parentNote }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);margin-bottom:6px"><i class="ph ph-git-branch" style="color:var(--color-accent)"></i>{{ R.parentNote }}</div></sc-if>
       <div style="font-size:11.5px;color:var(--faint);margin-bottom:4px">{{ R.optsLine }}</div>
+      <sc-if value="{{ R.contNote }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-bottom:4px"><i class="ph ph-arrow-bend-down-right" style="font-size:13px"></i>{{ R.contNote }}<button type="button" data-help="cont" aria-label="Help: Continued" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div></sc-if>
+      <sc-if value="{{ R.cut }}" hint-placeholder-val="{{ false }}"><div role="note" style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;padding:6px 10px;margin:6px 0 4px;border-radius:var(--radius-md);border:1px dashed var(--color-warn);background:color-mix(in srgb,var(--color-warn) 8%,transparent)"><i class="ph ph-scissors" style="color:var(--color-warn);font-size:15px;margin-top:1px"></i><span>{{ R.cut }}</span></div></sc-if>
       <sc-for list="{{ R.blocks }}" as="b" hint-placeholder-count="6">
         <sc-if value="{{ b.isH }}" hint-placeholder-val="{{ false }}"><h2 style="font-size:19px;margin:22px 0 8px">{{ b.text }}</h2></sc-if>
         <sc-if value="{{ b.isBody }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:8px;margin:0 0 9px;padding-left:{{ b.indent }};font-size:15px;line-height:1.7;text-wrap:pretty"><sc-if value="{{ b.bullet }}" hint-placeholder-val="{{ false }}"><span style="color:var(--muted);flex:none;min-width:14px">{{ b.bullet }}</span></sc-if><span><sc-for list="{{ b.segs }}" as="s"><sc-if value="{{ s.isText }}" hint-placeholder-val="{{ true }}">{{ s.text }}</sc-if><sc-if value="{{ s.isCite }}" hint-placeholder-val="{{ false }}"><button aria-label="{{ s.aria }}" onMouseEnter="{{ s.show }}" onFocus="{{ s.show }}" onMouseLeave="{{ hideCite }}" onBlur="{{ hideCite }}" style="font-family:var(--mono);font-size:{{ s.fs }};line-height:1;padding:{{ s.pad }};margin:0 1px;vertical-align:{{ s.va }};border:0;border-radius:4px;background:var(--color-accent-900);color:var(--color-accent-200);cursor:help" style-hover="background:var(--color-accent-800)">{{ s.label }}</button></sc-if></sc-for></span></div></sc-if>
       </sc-for>
+      <sc-if value="{{ R.cutEnd }}" hint-placeholder-val="{{ false }}"><div style="margin:4px 0 0;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-warn)"><i class="ph ph-scissors"></i>{{ R.cutEnd }}</div></sc-if>
       <h2 style="font-size:19px;margin:26px 0 8px;display:flex;align-items:center;gap:8px">References<span style="font-size:12px;font-weight:400;color:var(--muted)">{{ R.refStyle }}</span><button type="button" data-help="w-ref" aria-label="Help: Reference style" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></h2>
       <ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px">
         <sc-for list="{{ R.refs }}" as="x" hint-placeholder-count="6"><li style="display:flex;gap:8px;font-size:13.5px;line-height:1.55"><sc-if value="{{ x.mark }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:12px;color:var(--muted);flex:none;min-width:30px;padding-top:1px">{{ x.mark }}</span></sc-if><span style="min-width:0">{{ x.text }} <span style="font-family:var(--mono);font-size:12px;color:var(--muted);word-break:break-all">{{ x.url }}</span></span></li></sc-for>
@@ -391,7 +438,7 @@ html,body{margin:0;height:100%}
           <td style="max-width:0"><button onClick="{{ h.open }}" style="display:block;width:100%;border:0;background:transparent;padding:0;color:var(--color-text);font:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" style-hover="color:var(--color-accent-300)">{{ h.q }}</button><sc-if value="{{ h.parent }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px"><i class="ph ph-arrow-elbow-down-right"></i>rewrite of <span style="font-family:var(--mono);font-size:11px">{{ h.parent }}</span> · {{ h.wnote }}<button type="button" data-help="h-version" aria-label="Help: Rewrite marker" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div></sc-if></td>
           <td style="white-space:nowrap;color:var(--muted)">{{ h.d }}</td>
           <td>{{ h.recipe }}</td>
-          <td><span class="tag" style="gap:5px;padding:2px 8px;background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.bd }}"><i class="ph {{ h.icon }}" style="animation:{{ h.anim }}"></i>{{ h.status }}</span></td>
+          <td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="tag" style="gap:5px;padding:2px 8px;background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.bd }}"><i class="ph {{ h.icon }}" style="animation:{{ h.anim }}"></i>{{ h.status }}</span><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ h.depthL }}</span></div></td>
           <td style="text-align:right;white-space:nowrap">{{ h.dur }}</td>
           <td style="text-align:right;white-space:nowrap">{{ h.cost }}</td>
           <td style="text-align:right;white-space:nowrap"><div style="display:inline-flex;gap:2px"><button class="btn btn-ghost btn-icon" aria-label="Open" title="Open" onClick="{{ h.open }}" style="width:30px;height:30px"><i class="ph ph-arrow-square-out"></i></button><button class="btn btn-ghost btn-icon" aria-label="Rerun" title="Rerun" onClick="{{ h.rerun }}" style="width:30px;height:30px"><i class="ph ph-arrow-clockwise"></i></button><button class="btn btn-ghost btn-icon" aria-label="Delete" title="Delete" onClick="{{ h.del }}" style="width:30px;height:30px;color:var(--muted)"><i class="ph ph-trash"></i></button></div></td>
@@ -438,7 +485,7 @@ html,body{margin:0;height:100%}
         <div style="min-width:0">
           <sc-if value="{{ f.isSeg }}" hint-placeholder-val="{{ false }}"><div class="seg" role="radiogroup" aria-label="{{ f.label }}"><sc-for list="{{ f.opts }}" as="o"><label class="seg-opt"><input type="radio" name="{{ o.name }}" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
           <sc-if value="{{ f.isArea }}" hint-placeholder-val="{{ false }}"><textarea id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.ph }}" style="min-height:64px;font-size:13.5px"></textarea></sc-if>
-          <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span></div></sc-if>
+          <sc-if value="{{ f.isNum }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:8px"><input id="{{ f.id }}" class="input" type="number" min="100" max="4000" step="50" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:110px"><span style="font-size:12px;color:var(--muted)">words, approximately</span><sc-if value="{{ f.numHint }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--faint)">· {{ f.numHint }}</span></sc-if></div></sc-if>
           <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}"><select id="{{ f.id }}" class="input" value="{{ f.value }}" onChange="{{ f.onChange }}" style="width:min(380px,100%)"><sc-for list="{{ f.options }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select><sc-if value="{{ f.desc }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:var(--muted);margin-top:4px">{{ f.desc }}</div></sc-if></sc-if>
         </div>
       </div>
@@ -513,6 +560,18 @@ html,body{margin:0;height:100%}
       </sc-for>
     </div>
     <div class="dialog-actions" style="align-items:center"><span style="font-size:12px;color:var(--faint);margin-right:auto">Creates <span style="font-family:var(--mono)">{{ rwNextLabel }}</span> linked to <span style="font-family:var(--mono)">{{ rwFromId }}</span></span><button class="btn btn-secondary" onClick="{{ closeRw }}">Cancel</button><button class="btn btn-primary" onClick="{{ confirmRw }}"><i class="ph ph-pen-nib"></i>Rewrite from write stage</button></div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ digOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" onClick="{{ closeDigBackdrop }}" style="position:absolute;z-index:20">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dg-t" style="width:min(500px,100%);max-height:calc(100% - 24px);overflow:auto">
+    <div style="display:flex;align-items:center;gap:8px"><i class="ph ph-magnifying-glass-plus" style="color:var(--color-accent);font-size:18px"></i><div id="dg-t" class="dialog-title">Dig deeper</div><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">later feature</span><button class="btn btn-ghost btn-icon" aria-label="Close" onClick="{{ closeDig }}" style="margin-left:auto;width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></div>
+    <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted);padding:8px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-accent) 7%,transparent)"><i class="ph ph-recycle" style="color:var(--color-accent);font-size:15px;margin-top:2px"></i><span>Starts a new run from this run’s 22 sources and 19 kept passages. A gap step reads them first, then searches only for what’s missing.</span></div>
+    <div><div style="display:grid;grid-template-columns:{{ dlgCols }};gap:6px 14px;align-items:start;padding:5px 0"><div style="display:flex;align-items:center;gap:5px;padding-top:6px;font-size:12.5px">Rounds to add</div><div style="min-width:0;display:flex;flex-direction:column;gap:4px"><div class="seg" role="radiogroup" aria-label="Rounds to add"><sc-for list="{{ digRoundOpts }}" as="o"><label class="seg-opt"><input type="radio" name="dig-rounds" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></div></div><div style="display:grid;grid-template-columns:{{ dlgCols }};gap:6px 14px;align-items:start;padding:5px 0"><div style="display:flex;align-items:center;gap:5px;padding-top:6px;font-size:12.5px">Depth</div><div style="min-width:0;display:flex;flex-direction:column;gap:4px"><div class="seg" role="radiogroup" aria-label="Depth"><sc-for list="{{ digDepthOpts }}" as="o"><label class="seg-opt"><input type="radio" name="dig-depth" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div><span style="font-size:12px;color:var(--muted)">{{ digDepthDesc }}</span></div></div></div>
+    <div style="font-size:12px;color:var(--muted)">{{ digEst }}</div>
+    <div class="dialog-actions" style="align-items:center"><span style="font-size:12px;color:var(--faint);margin-right:auto">Mock only · not built yet</span><button class="btn btn-secondary" onClick="{{ closeDig }}">Cancel</button><button class="btn btn-primary" onClick="{{ confirmDig }}"><i class="ph ph-magnifying-glass-plus"></i>Dig deeper</button></div>
   </div>
 </div>
 </sc-if>
@@ -637,7 +696,7 @@ html,body{margin:0;height:100%}
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;finished&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;rounds-live&quot;,&quot;rounds-done&quot;,&quot;rounds-nonew&quot;,&quot;rounds-max&quot;,&quot;finished&quot;,&quot;report-cut&quot;,&quot;dig-deeper&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;new-depth&quot;,&quot;new-custom&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;iterative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
 const PH=[
  {id:'plan',l:'Plan',s:0,r:0,e:2.5,gpu:'LLM'},
  {id:'search',l:'Search',s:2.5,r:2.5,e:6.5},
@@ -811,14 +870,46 @@ function sources(files){
 const HELP={recipe:{t:'Recipe',b:'Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.'},sources:{t:'Sources',b:'Web searches the internet. Files uses only your attachments. Both combines them; attachments get a share of the context budget.'},profile:{t:'Profile',b:'A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server.'},attach:{t:'Attachments',b:'Markdown or text files to research alongside the web, or instead of it.',ex:'pdf-ingest output (.md)'},'w-tone':{t:'Tone',b:'The writing style of the report. Each option in the list says what it emphasizes.'},'w-custom':{t:'Custom instructions',b:'Extra guidance added on top of the tone. Set a default here, or change it for one run.',ex:'Focus on costs; avoid jargon.'},'w-words':{t:'Length (words)',b:'Target length of the report. The writer aims for it; it is not an exact count.'},'w-lang':{t:'Language',b:'The language the report is written in. Sources can be in any language.'},'w-cite':{t:'Citation marker',b:'How citations look in the text.',ex:'[1] · ¹ · (Leviathan et al., 2023)'},'w-ref':{t:'Reference style',b:'Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE.'},overridden:{t:'Overridden',b:'This value differs from your default in Settings and applies to this run only.'},rwchanged:{t:'Changed',b:'This value differs from the version you are rewriting.'},'ph-plan':{t:'Plan',b:'Splits your question into focused sub-queries for search.'},'ph-search':{t:'Search',b:'Runs each sub-query against the search provider and collects candidate URLs.'},'ph-fetch':{t:'Fetch',b:'Downloads each URL and extracts its readable text. Failed pages are skipped and the run continues.'},'ph-load':{t:'Load',b:'Reads your attached files.'},'ph-chunk':{t:'Chunk',b:'Splits pages and files into passages along their headings.'},'ph-prefilter':{t:'Prefilter',b:'Quickly narrows chunks with embeddings or keyword ranking before the slower scorer.'},'ph-score':{t:'Score',b:'Rates how useful each passage is for its question.'},'ph-select':{t:'Select',b:'Picks the best passages that fit the writer\'s context budget.'},'ph-write':{t:'Write',b:'Writes the report from the selected passages and cites each claim.'},wait:{t:'Waiting for GPU',b:'Another model is unloading from the same GPU. This stage starts when it is free.'},device:{t:'Device',b:'The machine and GPU running the current stage, as labelled in the profile.',ex:'desktop:gpu0'},scorer:{t:'Scorer',b:'Which scorer ranked the passages. “fallback” means the configured scorer failed and a simpler one took over.',ex:'jev · rerank · bm25 · fallback'},score:{t:'Score and threshold',b:'Each passage scores from 0 to 1. Passages right of the line are kept; the line is the scorer\'s configured threshold.'},rejected:{t:'Rejected passages',b:'Shows passages that scored below the threshold or did not fit the budget.'},tokens:{t:'Tokens and cost',b:'Prompt and completion tokens across all stages. Cost is $0 for local models.'},rewrite:{t:'Rewrite',b:'Writes a new version from the same passages with different writing options. No new search; it creates a linked version.'},retry:{t:'Retry from Score',b:'Reruns scoring, selection and writing on the saved pages. Useful after changing the scorer or profile.'},rerun:{t:'Rerun',b:'Starts a fresh run with the same question and attachments.'},versions:{t:'Versions',b:'Reports that share the same research. v1 is the original; rewrites follow.'},pdevice:{t:'Device',b:'Where this provider runs, as labelled in the profile.'},unload:{t:'Unload',b:'Whether the model can be released between phases: none, llama-swap or ollama. Exclusive GPU policy needs it.'},health:{t:'Health',b:'Not checked yet, OK, slow (degraded), or down. Checks run only when you click Check, so idle GPU servers are never woken by opening this page.'},gpupolicy:{t:'GPU policy',b:'Shared keeps all models loaded. Exclusive unloads a model before the next one on the same GPU loads; it needs unload support.'},wdefaults:{t:'Writing defaults',b:'Used for every new run. Each run can override them in its options.'},apitokens:{t:'API tokens',b:'For scripts and agents on other machines. A token is shown once, when you create it.'},'h-recipe':{t:'Recipe',b:'Report wrote a cited report; context returned selected passages only.'},'h-version':{t:'Rewrite',b:'A new version written from an earlier run\'s passages. It opens next to its parent as linked versions.'},'h-cost':{t:'Cost',b:'Total for search and hosted APIs across all stages. $0 for local models.'},'f-chunks':{t:'Chunks',b:'Pages and files split along their headings. The prefilter ranks them per sub-query and passes the top 50 of each to the scorer; the rest are “prefiltered” and never scored.'},'f-scored':{t:'Scored',b:'Chunks the scorer rated from 0 to 1, after the prefilter.'},'f-kept':{t:'Kept',b:'Scored at least 0.50 (threshold) and in the top 10 of their sub-query (query cap).'},'f-cited':{t:'Cited',b:'Kept passages that fit the writer’s selection: at most 1 per source (source cap) and within the token budget. Numbered in the report.'},legend:{t:'Passage fates',items:[{icon:'ph-quotes',t:'cited [n]',b:'Selected and cited in the report. The marker follows your citation setting.'},{icon:'ph-stack',t:'source cap',b:'Kept, but its source already has the maximum of 1 cited passage.'},{icon:'ph-gauge',t:'over budget',b:'Kept, but too long for the tokens left in the writer’s budget.'},{icon:'ph-funnel',t:'query cap · q1',b:'At or above 0.50, but its sub-query already had 10 better passages.'},{icon:'ph-arrow-down',t:'below 0.50',b:'Scored under the threshold.'},{icon:'ph-minus-circle',t:'prefiltered',b:'Never scored: outside the top 50 for every sub-query. Shown in the source view.'}]}};
 const PDEV={search:['homelab','none'],fetch:['desktop:cpu','none'],embeddings:['desktop:gpu0','ollama'],scorer:['desktop:gpu0','llama-swap'],llm:['desktop:gpu0','llama-swap']};
 const KEPTBY={};PASS.forEach(p=>{if(p.kept)KEPTBY[p.s]=(KEPTBY[p.s]||0)+1;});
+const DEPTHS=[['quick','Quick','Fast overview: few searches, short report.'],['standard','Standard','Balanced: today’s default.'],['deep','Deep','Several research rounds that follow up on gaps.'],['exhaustive','Exhaustive','Many rounds and sources; slow, for thorough reports.'],['custom','Custom','Set every value yourself.']];
+const DL={},DD={};DEPTHS.forEach(([v,l,d])=>{DL[v]=l;DD[v]=d;});
+const DPRE={quick:{subq:3,rpq:5,pages:15,rounds:1,ppq:6,ctx:4000,words:600},standard:{subq:5,rpq:8,pages:40,rounds:1,ppq:10,ctx:8000,words:1200},deep:{subq:6,rpq:8,pages:60,rounds:3,ppq:12,ctx:16000,words:2000},exhaustive:{subq:8,rpq:10,pages:120,rounds:5,ppq:16,ctx:48000,words:3000}};
+const DF=[['subq','Sub-queries',1,12,1],['rpq','Results per query',1,20,1],['pages','Max pages',5,300,5],['rounds','Rounds',1,8,1],['ppq','Passages per query',1,40,1],['ctx','Context tokens',1000,128000,1000]];
+const DCDEF={subq:6,rpq:8,pages:80,rounds:2,ppq:12,ctx:24000};
+const CTXMAX={workstation:22000,'low-vram':12000,cloud:128000,nixos:16000};
+const fmtN=n=>Number(n).toLocaleString('en-US');const fmtKT=n=>Math.round(n/1000)+'k';
+const llmCalls=(rounds,words)=>1+Math.max(0,rounds-1)+Math.max(1,Math.ceil(words/800));
+const FQ2=['speculative decoding acceptance rate measured on 8 GB GPUs','EAGLE-2 draft head VRAM overhead','prompt lookup decoding llama.cpp code benchmark'],FQ3=['speculative decoding production latency p50 p99','draft model quantization effect on acceptance rate'];
+const NA='Missing: measured acceptance on 8 GB cards; no VRAM numbers for EAGLE-style heads.';
+const RV={coverage:{stop:'model judged coverage sufficient',endNote:'Every sub-query has at least 2 kept passages, including primary sources.',rounds:[{pages:16,kept:13,qs:SUBQ,w:1.6,gap:true,res:[8,7,6,5,6]},{pages:6,kept:6,qs:FQ2,w:1,gap:true,note:NA,res:[4,3,3]}]},
+ nonew:{stop:'no new sources',endNote:'Follow-up searches returned only pages fetched in round 1.',rounds:[{pages:22,kept:19,qs:SUBQ,w:1.9,gap:true,res:[8,7,6,5,6]},{pages:0,kept:0,known:9,qs:FQ2.slice(0,2),w:.45,gap:false,note:'Missing: benchmarks on 8 GB cards and at long context.',res:[5,4]}]},
+ max:{stop:'max rounds',endNote:'',rounds:[{pages:12,kept:10,qs:SUBQ,w:1.3,gap:true,res:[6,5,5,4,4]},{pages:6,kept:6,qs:FQ2,w:1,gap:true,note:NA,res:[4,3,3]},{pages:4,kept:3,qs:FQ3,w:.8,gap:false,note:'Missing: production latency numbers; nothing on how draft quantization affects acceptance.',res:[3,2]}]}};
+function isched(R){const gw=.35;let tot=0;R.rounds.forEach(x=>tot+=x.w+(x.gap?gw:0));const u=28.5/tot;let c=2.5;const W={search:[],fetch:[],chunk:[],prefilter:[],score:[],gap:[]},rs=[];
+ R.rounds.forEach((x,i)=>{const a=c,L=x.w*u;const F=x.pages?{search:[0,.22],fetch:[.08,.62],chunk:[.62,.7],prefilter:[.7,.8],score:[.8,1]}:{search:[0,.45],fetch:[.2,1]};
+  Object.keys(F).forEach(k=>W[k].push({s:a+F[k][0]*L,e:a+F[k][1]*L,k:i+1}));c+=L;rs.push({a,b:c,k:i+1});
+  if(x.gap){W.gap.push({s:c,e:c+gw*u,k:i+1});c+=gw*u;}});
+ return {W,rs,R};}
+const HDEPTH={r_7f3a:'deep',r_7f41:'deep',r_7e90:'quick',r_7e2c:'standard',r_7d11:'exhaustive',r_7c08:'quick',r_7b77:'standard',r_7a3e:'custom',r_79d0:'standard'};HIST.forEach(x=>x.depth=HDEPTH[x.id]);
+const ISC={};Object.keys(RV).forEach(k=>ISC[k]=isched(RV[k]));
+Object.assign(HELP,{'ph-gap':{t:'Gap',b:'Between rounds, reads the best passages so far and writes follow-up queries for what is missing, or stops research early.'},
+ rounds:{t:'Research rounds',b:'Round 1 searches the planner’s queries. Each later round searches the gap step’s follow-ups. Pages and passages are counted as new to that round.'},
+ cont:{t:'Continued',b:'The writer reached its output limit, so it was asked to continue from where it stopped. The parts are joined into one report.'},
+ 'r-stop':{t:'Why research stopped',items:[{icon:'ph-prohibit',t:'no new sources',b:'Follow-up searches returned only pages already fetched.'},{icon:'ph-files',t:'page limit reached',b:'Max pages was used up.'},{icon:'ph-check-circle',t:'model judged coverage sufficient',b:'The gap step found nothing important missing.'},{icon:'ph-stack',t:'max rounds',b:'Every planned round ran.'}]}});
+Object.assign(HELP,{depth:{t:'Depth',b:'How much research to do. Each preset sets the values under Advanced and a default report length. Deeper runs take longer and use more tokens.'},
+ 'd-subq':{t:'Sub-queries',b:'How many focused searches the planner writes from your question.'},'d-rpq':{t:'Results per query',b:'Search results kept for each sub-query.'},
+ 'd-pages':{t:'Max pages',b:'Upper limit on pages fetched across all rounds. Research stops when it is reached.'},
+ 'd-rounds':{t:'Rounds',b:'Search, fetch and score passes. After each round a gap step decides what to search next, or stops early.'},
+ 'd-ppq':{t:'Passages per query',b:'Top-scoring passages kept for each sub-query before selection.'},
+ 'd-ctx':{t:'Context tokens',b:'Token budget for the passages the writer sees. The profile’s model window can lower it.'},
+ 'w-words-def':{t:'Depth default',b:'Each depth sets a default length: Quick 600, Standard your Settings default, Deep 2,000, Exhaustive 3,000 words. Changing depth updates it until you edit it.'}});
 
 class Component extends DCLogic {
   state={screen:'live',run:null,query:'',files:[],dragOver:false,dropErr:'',optsOpen:false,opts:{recipe:'report',sources:'both',profile:'low-vram'},wNew:{...WDEF},wDef:{...WDEF},wSaved:false,pf:'kept',tab:'progress',cite:null,toast:null,hq:'',hf:'all',hr:'any',hist:HIST,versions:[],viewId:null,rw:null,theme:null,winW:window.innerWidth,
     health:{search:{st:'ok',ms:418,at:Date.now()-180000},fetch:{st:'none'},embeddings:{st:'down',detail:'ECONNREFUSED 127.0.0.1:11434 · is ollama running?',at:Date.now()-180000},scorer:{st:'none'},llm:{st:'none'}},now:Date.now(),
-    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive',src:null};
+    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive',src:null,depth:'standard',dCustom:{...DCDEF},advOpen:false,wordsTouched:false,dWords:1200,dig:null,rqOpen:{}};
   qRef=React.createRef();fileRef=React.createRef();hRef=React.createRef();repRef=React.createRef();pwRef=React.createRef();sdRef=React.createRef();sdBodyRef=React.createRef();
   componentDidMount(){
-    try{const s=JSON.parse(localStorage.getItem('wosarcher-writing-defaults')||'null');if(s){const wd={...WDEF,...s};this.setState({wDef:wd,wNew:{...wd}});}}catch(e){}
+    try{const s=JSON.parse(localStorage.getItem('wosarcher-writing-defaults')||'null');if(s){const wd={...WDEF,...s};this.setState({wDef:wd,wNew:{...wd},dWords:wd.words});}}catch(e){}
+    try{const dc=JSON.parse(localStorage.getItem('wosarcher-depth-custom')||'null');if(dc)this.setState({dCustom:{...DCDEF,...dc}});}catch(e){}
     this.iv=setInterval(()=>this.tick(),100);
     this.onKey=e=>this.key(e);this.onResize=()=>this.setState({winW:window.innerWidth});
     window.addEventListener('keydown',this.onKey);window.addEventListener('resize',this.onResize);
@@ -837,10 +928,10 @@ class Component extends DCLogic {
     if(ss&&!ss.loading&&(!p0||p0.sel!==ss.sel||p0.loading||p0.s!==ss.s)){const body=this.sdBodyRef.current;const ce=body&&body.querySelector('[data-chunk="'+ss.sel+'"]');
       if(ce){const smooth=p0&&!p0.loading&&p0.s===ss.s;if(!smooth||ce.offsetTop<body.scrollTop+8||ce.offsetTop+ce.offsetHeight>body.scrollTop+body.clientHeight-8)body.scrollTo({top:Math.max(0,ce.offsetTop-body.clientHeight*.22),behavior:smooth?'smooth':'auto'});}}
   }
-  baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',...o};}
+  baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',depth:'standard',iter:null,...o};}
   applyScenario(sc){
     const unlocked={...this.state.auth,locked:false,err:null,pw:'',left:5,until:0};
-    const S={cite:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null};
+    const S={cite:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null,depth:'standard',advOpen:false,wordsTouched:false,dWords:this.state.wDef.words,optsOpen:false,dig:null,rqOpen:{},wNew:{...this.state.wDef},opts:{recipe:'report',sources:'both',profile:'low-vram'}};
     const v1={id:'r_8c21',v:1,query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},md:MD1,dur:fmtT(END*TF),date:'Today, 14:02',files:[]};
     if(sc==='login')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true}});
     if(sc==='login-wrong')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true,err:'wrong',left:3}});
@@ -848,6 +939,8 @@ class Component extends DCLogic {
     if(sc==='passages')return this.setState({...S,run:this.baseRun({status:'done',t:END}),screen:'live',tab:'passages',pf:'all'});
     const SRC={source:[14],'source-loading':[14,true],'source-truncated':[18],'source-file':[2]}[sc];
     if(SRC){const p=PASS[SRC[0]];this.setState({...S,run:this.baseRun({status:'done',t:END}),screen:'live',tab:'passages',pf:'all'});this.openSrc(p.s,DOCS[p.s].findIndex(c=>c.p===p),SRC[1]);return;}
+    if(sc==='new-depth')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'exhaustive',dWords:3000,opts:{...S.opts,profile:'workstation'},wNew:{...this.state.wDef,words:3000}});
+    if(sc==='new-custom')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'custom'});
     if(sc==='help')return this.setState({...S,run:null,screen:'helpspec'});
     if(sc==='empty')return this.setState({...S,run:null,screen:'live'});
     if(sc==='new')return this.setState({...S,run:null,screen:'new'});
@@ -855,7 +948,12 @@ class Component extends DCLogic {
     if(sc==='failure')return this.setState({...S,run:this.baseRun({status:'running',t:18,failAt:25.4}),screen:'live'});
     if(sc==='cancelled')return this.setState({...S,run:this.baseRun({status:'cancelled',t:13.2,stopAt:13.2}),screen:'live'});
     if(sc==='reconnecting')return this.setState({...S,run:this.baseRun({status:'running',t:10,reconAt:13}),screen:'live'});
-    if(sc==='finished')return this.setState({...S,run:this.baseRun({status:'done',t:END}),versions:[v1],viewId:'r_8c21',screen:'report'});
+    const v1d={...v1,depth:'deep',rounds:'2 of 3 rounds',cont:1,wopts:{...v1.wopts,words:2000}};
+    const deepRun=o=>this.baseRun({depth:'deep',iter:{planned:3,variant:'coverage'},wopts:{...v1d.wopts},...o});
+    if(sc==='rounds-live')return this.setState({...S,run:deepRun({status:'running',t:17.2}),screen:'live'});
+    const RVS={'rounds-done':['coverage','2 of 3 rounds'],'rounds-nonew':['nonew','2 of 3 rounds'],'rounds-max':['max','3 of 3 rounds']}[sc];
+    if(RVS)return this.setState({...S,run:deepRun({status:'done',t:END,iter:{planned:3,variant:RVS[0]}}),versions:[{...v1d,rounds:RVS[1]}],viewId:'r_8c21',screen:'live'});
+    if(sc==='finished'||sc==='report-cut'||sc==='dig-deeper')return this.setState({...S,run:deepRun({status:'done',t:END}),versions:[sc==='report-cut'?{...v1d,cont:2,cut:true}:v1d],viewId:'r_8c21',screen:'report',dig:sc==='dig-deeper'?{rounds:1,depth:'deep'}:null});
     if(sc==='versions'){const v2={id:'r_8c4e',v:2,root:'r_8c21',parent:'r_8c21',query:DQ,opts:v1.opts,wopts:{...v1.wopts,tone:'Informative',words:250,cite:'super'},md:MD2,dur:'0:51',date:'Today, 14:09',files:[]};
       return this.setState({...S,run:this.baseRun({status:'done',t:END,id:'r_8c4e',kind:'rewrite',rewriteOf:'r_8c21',t0:32,md:MD2,wopts:v2.wopts}),versions:[v1,v2],viewId:'r_8c4e',screen:'report'});}
     this.setState({...S,run:this.baseRun(),screen:'live'});
@@ -878,7 +976,7 @@ class Component extends DCLogic {
   }
   finish(r){
     this.setState(s=>{if(s.versions.find(v=>v.id===r.id))return null;const par=r.rewriteOf?s.versions.find(v=>v.id===r.rewriteOf):null;const root=par?(par.root||par.id):null;
-      const v={id:r.id,v:root?s.versions.filter(x=>(x.root||x.id)===root).length+1:1,root,parent:r.rewriteOf||null,query:r.query,opts:r.opts,wopts:r.wopts,md:r.md,dur:fmtT((END-r.t0)*TF),date:'Today, now',files:r.files};
+      const v={id:r.id,v:root?s.versions.filter(x=>(x.root||x.id)===root).length+1:1,root,parent:r.rewriteOf||null,query:r.query,opts:r.opts,wopts:r.wopts,md:r.md,dur:fmtT((END-r.t0)*TF),date:'Today, now',files:r.files,depth:r.depth,cont:r.depth==='deep'||r.depth==='exhaustive'?1:0,rounds:r.iter?(ISC[r.iter.variant].R.rounds.length+' of '+r.iter.planned+' rounds'):''};
       return {versions:[...s.versions,v],viewId:r.id};});
   }
   shownT(r){const t=r.conn==='reconnecting'?r.dropAt:r.t;return r.stopAt!=null?Math.min(t,r.stopAt):t;}
@@ -886,18 +984,18 @@ class Component extends DCLogic {
     if(this.state.auth.locked)return;
     const tag=(e.target&&e.target.tagName)||'';const typing=/INPUT|TEXTAREA|SELECT/.test(tag);
     if(e.altKey&&/^Digit[1-4]$/.test(e.code)){e.preventDefault();this.go(['new','live','history','settings'][+e.code.slice(5)-1]);return;}
-    if(e.key==='Escape'){if(this.state.help){this.setState({help:null});return;}if(this.state.src){this.closeSrc();return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
+    if(e.key==='Escape'){if(this.state.help){this.setState({help:null});return;}if(this.state.dig){this.setState({dig:null});return;}if(this.state.src){this.closeSrc();return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
     if(this.state.src&&!typing&&/^Arrow(Down|Right|Up|Left)$/.test(e.key)){e.preventDefault();this.moveSrc(/Down|Right/.test(e.key)?1:-1);return;}
     if(typing)return;
     if(e.key==='r'&&this.state.screen==='live'&&!this.state.src&&!e.ctrlKey&&!e.metaKey){const o=['cited','kept','all'];this.setState(s=>({pf:o[(o.indexOf(s.pf)+1)%3]}));}
     if(e.key==='/'&&this.state.screen==='history'){e.preventDefault();this.hRef.current&&this.hRef.current.focus();}
   }
   go(id){this.setState({screen:id,cite:null});if(id==='new')setTimeout(()=>this.qRef.current&&this.qRef.current.focus(),50);}
-  openHelp(el,key,pinned){const rc=el.getBoundingClientRect();const W=key==='legend'?280:272,est=key==='legend'?330:180,vw=window.innerWidth,vh=window.innerHeight;const cx=rc.left+rc.width/2;const x=clamp(cx-W/2,8,vw-8-W);const below=rc.bottom+est<vh||rc.top<est;
+  openHelp(el,key,pinned){const rc=el.getBoundingClientRect();const big=key==='legend'||!!(HELP[key]&&HELP[key].items);const W=big?280:272,est=big?330:180,vw=window.innerWidth,vh=window.innerHeight;const cx=rc.left+rc.width/2;const x=clamp(cx-W/2,8,vw-8-W);const below=rc.bottom+est<vh||rc.top<est;
     clearTimeout(this.hT);this.setState({help:{key,pinned:!!pinned,x,y:below?rc.bottom+9:rc.top-9,below,ax:clamp(cx-x-5,10,W-20)}});}
   helpContent(key){const dh=this.dynHelp&&this.dynHelp[key];if(dh)return dh;if(key&&key.startsWith('wait-')){const p=HELP['ph-'+key.slice(5)]||{t:'',b:''};return {t:p.t+' · waiting for GPU',b:HELP.wait.b+' '+p.b};}return HELP[key]||{t:key,b:''};}
   fb(){return this.props.fallback??true;}
-  fateKey(c,t){if(!c.p)return t>=PM.prefilter.e?'pre':'pending';const p=c.p,sd=t>=PM.score.e;if(!sd&&p.at>t)return 'pending';if(p.v<TH)return 'below';if(!sd)return 'above';if(p.f==='qcap')return 'qcap';if(t<PM.select.e)return 'kept';return p.f;}
+  fateKey(c,t){const M=this.PMr||PM;if(!c.p)return t>=M.prefilter.e?'pre':'pending';const p=c.p,sd=t>=M.score.e,at=this.atMap?this.atMap[p.k]:p.at;if(!sd&&at>t)return 'pending';if(p.v<TH)return 'below';if(!sd)return 'above';if(p.f==='qcap')return 'qcap';if(t<M.select.e)return 'kept';return p.f;}
   badge(fk,p,r){const o={...(FATE[fk]||FATE.pending),mark:'',q:''};if(fk==='cited')o.mark=this.citeLabel(p.n,r.wopts.cite,r.files);if(fk==='qcap')o.q='q'+p.q;if(fk==='below')o.label='below '+TH.toFixed(2);if(fk==='above')o.label='≥ '+TH.toFixed(2);return o;}
   why(fk,p,r){
     if(fk==='pre')return 'Not scored: outside the top 50 for every sub-query.';
@@ -917,9 +1015,9 @@ class Component extends DCLogic {
   moveSrc(d){this.setState(st=>{if(!st.src||st.src.loading)return null;const n=(DOCS[st.src.s]||[]).length;const sel=clamp(st.src.sel+d,0,n-1);return sel===st.src.sel?null:{src:{...st.src,sel}};});}
   toastMsg(msg,undo){clearTimeout(this.tt);this.setState({toast:{msg,undo}});this.tt=setTimeout(()=>this.setState({toast:null}),undo?6000:2200);}
   copy(text,msg){try{navigator.clipboard.writeText(text);}catch(e){}if(msg)this.toastMsg(msg);}
-  start(q,opts,files,wopts){
+  start(q,opts,files,wopts,extra={}){
     const id='r_'+Math.random().toString(16).slice(2,6);
-    this.setState({run:this.baseRun({id,query:q,opts,files,wopts}),screen:'live',tab:'progress',pf:'kept'});
+    this.setState({run:this.baseRun({id,query:q,opts,files,wopts,...extra}),screen:'live',tab:'progress',pf:'kept'});
   }
   addFiles(list){
     const ok=[],bad=[];[...list].forEach(f=>(/\.(md|txt)$/i.test(f.name)?ok:bad).push(f));
@@ -961,6 +1059,43 @@ class Component extends DCLogic {
     if(caret){const last=out[out.length-1];if(last&&last.isBody)last.segs.push({isCaret:true});else out.push({isBody:true,bullet:'',indent:'0px',segs:[{isCaret:true}]});}
     return out;
   }
+  wBase(s){return s.depth==='custom'?s.dWords:s.depth==='standard'?s.wDef.words:DPRE[s.depth].words;}
+  pickDepth(d){this.setState(s=>{const nb=d==='custom'?s.dWords:d==='standard'?s.wDef.words:DPRE[d].words;const u={depth:d,dWords:nb};if(d==='custom')u.advOpen=true;if(!s.wordsTouched)u.wNew={...s.wNew,words:nb};return u;});}
+  editDepth(k,v){this.setState(s=>{const base=s.depth==='custom'?s.dCustom:DPRE[s.depth];const dCustom={};DF.forEach(([kk])=>dCustom[kk]=base[kk]);dCustom[k]=v;try{localStorage.setItem('wosarcher-depth-custom',JSON.stringify(dCustom));}catch(e){}return {depth:'custom',dCustom,advOpen:true};});}
+  ist(id,t,r,iter){const W=iter.W[id];if(!W)return null;if(!W.length||t<W[0].s)return {st:'pending'};const stop=r.stopAt!=null&&t>=r.stopAt;
+    const cur=W.find(w=>t>=w.s&&t<w.e);if(cur)return {st:stop?(r.status==='failed'?'failed':'cancelled'):'running',k:cur.k,pr:(t-cur.s)/(cur.e-cur.s)};
+    let last=W[0];W.forEach(w=>{if(t>=w.e)last=w;});return {st:t>=31||r.status==='done'?'done':'idle',k:last.k};}
+  idetail(id,is,st,iter,N){if(id==='gap')return is.st==='done'?(iter.R.rounds.length>=N?'max rounds':iter.R.stop):'after round '+is.k;
+    if(is.st==='running'||st==='cancelled'||st==='failed')return 'round '+is.k+'/'+N;if(is.st==='idle')return 'round '+is.k+' done';const n=iter.W[id].length;return n+' round'+(n>1?'s':'');}
+  iterSrc(src,iter){const cum=[];let c=0;iter.R.rounds.forEach(x=>{c+=x.pages;cum.push(c);});
+    return src.map(s=>{if(s.file)return {...s,round:1};let k=cum.findIndex(v=>s.i<v);if(k<0)k=cum.length-1;const lo=k?cum[k-1]:0,n=Math.max(1,cum[k]-lo),j=s.i-lo;const sw=iter.W.search.find(w=>w.k===k+1),fw=iter.W.fetch.find(w=>w.k===k+1);if(!sw||!fw)return {...s,round:k+1};
+      const found=sw.s+(j+1)/n*(sw.e-sw.s)*.9;const fs=Math.max(found+.2,fw.s+j/n*(fw.e-fw.s)*.7);const fe=Math.min(fw.e,fs+(fw.e-fw.s)*(s.fail.startsWith('Timed')?.3:.18));return {...s,found,fs,fe,round:k+1};});}
+  roundsData(r,t,iter,conn){if(!iter)return {iter:false,rounds:[]};const R=iter.R,N=r.iter.planned,ran=R.rounds.length,status=r.status,W=iter.W;
+    const stopped=r.stopAt!=null&&status!=='running'&&status!=='done';const ended=!stopped&&(t>=31||status==='done');
+    const SN={search:'searching',fetch:'fetching',chunk:'chunking',prefilter:'prefiltering',score:'scoring'};let qn=0;const rounds=[];
+    R.rounds.forEach((x,i)=>{const k=i+1,rr=iter.rs[i],q0=qn;qn+=x.qs.length;if(conn||t<rr.a)return;
+      const win=id=>W[id].find(w=>w.k===k);const sw=win('search'),fw=win('fetch');const inR=t<rr.b;
+      const act=['score','prefilter','chunk','fetch','search'].find(id=>{const w=win(id);return w&&t>=w.s&&t<w.e;});
+      const pages=Math.round(x.pages*clamp((t-fw.s)/(fw.e-fw.s),0,1));
+      let icon='ph-check',ic='var(--muted)',anim='none',stat,statCol='var(--muted)';
+      if(inR&&stopped){icon='ph-stop-circle';stat='cancelled · '+pages+' new pages';}
+      else if(inR){icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';stat=pages+' new pages · '+(SN[act]||'working');statCol='var(--color-accent-300)';}
+      else if(!x.pages){icon='ph-minus-circle';stat='0 new pages · '+x.known+' already fetched';}
+      else stat=x.pages+' new pages · '+x.kept+' kept';
+      const qsAll=x.qs.map((qq,j)=>{const at=sw.s+(j+1)/x.qs.length*(sw.e-sw.s),s0=sw.s+j/x.qs.length*(sw.e-sw.s);let st,qi='ph-check',qa='none';
+        if(t>=at)st=(x.res[j]||3)+(x.pages?' results':' known');else if(stopped){st='cancelled';qi='ph-stop-circle';}
+        else if(t>=s0){st='searching';qi='ph-circle-notch';qa='sx-spin .9s linear infinite';}else{st='queued';qi='ph-clock';}
+        return {n:'q'+(q0+j+1),text:qq,st,icon:qi,anim:qa};});
+      const ro=this.state.rqOpen[k];const open=ro==null?inR:ro;const long=qsAll.length>3;
+      const gw=W.gap.find(w=>w.k===k),next=R.rounds[i+1];let gap='',gapIcon='ph-arrow-bend-down-right',gapCol='var(--muted)',gapAnim='none';
+      if(gw&&t>=gw.s){if(t<gw.e&&!stopped){gap='Gap: reading the best passages so far…';gapIcon='ph-circle-notch';gapCol='var(--color-accent-300)';gapAnim='sx-spin .9s linear infinite';}else if(next&&t>=gw.e)gap='Gap: '+next.qs.length+' follow-up queries for round '+(k+1);}
+      rounds.push({k,title:'Round '+k,kind:i?'gap follow-ups':'planner queries',icon,ic,anim,stat,statCol,note:x.note||'',qs:long&&!open?qsAll.slice(0,2):qsAll,more:long?(open?'Show fewer':'+'+(qsAll.length-2)+' more'):'',exp:open?'true':'false',toggle:()=>this.setState(s=>({rqOpen:{...s.rqOpen,[k]:!open}})),gap,gapIcon,gapCol,gapAnim});});
+    const ci=iter.rs.findIndex(x=>t>=x.a&&t<x.b),gN=W.gap.find(w=>t>=w.s&&t<w.e),reason=ran>=N?'max rounds':R.stop;
+    let summary='',stop='',stopIcon='ph-check-circle',stopNote='',next='';
+    if(conn||t<iter.rs[0].a)summary='up to '+N+' rounds';else if(stopped)summary='cancelled';else if(ended)summary=ran+' of '+N+' rounds';else if(ci>=0)summary='round '+(ci+1)+'/'+N;else if(gN)summary='gap after round '+gN.k;
+    if(ended){stop=reason==='max rounds'?'All '+N+' rounds ran · max rounds':'Stopped after round '+ran+' of '+N+' · '+reason;stopIcon={'model judged coverage sufficient':'ph-check-circle','no new sources':'ph-prohibit','page limit reached':'ph-files','max rounds':'ph-stack'}[reason];stopNote=reason==='max rounds'?'':R.endNote;}
+    else if(!stopped&&!conn&&t>=iter.rs[0].a){const k=ci>=0?ci+1:gN?gN.k:ran;if(N>k)next='Up to '+(N-k)+' more round'+(N-k>1?'s':'')+' if the gap step finds gaps';}
+    return {iter:true,rounds,roundsSummary:summary,roundsStop:stop,stopIcon,stopNote,roundsNext:next,roundsEmpty:!rounds.length,roundsEmptyText:conn?'Waiting for the planner…':'Planning round 1 queries…'};}
   phaseSt(p,t,r){
     if(r.kind==='rewrite'&&p.e<=r.t0)return 'reused';
     if(t<p.s)return 'pending';if(t>=p.e)return 'done';
@@ -980,8 +1115,10 @@ class Component extends DCLogic {
       return f;});
   }
   derive(r,phone){
-    const t=this.shownT(r);const conn=r.status==='connecting';const src=sources(r.files);const subN=SUBQ.filter((_,i)=>.5+i*.45<=t).length;
-    const P={};PH.forEach(p=>P[p.id]=p);const prog=p=>clamp((t-p.r)/(p.e-p.r),0,1);
+    const t=this.shownT(r);const conn=r.status==='connecting';const iter=r.iter?ISC[r.iter.variant]:null;let src=sources(r.files);if(iter)src=this.iterSrc(src,iter);const subN=SUBQ.filter((_,i)=>.5+i*.45<=t).length;
+    let P={};PH.forEach(p=>P[p.id]=p);if(iter){P={...P};['search','fetch','chunk','prefilter','score'].forEach(id=>{const W=iter.W[id];P[id]={...P[id],s:W[0].s,r:W[0].s,e:W[W.length-1].e};});}
+    this.PMr=P;this.atMap=null;if(iter){this.atMap={};PASS.forEach(p=>{const so=src[p.s];const k=(so&&so.round)||1;const w=iter.W.score.find(x=>x.k===k)||iter.W.score[0];this.atMap[p.k]=w.s+clamp((p.at-23)/7.7,0,1)*(w.e-w.s);});}
+    const prog=p=>clamp((t-p.r)/(p.e-p.r),0,1);
     const web=src.filter(s=>!s.file);const nok=web.filter(s=>!s.fail&&s.fe<=t).length,nfail=web.filter(s=>s.fail&&s.fe<=t).length,nfound=web.filter(s=>s.found<=t).length;
     const chunks=Math.round(prog(P.chunk)*612),pre=Math.round(prog(P.prefilter)*612),scored=Math.round(prog(P.score)*150);
     const chars=t<34?0:Math.floor(r.md.length*clamp((t-34)/(END-34.5),0,1));const writeTok=Math.round(chars/3.7);
@@ -997,21 +1134,22 @@ class Component extends DCLogic {
     const txt={plan:st=>st==='done'?'5 sub-queries':`${subN}/5 sub-queries`,search:st=>st==='done'?'22 URLs found':`found ${nfound}`,fetch:()=>`fetched ${nok}/22`+(nfail?` · ${nfail} failed`:''),
       load:st=>st==='done'?'2/2 files':`loaded ${src.filter(s=>s.file&&s.fe<=t).length}/2 files`,chunk:()=>`${chunks} chunks`,prefilter:st=>st==='done'?'150 of 612 kept':pre+'/612 ranked',
       score:st=>st==='done'?'150 scored':'scored '+scored+'/150',select:st=>st==='done'?'14 of 19 cited':'selecting',write:()=>`${fmtK(writeTok)} tokens`};
-    const TG={plan:['qwen2.5-7b','m-plan',false],prefilter:fb?['BM25 · fallback','m-prefilter-fb',true]:['bge-small-en-v1.5','m-prefilter',false],score:[prof.scorer,'m-score',false],write:['qwen2.5-7b','m-write',false]};
+    const TG={plan:['qwen2.5-7b','m-plan',false],prefilter:fb?['BM25 · fallback','m-prefilter-fb',true]:['bge-small-en-v1.5','m-prefilter',false],score:[prof.scorer,'m-score',false],write:['qwen2.5-7b','m-write',false],gap:['qwen2.5-7b','m-gap',false]};
     const LLM='qwen2.5-7b-instruct-q4_k_m';
-    this.dynHelp={'m-plan':{t:'Planner · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},'m-write':{t:'Writer · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},
+    this.dynHelp={'m-plan':{t:'Planner · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},'m-write':{t:'Writer · '+LLM,b:'The configured LLM, on '+prof.gpuDev+'.'},'m-gap':{t:'Gap · '+LLM,b:'Reads the best passages after each round and writes follow-up queries. Runs on '+prof.gpuDev+'.'},
       'm-prefilter':{t:'Prefilter · embeddings',b:'Ran bge-small-en-v1.5 as configured. Kept the top 50 chunks per sub-query: 150 of 612. q4 and q5 had fewer than 50 candidates and skipped ranking (small-input passthrough).'},
       'm-prefilter-fb':{t:'Fallback · keyword (BM25)',b:'Configured: embeddings (bge-small-en-v1.5). The embedder was unreachable (ECONNREFUSED 127.0.0.1:11434), so BM25 ran instead. Kept the top 50 per sub-query: 150 of 612. q4 and q5 skipped ranking (small-input passthrough).'},
       'm-score':{t:'Scorer · '+prof.scorer,b:'Ran '+prof.scorer+' as configured in the '+prof.id+' profile. Scores of '+th.toFixed(2)+' or more go on to the query cap.'}};
     let gpuPhase=null,stopLabel='';
-    const phases=PH.map(p=>{const st=conn?'pending':this.phaseSt(p,t,r);const S=ST[st];
+    const PHS=iter?[...PH.slice(0,7),{id:'gap',l:'Gap',s:31,r:31,e:31,gpu:'LLM'},...PH.slice(7)]:PH;const NPL=r.iter?r.iter.planned:1,RAN=iter?iter.R.rounds.length:1;
+    const phases=PHS.map(p=>{const is=iter&&!conn?this.ist(p.id,t,r,iter):null;const st=conn?'pending':is?(is.st==='idle'?'done':is.st):this.phaseSt(p,t,r);const S=ST[st];
       if((st==='running'||st==='waiting')&&p.gpu)gpuPhase={p,st};if(st==='cancelled'||st==='failed')stopLabel=p.l;
-      const text=st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+(fb&&p.id==='score'?'planner LLM unloading':p.wait):st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](st);
-      const pct=st==='done'||st==='reused'?100:(st==='running'||st==='failed'||st==='cancelled')?Math.round(prog(p)*100):0;
+      const text=p.id==='gap'?(st==='pending'?'pending':is.st==='running'?'reading round '+is.k:is.st==='idle'?(((iter.R.rounds[is.k]||{}).qs||[]).length+' follow-ups'):st==='done'?RAN+' of '+NPL+' rounds':'cancelled'):st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+(fb&&p.id==='score'?'planner LLM unloading':p.wait):st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](is&&is.st==='idle'?'running':st);
+      const pct=is&&is.pr!=null&&st!=='done'?Math.round(clamp(is.pr,0,1)*100):st==='done'||st==='reused'?100:(st==='running'||st==='failed'||st==='cancelled')?Math.round(prog(p)*100):0;
       return {help:(st==='waiting'?'wait-':'ph-')+p.id,helpLabel:'Help: '+p.l+(st==='waiting'?', waiting for GPU':''),label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text,
         hasTag:!!TG[p.id]&&['running','done','failed','cancelled','reused'].includes(st),tag:TG[p.id]?TG[p.id][0]:'',tagHelp:TG[p.id]?TG[p.id][1]:'',tagFb:!!(TG[p.id]&&TG[p.id][2]),tagAria:TG[p.id]?'Method: '+TG[p.id][0]+', details':'',
         tagBs:TG[p.id]&&TG[p.id][2]?'dashed':'solid',tagBd:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--color-divider)',tagCol:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--muted)',
-        detail:p.id==='prefilter'&&(st==='done'||st==='running'||st==='reused')?(st==='running'?'top 50 per sub-query':'top 50/sub-query · q4, q5 passthrough'):''};});
+        detail:is&&st!=='pending'?this.idetail(p.id,is,st,iter,NPL):p.id==='prefilter'&&(st==='done'||st==='running'||st==='reused')?(st==='running'?'top 50 per sub-query':'top 50/sub-query · q4, q5 passthrough'):'',dc:is&&is.st==='running'?'var(--color-accent-300)':'var(--muted)'};});
     const keptVisible=t>=P.select.e;
     const sourcesV=conn?[]:src.filter(s=>s.found<=t).map(s=>{let st,icon,ic,sc='var(--muted)',anim='none';
       if(s.file){if(s.fe<=t){st=s.size;icon='ph-file-text';ic='var(--muted)';}else{st='loading…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';}}
@@ -1019,9 +1157,9 @@ class Component extends DCLogic {
       else if(t<s.fe){if(status==='cancelled'){st='cancelled';icon='ph-stop-circle';ic='var(--muted)';}else{st='fetching…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';sc='var(--color-accent-300)';}}
       else if(s.fail){st=s.fail;icon='ph-x-circle';ic='var(--color-danger)';sc='var(--color-danger)';}
       else{st=isRw?'cached':'fetched';icon='ph-check';ic='var(--muted)';}
-      return {icon,ic,anim,st,sc,title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:keptVisible&&KEPTBY[s.i]?KEPTBY[s.i]+' kept':''};}).reverse();
+      return {icon,ic,anim,st,sc,rtag:s.round>1?'round '+s.round:'',title:s.t,url:s.u,href:s.file?'#':'https://'+s.u,kept:keptVisible&&KEPTBY[s.i]?KEPTBY[s.i]+' kept':''};}).reverse();
     const pf=this.state.pf;const KEEPK={cited:1,srccap:1,budget:1,kept:1};
-    const scoredP=conn?[]:PASS.filter(p=>p.at<=t||scoreDone).sort((a,b)=>b.v-a.v);
+    const scoredP=conn?[]:PASS.filter(p=>(this.atMap?this.atMap[p.k]:p.at)<=t||scoreDone).sort((a,b)=>b.v-a.v);
     const passages=scoredP.map(p=>({p,fk:this.fateKey({p},t)})).filter(({fk})=>pf==='all'||(pf==='cited'?fk==='cited':KEEPK[fk])).map(({p,fk})=>{const b=this.badge(fk,p,r);const ab=p.v>=TH;const so=src[p.s];const open=()=>this.openSrc(p.s,DOCS[p.s].findIndex(c=>c.p===p));
       return {score:p.v.toFixed(2),pct:Math.round(p.v*100),sc:ab?'var(--color-accent-300)':'var(--muted)',bar:ab?'var(--color-accent)':'var(--faint)',op:b.op,heading:p.h,text:p.x,dom:so.file?so.u:so.dom,th:Math.round(th*100),thTitle:'threshold '+th.toFixed(2),b,
         aria:p.v.toFixed(2)+', '+b.label+(b.mark?' '+b.mark:'')+(b.q?' '+b.q:'')+'. '+(so.file?so.u:so.dom)+', '+p.h+'. Open source',open,key:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}}};});
@@ -1063,6 +1201,7 @@ class Component extends DCLogic {
       canCancel:running||conn,isDone:status==='done',canRerun:status==='failed'||status==='cancelled',
       banner:!!bn,bannerIcon:bn&&bn[0],bannerIc:bn&&bn[1],bannerText:bn&&bn[2],bannerBg:bn&&bn[3],bannerBd:bn&&bn[4],bannerAnim:bn&&bn[5],
       phases,
+      depthLabel:DL[r.depth||'standard'],...this.roundsData(r,t,iter,conn),
       subq:conn?[]:SUBQ.slice(0,subN).map((q,i)=>{const at=2.8+i*.7;let st,icon,anim='none';
         if(isRw){st='reused';icon='ph-recycle';}else if(t<2.5){st='queued';icon='ph-clock';}else if(t<at){st=status==='cancelled'?'cancelled':'searching';icon=status==='cancelled'?'ph-stop-circle':'ph-circle-notch';anim=status==='cancelled'?'none':'sx-spin .9s linear infinite';}else{st=[8,7,6,5,6][i]+' results';icon='ph-check';}
         return {n:i+1,text:q,st,icon,anim};}),
@@ -1083,20 +1222,29 @@ class Component extends DCLogic {
     const nav=[['new','New run','ph-plus-circle','Alt 1'],['live','Live run','ph-pulse','Alt 2'],['history','History','ph-clock-counter-clockwise','Alt 3'],['settings','Settings','ph-gear-six','Alt 4']].map(([id,l,ic,k])=>{
       const active=scr===id||(id==='live'&&scr==='report');const runDot=id==='live'&&r&&(r.status==='running'||r.status==='connecting');const healthDot=id==='settings'&&Object.values(S.health).some(h=>h.st==='down'||h.st==='degraded');
       return {l,ic,k,cur:active?'page':undefined,bg:active?'color-mix(in srgb,var(--color-accent) 12%,transparent)':'transparent',col:active?'var(--color-accent-300)':'var(--color-text)',go:()=>this.go(id),dot:!!(runDot||healthDot),dotCol:runDot?'var(--color-accent)':'var(--color-warn)',dotAnim:runDot?'sx-pulse 1.4s infinite':'none'};});
-    const setNewW=(k,v)=>this.setState(s=>({wNew:{...s.wNew,[k]:v}}));
+    const setNewW=(k,v)=>this.setState(s=>k==='words'?{wNew:{...s.wNew,words:v},wordsTouched:String(v)!==String(this.wBase(s))}:{wNew:{...s.wNew,[k]:v}});
     const setDefW=(k,v)=>{this.setState(s=>{const wDef={...s.wDef,[k]:v};try{localStorage.setItem('wosarcher-writing-defaults',JSON.stringify(wDef));}catch(e){}
       const wNew=String(s.wNew[k])===String(s.wDef[k])?{...s.wNew,[k]:v}:s.wNew;return {wDef,wNew,wSaved:true};});clearTimeout(this.ws);this.ws=setTimeout(()=>this.setState({wSaved:false}),1500);};
-    const newW=this.wFields(S.wNew,S.wDef,setNewW,'nw','overridden');const overN=newW.filter(f=>f.changed).length;
+    const wB=this.wBase(S);const newW=this.wFields(S.wNew,{...S.wDef,words:wB},setNewW,'nw','overridden');const nwW=newW.find(f=>f.id==='nw-words');
+    if(nwW){if(nwW.changed){nwW.baseText=DL[S.depth]+' default: '+wB+' words';nwW.markHelp='w-words-def';nwW.markHelpLabel='Help: Depth default';}else nwW.numHint=S.depth==='custom'?'':'set by '+DL[S.depth];}
+    const overN=newW.filter(f=>f.changed).length;
     const pick=(k,o)=>this.setState(s=>({opts:{...s.opts,[k]:o}}));
     const runFields=[['recipe','Recipe',['report','context']],['sources','Sources',['web','files','both']]].map(([k,label,os])=>({id:'opt-'+k,label,help:k,helpLabel:'Help: '+label,isSeg:true,isSelect:false,opts:os.map(o=>({label:o,name:'opt-'+k,checked:S.opts[k]===o,onPick:()=>pick(k,o)})),options:[],desc:''}));
     const prof=PROFILES.find(p=>p.id===S.opts.profile)||PROFILES[1];
     runFields.push({id:'opt-profile',label:'Profile',help:'profile',helpLabel:'Help: Profile',isSeg:false,isSelect:true,value:S.opts.profile,options:PROFILES.map(p=>({v:p.id,l:p.id+(p.user?'  (user profile)':'')})),onChange:e=>pick('profile',e.target.value),desc:prof.desc,opts:[]});
-    const submit=()=>{const q=S.query.trim();if(q)this.start(q,{...S.opts},S.files,{...S.wNew});};
+    const iterOK=P.iterative??true;const dv=S.depth==='custom'?S.dCustom:DPRE[S.depth];const isPre=S.depth!=='custom';
+    const ctxMax=CTXMAX[S.opts.profile]||12000;const effR=iterOK?dv.rounds:1;
+    const depthFields=DF.map(([k,label,mn,mx,st])=>{let note='',noteIcon='ph-info';
+      if(k==='ctx'&&dv.ctx>ctxMax)note=fmtN(dv.ctx)+' → '+fmtN(ctxMax)+' (model window)';
+      if(k==='rounds'&&!iterOK){noteIcon='ph-lock-simple';note=dv.rounds>1?dv.rounds+' → 1 · this server runs 1 round':'This server runs 1 round only.';}
+      return {id:'d-'+k,label,help:'d-'+k,helpLabel:'Help: '+label,min:mn,max:mx,step:st,value:dv[k],dis:k==='rounds'&&!iterOK,onChange:e=>this.editDepth(k,+e.target.value||mn),note,noteIcon,bs:isPre?'dashed':'solid',col:isPre?'var(--muted)':'var(--color-text)'};});
+    const depthEst='~'+dv.pages+' pages · '+effR+' round'+(effR>1?'s':'')+' · ~'+llmCalls(effR,S.wNew.words)+' LLM calls'+(dv.ctx>ctxMax?' · context '+fmtKT(dv.ctx)+' → '+fmtKT(ctxMax)+' (model window)':'')+(!iterOK&&dv.rounds>1?' · rounds limited to 1':'');
+    const submit=()=>{const q=S.query.trim();if(q)this.start(q,{...S.opts},S.files,{...S.wNew},{depth:S.depth,iter:effR>1?{planned:effR,variant:'coverage'}:null});};
     // report view
     let R={};const cur=S.versions.find(v=>v.id===S.viewId)||S.versions[S.versions.length-1];
     if(cur){const root=cur.root||cur.id;const sib=S.versions.filter(v=>(v.root||v.id)===root);const par=cur.parent&&S.versions.find(v=>v.id===cur.parent);
       const src=sources(cur.files);const citesBy={};PASS.filter(p=>p.n).forEach(p=>{(citesBy[p.s]=citesBy[p.s]||[]).push(this.citeLabel(p.n,cur.wopts.cite,cur.files));});
-      R={id:cur.id,query:cur.query,h1:phone?'21px':'26px',meta:`${cur.date} · ${cur.dur} · ${cur.opts.recipe} · 22 sources · 14 passages`,multi:sib.length>1,
+      R={id:cur.id,depthL:DL[cur.depth||'standard'],contNote:cur.cont&&!cur.cut?'Continued '+cur.cont+'× after reaching the output limit.':'',cut:cur.cut?'Still cut off after '+cur.cont+' continuations. The last section may be incomplete.':'',cutEnd:cur.cut?'Output limit reached here':'',query:cur.query,h1:phone?'21px':'26px',meta:`${cur.date} · ${cur.dur} · ${cur.opts.recipe} · 22 sources · 14 passages`+(cur.rounds?' · '+cur.rounds:''),multi:sib.length>1,
         versions:sib.map(v=>{const pv=v.parent&&S.versions.find(x=>x.id===v.parent);const c=v.id===cur.id;return {v:v.v,kind:v.parent?'rewrite':'research',id:v.id,desc:v.parent?(wDiff(pv.wopts,v.wopts)||'same options')+' · '+v.dur:'full run · '+v.dur,icon:v.parent?'ph-git-branch':'ph-magnifying-glass',cur:c?'true':undefined,bd:c?'var(--color-accent)':'var(--color-divider)',bg:c?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',go:()=>this.setState({viewId:v.id,cite:null})};}),
         parentNote:par?`Rewritten from ${par.id} (v${par.v}): same sources and passages; changed ${wDiff(par.wopts,cur.wopts)||'nothing'}.`:'',
         optsLine:'Written with '+wSum(cur.wopts)+(cur.wopts.custom?' · custom instructions':''),
@@ -1110,13 +1258,13 @@ class Component extends DCLogic {
     const setRw=(k,v)=>this.setState(s=>({rw:{...s.rw,w:{...s.rw.w,[k]:v}}}));
     const nextV=rwBase?S.versions.filter(v=>(v.root||v.id)===(rwBase.root||rwBase.id)).length+1:2;
     // history
-    const session=[];S.versions.forEach(v=>{if(!HIST.find(h=>h.id===v.id))session.push({id:v.id,q:v.query,d:v.date,recipe:v.opts.recipe,status:'completed',dur:v.dur,cost:v.parent?'$0.000':'$0.004',parent:v.parent,wnote:v.parent?`${v.wopts.tone} · ${v.wopts.words} words`:''});});
-    if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?'running':r.status,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
+    const session=[];S.versions.forEach(v=>{if(!HIST.find(h=>h.id===v.id))session.push({id:v.id,depth:v.depth,q:v.query,d:v.date,recipe:v.opts.recipe,status:'completed',dur:v.dur,cost:v.parent?'$0.000':'$0.004',parent:v.parent,wnote:v.parent?`${v.wopts.tone} · ${v.wopts.words} words`:''});});
+    if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,depth:r.depth,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?'running':r.status,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
     const allH=P.emptyHistory?[]:[...session.reverse(),...S.hist];
     const q=S.hq.trim().toLowerCase();
     const shown=allH.filter(h=>(!q||h.q.toLowerCase().includes(q))&&(S.hf==='all'||h.status===S.hf)&&(S.hr==='any'||h.recipe===S.hr));
     const HS={completed:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent'],running:['ph-circle-notch','var(--color-accent-800)','var(--color-accent-100)','transparent'],failed:['ph-x-circle','color-mix(in srgb,var(--color-danger) 18%,transparent)','var(--color-text)','transparent'],cancelled:['ph-stop-circle','transparent','var(--muted)','var(--color-divider)'],done:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent']};
-    const hist=shown.map(h=>{const s=HS[h.status]||HS.completed;return {...h,status:h.status==='done'?'completed':h.status,icon:s[0],bg:s[1],fg:s[2],bd:s[3],anim:h.status==='running'?'sx-spin .9s linear infinite':'none',parent:h.parent||'',
+    const hist=shown.map(h=>{const s=HS[h.status]||HS.completed;return {...h,depthL:DL[h.depth||'standard'],status:h.status==='done'?'completed':h.status,icon:s[0],bg:s[1],fg:s[2],bd:s[3],anim:h.status==='running'?'sx-spin .9s linear infinite':'none',parent:h.parent||'',
       open:()=>{if(h.live){this.go('live');return;}if(S.versions.find(v=>v.id===h.id)){this.setState({viewId:h.id,screen:'report'});return;}
         if(h.status==='completed')this.setState({versions:[...S.versions,{id:h.id,v:1,query:h.q,opts:{recipe:h.recipe,sources:'both',profile:'low-vram'},wopts:{...S.wDef},md:MD1,dur:h.dur,date:h.d,files:[]}],viewId:h.id,screen:'report'});
         else this.applyScenario(h.status==='failed'?'failure':'cancelled');},
@@ -1145,7 +1293,7 @@ class Component extends DCLogic {
           aria:(c.p?c.p.v.toFixed(2)+', ':'')+b.label+(b.mark?' '+b.mark:'')+'. '+c.h+(cur?', selected':''),pick,key:e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}}};});
       const c=doc[sel]||{h:'',p:null};const fk=fks[sel]||'pending';const cp=c.p;
       const qrow=[1,2,3,4,5].map(q=>{const s=cp?cp.qs[q]:null;const prim=!!cp&&cp.q===q;let st;
-        if(t<PM.prefilter.e)st='pending';
+        if(t<(this.PMr||PM).prefilter.e)st='pending';
         else if(s!=null){st=prim?{cited:'kept',srccap:'kept',budget:'kept',kept:'kept',qcap:'query cap',below:'below '+TH.toFixed(2),above:'≥ '+TH.toFixed(2),pending:'pending'}[fk]:(s>=TH?'counted in q'+cp.q:'below '+TH.toFixed(2));}
         else st=q>=4?'not in results':'prefiltered';
         return {q:'q'+q,score:s!=null&&t>=PM.prefilter.e&&fk!=='pending'?s.toFixed(2):'',st,title:'q'+q+': '+SUBQ[q-1],bd:prim?'var(--color-accent)':'var(--color-divider)',col:prim?'var(--color-text)':'var(--muted)'};});
@@ -1171,22 +1319,31 @@ class Component extends DCLogic {
       dropBorder:S.dragOver?'var(--color-accent)':'var(--color-divider)',dropBg:S.dragOver?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',dropErr:S.dropErr,
       hasFiles:S.files.length>0,files:S.files.map(f=>({name:f.name,size:fmtB(f.bytes),removeLabel:'Remove '+f.name,remove:()=>this.setState(s=>({files:s.files.filter(x=>x.name!==f.name)}))})),
       optsOpen:S.optsOpen,toggleOpts:()=>this.setState(s=>({optsOpen:!s.optsOpen})),optsCaret:S.optsOpen?'ph-caret-down':'ph-caret-right',
-      optSummary:`${S.opts.recipe} · ${S.opts.sources} · ${S.opts.profile} · ${wSum(S.wNew)}`,wOverCount:overN>0,wOverLabel:overN+' overridden',
-      runFields,newWFields:newW,resetAllW:()=>this.setState(s=>({wNew:{...s.wDef}})),
+      optSummary:[DL[S.depth],S.opts.recipe,S.opts.sources,S.opts.profile,S.wNew.words+' words',S.wNew.tone.toLowerCase()].join(' · '),
+      depthOpts:DEPTHS.map(([v,l])=>({label:l,checked:S.depth===v,onPick:()=>this.pickDepth(v)})),depthDesc:DD[S.depth],depthEst,depthFields,
+      advOpen:S.advOpen,advExp:S.advOpen?'true':'false',advCaret:S.advOpen?'ph-caret-down':'ph-caret-right',advHint:isPre?'· '+DL[S.depth]+' values':'· your values',toggleAdv:()=>this.setState(s=>({advOpen:!s.advOpen})),
+      advNote:isPre?DL[S.depth]+' preset. Edit any value to switch to Custom.':'Your Custom values, saved in this browser.',wOverCount:overN>0,wOverLabel:overN+' overridden',
+      runFields,newWFields:newW,resetAllW:()=>this.setState(s=>({wNew:{...s.wDef,words:this.wBase(s)},wordsTouched:false})),
       // live
       noRun:!r,hasRun:!!r,L,liveGap:phone?'8px':'10px',liveOverflow:phone?'auto':'hidden',gridFlex:phone?'none':'1',gridMinH:phone?'auto':'0',subqFlex:phone?'none':'0 1 auto',subqMax:phone?'none':'42%',livePad:phone?'10px 10px 8px':'14px 16px 10px',
-      tabs,showTimeline:!phone||tab==='progress',showSubq:!phone||tab==='progress',showSources:!phone||tab==='sources',showCol1:!phone||tab==='progress'||tab==='sources',showPassages:!phone||tab==='passages',showReport:!phone||tab==='report',
-      tlCols:phone?'1fr 1fr':'repeat(9,minmax(98px,1fr))',liveCols:phone?'minmax(0,1fr)':(S.winW<1180?'minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)':'minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr)'),
+      tabs,showTimeline:!phone||tab==='progress',showSubq:!L.iter&&(!phone||tab==='progress'),showRounds:!!L.iter&&(!phone||tab==='progress'),roundsMax:phone?'none':'58%',showSources:!phone||tab==='sources',showCol1:!phone||tab==='progress'||tab==='sources',showPassages:!phone||tab==='passages',showReport:!phone||tab==='report',
+      tlCols:phone?'1fr 1fr':'repeat('+((L.phases&&L.phases.length)||9)+',minmax(98px,1fr))',liveCols:phone?'minmax(0,1fr)':(S.winW<1180?'minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr)':'minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr)'),
       skel:[{w:'72%'},{w:'58%'},{w:'80%'},{w:'64%'},{w:'70%'},{w:'52%'}],
       srcOpen:!!(S.src&&r),sd,sdRef:this.sdRef,sdBodyRef:this.sdBodyRef,closeSrc:()=>this.closeSrc(),closeSrcBackdrop:e=>{if(e.target===e.currentTarget)this.closeSrc();},checkAllBusy:Object.values(S.health).some(x=>x.checking),
       repRef:this.repRef,hideCite:()=>this.setState({cite:null}),footGap:phone?'10px':'18px',
       cancel:()=>{const rr=S.run;if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
       openReport:()=>this.setState({screen:'report',viewId:r&&r.id}),
-      rerun:()=>r&&this.start(r.query,r.opts,r.files,r.wopts),
+      rerun:()=>r&&this.start(r.query,r.opts,r.files,r.wopts,{depth:r.depth,iter:r.iter}),
       retry:()=>this.setRun({status:'running',failAt:null,stopAt:null,t:21}),
       retryCloud:()=>this.setRun({status:'running',failAt:null,stopAt:null,t:23,opts:{...r.opts,profile:'cloud'}}),
       copyErr:()=>this.copy(ERR,'Error copied'),
       // report
+      openDig:()=>this.setState({dig:{rounds:1,depth:'deep'}}),digOpen:!!(S.dig&&cur),
+      digRoundOpts:[1,2,3].map(n=>({label:String(n),checked:!!S.dig&&S.dig.rounds===n,onPick:()=>this.setState(s=>({dig:{...s.dig,rounds:n}}))})),
+      digDepthOpts:[['deep','Deep'],['exhaustive','Exhaustive']].map(([v,l])=>({label:l,checked:!!S.dig&&S.dig.depth===v,onPick:()=>this.setState(s=>({dig:{...s.dig,depth:v}}))})),
+      digDepthDesc:S.dig?(S.dig.depth==='deep'?'Up to 20 new pages per round.':'Up to 24 new pages per round; keeps more passages.'):'',
+      digEst:S.dig?'~'+(S.dig.depth==='deep'?20:24)*S.dig.rounds+' more pages · +'+S.dig.rounds+' round'+(S.dig.rounds>1?'s':'')+' · ~'+(S.dig.rounds+Math.ceil(DPRE[S.dig.depth].words/800))+' LLM calls':'',
+      closeDig:()=>this.setState({dig:null}),closeDigBackdrop:e=>{if(e.target===e.currentTarget)this.setState({dig:null});},confirmDig:()=>{this.setState({dig:null});this.toastMsg('Dig deeper is planned for a later release');},
       R,openRewrite:()=>cur&&this.setState({rw:{from:cur.id,w:{...cur.wopts}}}),
       copyMd:()=>this.copy(cur?cur.md:'','Markdown copied'),
       download:()=>{if(!cur)return;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([`# ${cur.query}\n\n`+cur.md],{type:'text/markdown'}));a.download=cur.id+'.md';a.click();this.toastMsg('Downloaded '+cur.id+'.md');},
