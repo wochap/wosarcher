@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../api/types";
 import { ev, stageDone, usage } from "../test/events";
+import { roundsLog, roundTwoFetching } from "../test/rounds";
 import { isFallback } from "./providers";
 import { applySummary, initialRunView, type RunView, runReducer } from "./reducer";
 
@@ -217,5 +218,41 @@ describe("applySummary", () => {
     expect(applySummary(view, summary("running"))).toBe(view);
     const ended = applySummary(view, summary("done"));
     expect(applySummary(ended, summary("failed", { end_stage: "fetch" }))).toBe(ended);
+  });
+});
+
+describe("research rounds", () => {
+  it("folds three rounds with their queries, pages, gap notes, and the stop", () => {
+    const state = fold(roundsLog("max"));
+    expect(state.rounds.map((r) => [r.round, r.state, r.newPages, r.kept])).toEqual([
+      [1, "done", 16, 32],
+      [2, "done", 6, 12],
+      [3, "done", 4, 8],
+    ]);
+    expect(state.rounds[0].note).toBe("Missing: benchmarks.");
+    expect(state.rounds[0].gap).toBe(2);
+    expect(state.rounds[1].queries.map((q) => [q.id, q.results, q.searched])).toEqual([
+      ["q6", 1, true],
+      ["q7", 1, true],
+    ]);
+    expect(state.research).toEqual({ planned: 3, ran: 3, reason: "max rounds", note: "" });
+    expect(state.phases.fetch).toMatchObject({ state: "done", round: 3, roundsDone: 3 });
+    expect(state.phases.gap).toMatchObject({ state: "done", round: 2, roundsDone: 2 });
+    expect(state.sources["https://r3-0.test"].round).toBe(3);
+  });
+
+  it("records a round with no new sources", () => {
+    const state = fold(roundsLog("nonew"));
+    expect(state.rounds[1]).toMatchObject({ state: "done", newPages: 0, knownPages: 9 });
+    expect(state.research?.reason).toBe("no new sources");
+  });
+
+  it("tracks the running round and cancels it", () => {
+    let state = fold(roundTwoFetching());
+    expect(state.rounds[1]).toMatchObject({ state: "running", stage: "fetch", newPages: 6 });
+    expect(state.phases.fetch.round).toBe(2);
+    state = runReducer(state, ev(999, "run.cancelled", { stage: "fetch" }));
+    expect(state.rounds[1].state).toBe("cancelled");
+    expect(state.phases.fetch.state).toBe("cancelled");
   });
 });

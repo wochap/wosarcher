@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from wosarcher.config import Provider, Settings
 from wosarcher.models import Stage
 
-GPU_BLOCK: dict[Stage, str] = {"plan": "llm", "prefilter": "prefilter", "score": "score", "write": "llm"}
+GPU_BLOCK: dict[Stage, str] = {"plan": "llm", "prefilter": "prefilter", "score": "score", "gap": "llm", "write": "llm"}
 STAGE_BLOCK: dict[Stage, str] = {**GPU_BLOCK, "search": "search", "fetch": "fetch"}
 
 

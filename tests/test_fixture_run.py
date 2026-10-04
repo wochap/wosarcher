@@ -50,7 +50,7 @@ REGENERATE = "rerun `uv run python -m tests.fixtures.make_recorded_run`"
 def test_fixture_parses() -> None:
     run_dir = RUNS / FIXTURE_RUN
     expected = {name for names in STAGE_ARTIFACTS.values() for name in names}
-    assert expected <= {*DOCUMENTS, *LINES, "report.md"}
+    assert expected <= {*DOCUMENTS, *LINES, "report.md", "research.json"}
     assert (run_dir / "report.md").is_file()
     for name, model in DOCUMENTS.items():
         try:

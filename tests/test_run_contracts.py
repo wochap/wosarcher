@@ -15,6 +15,7 @@ from wosarcher.models import (
     EVENT_TYPES,
     STAGES,
     Context,
+    GapReadyData,
     HitFoundData,
     KeptPassage,
     PageFailedData,
@@ -23,7 +24,9 @@ from wosarcher.models import (
     PlanReadyData,
     Query,
     ReportTextData,
+    ResearchDoneData,
     ResourceData,
+    RoundDoneData,
     RunCancelledData,
     RunDoneData,
     RunFailedData,
@@ -65,13 +68,16 @@ DATA: dict[str, BaseModel] = {
     "passages.scored": PassagesScoredData(
         query_id="q0", scorer="jev", scored=3, kept=1, threshold_display=0.5, passages=[PASSAGE]
     ),
+    "round.done": RoundDoneData(round=1, query_ids=["q1"], new_pages=4, known_pages=1, kept=3),
+    "gap.ready": GapReadyData(round=1, queries=[Query(id="q4", text="f", round=2)], note="n", stop=False),
+    "research.done": ResearchDoneData(planned=3, ran=2, reason="no new sources", note="n"),
     "report.delta": ReportTextData(text="Intro"),
     "report.snapshot": ReportTextData(text="Intro"),
 }
 
 
 def test_stage_order() -> None:
-    assert STAGES == ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write")
+    assert STAGES == ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "gap", "select", "write")
     assert get_args(Stage) == STAGES
 
 

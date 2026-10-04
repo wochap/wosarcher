@@ -11,13 +11,17 @@ import shutil
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from pydantic import BaseModel
 
 from wosarcher.config import Settings, redact
 from wosarcher.models import (
+    LOOP_STAGES,
     STAGES,
     Event,
+    Plan,
+    ResearchDone,
     RunCancelled,
     RunCosts,
     RunFailed,
@@ -40,6 +44,7 @@ STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "chunk": ("chunks.jsonl",),
     "prefilter": ("candidates.jsonl",),
     "score": ("scores.jsonl",),
+    "gap": ("research.json",),
     "select": ("context.json", "select.jsonl"),
     "write": ("report.md", "report.json"),
 }
@@ -84,6 +89,13 @@ def expand(path: str) -> list[tuple[Path, Path]]:
         return [(found, Path(given.resolve().name) / found.relative_to(given)) for found in visible]
     matches = [Path(match) for match in sorted(glob.glob(path, recursive=True))]
     return [(match, Path(match.name)) for match in matches if match.is_file()]
+
+
+def settings_rounds(record: RunRecord) -> int:
+    """The run's resolved `research.rounds`; 1 for runs from before research rounds."""
+    research: object = record.settings.get("research")
+    rounds = cast(dict[str, object], research).get("rounds", 1) if isinstance(research, dict) else 1
+    return rounds if isinstance(rounds, int) else 1
 
 
 def free_name(name: Path, taken: set[Path]) -> Path:
@@ -163,10 +175,11 @@ class RunStore:
     ) -> RunRecord:
         parent = self.read_record(parent_id)
         done = self.done_events(parent_id)
-        earlier = STAGES[: STAGES.index(from_stage)]
-        missing = [stage for stage in earlier if stage not in done]
+        missing = self.missing_stages(parent_id, from_stage)
         if missing:
             raise RunStoreError(f"cannot fork {parent_id} from {from_stage}: stage {missing[0]} is not finished")
+        rerun_loop = from_stage in LOOP_STAGES and self.planned_rounds(parent) > 1
+        earlier = STAGES[: STAGES.index("search" if rerun_loop else from_stage)]
         run_id, path = self.new_dir(run_id)
         source = self.run_dir(parent_id)
         if (source / "attachments").is_dir():
@@ -188,9 +201,39 @@ class RunStore:
             for name in STAGE_ARTIFACTS[stage]:
                 if (source / name).is_file():
                     shutil.copyfile(source / name, path / name)
+            if stage not in done:
+                continue
             data = done[stage].data.model_copy(update={"copied_from": done[stage].data.copied_from or parent_id})
             self.append_event(run_id, "stage.done", stage, data)
+            research = self.research_done(parent_id)
+            if stage == "gap" and research is not None:
+                self.append_event(run_id, "research.done", "gap", research.data)
+        if rerun_loop:
+            plan = self.read_artifact(run_id, "plan.json", Plan)
+            first = [query for query in plan.queries if query.round == 1]
+            self.write_artifact(run_id, "plan.json", plan.model_copy(update={"queries": first}))
         return record
+
+    def missing_stages(self, run_id: str, from_stage: Stage) -> list[Stage]:
+        """The stages before `from_stage` that are not finished; `gap` only counts in multi-round runs."""
+        finished = self.finished_stages(run_id)
+        multi = self.planned_rounds(self.read_record(run_id)) > 1
+        earlier = STAGES[: STAGES.index(from_stage)]
+        if multi and from_stage in LOOP_STAGES:
+            earlier = STAGES[: STAGES.index("search")]
+        return [stage for stage in earlier if stage not in finished and (multi or stage != "gap")]
+
+    def planned_rounds(self, record: RunRecord) -> int:
+        """The rounds the loop runs: `research.rounds`, or 1 for files-only runs and plans without a sub-query."""
+        if record.request.sources == "files" or settings_rounds(record) < 2:
+            return 1
+        path = self.run_dir(record.run_id) / "plan.json"
+        if path.is_file() and len(self.read_artifact(record.run_id, "plan.json", Plan).queries) < 2:
+            return 1
+        return settings_rounds(record)
+
+    def research_done(self, run_id: str) -> ResearchDone | None:
+        return next((e for e in reversed(self.read_events(run_id)) if isinstance(e, ResearchDone)), None)
 
     def lineage_root(self, run_id: str) -> str:
         """Follow `parent_run_id` up, stopping at a missing or repeated run."""
@@ -234,6 +277,10 @@ class RunStore:
         else:
             text = "".join(item.model_dump_json() + "\n" for item in value)
         self.write_text(run_id, name, text)
+
+    def append_jsonl(self, run_id: str, name: str, items: Sequence[BaseModel]) -> None:
+        with (self.run_dir(run_id) / name).open("a", encoding="utf-8") as out:
+            out.write("".join(item.model_dump_json() + "\n" for item in items))
 
     def read_artifact[T: BaseModel](self, run_id: str, name: str, model_type: type[T]) -> T:
         return model_type.model_validate_json((self.run_dir(run_id) / name).read_text(encoding="utf-8"))
@@ -313,7 +360,11 @@ class RunStore:
         return {e.stage: e for e in self.read_events(run_id) if isinstance(e, StageDone) and e.stage is not None}
 
     def finished_stages(self, run_id: str) -> set[Stage]:
-        return set(self.done_events(run_id))
+        """Stages with `stage.done`; in a multi-round run the loop stages count only after `research.done`."""
+        finished = set(self.done_events(run_id))
+        if self.planned_rounds(self.read_record(run_id)) > 1 and self.research_done(run_id) is None:
+            finished -= set(LOOP_STAGES)
+        return finished
 
     # Listing
 
@@ -333,6 +384,8 @@ class RunStore:
         started = next((event.ts for event in events if event.type == "run.started"), None)
         duration = (events[-1].ts - started).total_seconds() if started and status != "interrupted" else None
         costs = self.read_costs(record.run_id)
+        research = self.research_done(record.run_id)
+        gap_done = "gap" in self.done_events(record.run_id)
         last = events[-1] if events else None
         ended = last if isinstance(last, RunFailed | RunCancelled) else None
         error = last.data.error if isinstance(last, RunFailed) else None
@@ -353,6 +406,9 @@ class RunStore:
             cost=costs.total.cost if costs else None,
             error=error,
             end_stage=ended.data.stage if ended else None,
+            rounds_planned=settings_rounds(record),
+            rounds_ran=research.data.ran if research else (1 if gap_done else None),
+            stop_reason=research.data.reason if research else None,
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:

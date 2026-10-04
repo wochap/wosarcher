@@ -8,7 +8,7 @@ import { Seg } from "../../components/Seg";
 import { DEPTH_LABELS, type Depth, estimate, fmtN } from "../../run/depth";
 import css from "./OptionsPanel.module.css";
 
-type Field = keyof ResearchValues | "rounds";
+type Field = keyof ResearchValues;
 
 const FIELDS: [Field, string, number, number, number][] = [
   ["sub_queries", "Sub-queries", 1, 12, 1],
@@ -34,6 +34,10 @@ type Props = {
   values: ResearchValues;
   /** The context budget the profile's window leaves; null when unknown. */
   effective: number | null;
+  /** Follow-up queries per round the estimate counts. */
+  queriesPerRound: number;
+  /** Files-only runs use one round. */
+  filesOnly: boolean;
   onPick: (depth: Depth) => void;
   onEdit: (field: keyof ResearchValues, value: number) => void;
 };
@@ -44,6 +48,8 @@ export function DepthGroup({
   description,
   values,
   effective,
+  queriesPerRound,
+  filesOnly,
   onPick,
   onEdit,
 }: Props) {
@@ -71,7 +77,7 @@ export function DepthGroup({
         <div className={css.depthText}>
           <span className={css.depthDesc}>{description}</span>
           <span aria-live="polite" className={css.estimate}>
-            {estimate(values, effective)}
+            {estimate(values, effective, queriesPerRound, filesOnly ? 1 : values.rounds)}
           </span>
         </div>
         <button
@@ -95,13 +101,13 @@ export function DepthGroup({
             </span>
             <div className={css.advGrid}>
               {FIELDS.map(([field, label, min, max, step]) => {
-                const rounds = field === "rounds";
-                const note = rounds
-                  ? "This server runs 1 round only."
+                const locked = field === "rounds" && filesOnly;
+                const note = locked
+                  ? "Files-only runs use 1 round."
                   : field === "context_tokens" && clamped
                     ? `${fmtN(values.context_tokens)} → ${fmtN(effective ?? 0)} (model window)`
                     : "";
-                const NoteIcon = rounds ? LockSimple : Info;
+                const NoteIcon = locked ? LockSimple : Info;
                 return (
                   <div key={field} className={css.advField}>
                     <div className={css.advLabel}>
@@ -116,10 +122,10 @@ export function DepthGroup({
                       min={min}
                       max={max}
                       step={step}
-                      value={rounds ? 1 : values[field]}
-                      disabled={rounds}
+                      value={locked ? 1 : values[field]}
+                      disabled={locked}
                       onChange={(e) => {
-                        if (!rounds) onEdit(field, Number(e.target.value) || min);
+                        if (!locked) onEdit(field, Number(e.target.value) || min);
                       }}
                     />
                     {note && (

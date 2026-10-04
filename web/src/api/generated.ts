@@ -58,7 +58,9 @@ export type Name1 = string
 export type ContextTokens = number
 export type MaxPages = number
 export type PassagesPerQuery = number
+export type QueriesPerRound = number
 export type ResultsPerQuery = number
+export type Rounds = number
 export type SubQueries = number
 export type Words = (number | null)
 export type GpuPolicy = ("shared" | "exclusive")
@@ -84,11 +86,12 @@ export type Failures = Skipped[]
 export type Format = ("markdown" | "pdf-ingest")
 export type QueryIds = string[]
 export type Rank1 = number
+export type Round = number
 export type Text3 = string
 export type Truncated = boolean
 export type Pages = Page[]
 export type Unfetched = number
-export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write")
+export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write")
 export type Profile = (string | null)
 export type Set = string[]
 export type CitationMarker = (("numeric" | "superscript" | "author-year") | null)
@@ -97,6 +100,21 @@ export type ReferenceStyle = (string | null)
 export type Tone = (string | null)
 export type ToneInstructions = (string | null)
 export type Words1 = (number | null)
+export type Note1 = string
+export type Id = string
+export type Round1 = number
+export type Text4 = string
+export type Queries = Query1[]
+export type Round2 = number
+export type Stop = boolean
+export type RunId = string
+export type Seq = number
+export type Stage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts = string
+export type Type = "gap.ready"
+export type Note2 = string
+export type Queries1 = Query1[]
+export type Stop1 = boolean
 export type Blocks = string[]
 export type CheckedAt = (string | null)
 export type Detail1 = string
@@ -114,22 +132,23 @@ export type Profile1 = string
 export type Warnings1 = string[]
 export type QueryIds1 = string[]
 export type Rank2 = number
+export type Round3 = number
 export type Snippet = string
 export type Title1 = string
 export type Url1 = string
 export type QueryIds2 = string[]
 export type Title2 = string
 export type Url2 = string
-export type RunId = string
-export type Seq = number
-export type Stage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts = string
-export type Type = "hit.found"
+export type RunId1 = string
+export type Seq1 = number
+export type Stage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts1 = string
+export type Type1 = "hit.found"
 export type ChunkId3 = string
 export type Display3 = (number | null)
 export type HeadingPath2 = string[]
 export type SourceId3 = string
-export type Text4 = string
+export type Text5 = string
 export type Title3 = string
 export type Uri1 = string
 export type Pages1 = Page[]
@@ -143,42 +162,41 @@ export type Content = string
 export type Role1 = ("system" | "user" | "assistant")
 export type Reason1 = string
 export type Url3 = string
-export type RunId1 = string
-export type Seq1 = number
-export type Stage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts1 = string
-export type Type1 = "page.failed"
+export type RunId2 = string
+export type Seq2 = number
+export type Stage2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts2 = string
+export type Type2 = "page.failed"
 export type Cached = boolean
 export type Chars = number
+export type Round4 = number
 export type SourceId4 = string
 export type Title4 = string
 export type Url4 = string
-export type RunId2 = string
-export type Seq2 = number
-export type Stage2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts2 = string
-export type Type2 = "page.fetched"
+export type RunId3 = string
+export type Seq3 = number
+export type Stage3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts3 = string
+export type Type3 = "page.fetched"
 export type Kept = number
 export type Passages1 = KeptPassage[]
 export type QueryId4 = string
 export type Scored = number
 export type Scorer1 = string
 export type ThresholdDisplay = (number | null)
-export type RunId3 = string
-export type Seq3 = number
-export type Stage3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts3 = string
-export type Type3 = "passages.scored"
-export type Id = string
-export type Text5 = string
-export type Queries = Query1[]
-export type Warnings2 = string[]
-export type Queries1 = Query1[]
 export type RunId4 = string
 export type Seq4 = number
-export type Stage4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Stage4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts4 = string
-export type Type4 = "plan.ready"
+export type Type4 = "passages.scored"
+export type Queries2 = Query1[]
+export type Warnings2 = string[]
+export type Queries3 = Query1[]
+export type RunId5 = string
+export type Seq5 = number
+export type Stage5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts5 = string
+export type Type5 = "plan.ready"
 export type Candidates = Candidate[]
 export type Method = ("embeddings" | "bm25" | "none")
 export type Warnings3 = string[]
@@ -195,6 +213,7 @@ export type Display4 = (number | null)
 export type Dropped = (("threshold" | "query_cap" | "other_query") | null)
 export type Kept2 = boolean
 export type QueryId5 = string
+export type Round5 = number
 export type Scorer2 = string
 export type Value = number
 export type Passages2 = Score[]
@@ -213,39 +232,70 @@ export type References = Reference[]
 export type Truncated1 = boolean
 export type Warnings4 = string[]
 export type Text6 = string
-export type RunId5 = string
-export type Seq5 = number
-export type Stage5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts5 = string
-export type Type5 = "report.delta"
 export type RunId6 = string
 export type Seq6 = number
-export type Stage6 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Stage6 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts6 = string
-export type Type6 = "report.snapshot"
+export type Type6 = "report.delta"
+export type RunId7 = string
+export type Seq7 = number
+export type Stage7 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts7 = string
+export type Type7 = "report.snapshot"
+export type Note3 = string
+export type Planned = number
+export type Ran = number
+export type Reason2 = ("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed")
+export type RunId8 = string
+export type Seq8 = number
+export type Stage8 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts8 = string
+export type Type8 = "research.done"
 export type ContextTokens1 = (number | null)
 export type MaxPages1 = (number | null)
 export type PassagesPerQuery1 = (number | null)
 export type ResultsPerQuery1 = (number | null)
+export type Rounds1 = (number | null)
 export type SubQueries1 = (number | null)
+export type Note4 = string
+export type Planned1 = number
+export type Ran1 = number
+export type Reason3 = ("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed")
+export type Kept3 = number
+export type KnownPages = number
+export type NewPages = number
+export type Note5 = string
+export type QueryIds3 = string[]
+export type Round6 = number
+export type Rounds2 = RoundRecord[]
 export type Device2 = string
-export type ReleasedStage = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write")
-export type RunId7 = string
-export type Seq7 = number
-export type Stage7 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts7 = string
-export type Type7 = "resource.released"
-export type RunId8 = string
-export type Seq8 = number
-export type Stage8 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts8 = string
-export type Type8 = "resource.waiting"
-export type Stage9 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type ReleasedStage = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write")
 export type RunId9 = string
 export type Seq9 = number
-export type Stage10 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Stage9 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts9 = string
-export type Type9 = "run.cancelled"
+export type Type9 = "resource.released"
+export type RunId10 = string
+export type Seq10 = number
+export type Stage10 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts10 = string
+export type Type10 = "resource.waiting"
+export type Kept4 = number
+export type KnownPages1 = number
+export type NewPages1 = number
+export type QueryIds4 = string[]
+export type Round7 = number
+export type RunId11 = string
+export type Seq11 = number
+export type Stage11 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts11 = string
+export type Type11 = "round.done"
+export type Stage12 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type RunId12 = string
+export type Seq12 = number
+export type Stage13 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts12 = string
+export type Type12 = "run.cancelled"
 export type Cost = number
 export type InputTokens1 = number
 export type OutputTokens1 = number
@@ -256,16 +306,16 @@ export type Profile2 = (string | null)
 export type Query2 = string
 export type Set1 = string[]
 export type Sources1 = (("both" | "web" | "files") | null)
-export type Until = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type RunId10 = string
+export type Until = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type RunId13 = string
 export type Status2 = ("queued" | "running")
 export type Cost1 = (number | null)
 export type Created = string
 export type Depth1 = (string | null)
 export type DurationS = (number | null)
-export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Error3 = (string | null)
-export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type LastSeq = number
 export type ParentRunId = (string | null)
 export type Profile3 = string
@@ -273,7 +323,7 @@ export type Query3 = string
 export type QueuePosition = (number | null)
 export type Changes = string[]
 export type CreatedAt = string
-export type ForkFrom1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type ForkFrom1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Overrides = string[]
 export type ParentRunId1 = (string | null)
 export type Profile4 = string
@@ -281,13 +331,16 @@ export type Attachments = string[]
 export type Depth2 = (string | null)
 export type Query4 = string
 export type Sources2 = ("both" | "web" | "files")
-export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type RunId11 = string
+export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type RunId14 = string
 export type Version = number
-export type RunId12 = string
+export type RoundsPlanned = number
+export type RoundsRan = (number | null)
+export type RunId15 = string
 export type Sources3 = ("both" | "web" | "files")
 export type Status3 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
-export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed") | null)
+export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
 export type Language1 = string
@@ -295,68 +348,71 @@ export type ReferenceStyle1 = string
 export type Tone1 = string
 export type ToneInstructions1 = string
 export type Words2 = number
-export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type RunId13 = string
-export type Seq10 = number
-export type Stage11 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts10 = string
-export type Type10 = "run.done"
+export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type RunId16 = string
+export type Seq13 = number
+export type Stage14 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts13 = string
+export type Type13 = "run.done"
 export type Error4 = string
-export type Stage12 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type RunId14 = string
-export type Seq11 = number
-export type Stage13 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts11 = string
-export type Type11 = "run.failed"
+export type Stage15 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type RunId17 = string
+export type Seq14 = number
+export type Stage16 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts14 = string
+export type Type14 = "run.failed"
 export type Detail3 = string
 export type Error5 = string
-export type RunId15 = string
+export type RunId18 = string
 export type Status4 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type Error6 = (string | null)
 export type RunDir = string
-export type RunId16 = string
+export type RunId19 = string
 export type Status5 = ("done" | "failed" | "cancelled")
 export type Position1 = number
-export type RunId17 = string
-export type Seq12 = number
-export type Stage14 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts12 = string
-export type Type12 = "run.queued"
+export type RunId20 = string
+export type Seq15 = number
+export type Stage17 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts15 = string
+export type Type15 = "run.queued"
 export type ParentRunId2 = (string | null)
 export type Profile5 = string
 export type Query5 = string
-export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version2 = number
-export type RunId18 = string
-export type Seq13 = number
-export type Stage15 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts13 = string
-export type Type13 = "run.started"
+export type RunId21 = string
+export type Seq16 = number
+export type Stage18 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts16 = string
+export type Type16 = "run.started"
 export type Cost2 = (number | null)
 export type Created1 = string
 export type Depth3 = (string | null)
 export type DurationS1 = (number | null)
-export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Error7 = (string | null)
-export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
 export type Query6 = string
 export type QueuePosition1 = (number | null)
-export type RunId19 = string
+export type RoundsPlanned1 = number
+export type RoundsRan1 = (number | null)
+export type RunId22 = string
 export type Sources4 = ("both" | "web" | "files")
 export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
-export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed") | null)
+export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version3 = number
 export type Failed = Skipped[]
-export type Queries2 = QueryScores[]
+export type Queries4 = QueryScores[]
 export type Scorer4 = string
 export type Scores = Score[]
 export type Failures1 = Skipped[]
 export type Hits = Hit[]
 export type ChunkId5 = string
 export type QueryId7 = string
-export type Reason2 = ("source_cap" | "budget")
+export type Reason4 = ("source_cap" | "budget")
 export type TokensLeft1 = (number | null)
 export type TokensNeeded1 = (number | null)
 export type Sources5 = ("both" | "web" | "files")
@@ -367,11 +423,11 @@ export type TokenName = (string | null)
 export type ChunkId6 = string
 export type HeadingPath3 = string[]
 export type Position2 = number
-export type Queries3 = ChunkQueryFate[]
+export type Queries5 = ChunkQueryFate[]
 export type RemovedBefore = number
 export type Text7 = string
 export type Chunks1 = SourceChunk[]
-export type Queries4 = Query1[]
+export type Queries6 = Query1[]
 export type QueryCap = number
 export type SourceCap = number
 export type Threshold = (number | null)
@@ -380,37 +436,40 @@ export type CopiedFrom = (string | null)
 export type Count = number
 export type Passthrough1 = string[]
 export type Provider2 = (string | null)
+export type Round8 = number
 export type Seconds = number
 export type Skipped2 = boolean
 export type Unfetched1 = number
 export type Warnings5 = string[]
-export type RunId20 = string
-export type Seq14 = number
-export type Stage16 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts14 = string
-export type Type14 = "stage.done"
-export type Error8 = string
-export type Next = string
-export type RunId21 = string
-export type Seq15 = number
-export type Stage17 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts15 = string
-export type Type15 = "stage.failed"
-export type Done = number
-export type Failed1 = number
-export type Total = number
-export type RunId22 = string
-export type Seq16 = number
-export type Stage18 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
-export type Ts16 = string
-export type Type16 = "stage.progress"
-export type Device3 = (string | null)
-export type Provider3 = string
 export type RunId23 = string
 export type Seq17 = number
-export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
+export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts17 = string
-export type Type17 = "stage.started"
+export type Type17 = "stage.done"
+export type Error8 = string
+export type Next = string
+export type RunId24 = string
+export type Seq18 = number
+export type Stage20 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts18 = string
+export type Type18 = "stage.failed"
+export type Done = number
+export type Failed1 = number
+export type Round9 = number
+export type Total = number
+export type RunId25 = string
+export type Seq19 = number
+export type Stage21 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts19 = string
+export type Type19 = "stage.progress"
+export type Device3 = (string | null)
+export type Provider3 = string
+export type Round10 = number
+export type RunId26 = string
+export type Seq20 = number
+export type Stage22 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Ts20 = string
+export type Type20 = "stage.started"
 export type Name3 = string
 export type Id1 = string
 export type Name4 = string
@@ -572,7 +631,9 @@ export interface DepthValues {
 context_tokens: ContextTokens
 max_pages: MaxPages
 passages_per_query: PassagesPerQuery
+queries_per_round: QueriesPerRound
 results_per_query: ResultsPerQuery
+rounds: Rounds
 sub_queries: SubQueries
 words?: Words
 }
@@ -642,6 +703,7 @@ export interface Page {
 format?: Format
 query_ids?: QueryIds
 rank?: Rank1
+round?: Round
 source: Source
 text: Text3
 truncated?: Truncated
@@ -668,6 +730,50 @@ reference_style?: ReferenceStyle
 tone?: Tone
 tone_instructions?: ToneInstructions
 words?: Words1
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "GapReady".
+ */
+export interface GapReady {
+data: GapReadyData
+run_id: RunId
+seq: Seq
+stage?: Stage
+ts: Ts
+type?: Type
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "GapReadyData".
+ */
+export interface GapReadyData {
+note: Note1
+queries: Queries
+round: Round2
+stop: Stop
+}
+/**
+ * `q0` is the main query; `q1`, `q2`, ... are sub-queries.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "Query".
+ */
+export interface Query1 {
+id: Id
+round?: Round1
+text: Text4
+}
+/**
+ * The gap step's reply after a round: validated follow-ups, a note, and the advisory stop flag.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "GapResult".
+ */
+export interface GapResult {
+note?: Note2
+queries: Queries1
+stop?: Stop1
 }
 /**
  * Body of `POST /api/providers/health/check`; no blocks means every block.
@@ -711,6 +817,7 @@ url?: Url
 export interface Hit {
 query_ids: QueryIds1
 rank: Rank2
+round?: Round3
 snippet: Snippet
 title: Title1
 url: Url1
@@ -721,11 +828,11 @@ url: Url1
  */
 export interface HitFound {
 data: HitFoundData
-run_id: RunId
-seq: Seq
-stage?: Stage
-ts: Ts
-type?: Type
+run_id: RunId1
+seq: Seq1
+stage?: Stage1
+ts: Ts1
+type?: Type1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -745,7 +852,7 @@ chunk_id: ChunkId3
 display: Display3
 heading_path?: HeadingPath2
 source_id: SourceId3
-text: Text4
+text: Text5
 title: Title3
 uri: Uri1
 }
@@ -788,11 +895,11 @@ role: Role1
  */
 export interface PageFailed {
 data: PageFailedData
-run_id: RunId1
-seq: Seq1
-stage?: Stage1
-ts: Ts1
-type?: Type1
+run_id: RunId2
+seq: Seq2
+stage?: Stage2
+ts: Ts2
+type?: Type2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -808,11 +915,11 @@ url: Url3
  */
 export interface PageFetched {
 data: PageFetchedData
-run_id: RunId2
-seq: Seq2
-stage?: Stage2
-ts: Ts2
-type?: Type2
+run_id: RunId3
+seq: Seq3
+stage?: Stage3
+ts: Ts3
+type?: Type3
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -821,6 +928,7 @@ type?: Type2
 export interface PageFetchedData {
 cached: Cached
 chars: Chars
+round?: Round4
 source_id: SourceId4
 title: Title4
 url: Url4
@@ -831,11 +939,11 @@ url: Url4
  */
 export interface PassagesScored {
 data: PassagesScoredData
-run_id: RunId3
-seq: Seq3
-stage?: Stage3
-ts: Ts3
-type?: Type3
+run_id: RunId4
+seq: Seq4
+stage?: Stage4
+ts: Ts4
+type?: Type4
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -854,18 +962,8 @@ threshold_display: ThresholdDisplay
  * via the `definition` "Plan".
  */
 export interface Plan {
-queries: Queries
+queries: Queries2
 warnings?: Warnings2
-}
-/**
- * `q0` is the main query; `q1`, `q2`, ... are sub-queries.
- * 
- * This interface was referenced by `WosarcherContracts`'s JSON-Schema
- * via the `definition` "Query".
- */
-export interface Query1 {
-id: Id
-text: Text5
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -873,18 +971,18 @@ text: Text5
  */
 export interface PlanReady {
 data: PlanReadyData
-run_id: RunId4
-seq: Seq4
-stage?: Stage4
-ts: Ts4
-type?: Type4
+run_id: RunId5
+seq: Seq5
+stage?: Stage5
+ts: Ts5
+type?: Type5
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "PlanReadyData".
  */
 export interface PlanReadyData {
-queries: Queries1
+queries: Queries3
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -932,6 +1030,7 @@ display?: Display4
 dropped?: Dropped
 kept?: Kept2
 query_id: QueryId5
+round?: Round5
 scorer: Scorer2
 value: Value
 }
@@ -963,11 +1062,11 @@ warnings?: Warnings4
  */
 export interface ReportDelta {
 data: ReportTextData
-run_id: RunId5
-seq: Seq5
-stage?: Stage5
-ts: Ts5
-type?: Type5
+run_id: RunId6
+seq: Seq6
+stage?: Stage6
+ts: Ts6
+type?: Type6
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -982,11 +1081,33 @@ text: Text6
  */
 export interface ReportSnapshot {
 data: ReportTextData
-run_id: RunId6
-seq: Seq6
-stage?: Stage6
-ts: Ts6
-type?: Type6
+run_id: RunId7
+seq: Seq7
+stage?: Stage7
+ts: Ts7
+type?: Type7
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ResearchDone".
+ */
+export interface ResearchDone {
+data: ResearchDoneData
+run_id: RunId8
+seq: Seq8
+stage?: Stage8
+ts: Ts8
+type?: Type8
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ResearchDoneData".
+ */
+export interface ResearchDoneData {
+note: Note3
+planned: Planned
+ran: Ran
+reason: Reason2
 }
 /**
  * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
@@ -999,7 +1120,33 @@ context_tokens?: ContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 results_per_query?: ResultsPerQuery1
+rounds?: Rounds1
 sub_queries?: SubQueries1
+}
+/**
+ * `research.json`: the rounds of a multi-round run and why research stopped.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ResearchRecord".
+ */
+export interface ResearchRecord {
+note?: Note4
+planned: Planned1
+ran: Ran1
+reason: Reason3
+rounds: Rounds2
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "RoundRecord".
+ */
+export interface RoundRecord {
+kept?: Kept3
+known_pages?: KnownPages
+new_pages?: NewPages
+note?: Note5
+query_ids: QueryIds3
+round: Round6
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1015,11 +1162,11 @@ released_stage: ReleasedStage
  */
 export interface ResourceReleased {
 data: ResourceData
-run_id: RunId7
-seq: Seq7
-stage?: Stage7
-ts: Ts7
-type?: Type7
+run_id: RunId9
+seq: Seq9
+stage?: Stage9
+ts: Ts9
+type?: Type9
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1027,11 +1174,34 @@ type?: Type7
  */
 export interface ResourceWaiting {
 data: ResourceData
-run_id: RunId8
-seq: Seq8
-stage?: Stage8
-ts: Ts8
-type?: Type8
+run_id: RunId10
+seq: Seq10
+stage?: Stage10
+ts: Ts10
+type?: Type10
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "RoundDone".
+ */
+export interface RoundDone {
+data: RoundDoneData
+run_id: RunId11
+seq: Seq11
+stage?: Stage11
+ts: Ts11
+type?: Type11
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "RoundDoneData".
+ */
+export interface RoundDoneData {
+kept: Kept4
+known_pages: KnownPages1
+new_pages: NewPages1
+query_ids: QueryIds4
+round: Round7
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1039,18 +1209,18 @@ type?: Type8
  */
 export interface RunCancelled {
 data: RunCancelledData
-run_id: RunId9
-seq: Seq9
-stage?: Stage10
-ts: Ts9
-type?: Type9
+run_id: RunId12
+seq: Seq12
+stage?: Stage13
+ts: Ts12
+type?: Type12
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "RunCancelledData".
  */
 export interface RunCancelledData {
-stage: Stage9
+stage: Stage12
 }
 /**
  * `costs.json`.
@@ -1104,6 +1274,7 @@ context_tokens?: ContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 results_per_query?: ResultsPerQuery1
+rounds?: Rounds1
 sub_queries?: SubQueries1
 }
 /**
@@ -1122,7 +1293,7 @@ words?: Words1
  * via the `definition` "RunCreated".
  */
 export interface RunCreated {
-run_id: RunId10
+run_id: RunId13
 status: Status2
 }
 /**
@@ -1146,9 +1317,12 @@ profile: Profile3
 query: Query3
 queue_position?: QueuePosition
 request?: (RunRecord | null)
-run_id: RunId12
+rounds_planned?: RoundsPlanned
+rounds_ran?: RoundsRan
+run_id: RunId15
 sources?: Sources3
 status: Status3
+stop_reason?: StopReason
 until?: Until2
 version?: Version1
 writing?: WritingOptions
@@ -1167,7 +1341,7 @@ overrides?: Overrides
 parent_run_id?: ParentRunId1
 profile: Profile4
 request: RunRequest
-run_id: RunId11
+run_id: RunId14
 settings: Settings
 version?: Version
 }
@@ -1199,11 +1373,11 @@ words?: Words2
  */
 export interface RunDone {
 data: RunDoneData
-run_id: RunId13
-seq: Seq10
-stage?: Stage11
-ts: Ts10
-type?: Type10
+run_id: RunId16
+seq: Seq13
+stage?: Stage14
+ts: Ts13
+type?: Type13
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1219,11 +1393,11 @@ until: Until3
  */
 export interface RunFailed {
 data: RunFailedData
-run_id: RunId14
-seq: Seq11
-stage?: Stage13
-ts: Ts11
-type?: Type11
+run_id: RunId17
+seq: Seq14
+stage?: Stage16
+ts: Ts14
+type?: Type14
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1231,7 +1405,7 @@ type?: Type11
  */
 export interface RunFailedData {
 error: Error4
-stage: Stage12
+stage: Stage15
 }
 /**
  * The 409 body of `POST /api/runs/{id}/cancel` for a run that is neither queued nor running.
@@ -1242,7 +1416,7 @@ stage: Stage12
 export interface RunNotActive {
 detail: Detail3
 error: Error5
-run_id: RunId15
+run_id: RunId18
 status: Status4
 }
 /**
@@ -1256,7 +1430,7 @@ context?: (Context | null)
 error?: Error6
 report?: (Report | null)
 run_dir: RunDir
-run_id: RunId16
+run_id: RunId19
 status: Status5
 }
 /**
@@ -1265,11 +1439,11 @@ status: Status5
  */
 export interface RunQueued {
 data: RunQueuedData
-run_id: RunId17
-seq: Seq12
-stage?: Stage14
-ts: Ts12
-type?: Type12
+run_id: RunId20
+seq: Seq15
+stage?: Stage17
+ts: Ts15
+type?: Type15
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1284,11 +1458,11 @@ position: Position1
  */
 export interface RunStarted {
 data: RunStartedData
-run_id: RunId18
-seq: Seq13
-stage?: Stage15
-ts: Ts13
-type?: Type13
+run_id: RunId21
+seq: Seq16
+stage?: Stage18
+ts: Ts16
+type?: Type16
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1319,9 +1493,12 @@ parent_run_id?: ParentRunId3
 profile: Profile6
 query: Query6
 queue_position?: QueuePosition1
-run_id: RunId19
+rounds_planned?: RoundsPlanned1
+rounds_ran?: RoundsRan1
+run_id: RunId22
 sources?: Sources4
 status: Status6
+stop_reason?: StopReason1
 until?: Until5
 version?: Version3
 writing?: WritingOptions1
@@ -1340,7 +1517,7 @@ words?: Words2
  */
 export interface ScoreResult {
 failed?: Failed
-queries: Queries2
+queries: Queries4
 scorer: Scorer4
 scores: Scores
 }
@@ -1361,7 +1538,7 @@ hits: Hits
 export interface SelectSkip {
 chunk_id: ChunkId5
 query_id: QueryId7
-reason: Reason2
+reason: Reason4
 tokens_left?: TokensLeft1
 tokens_needed?: TokensNeeded1
 }
@@ -1404,7 +1581,7 @@ chunk_id: ChunkId6
 fate: ChunkFate
 heading_path?: HeadingPath3
 position: Position2
-queries: Queries3
+queries: Queries5
 removed_before?: RemovedBefore
 text: Text7
 }
@@ -1416,7 +1593,7 @@ text: Text7
  */
 export interface SourceView {
 chunks: Chunks1
-queries: Queries4
+queries: Queries6
 query_cap: QueryCap
 source: Source
 source_cap: SourceCap
@@ -1429,11 +1606,11 @@ truncated?: Truncated2
  */
 export interface StageDone {
 data: StageDoneData
-run_id: RunId20
-seq: Seq14
-stage?: Stage16
-ts: Ts14
-type?: Type14
+run_id: RunId23
+seq: Seq17
+stage?: Stage19
+ts: Ts17
+type?: Type17
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1444,6 +1621,7 @@ copied_from?: CopiedFrom
 count: Count
 passthrough?: Passthrough1
 provider?: Provider2
+round?: Round8
 seconds: Seconds
 skipped?: Skipped2
 unfetched?: Unfetched1
@@ -1463,11 +1641,11 @@ units?: Units
  */
 export interface StageFailed {
 data: StageFailedData
-run_id: RunId21
-seq: Seq15
-stage?: Stage17
-ts: Ts15
-type?: Type15
+run_id: RunId24
+seq: Seq18
+stage?: Stage20
+ts: Ts18
+type?: Type18
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1483,11 +1661,11 @@ next: Next
  */
 export interface StageProgress {
 data: StageProgressData
-run_id: RunId22
-seq: Seq16
-stage?: Stage18
-ts: Ts16
-type?: Type16
+run_id: RunId25
+seq: Seq19
+stage?: Stage21
+ts: Ts19
+type?: Type19
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1496,6 +1674,7 @@ type?: Type16
 export interface StageProgressData {
 done: Done
 failed: Failed1
+round?: Round9
 total: Total
 }
 /**
@@ -1504,11 +1683,11 @@ total: Total
  */
 export interface StageStarted {
 data: StageStartedData
-run_id: RunId23
-seq: Seq17
-stage?: Stage19
-ts: Ts17
-type?: Type17
+run_id: RunId26
+seq: Seq20
+stage?: Stage22
+ts: Ts20
+type?: Type20
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1517,6 +1696,7 @@ type?: Type17
 export interface StageStartedData {
 device: Device3
 provider: Provider3
+round?: Round10
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema

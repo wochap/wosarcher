@@ -68,6 +68,8 @@ class Query(Contract):
 
     id: str
     text: str
+    round: int = Field(default=1, ge=1)
+    """The research round that searches it; follow-ups start at 2."""
 
 
 class Plan(Contract):
@@ -83,6 +85,7 @@ class Hit(Contract):
     rank: int = Field(ge=1)
     """Best (lowest) rank over the queries that found it, 1-based."""
     query_ids: list[str]
+    round: int = Field(default=1, ge=1)
 
 
 class Source(Contract):
@@ -105,6 +108,8 @@ class Page(Contract):
     """Hit rank; 0 for files."""
     query_ids: list[str] = []
     """Empty for files."""
+    round: int = Field(default=1, ge=1)
+    """The research round that fetched it; 1 for files."""
 
 
 class Chunk(Contract):
@@ -163,6 +168,7 @@ class Score(Contract):
     kept: bool = False
     dropped: Literal["threshold", "query_cap", "other_query"] | None = None
     """Why the pair is not kept: the first rule that dropped it; None when kept."""
+    round: int = Field(default=1, ge=1)
 
 
 class Candidate(Contract):
@@ -332,9 +338,55 @@ class Report(Contract):
     """The last call ended at the output limit, or a continuation failed."""
 
 
-Stage = Literal["load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write"]
-STAGES: tuple[Stage, ...] = ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write")
+Stage = Literal["load", "plan", "search", "fetch", "chunk", "prefilter", "score", "gap", "select", "write"]
+STAGES: tuple[Stage, ...] = (
+    "load",
+    "plan",
+    "search",
+    "fetch",
+    "chunk",
+    "prefilter",
+    "score",
+    "gap",
+    "select",
+    "write",
+)
 """Run order."""
+LOOP_STAGES: tuple[Stage, ...] = ("search", "fetch", "chunk", "prefilter", "score", "gap")
+"""The stages that repeat once per research round."""
+
+StopReason = Literal[
+    "max rounds", "no new sources", "page limit reached", "model judged coverage sufficient", "gap step failed"
+]
+
+
+class GapResult(Contract):
+    """The gap step's reply after a round: validated follow-ups, a note, and the advisory stop flag."""
+
+    queries: list[Query]
+    note: str = ""
+    stop: bool = False
+
+
+class RoundRecord(Contract):
+    round: int = Field(ge=1)
+    query_ids: list[str]
+    new_pages: int = 0
+    known_pages: int = 0
+    """Hits whose URL an earlier round already fetched or queued."""
+    kept: int = 0
+    note: str = ""
+    """The gap note written after this round; empty for the last round."""
+
+
+class ResearchRecord(Contract):
+    """`research.json`: the rounds of a multi-round run and why research stopped."""
+
+    planned: int = Field(ge=1)
+    ran: int = Field(ge=0)
+    reason: StopReason
+    note: str = ""
+    rounds: list[RoundRecord]
 
 
 class RunRequest(Contract):
@@ -441,6 +493,12 @@ class RunSummary(Contract):
     """The `run.failed` error text; None unless the status is `failed`."""
     end_stage: Stage | None = None
     """The stage named by the last `run.failed` or `run.cancelled`; None otherwise."""
+    rounds_planned: int = 1
+    """The resolved `research.rounds`."""
+    rounds_ran: int | None = None
+    """From `research.done`; 1 for a single-round run past the loop; None until then."""
+    stop_reason: StopReason | None = None
+    """None for single-round runs."""
 
 
 class RunOutput(Contract):
@@ -493,6 +551,7 @@ class ResearchPatch(Contract):
     max_pages: int | None = Field(default=None, gt=0)
     passages_per_query: int | None = Field(default=None, gt=0)
     context_tokens: int | None = Field(default=None, gt=0)
+    rounds: int | None = Field(default=None, gt=0, le=8)
 
 
 class RunCreate(Contract):
@@ -560,6 +619,8 @@ class DepthValues(Contract):
     max_pages: int
     passages_per_query: int
     context_tokens: int
+    rounds: int
+    queries_per_round: int
     words: int | None = None
     """None: the preset sets no length, so the global default applies."""
 
@@ -686,12 +747,14 @@ class RunCancelledData(Contract):
 class StageStartedData(Contract):
     device: str | None
     provider: str
+    round: int = 1
 
 
 class StageProgressData(Contract):
     done: int
     total: int
     failed: int
+    round: int = 1
 
 
 class StageDoneData(Contract):
@@ -706,6 +769,7 @@ class StageDoneData(Contract):
     """Sub-query IDs whose pairs skipped ranking; set by prefilter only."""
     unfetched: int = 0
     """Queued hits left unfetched at the page cap; set by fetch only."""
+    round: int = 1
 
 
 class StageFailedData(Contract):
@@ -735,6 +799,7 @@ class PageFetchedData(Contract):
     title: str
     chars: int
     cached: bool
+    round: int = 1
 
 
 class PageFailedData(Contract):
@@ -759,6 +824,29 @@ class PassagesScoredData(Contract):
     kept: int
     threshold_display: float | None
     passages: list[KeptPassage]
+
+
+class RoundDoneData(Contract):
+    round: int
+    query_ids: list[str]
+    new_pages: int
+    known_pages: int
+    kept: int
+
+
+class GapReadyData(Contract):
+    round: int
+    """The round the gap step followed."""
+    queries: list[Query]
+    note: str
+    stop: bool
+
+
+class ResearchDoneData(Contract):
+    planned: int
+    ran: int
+    reason: StopReason
+    note: str
 
 
 class ReportTextData(Contract):
@@ -860,6 +948,21 @@ class PassagesScored(EventBase):
     data: PassagesScoredData
 
 
+class RoundDone(EventBase):
+    type: Literal["round.done"] = "round.done"
+    data: RoundDoneData
+
+
+class GapReady(EventBase):
+    type: Literal["gap.ready"] = "gap.ready"
+    data: GapReadyData
+
+
+class ResearchDone(EventBase):
+    type: Literal["research.done"] = "research.done"
+    data: ResearchDoneData
+
+
 class ReportDelta(EventBase):
     type: Literal["report.delta"] = "report.delta"
     data: ReportTextData
@@ -887,6 +990,9 @@ EVENT_TYPES: tuple[type[EventBase], ...] = (
     PageFetched,
     PageFailed,
     PassagesScored,
+    RoundDone,
+    GapReady,
+    ResearchDone,
     ReportDelta,
     ReportSnapshot,
 )
@@ -908,6 +1014,9 @@ Event = Annotated[
     | PageFetched
     | PageFailed
     | PassagesScored
+    | RoundDone
+    | GapReady
+    | ResearchDone
     | ReportDelta
     | ReportSnapshot,
     Field(discriminator="type"),
@@ -954,6 +1063,9 @@ CONTRACTS: tuple[type[Contract], ...] = (
     SourceView,
     Reference,
     Report,
+    GapResult,
+    RoundRecord,
+    ResearchRecord,
     WritingOptions,
     Message,
     Completion,

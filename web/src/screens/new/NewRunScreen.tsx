@@ -26,7 +26,7 @@ import { OptionsPanel, overriddenFields } from "./OptionsPanel";
 
 /**
  * The request for the form: the context recipe stops after select; writing holds overrides of
- * the depth-aware `defaults`. Custom sends its five values, and Length whenever it differs from
+ * the depth-aware `defaults`. Custom sends its six values, and Length whenever it differs from
  * the saved default, since no preset sets it on the server.
  */
 export function runRequest(
@@ -116,7 +116,7 @@ export function NewRunScreen() {
     setDraft((d) => {
       const custom =
         depth === "custom" && !d.custom && values
-          ? { values: loadCustom() ?? values, words: wordsOf(options.depth) ?? 0 }
+          ? { values: { ...values, ...loadCustom() }, words: wordsOf(options.depth) ?? 0 }
           : d.custom;
       const base = depth === "custom" ? custom?.words : wordsOf(depth);
       const { words, ...rest } = d.writing;
@@ -215,6 +215,9 @@ export function NewRunScreen() {
                   : (presetOf(options.depth)?.description ?? ""),
               values,
               effective: effectiveContext(profile, writing.words),
+              queriesPerRound:
+                (presetOf(options.depth) ?? depths[depths.length - 1])?.values.queries_per_round ??
+                3,
               wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
               onPick: pickDepth,
               onEdit: editResearch,

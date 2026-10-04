@@ -194,6 +194,25 @@ def best_pair_only(scores: list[Score], plan_index: dict[str, int]) -> list[Scor
     ]
 
 
+def keep_once(scores: list[Score], queries: Sequence[Query]) -> list[Score]:
+    """Across rounds, keep each chunk for one query only: the earliest round's kept pair, then plan order."""
+    plan_index = {query.id: i for i, query in enumerate(queries)}
+    first: dict[str, Score] = {}
+    for score in scores:
+        if not score.kept:
+            continue
+        current = first.get(score.chunk_id)
+        order = (score.round, plan_index.get(score.query_id, len(plan_index)))
+        if current is None or order < (current.round, plan_index.get(current.query_id, len(plan_index))):
+            first[score.chunk_id] = score
+    return [
+        score.model_copy(update={"kept": False, "dropped": "other_query"})
+        if score.kept and first[score.chunk_id] is not score
+        else score
+        for score in scores
+    ]
+
+
 def capped(scores: list[Score], top_k: int) -> list[Score]:
     """One query's scores in page order; keep at most `top_k` kept pairs by value."""
     kept = sorted((i for i, score in enumerate(scores) if score.kept), key=lambda i: (-scores[i].value, i))

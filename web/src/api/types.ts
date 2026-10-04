@@ -49,5 +49,8 @@ export type RunEvent =
   | Ev<"page.fetched", G.PageFetched>
   | Ev<"page.failed", G.PageFailed>
   | Ev<"passages.scored", G.PassagesScored>
+  | Ev<"round.done", G.RoundDone>
+  | Ev<"gap.ready", G.GapReady>
+  | Ev<"research.done", G.ResearchDone>
   | Ev<"report.delta", G.ReportDelta>
   | Ev<"report.snapshot", G.ReportSnapshot>;

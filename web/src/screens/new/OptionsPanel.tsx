@@ -33,6 +33,7 @@ export type DepthView = {
   description: string;
   values: ResearchValues;
   effective: number | null;
+  queriesPerRound: number;
   wordsSet: boolean;
   onPick: (depth: Depth) => void;
   onEdit: (field: keyof ResearchValues, value: number) => void;
@@ -88,6 +89,8 @@ export function OptionsPanel(props: Props) {
             description={depth.description}
             values={depth.values}
             effective={depth.effective}
+            queriesPerRound={depth.queriesPerRound}
+            filesOnly={options.sources === "files"}
             onPick={depth.onPick}
             onEdit={depth.onEdit}
           />

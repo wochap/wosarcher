@@ -165,9 +165,12 @@ def test_depths_standard_values(client: TestClient) -> None:
         "max_pages": 40,
         "passages_per_query": 10,
         "context_tokens": 16000,
+        "rounds": 1,
+        "queries_per_round": 3,
         "words": None,
     }
     assert found["quick"]["values"]["words"] == 600
+    assert (found["deep"]["values"]["rounds"], found["exhaustive"]["values"]["queries_per_round"]) == (3, 4)
 
 
 def test_profile_limits(client: TestClient) -> None:

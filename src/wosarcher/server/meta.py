@@ -85,9 +85,9 @@ def depth_info(name: str) -> DepthInfo:
         field: values.get(key, getattr(getattr(defaults, key.split(".")[0]), key.split(".")[1]))
         for field, key in RESEARCH_KEYS.items()
     }
-    return DepthInfo(
-        name=name, description=description, values=DepthValues(**research, words=values.get("write.words"))
-    )
+    per_round = values.get("research.queries_per_round", defaults.research.queries_per_round)
+    depth = DepthValues(**research, queries_per_round=per_round, words=values.get("write.words"))
+    return DepthInfo(name=name, description=description, values=depth)
 
 
 @router.get("/depths")

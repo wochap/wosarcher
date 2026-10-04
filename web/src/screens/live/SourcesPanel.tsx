@@ -25,6 +25,8 @@ type Row = {
   tone: "muted" | "faint" | "danger";
   icon: Icon;
   kept: number;
+  /** "round <k>" for a page a later research round fetched. */
+  roundTag?: string;
 };
 
 const SKELETON = ["72%", "58%", "80%", "64%", "70%", "52%"];
@@ -60,9 +62,16 @@ function keptBySource(run: RunView, context: Context | null): Record<string, num
   return counts;
 }
 
-type Props = { run: RunView; files: FileRow[]; context: Context | null; className?: string };
+type Props = {
+  run: RunView;
+  files: FileRow[];
+  context: Context | null;
+  /** The run's `research.rounds`; round tags show only above 1. */
+  rounds?: number;
+  className?: string;
+};
 
-export function SourcesPanel({ run, files, context, className }: Props) {
+export function SourcesPanel({ run, files, context, rounds = 1, className }: Props) {
   const queued = run.status === "queued";
   const web = Object.values(run.sources).filter((s) => s.kind === "web");
   const selected = run.phases.select.state === "done" || run.phases.select.state === "reused";
@@ -77,7 +86,13 @@ export function SourcesPanel({ run, files, context, className }: Props) {
       icon: FileText,
       kept: kept[f.sourceId] ?? 0,
     })),
-    ...web.map((s) => ({ ...webRow(run, s), kept: kept[s.sourceId] ?? 0 })).reverse(),
+    ...web
+      .map((s) => ({
+        ...webRow(run, s),
+        kept: kept[s.sourceId] ?? 0,
+        roundTag: rounds > 1 && s.round > 1 ? `round ${s.round}` : undefined,
+      }))
+      .reverse(),
   ];
   const fetched = web.filter((s) => s.state === "fetched").length;
   const failed = web.filter((s) => s.state === "failed").length;
@@ -124,6 +139,7 @@ export function SourcesPanel({ run, files, context, className }: Props) {
               <div className={css.state}>
                 <div data-tone={row.tone}>{row.state}</div>
                 {row.kept > 0 && <div className={css.kept}>{row.kept} kept</div>}
+                {row.roundTag && <div className={css.roundTag}>{row.roundTag}</div>}
               </div>
             </div>
           );

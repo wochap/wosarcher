@@ -95,8 +95,8 @@ describe("Depth", () => {
     const api = await openOptions();
     fireEvent.click(screen.getByLabelText("Deep"));
     expect(header()).toContain("Deep · report · both · low-vram · 2000 words · Analytical");
-    expect(screen.getByText("More searches and sources, longer report.")).toBeTruthy();
-    expect(screen.getByText("~60 pages · 1 round · ~2 LLM calls")).toBeTruthy();
+    expect(screen.getByText("Several research rounds that follow up on gaps.")).toBeTruthy();
+    expect(screen.getByText("~60 pages · 3 rounds · ~4 LLM calls")).toBeTruthy();
     const request = await start(api);
     expect(request.depth).toBe("deep");
     expect(request.research).toBeUndefined();
@@ -119,6 +119,7 @@ describe("Depth", () => {
       max_pages: 80,
       passages_per_query: 10,
       context_tokens: 24000,
+      rounds: 3,
     });
     expect(request.writing).toEqual({ words: 2000 });
   });
@@ -131,13 +132,18 @@ describe("Depth", () => {
     expect(screen.getByText(/context 32k → 25k \(model window\)$/)).toBeTruthy();
   });
 
-  it("keeps Rounds at one", async () => {
+  it("edits Rounds, and keeps files-only runs at one round", async () => {
     await openOptions();
+    fireEvent.click(screen.getByLabelText("Deep"));
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     const rounds = screen.getByLabelText("Rounds") as HTMLInputElement;
+    expect(rounds.value).toBe("3");
+    expect(rounds.disabled).toBe(false);
+    fireEvent.click(screen.getByLabelText("files"));
     expect(rounds.value).toBe("1");
     expect(rounds.disabled).toBe(true);
-    expect(screen.getByText("This server runs 1 round only.")).toBeTruthy();
+    expect(screen.getByText("Files-only runs use 1 round.")).toBeTruthy();
+    expect(screen.getByText(/· 1 round ·/)).toBeTruthy();
   });
 
   it("lets Length follow the depth until it is edited", async () => {

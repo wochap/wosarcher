@@ -289,8 +289,9 @@ async def test_exclusive_release_between_score_and_write(tmp_path: Path) -> None
     fakes = adapters(scorers={"rerank": FakeScorer("rerank")}, managed=managed)
     assert await run(cfg, run_id, fakes) == "done"
     names = kinds(store.read_events(run_id))
-    after = names[names.index("stage.done:score") :][:4]
-    assert after == ["stage.done:score", "resource.waiting:write", "resource.released:write", "stage.started:select"]
+    after = names[names.index("stage.done:score") :][:5]
+    expected = ["stage.done:score", "resource.waiting:write", "resource.released:write", "stage.done:gap"]
+    assert after == [*expected, "stage.started:select"]
     assert released == ["llm", "score"]
     assert not [name for name in names[names.index("stage.started:select") :] if name.startswith("resource.")]
 

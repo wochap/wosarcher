@@ -75,6 +75,13 @@ describe("ReportScreen continuation notes", () => {
 });
 
 describe("ReportScreen", () => {
+  it("ends a multi-round run's meta line with its rounds", async () => {
+    const deep = summary({ depth: "deep", rounds_planned: 3, rounds_ran: 2 });
+    const others = finished.data.runs?.filter((r) => r.run_id !== RUN_ID) ?? [];
+    await openScenario({ ...finished, data: { ...finished.data, runs: [deep, ...others] } });
+    expect(await screen.findByText(/ · 14 passages · 2 of 3 rounds$/)).toBeTruthy();
+  });
+
   it("shows the finished report with its sources and selected passages", async () => {
     await openScenario(finished);
     expect(await screen.findByRole("heading", { level: 1, name: QUERY })).toBeTruthy();

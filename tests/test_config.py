@@ -325,6 +325,7 @@ def test_standard_equals_defaults(env: dict[str, str]) -> None:
 def test_deep_values(env: dict[str, str]) -> None:
     settings = resolve(None, [], env, depth="deep")
     assert (settings.plan.max_sub_queries, settings.fetch.max_pages, settings.write.words) == (5, 60, 2000)
+    assert (settings.research.rounds, settings.research.queries_per_round) == (3, 3)
 
 
 def test_custom_applies_no_preset(env: dict[str, str]) -> None:
@@ -343,6 +344,17 @@ def test_provider_key_rejected(tmp_path: Path) -> None:
         load_depth("odd", tmp_path)
     assert str(path) in str(error.value)
     assert "llm.model" in str(error.value)
+
+
+def test_gap_context_rejected_in_preset(tmp_path: Path) -> None:
+    (tmp_path / "odd.toml").write_text("[research]\ngap_context_tokens = 1000\n")
+    with pytest.raises(ConfigError, match=r"research\.gap_context_tokens"):
+        load_depth("odd", tmp_path)
+
+
+def test_rounds_above_eight_rejected(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"research\.rounds"):
+        resolve(None, ["research.rounds=9"], env)
 
 
 def test_preset_beats_environment(env: dict[str, str]) -> None:

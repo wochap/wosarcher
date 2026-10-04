@@ -1,15 +1,18 @@
 """`wosarcher run`, `fork`, and `runs` with fake adapters injected in place of `build.build`."""
 
+import io
 import json
 import os
 import signal
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 import pytest
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
 import wosarcher.build as building
@@ -19,7 +22,15 @@ from wosarcher.cli import app
 from wosarcher.cli.progress import ProgressView
 from wosarcher.config import Settings
 from wosarcher.http import UsageLedger
-from wosarcher.models import RunRecord
+from wosarcher.models import (
+    Event,
+    GapReadyData,
+    ResearchDoneData,
+    RunRecord,
+    Stage,
+    StageStartedData,
+    make_event,
+)
 from wosarcher.ports import Adapters
 from wosarcher.store import RunStore
 
@@ -69,6 +80,12 @@ def test_writing_flags(world: World, tmp_path: Path) -> None:
     assert "## References" in result.stdout
 
 
+def test_rounds_flag(world: World) -> None:
+    result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--rounds", "2"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].research.rounds == 2
+
+
 def test_depth_with_research_flag(world: World, tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--max-pages", "80"])
     assert result.exit_code == 0, result.output
@@ -88,7 +105,7 @@ def test_files_without_attach(world: World, tmp_path: Path) -> None:
 def test_unknown_until(world: World) -> None:
     result = runner.invoke(app, ["run", "q", "--until", "rank"])
     assert result.exit_code == 2
-    assert "load, plan, search, fetch, chunk, prefilter, score, select, write" in result.output
+    assert "load, plan, search, fetch, chunk, prefilter, score, gap, select, write" in result.output
 
 
 def test_invalid_override(world: World, tmp_path: Path) -> None:
@@ -152,6 +169,25 @@ def test_progress_view_replays_events(world: World, tmp_path: Path) -> None:
         for event in store.read_events(only_run(tmp_path).run_id):
             view(event)
     assert view.rows["write"].state == "done"
+
+
+def round_event(event_type: str, stage: Stage, data: BaseModel) -> Event:
+    return make_event(1, "r", datetime.now(UTC), event_type, stage, data)
+
+
+def test_multi_round_progress() -> None:
+    from rich.console import Console
+
+    out = io.StringIO()
+    view = ProgressView(Console(file=out, force_terminal=False, width=200), rounds=3)
+    view.update(round_event("stage.started", "fetch", StageStartedData(device=None, provider="firecrawl", round=2)))
+    assert view.rows["fetch"].state == "running · round 2/3"
+    view.update(round_event("gap.ready", "gap", GapReadyData(round=1, queries=[], note="", stop=False)))
+    assert view.rows["gap"].counters == "0 follow-ups"
+    done = ResearchDoneData(planned=3, ran=2, reason="no new sources", note="")
+    view.update(round_event("research.done", "gap", done))
+    assert "research: 2 of 3 rounds · no new sources" in out.getvalue()
+    assert "gap" not in ProgressView(Console(file=io.StringIO())).rows
 
 
 def test_fork_rewrite_only(world: World, tmp_path: Path) -> None:

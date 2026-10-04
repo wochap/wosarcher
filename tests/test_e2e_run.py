@@ -10,10 +10,11 @@ import pytest
 import respx
 from typer.testing import CliRunner
 
+from tests.fixtures import recorded
 from tests.fixtures.recorded import NOTES, QUERY, config_home, recorded_router
 from wosarcher.cli import app
 from wosarcher.config import resolve
-from wosarcher.models import Context, RunOutput, parse_event
+from wosarcher.models import Context, Plan, ResearchRecord, RunOutput, parse_event
 from wosarcher.store import STAGE_ARTIFACTS
 
 runner = CliRunner()
@@ -60,7 +61,7 @@ def test_full_run(runs: Path) -> None:
     assert events[-1].type == "run.done"
     assert [event.seq for event in events] == list(range(1, len(events) + 1))
     assert any(event.type == "page.failed" for event in events)
-    expected = [name for names in STAGE_ARTIFACTS.values() for name in names]
+    expected = [name for names in STAGE_ARTIFACTS.values() for name in names if name != "research.json"]
     for name in [*expected, "request.json", "costs.json", "attachments/notes.md"]:
         assert (run_dir / name).is_file(), name
     context = Context.model_validate_json((run_dir / "context.json").read_text())
@@ -92,3 +93,72 @@ def test_quick_depth(runs: Path) -> None:
     assert len([event for event in events if event.type == "page.fetched"]) <= 15
     listed = runner.invoke(app, ["runs", "--json"])
     assert json.loads(listed.stdout)[0]["depth"] == "quick"
+
+
+FOLLOW_UP = "battery recycling regulation deadlines"
+REGULATION_URL = "https://regulations.example.org/battery-rules"
+REGULATION_PAGE = (
+    "# Battery regulation\n\nThe battery recycling regulation sets deadlines: recycling efficiency targets for "
+    "lithium batteries rise in 2027 and 2031, with regulation deadlines for material recovery."
+)
+
+
+def completion(content: str) -> httpx.Response:
+    choice = {"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": "stop"}
+    return httpx.Response(200, json={"id": "c", "object": "chat.completion", "choices": [choice]})
+
+
+def deep_router() -> respx.MockRouter:
+    """The recorded world plus one follow-up search and page; the gap step continues once, then stops."""
+    gaps: list[dict[str, object]] = [
+        {"queries": [FOLLOW_UP], "note": "Regulation is missing.", "stop": False},
+        {"queries": [], "note": "Methods, economics, and regulation are covered.", "stop": True},
+    ]
+
+    def search(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("q") == FOLLOW_UP:
+            result = {"url": REGULATION_URL, "title": "Battery regulation", "content": "Deadlines."}
+            return httpx.Response(200, json={"results": [result]})
+        return recorded.search(request)
+
+    def scrape(request: httpx.Request) -> httpx.Response:
+        if json.loads(request.content)["url"] == REGULATION_URL:
+            data = {"markdown": REGULATION_PAGE, "metadata": {"title": "Battery regulation", "statusCode": 200}}
+            return httpx.Response(200, json={"success": True, "data": data})
+        return recorded.scrape(request)
+
+    def chat(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        system = body["messages"][0]["content"]
+        if "You review web research" in system:
+            return completion(json.dumps(gaps.pop(0)))
+        if body.get("stream"):
+            numbers = re.findall(r"^\[(\d+)\] ", body["messages"][1]["content"], re.MULTILINE)
+            text = "Battery recycling is regulated " + "".join(f"[{n}]" for n in numbers) + "."
+            chunk = {"choices": [{"index": 0, "delta": {"content": text}, "finish_reason": "stop"}]}
+            return httpx.Response(200, content=f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n".encode())
+        return recorded.chat(request)
+
+    router = respx.mock(assert_all_mocked=True, assert_all_called=False)
+    router.get("http://searxng.test/search").mock(side_effect=search)
+    router.post("http://firecrawl.test/v1/scrape").mock(side_effect=scrape)
+    router.post("http://llm.test/v1/chat/completions").mock(side_effect=chat)
+    return router
+
+
+def test_deep_run_two_rounds(runs: Path) -> None:
+    with deep_router():
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--depth", "deep", "--run-id", RUN_ID])
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    research = ResearchRecord.model_validate_json((run_dir / "research.json").read_text())
+    assert (research.planned, research.ran, research.reason) == (3, 2, "model judged coverage sufficient")
+    assert research.note == "Methods, economics, and regulation are covered."
+    plan = Plan.model_validate_json((run_dir / "plan.json").read_text())
+    rounds = {query.id: query.round for query in plan.queries}
+    context = Context.model_validate_json((run_dir / "context.json").read_text())
+    cited = {int(n) for n in re.findall(r"\[(\d+)\]", (run_dir / "report.md").read_text())}
+    cited_rounds = {rounds[passage.query_id] for passage in context.passages if passage.n in cited}
+    assert cited_rounds == {1, 2}
+    listed = json.loads(runner.invoke(app, ["runs", "--json"]).stdout)
+    assert (listed[0]["rounds_planned"], listed[0]["rounds_ran"]) == (3, 2)

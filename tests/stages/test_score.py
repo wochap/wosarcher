@@ -4,8 +4,8 @@ import pytest
 
 from wosarcher.adapters.fakes import FakeScorer
 from wosarcher.config import ScoreConfig
-from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, ScoreResult
-from wosarcher.stages.score import _display, _keep_calibrated, _keep_relative, score
+from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, Score, ScoreResult
+from wosarcher.stages.score import _display, _keep_calibrated, _keep_relative, keep_once, score
 
 from .ranking_data import chunks_of, file_page, queries, web_page
 
@@ -236,3 +236,13 @@ async def test_passthrough_is_not_capped() -> None:
     candidates = every(qs, chunks, passthrough=True)
     result = await score(candidates, qs, pages, chunks, None, cfg=ScoreConfig(provider="rerank", top_k=10))
     assert sum(s.kept for s in result.scores) == 14
+
+
+def test_chunk_kept_once_across_rounds() -> None:
+    plan = [Query(id="q0", text="m"), Query(id="q1", text="a"), Query(id="q6", text="b", round=2)]
+    first = Score(query_id="q1", chunk_id="file", value=0.4, scorer="bm25", display=0.4, kept=True)
+    later = Score(query_id="q6", chunk_id="file", value=0.9, scorer="bm25", display=0.9, kept=True, round=2)
+    assert keep_once([first, later], plan) == [
+        first,
+        later.model_copy(update={"kept": False, "dropped": "other_query"}),
+    ]

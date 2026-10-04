@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 
 from tests.server.conftest import argv, create, finished, status, wait_until
 from wosarcher.models import (
+    ResearchDoneData,
+    ResearchRecord,
     RunCosts,
     RunDoneData,
     RunRecord,
@@ -304,12 +306,36 @@ def resolved(runs_dir: Path, run_id: str) -> dict[str, Any]:
 
 
 def test_custom_research_values(client: TestClient, runs_dir: Path) -> None:
-    request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80}}
+    request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80, "rounds": 2}}
     run_id = create(client, request)
     finished(client, run_id)
     settings = resolved(runs_dir, run_id)
     assert (settings["plan"]["max_sub_queries"], settings["fetch"]["max_pages"]) == (6, 80)
+    assert settings["research"]["rounds"] == 2
     assert summary(client, run_id)["depth"] == "custom"
+
+
+def test_too_many_rounds_422(client: TestClient) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "research": {"rounds": 9}}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert response.status_code == 422
+    assert "rounds" in response.text
+
+
+def test_summary_rounds_and_research_record(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True)
+    store = RunStore(runs_dir, runs_dir)
+    record = store.read_record("r")
+    store.write_artifact("r", "request.json", record.model_copy(update={"settings": {"research": {"rounds": 3}}}))
+    done = ResearchDoneData(planned=3, ran=2, reason="no new sources", note="n")
+    store.append_event("r", "research.done", "gap", done)
+    research = ResearchRecord(planned=3, ran=2, reason="no new sources", note="n", rounds=[])
+    store.write_artifact("r", "research.json", research)
+    found = summary(client, "r")
+    assert (found["rounds_planned"], found["rounds_ran"], found["stop_reason"]) == (3, 2, "no new sources")
+    response = client.get("/api/runs/r/artifacts/research.json")
+    assert (response.status_code, response.json()["reason"]) == (200, "no new sources")
+    assert response.headers["content-type"] == "application/json; charset=utf-8"
 
 
 def test_unknown_depth_422(client: TestClient) -> None:

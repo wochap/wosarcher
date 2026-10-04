@@ -15,7 +15,14 @@ import { HelpTip } from "../../components/HelpTip";
 import type { Help } from "../../components/help";
 import { fmtK } from "../../run/format";
 import { isFallback, methodOf, modelOf } from "../../run/providers";
-import { PHASES, type Phase, type PhaseId, type PhaseState, type RunView } from "../../run/reducer";
+import {
+  LOOP_PHASES,
+  PHASES,
+  type Phase,
+  type PhaseId,
+  type PhaseState,
+  type RunView,
+} from "../../run/reducer";
 import { skippedByRecipe, stageLabel } from "./model";
 import css from "./PhaseTimeline.module.css";
 
@@ -64,6 +71,8 @@ function progress(id: PhaseId, phase: Phase, run: RunView): string {
         : `${c.done ?? 0}/${c.total ?? 0} embedded`;
     case "score":
       return done ? `${c.count} scored` : `scored ${c.done ?? 0}/${c.total ?? 0}`;
+    case "gap":
+      return gapText(phase, run);
     case "select":
       return done ? `${c.count} selected` : "selecting";
     case "write":
@@ -71,11 +80,34 @@ function progress(id: PhaseId, phase: Phase, run: RunView): string {
   }
 }
 
+/** The Gap card: the round it reads, its last follow-up count, or how research ended. */
+function gapText(phase: Phase, run: RunView): string {
+  if (run.research) return `${run.research.ran} of ${run.research.planned} rounds`;
+  if (phase.state === "running") return `reading round ${phase.round}`;
+  const last = [...run.rounds].reverse().find((r) => typeof r.gap === "number");
+  return last ? `${last.gap} follow-ups` : "pending";
+}
+
+/** A multi-round card's second line: the round it is in, or how many rounds it ran. */
+export function roundDetail(id: PhaseId, run: RunView, planned: number): string {
+  const phase = run.phases[id];
+  if (planned < 2 || !LOOP_PHASES.includes(id) || phase.state === "pending" || phase.skipped)
+    return "";
+  if (id === "gap") return run.research ? run.research.reason : `after round ${phase.round}`;
+  if (phase.state === "running" || phase.state === "waiting" || phase.state === "cancelled")
+    return `round ${phase.round}/${planned}`;
+  if (phase.state === "done" && !run.research && run.status === "running")
+    return `round ${phase.round} done`;
+  return phase.roundsDone ? `${phase.roundsDone} round${phase.roundsDone === 1 ? "" : "s"}` : "";
+}
+
 export type PhaseCard = { id: PhaseId; state: PhaseState; text: string; pct: number };
 
 export function phaseCard(id: PhaseId, run: RunView): PhaseCard {
   const phase = run.phases[id];
-  if (phase.state === "done" && phase.skipped)
+  if (id === "gap" && phase.state === "pending")
+    return { id, state: "pending", text: gapText(phase, run), pct: 0 };
+  if (phase.state === "done" && phase.skipped && !(id === "gap" && run.research))
     return { id, state: "done", text: "skipped", pct: 100 };
   if (phase.state === "pending" && skippedByRecipe(run, id)) {
     return { id, state: "done", text: "skipped", pct: 100 };
@@ -110,6 +142,7 @@ const TAGGED: Partial<Record<PhaseId, true>> = {
   plan: true,
   prefilter: true,
   score: true,
+  gap: true,
   write: true,
 };
 const TAG_STATES: PhaseState[] = ["running", "done", "reused", "failed", "cancelled"];
@@ -120,8 +153,8 @@ export type MethodTag = { text: string; fallback: boolean; help: Help };
 function tagLabel(id: PhaseId, provider: string): string {
   const method = methodOf(provider);
   const model = modelOf(provider);
-  if (model && (id === "plan" || id === "write" || method === "llm" || method === "embeddings"))
-    return model;
+  const llm = id === "plan" || id === "gap" || id === "write";
+  if (model && (llm || method === "llm" || method === "embeddings")) return model;
   return method === "bm25" ? "BM25" : method;
 }
 
@@ -170,6 +203,13 @@ function tagHelp(
   const because = reason ? ` ${sentence(`Reason: ${reason}`)}` : "";
   const join = (...parts: string[]) => parts.filter(Boolean).join(" ");
   switch (id) {
+    case "gap": {
+      const on = phase.device ? ` Runs on ${phase.device}.` : "";
+      return {
+        title: `Gap · ${label}`,
+        body: `Reads the best passages after each round and writes follow-up queries.${on}`,
+      };
+    }
     case "plan":
     case "write": {
       const role = id === "plan" ? "Planner" : "Writer";
@@ -235,18 +275,22 @@ type Props = {
   run: RunView;
   /** The run's `prefilter.top_k`, from its request settings. */
   topK?: number;
+  /** The run's `research.rounds`; the Gap card and round texts show only above 1. */
+  rounds?: number;
 };
 
-export function PhaseTimeline({ run, topK }: Props) {
+export function PhaseTimeline({ run, topK, rounds = 1 }: Props) {
+  const phases = rounds > 1 ? PHASES : PHASES.filter((id) => id !== "gap");
   return (
     <ol aria-label="Phases" className={css.timeline}>
-      {PHASES.map((id) => {
+      {phases.map((id) => {
         const card = phaseCard(id, run);
         const Glyph = ICONS[card.state];
         const label = stageLabel(id);
         const waiting = card.state === "waiting";
         const tag = methodTag(id, run, topK);
-        const detail = id === "prefilter" ? prefilterDetail(run, topK) : "";
+        const detail =
+          roundDetail(id, run, rounds) || (id === "prefilter" ? prefilterDetail(run, topK) : "");
         return (
           <li key={id} className={css.card} data-state={card.state}>
             <div className={css.head}>

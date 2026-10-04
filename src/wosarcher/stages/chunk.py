@@ -131,13 +131,18 @@ def page_chunks(page: Page, size: int, overlap: int) -> list[Chunk]:
     return chunks
 
 
-def chunk(pages: Sequence[Page], *, size: int, overlap: int) -> ChunkResult:
-    seen: set[str] = set()
+def text_hash(text: str) -> str:
+    return sha256(normalised(text).encode("utf-8")).hexdigest()
+
+
+def chunk(pages: Sequence[Page], *, size: int, overlap: int, existing: Sequence[Chunk] = ()) -> ChunkResult:
+    """Chunks of `pages`, without near-duplicates of each other or of `existing` (earlier rounds' chunks)."""
+    seen = {text_hash(item.text) for item in existing}
     kept: list[Chunk] = []
     duplicates = 0
     for page in pages:
         for item in page_chunks(page, size, overlap):
-            key = sha256(normalised(item.text).encode("utf-8")).hexdigest()
+            key = text_hash(item.text)
             if key in seen:
                 duplicates += 1
                 continue

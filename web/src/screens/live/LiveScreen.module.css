@@ -52,6 +52,16 @@
   max-height: none;
 }
 
+.rounds {
+  flex: 0 1 auto;
+  max-height: 58%;
+}
+
+[data-phone="true"] .rounds {
+  flex: none;
+  max-height: none;
+}
+
 .sources {
   flex: 1;
 }

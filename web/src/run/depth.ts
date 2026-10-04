@@ -22,7 +22,7 @@ export function depthLabel(depth: string | null | undefined): string {
 }
 
 export function researchOf(info: DepthInfo): ResearchValues {
-  const { words: _, ...values } = info.values;
+  const { words: _, queries_per_round: __, ...values } = info.values;
   return values;
 }
 
@@ -45,11 +45,22 @@ export function effectiveContext(profile: ProfileInfo | undefined, words: number
 export const fmtN = (n: number) => n.toLocaleString("en-US");
 const fmtK = (n: number) => `${Math.round(n / 1000)}k`;
 
-/** "~<P> pages · 1 round · ~<C> LLM calls", plus the context clamp when there is one. */
-export function estimate(values: ResearchValues, effective: number | null): string {
-  const pages = Math.min(values.max_pages, (values.sub_queries + 1) * values.results_per_query);
-  const calls = values.sub_queries === 0 ? 1 : 2;
-  const line = `~${pages} pages · 1 round · ~${calls} LLM calls`;
+/**
+ * "~<P> pages · <R> rounds · ~<C> LLM calls", plus the context clamp when there is one. Each round
+ * after the first searches up to `queriesPerRound` follow-ups and costs one gap call.
+ */
+export function estimate(
+  values: ResearchValues,
+  effective: number | null,
+  queriesPerRound: number,
+  rounds: number = values.rounds,
+): string {
+  const found =
+    (values.sub_queries + 1) * values.results_per_query +
+    (rounds - 1) * queriesPerRound * values.results_per_query;
+  const pages = Math.min(values.max_pages, found);
+  const calls = (values.sub_queries > 0 ? 1 : 0) + (rounds - 1) + 1;
+  const line = `~${pages} pages · ${rounds} round${rounds === 1 ? "" : "s"} · ~${calls} LLM calls`;
   if (effective === null || values.context_tokens <= effective) return line;
   return `${line} · context ${fmtK(values.context_tokens)} → ${fmtK(effective)} (model window)`;
 }

@@ -30,9 +30,10 @@ RESEARCH_KEYS = {
     "max_pages": "fetch.max_pages",
     "passages_per_query": "score.top_k",
     "context_tokens": "select.max_context_tokens",
+    "rounds": "research.rounds",
 }
 # The only keys a depth preset may set, besides its `description`.
-DEPTH_KEYS = (*RESEARCH_KEYS.values(), "write.words")
+DEPTH_KEYS = (*RESEARCH_KEYS.values(), "research.queries_per_round", "write.words")
 
 # Seconds each stage may take; `run.stage_timeouts` overrides single stages.
 DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
@@ -43,6 +44,7 @@ DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
     "chunk": 60,
     "prefilter": 600,
     "score": 900,
+    "gap": 180,
     "select": 60,
     "write": 1800,
 }
@@ -148,6 +150,15 @@ class SelectConfig(Block):
     prompt_reserve_tokens: int = Field(default=2000, ge=0)
 
 
+class ResearchConfig(Block):
+    rounds: int = Field(default=1, ge=1, le=8)
+    """Research rounds; above 1, search through gap repeat."""
+    queries_per_round: int = Field(default=3, gt=0)
+    """Most follow-up queries the gap step keeps per round."""
+    gap_context_tokens: int = Field(default=4000, gt=0)
+    """Passage budget of the gap step's prompt."""
+
+
 class RunConfig(Block):
     gpu_policy: Literal["shared", "exclusive"] = "shared"
     runs_dir: Path | None = None
@@ -196,6 +207,7 @@ class Settings(Block):
     attach: AttachConfig = AttachConfig()
     chunk: ChunkConfig = ChunkConfig()
     select: SelectConfig = SelectConfig()
+    research: ResearchConfig = ResearchConfig()
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
     server: ServerConfig = ServerConfig()

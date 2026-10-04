@@ -6,6 +6,7 @@ import { live } from "../../test/fixtures/live";
 import { RUN_ID, upTo } from "../../test/fixtures/sample";
 import { REWRITE_ID, versions } from "../../test/fixtures/versions";
 import { renderWithHelp } from "../../test/help";
+import { roundsLog, roundTwoFetching } from "../../test/rounds";
 import { viewOf } from "../../test/views";
 import { PhaseTimeline } from "./PhaseTimeline";
 
@@ -115,5 +116,30 @@ describe("PhaseTimeline", () => {
     const done = stageDone(3, "prefilter", { provider: embeddings, passthrough: ["q4", "q5"] });
     render(<PhaseTimeline run={viewOf([begin, prefilterStarted, done])} topK={50} />);
     expect(card("Prefilter").textContent).toContain("top 50/sub-query · q4, q5 passthrough");
+  });
+});
+
+describe("PhaseTimeline rounds", () => {
+  it("shows the round on loop cards and the Gap card in a multi-round run", () => {
+    render(<PhaseTimeline run={viewOf(roundTwoFetching())} rounds={3} />);
+    expect(card("Fetch").dataset.state).toBe("running");
+    expect(card("Fetch").textContent).toContain("round 2/3");
+    expect(card("Search").textContent).toContain("round 2 done");
+    expect(card("Gap").textContent).toContain("2 follow-ups");
+    expect(card("Gap").textContent).toContain("after round 1");
+    expect(screen.getAllByRole("listitem")).toHaveLength(10);
+  });
+
+  it("ends with the rounds each card ran", () => {
+    render(<PhaseTimeline run={viewOf(roundsLog("coverage"))} rounds={3} />);
+    expect(card("Score").textContent).toContain("2 rounds");
+    expect(card("Gap").textContent).toContain("2 of 3 rounds");
+    expect(card("Gap").textContent).toContain("model judged coverage sufficient");
+  });
+
+  it("has no Gap card in a single-round run", () => {
+    render(<PhaseTimeline run={viewOf(all)} />);
+    expect(screen.queryByText("Gap")).toBeNull();
+    expect(card("Fetch").textContent).not.toContain("round");
   });
 });

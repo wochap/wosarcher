@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from wosarcher.config import CUSTOM_DEPTH, list_depths, select_profile
 from wosarcher.models import (
-    STAGES,
     Attachment,
     ForkCreate,
     RunCreate,
@@ -42,6 +41,7 @@ ARTIFACTS: dict[str, str] = {
     "chunks.jsonl": JSONL,
     "candidates.jsonl": JSONL,
     "scores.jsonl": JSONL,
+    "research.json": JSON,
     "context.json": JSON,
     "select.jsonl": JSONL,
     "report.md": MARKDOWN,
@@ -204,8 +204,7 @@ async def cancel_run(state: State, run_id: str) -> JSONResponse:
 @router.post("/{run_id}/fork", status_code=201, response_model=RunCreated)
 async def fork_run(state: State, run_id: str, body: ForkCreate) -> JSONResponse:
     parent = require_finished(state, run_id)
-    finished = state.store.finished_stages(run_id)
-    missing = [stage for stage in STAGES[: STAGES.index(body.from_stage)] if stage not in finished]
+    missing = state.store.missing_stages(run_id, body.from_stage)
     if missing:
         detail = f"cannot fork {run_id} from {body.from_stage}: stage {missing[0]} is not finished"
         raise RouteError(409, "stage_not_finished", detail)

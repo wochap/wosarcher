@@ -16,6 +16,7 @@ import { FILTERS, type PassageFilter, PassagesPanel } from "./PassagesPanel";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
 import { ReportPanel } from "./ReportPanel";
+import { ResearchRoundsPanel } from "./ResearchRoundsPanel";
 import { SourceDialog } from "./SourceDialog";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBanner } from "./StatusBanner";
@@ -31,6 +32,12 @@ function configuredScorer(detail: RunDetail | null | undefined): string | undefi
 function prefilterTopK(detail: RunDetail | null | undefined): number | undefined {
   const prefilter = detail?.request?.settings.prefilter as { top_k?: number } | undefined;
   return prefilter?.top_k;
+}
+
+/** The run's resolved `research.rounds`, from the settings in its `request.json`; 1 when unset. */
+export function plannedRounds(detail: RunDetail | null | undefined): number {
+  const research = detail?.request?.settings.research as { rounds?: number } | undefined;
+  return research?.rounds ?? detail?.rounds_planned ?? 1;
 }
 
 /** The run's caps the Passages funnel help quotes, from the settings in its `request.json`. */
@@ -103,6 +110,7 @@ export function LiveScreen() {
   const { detail, files, context, report } = data;
   const elapsed = elapsedSeconds(run, now);
   const attachments = detail?.request?.request.attachments?.length ?? files.length;
+  const rounds = run.research?.planned ?? plannedRounds(detail);
 
   async function attempt(action: () => Promise<unknown>) {
     try {
@@ -167,13 +175,26 @@ export function LiveScreen() {
         rewriteOf={detail?.fork_from === "write" ? detail.parent_run_id : null}
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
-      {shows("progress") && <PhaseTimeline run={run} topK={prefilterTopK(detail)} />}
+      {shows("progress") && (
+        <PhaseTimeline run={run} topK={prefilterTopK(detail)} rounds={rounds} />
+      )}
       <div className={css.grid}>
         {(shows("progress") || shows("sources")) && (
           <div className={css.column}>
-            {shows("progress") && <SubQueriesPanel run={run} className={css.subQueries} />}
+            {shows("progress") &&
+              (rounds > 1 ? (
+                <ResearchRoundsPanel run={run} planned={rounds} className={css.rounds} />
+              ) : (
+                <SubQueriesPanel run={run} className={css.subQueries} />
+              ))}
             {shows("sources") && (
-              <SourcesPanel run={run} files={files} context={context} className={css.sources} />
+              <SourcesPanel
+                run={run}
+                files={files}
+                context={context}
+                rounds={rounds}
+                className={css.sources}
+              />
             )}
           </div>
         )}

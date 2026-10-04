@@ -27,6 +27,8 @@ class EventLog:
         self.clock = clock
         self.progress_at: dict[Stage, float] = {}
         self.pending: dict[Stage, StageProgressData] = {}
+        self.round = 1
+        """The research round that `stage.progress` reports."""
 
     def publish(self, event: Event) -> None:
         for listener in self.listeners:
@@ -46,7 +48,7 @@ class EventLog:
 
     def progress(self, stage: Stage, done: int, total: int, failed: int = 0) -> None:
         """At most one `stage.progress` per stage every 250 ms; `flush` sends the last one held back."""
-        data = StageProgressData(done=done, total=total, failed=failed)
+        data = StageProgressData(done=done, total=total, failed=failed, round=self.round)
         now = self.clock()
         last = self.progress_at.get(stage)
         if last is not None and now - last < PROGRESS_INTERVAL:

@@ -130,7 +130,7 @@ def start(store: RunStore, settings: Settings, record: RunRecord, until: Stage |
     with ExitStack() as stack:
         listeners: list[Listener] = []
         if err.is_terminal and not as_json:
-            listeners.append(stack.enter_context(ProgressView(err)))
+            listeners.append(stack.enter_context(ProgressView(err, settings.research.rounds)))
         listeners.extend(diagnostics(view_shown=bool(listeners)))
         status = asyncio.run(execute(store, settings, record.run_id, until, listeners))
     output(store, record.run_id, status, as_json)
@@ -195,6 +195,7 @@ def run(
         int | None, typer.Option("--passages-per-query", min=1, help="Passages kept per query.")
     ] = None,
     context_tokens: Annotated[int | None, typer.Option("--context-tokens", min=1, help="Context token cap.")] = None,
+    rounds: Annotated[int | None, typer.Option("--rounds", min=1, max=8, help="Research rounds.")] = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -218,6 +219,7 @@ def run(
         max_pages=max_pages,
         passages_per_query=passages_per_query,
         context_tokens=context_tokens,
+        rounds=rounds,
     )
     overrides = [*(set_ or []), *flags, *research]
     env = os.environ

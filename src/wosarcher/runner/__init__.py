@@ -14,9 +14,15 @@ from typing import Literal
 from wosarcher.config import Settings
 from wosarcher.http import Usage, UsageLedger
 from wosarcher.models import (
+    LOOP_STAGES,
     STAGES,
     Page,
+    Plan,
+    ResearchDoneData,
+    ResearchRecord,
     ResourceData,
+    RoundDoneData,
+    RoundRecord,
     RunCancelledData,
     RunCosts,
     RunDoneData,
@@ -27,6 +33,7 @@ from wosarcher.models import (
     Stage,
     StageDoneData,
     StageStartedData,
+    StopReason,
     UsageTotals,
 )
 from wosarcher.ports import Adapters
@@ -40,6 +47,10 @@ from wosarcher.store.caches import PageCache
 
 SKIPPED_BY: dict[Sources, set[Stage]] = {"both": set(), "web": {"load"}, "files": {"search", "fetch"}}
 RunEnd = Literal["done", "failed"]
+ROUND_STAGES: tuple[Stage, ...] = LOOP_STAGES[:-1]
+"""The loop stages every round runs; `gap` follows all but the last."""
+LOOP_ARTIFACTS = ("hits.jsonl", "pages.jsonl", "chunks.jsonl", "candidates.jsonl", "scores.jsonl")
+NO_NEW_SOURCES = "Follow-up searches returned only pages fetched in earlier rounds."
 
 
 class StageError(Exception):
@@ -73,7 +84,7 @@ def empty_fails(stage: Stage, sources: Sources, files: int) -> bool:
     """Whether a stage with no output fails the run."""
     if stage == "load":
         return sources == "files"
-    if stage == "plan":
+    if stage in ("plan", "gap"):
         return False
     if stage == "search":
         return sources == "web"
@@ -108,17 +119,28 @@ class Runner:
         runnable: list[Stage] = [stage for stage in todo if stage not in skipped]
         log.emit("run.started", None, self.started(record, until))
         current: Stage | None = None
+        if "search" in todo and "plan" not in todo:
+            self.restart_loop(run_id)
         try:
             down = await preflight(self.settings, self.adapters.managed, runnable)
             if down:
                 raise StageError(*down)
+            looped = False
             for stage in todo:
                 current = stage
-                if stage in skipped:
+                if looped and stage in LOOP_STAGES:
+                    continue
+                if stage == "search" and self.planned_rounds(ctx) > 1:
+                    looped = True
+                    after: list[Stage] = [name for name in runnable if name not in LOOP_STAGES]
+                    await self.research(ctx, until, after)
+                    continue
+                if stage in skipped or stage == "gap":
                     self.skip(ctx, stage)
                     continue
                 await self.run_stage(ctx, stage)
-                await self.maybe_release(ctx, stage, runnable[runnable.index(stage) + 1 :])
+                following: list[Stage] = [name for name in runnable[runnable.index(stage) + 1 :] if name != "gap"]
+                await self.maybe_release(ctx, stage, following)
         except StageError as failure:
             self.write_costs(run_id)
             log.emit("run.failed", None, RunFailedData(stage=failure.stage, error=failure.error))
@@ -144,16 +166,98 @@ class Runner:
             until=until,
         )
 
+    def planned_rounds(self, ctx: steps.StepContext) -> int:
+        """`research.rounds`, or 1 for files-only runs and plans without a sub-query."""
+        if ctx.record.request.sources == "files" or len(ctx.plan().queries) < 2:
+            return 1
+        return self.settings.research.rounds
+
+    def restart_loop(self, run_id: str) -> None:
+        """Before the loop runs again: the plan back to its round-1 queries, the loop's artifacts emptied."""
+        path = self.store.run_dir(run_id) / "plan.json"
+        if not path.is_file():
+            return
+        plan = self.store.read_artifact(run_id, "plan.json", Plan)
+        first = [query for query in plan.queries if query.round == 1]
+        self.store.write_artifact(run_id, "plan.json", plan.model_copy(update={"queries": first}))
+        for name in LOOP_ARTIFACTS:
+            self.store.write_text(run_id, name, "")
+        (self.store.run_dir(run_id) / "research.json").unlink(missing_ok=True)
+
+    async def research(self, ctx: steps.StepContext, until: Stage | None, after: list[Stage]) -> None:
+        """Run search through score once per round, with a gap step between rounds, until a stop rule holds."""
+        planned = self.planned_rounds(ctx)
+        state = ctx.round
+        rounds: list[RoundRecord] = []
+        reason: StopReason | None = None
+        gap_ran = False
+        while reason is None:
+            for stage in ROUND_STAGES:
+                await self.run_stage(ctx, stage)
+                if stage == until:
+                    return
+                await self.maybe_release(ctx, stage, self.cycle(stage, after))
+            query_ids = [query.id for query in ctx.round_queries() if query.id != "q0"]
+            data = RoundDoneData(
+                round=state.number,
+                query_ids=query_ids,
+                new_pages=state.new_pages,
+                known_pages=state.known_pages,
+                kept=state.kept,
+            )
+            ctx.log.emit("round.done", "score", data)
+            rounds.append(RoundRecord(**data.model_dump()))
+            reason = self.stop_before_gap(state, planned)
+            if reason is not None:
+                break
+            await self.run_stage(ctx, "gap")
+            gap_ran = True
+            if until == "gap":
+                return
+            await self.maybe_release(ctx, "gap", self.cycle("gap", after))
+            if state.gap_error is not None or state.gap is None:
+                reason = "gap step failed"
+            else:
+                rounds[-1] = rounds[-1].model_copy(update={"note": state.gap.note})
+                if state.gap.stop or not state.gap.queries:
+                    reason = "model judged coverage sufficient"
+            if reason is None:
+                state.next()
+                ctx.log.round = state.number
+        note = {"no new sources": NO_NEW_SOURCES}.get(reason, "")
+        if reason == "model judged coverage sufficient" and state.gap is not None:
+            note = state.gap.note
+        record = ResearchRecord(planned=planned, ran=state.number, reason=reason, note=note, rounds=rounds)
+        self.store.write_artifact(ctx.run_id, "research.json", record)
+        if not gap_ran:
+            ctx.log.emit("stage.done", "gap", StageDoneData(count=0, seconds=0, skipped=True, round=state.number))
+        done = ResearchDoneData(planned=planned, ran=state.number, reason=reason, note=note)
+        ctx.log.emit("research.done", "gap", done)
+
+    def stop_before_gap(self, state: steps.RoundState, planned: int) -> StopReason | None:
+        if state.fetched >= self.settings.fetch.max_pages:
+            return "page limit reached"
+        if state.number > 1 and state.new_pages == 0:
+            return "no new sources"
+        if state.number >= planned:
+            return "max rounds"
+        return None
+
+    def cycle(self, stage: Stage, after: list[Stage]) -> list[Stage]:
+        """The stages after `stage` inside the loop, wrapping round once, then the stages after the loop."""
+        index = LOOP_STAGES.index(stage)
+        return [*LOOP_STAGES[index + 1 :], *LOOP_STAGES[:index], *after]
+
     def skip(self, ctx: steps.StepContext, stage: Stage) -> None:
-        for name in STAGE_ARTIFACTS[stage]:
+        for name in STAGE_ARTIFACTS[stage] if stage != "gap" else ():
             self.store.write_text(ctx.run_id, name, "")
         ctx.log.emit("stage.done", stage, StageDoneData(count=0, seconds=0, skipped=True))
 
     async def run_stage(self, ctx: steps.StepContext, stage: Stage) -> None:
         device = gpu_device(stage, self.settings)
-        ctx.log.emit(
-            "stage.started", stage, StageStartedData(device=device, provider=stage_provider(stage, self.settings))
-        )
+        number = ctx.round.number
+        started = StageStartedData(device=device, provider=stage_provider(stage, self.settings), round=number)
+        ctx.log.emit("stage.started", stage, started)
         before = self.ledger.total()
         start = time.monotonic()
         timeout = self.settings.run.stage_timeouts[stage]
@@ -161,16 +265,16 @@ class Runner:
             async with asyncio.timeout(timeout):
                 outcome = await steps.STEPS[stage](ctx)
         except TimeoutError:
-            raise StageError(stage, f"timed out after {timeout:g} s") from None
+            outcome = self.failed_stage(ctx, stage, f"timed out after {timeout:g} s")
         except Exception as error:
-            raise StageError(stage, str(error) or type(error).__name__) from None
+            outcome = self.failed_stage(ctx, stage, str(error) or type(error).__name__)
         ctx.log.flush(stage)
-        if outcome.count == 0:
+        if outcome.count == 0 and number == 1:
             files = len(self.store.read_items(ctx.run_id, "files.jsonl", Page))
             if empty_fails(stage, ctx.record.request.sources, files):
                 raise StageError(stage, "no output")
         usage = plus(self.ledger.total(), before, -1)
-        self.stage_usage[stage] = usage
+        self.stage_usage[stage] = plus(self.stage_usage.get(stage, Usage()), usage)
         data = StageDoneData(
             count=outcome.count,
             seconds=round(time.monotonic() - start, 3),
@@ -179,9 +283,17 @@ class Runner:
             warnings=[*self.warnings, *outcome.warnings],
             passthrough=outcome.passthrough,
             unfetched=outcome.unfetched,
+            round=number,
         )
         self.warnings = []
         ctx.log.emit("stage.done", stage, data)
+
+    def failed_stage(self, ctx: steps.StepContext, stage: Stage, error: str) -> steps.Outcome:
+        """A failed gap step stops research with a warning; any other failed stage fails the run."""
+        if stage != "gap":
+            raise StageError(stage, error)
+        ctx.round.gap_error = error
+        return steps.Outcome(0, warnings=[f"gap failed: {error}"])
 
     async def release(self, stage: Stage) -> bool:
         """Release the model of a GPU stage's block; false when the block cannot be released."""

@@ -100,3 +100,8 @@
 .kept {
   color: var(--color-accent-300);
 }
+
+.roundTag {
+  color: var(--faint);
+  font-size: 11px;
+}

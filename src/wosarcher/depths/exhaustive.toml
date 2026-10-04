@@ -1,4 +1,4 @@
-description = "Many searches and sources; slow, for thorough reports."
+description = "Many rounds and sources; slow, for thorough reports."
 
 [plan]
 max_sub_queries = 8
@@ -17,3 +17,7 @@ max_context_tokens = 32000
 
 [write]
 words = 3000
+
+[research]
+rounds = 5
+queries_per_round = 4

@@ -141,12 +141,22 @@ export const profiles: ProfileInfo[] = [
   { name: "nixos", source: "user", active: false, description: "" },
 ];
 
-const research = (sub: number, rpq: number, pages: number, ppq: number, ctx: number) => ({
+const research = (
+  sub: number,
+  rpq: number,
+  pages: number,
+  ppq: number,
+  ctx: number,
+  rounds = 1,
+  perRound = 3,
+) => ({
   sub_queries: sub,
   results_per_query: rpq,
   max_pages: pages,
   passages_per_query: ppq,
   context_tokens: ctx,
+  rounds,
+  queries_per_round: perRound,
 });
 
 export const depths: DepthInfo[] = [
@@ -162,13 +172,13 @@ export const depths: DepthInfo[] = [
   },
   {
     name: "deep",
-    description: "More searches and sources, longer report.",
-    values: { ...research(5, 10, 60, 10, 24000), words: 2000 },
+    description: "Several research rounds that follow up on gaps.",
+    values: { ...research(5, 10, 60, 10, 24000, 3, 3), words: 2000 },
   },
   {
     name: "exhaustive",
-    description: "Many searches and sources; slow, for thorough reports.",
-    values: { ...research(8, 10, 100, 8, 32000), words: 3000 },
+    description: "Many rounds and sources; slow, for thorough reports.",
+    values: { ...research(8, 10, 100, 8, 32000, 5, 4), words: 3000 },
   },
 ];
 

@@ -1,12 +1,16 @@
 // Inline help texts, verbatim from the prototype's HELP constant and keyed like it.
 import {
   ArrowDown,
+  CheckCircle,
+  Files,
   Funnel,
   Gauge,
   type Icon,
   MinusCircle,
+  Prohibit,
   Quotes,
   Stack,
+  Warning,
 } from "@phosphor-icons/react";
 
 /** One row of a legend: shown instead of the body. */
@@ -114,6 +118,37 @@ export const HELP: Record<string, Help> = {
     body: "Quickly narrows chunks with embeddings or keyword ranking before the slower scorer.",
   },
   "ph-score": { title: "Score", body: "Rates how useful each passage is for its question." },
+  "ph-gap": {
+    title: "Gap",
+    body: "Between rounds, reads the best passages so far and writes follow-up queries for what is missing, or stops research early.",
+  },
+  rounds: {
+    title: "Research rounds",
+    body: "Round 1 searches the planner’s queries. Each later round searches the gap step’s follow-ups. Pages and passages are counted as new to that round.",
+  },
+  "r-stop": {
+    title: "Why research stopped",
+    body: "",
+    items: [
+      {
+        icon: Prohibit,
+        term: "no new sources",
+        text: "Follow-up searches returned only pages already fetched.",
+      },
+      { icon: Files, term: "page limit reached", text: "Max pages was used up." },
+      {
+        icon: CheckCircle,
+        term: "model judged coverage sufficient",
+        text: "The gap step found nothing important missing.",
+      },
+      { icon: Stack, term: "max rounds", text: "Every planned round ran." },
+      {
+        icon: Warning,
+        term: "gap step failed",
+        text: "The gap step's model call failed; the report uses the rounds that ran.",
+      },
+    ],
+  },
   "ph-select": {
     title: "Select",
     body: "Picks the best passages that fit the writer's context budget.",

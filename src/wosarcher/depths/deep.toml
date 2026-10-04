@@ -1,4 +1,4 @@
-description = "More searches and sources, longer report."
+description = "Several research rounds that follow up on gaps."
 
 [plan]
 max_sub_queries = 5
@@ -17,3 +17,7 @@ max_context_tokens = 24000
 
 [write]
 words = 2000
+
+[research]
+rounds = 3
+queries_per_round = 3

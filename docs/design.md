@@ -24,16 +24,18 @@ capability at a time and may refine it; when they do, update this file.
 - Search providers besides SearXNG.
 - Local PDF parsing. Firecrawl handles PDFs at URLs. Local PDFs are converted
   outside the tool (for example with pdf-ingest) and attached as markdown.
-- Multi-agent orchestration, source curation, report chat. Deep (recursive)
-  research is a later recipe.
+- Multi-agent orchestration, source curation, report chat, and recursive
+  child researchers.
 
 ## Pipeline
 
 ```
 attachments ─► load ──────┬──────────────────────────────┐
                           │ outlines                     │
-                          ▼                              ├─► pages ─► chunk ─► prefilter ─► score ─► select ─► write
-query ─► initial search ─► plan ─► search ─► fetch ──────┘
+                          ▼                              ├─► pages ─► chunk ─► prefilter ─► score ─► gap ─► select ─► write
+query ─► initial search ─► plan ─► search ─► fetch ──────┘                                              │
+                                     ▲                                                                   │
+                                     └──────────────── follow-up queries (research rounds) ──────────────┘
 ```
 
 Load runs before plan so the planner sees attachment outlines.
@@ -47,15 +49,74 @@ Load runs before plan so the planner sees attachment outlines.
 | chunk | pages | chunks with heading path | CPU |
 | prefilter | chunks, queries | top-K (query, chunk) pairs | GPU or API |
 | score | pairs | scores | GPU or API |
+| gap | best passages so far, queries | follow-up queries, note, stop flag | LLM |
 | select | scores | context within a token budget | CPU |
 | write | context, query, writing options | report with citations | LLM |
+
+### Research rounds
+
+With `research.rounds` above 1 (and web sources with at least one
+sub-query), search, fetch, chunk, prefilter, score, and gap run as a loop,
+one pass per round; select and write run once after it. Round 1 searches
+the planner's sub-queries. After every round but the last, the gap stage
+makes one LLM call: it reads the passages select picks from every round's
+kept scores within `research.gap_context_tokens` (4000) and the queries
+already run, and answers JSON with up to `research.queries_per_round`
+follow-up queries, a short note on what is missing, and an advisory `stop`
+flag. Follow-ups get the next `qN` IDs, carry their `round`, and are
+appended to `plan.json`; round k+1 searches them. With `rounds = 1` the gap
+stage is skipped (`stage.done` with `skipped`) and nothing else changes.
+
+The loop and its bookkeeping (`RoundState`: round number, pages fetched so
+far, URLs seen, the scorer in use) live in the runner; the stages stay
+pure. Each round:
+
+- searches only its own queries (round 1 merges the initial hits);
+- fetches only hits whose URL no earlier round fetched or queued (the rest
+  count as known pages), within the pages `fetch.max_pages` has left: the
+  cap counts across all rounds;
+- chunks its new pages, deduplicated against earlier chunks;
+- prefilters and scores only pairs of its own queries with its new chunks,
+  plus attached file chunks, so a page from an earlier round never pairs
+  with a later query;
+- starts with the scorer the previous round ended on, so a fallback stays
+  in use;
+- appends to the cumulative artifacts. After each round's score,
+  `stages.score.keep_once` keeps every chunk for at most one query across
+  rounds: the earliest round's pair wins.
+
+Research stops at the first of these, checked in this order, and records
+the reason: the gap call failed or its reply was unreadable (`gap step
+failed`, a `gap failed: <error>` warning, the run continues); the pages
+fetched reached `fetch.max_pages` (`page limit reached`); a round after the
+first fetched no new page (`no new sources`); the last round ran (`max
+rounds`); the gap step set `stop` or no follow-up survived its checks
+(`model judged coverage sufficient`). The page limit and no-new-sources
+checks run before the gap call, so no call is wasted. A gap timeout counts
+as a failed gap step; every other stage timeout applies per round and fails
+the run. Usage of a stage that runs in several rounds is summed in
+`costs.json`.
+
+Resume and fork: the loop stages of a multi-round run count as finished
+only after `research.done`. A run resumed before that resets `plan.json` to
+its round-1 queries, empties the loop's artifacts, and restarts the loop at
+round 1 without calling the planner again; the page and embedding caches
+make the repeat cheap. A fork from a loop stage copies only the `load` and
+`plan` artifacts (the plan filtered to round 1) and reruns the loop; a fork
+from `select` or `write` copies every round and `research.json`.
+
+On `gpu_policy = exclusive`, release decisions use the real next stage,
+cyclic inside the loop (score, gap, search, …, prefilter), so a low-VRAM
+machine swaps models up to three times per round. Fewer rounds or a remote
+scorer keeps that down.
 
 ### Initial search
 
 Kept from gpt-researcher: one SearXNG call with the main query before
 planning, so the planner sees real result titles and snippets, not only the
 query. Snippets are short and come from SearXNG, not from scraped pages, so
-fetched content never reaches the planner.
+fetched content never reaches the planner (the gap step reads passages; see
+Prompt injection).
 
 ### Dedupe
 
@@ -391,6 +452,16 @@ behind each claim.
 ### Prompt injection
 
 - Fetched content never reaches the planner.
+- The gap step does read scraped passages, and its output becomes search
+  queries. Only the main query, the follow-up limit, and the date go
+  through `prompts/gap.md`; the existing queries and the passages go in one
+  user message after the `prompts/gap_data.md` preamble, in a delimited
+  `<data>` block whose closing text is escaped. Follow-ups are validated:
+  empty ones, ones over 200 characters, ones with a URL (`https?://` or
+  `www.`), and duplicates of any query (ignoring case and surrounding
+  whitespace) are dropped, and at most `research.queries_per_round` are
+  kept. They only feed SearXNG queries, never a tool call or a fetch the
+  user did not cause; the worst case is an off-topic search.
 - The writer sends `system` then one `user` message: an instruction to treat
   the following block as data, not instructions, the delimited
   `<passages>` block, and after it the writing task. Text that would close
@@ -459,7 +530,7 @@ src/wosarcher/
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
   profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
   store/         # __init__.py: RunStore (create, fork, artifacts, events.jsonl with seq, list_runs); caches.py: PageCache, EmbeddingCache
-  runner/        # __init__.py: Runner (stage loop, timeouts, costs, cancel); steps.py: one function per stage;
+  runner/        # __init__.py: Runner (stage loop, research rounds, timeouts, costs, cancel); steps.py: one function per stage, RoundState;
                  # events.py: EventLog, snapshot_event; devices.py: needs_release; caches.py: CachedFetcher, EmbeddingMapping
   build.py       # composition root: config -> adapters (a dict, no registry)
   doctor.py      # provider health probes and exclusive-GPU warnings
@@ -467,7 +538,7 @@ src/wosarcher/
   attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
   stages/        # one file per stage
   adapters/      # one file per adapter, plus fakes.py
-  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
+  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
   cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; logs.py: logs, event lines, stderr listener;
                  # serve.py: serve; auth.py: auth; progress.py: rich Live view
   __main__.py    # python -m wosarcher
@@ -517,13 +588,14 @@ runs/<id>/
   request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage
   attachments/       # copies of --attach files, directories, and globs
   files.jsonl        # load: attachment pages
-  plan.json          # plan
+  plan.json          # plan, then each round's follow-up queries
   initial.jsonl      # plan: hits of the initial search for the main query
-  hits.jsonl         # search: all hits, initial ones merged in
-  pages.jsonl        # fetch: web pages
+  hits.jsonl         # search: all hits of every round, initial ones merged in
+  pages.jsonl        # fetch: web pages of every round
   chunks.jsonl
   candidates.jsonl
   scores.jsonl
+  research.json      # gap: multi-round runs only; ResearchRecord
   context.json
   select.jsonl       # select: kept passages not selected, with the reason
   report.md          # written as the report streams, then replaced by the rendered report
@@ -538,6 +610,13 @@ by normalised URL for `run.page_cache_ttl_hours` (24; 0 disables) and
 embeddings. Run IDs are `YYYYMMDD-HHMMSS-xxxxxx` and sort by creation time.
 Directories starting with `.` (the server's `.queue/`) are not runs.
 
+Queries, hits, pages, and scores carry the `round` they first appeared in
+(1 for single-round runs and files). `research.json` holds `planned`,
+`ran`, `reason`, `note` (the end note: the gap note for `model judged
+coverage sufficient`, a fixed sentence for `no new sources`, else empty),
+and one entry per round with `round`, `query_ids`, `new_pages`,
+`known_pages`, `kept`, and the gap `note` written after it.
+
 A stage is finished when its `stage.done` event is in `events.jsonl`; a
 half-written artifact without that event is ignored. Artifacts are written
 to `<name>.tmp` and renamed. A stage skipped by `--sources` writes empty
@@ -546,11 +625,14 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N] [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N] [--rounds N] [--run-id ID] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
-  `fetch.max_pages`, `score.top_k`, and `select.max_context_tokens`, after
-  the `--set` values. `--depth` applies a depth preset below all of them
+  `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`, and
+  `research.rounds`, after the `--set` values. `--until` on a loop stage
+  stops after that stage in round 1. The progress view shows a `gap` row
+  only for multi-round runs, "round k/N" on running loop rows, and one
+  final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
   and is recorded in `request.json` (`request.depth`); forks keep it.
   `--run-id` lets a caller (the server) choose the ID; an existing directory
   exits 2. `--json` prints one `RunOutput` document (status, error, run
@@ -613,6 +695,8 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   ran, and the kept passages (text, heading path, source, display score).
   The full list, including pairs that were not kept and why, is the
   `scores.jsonl` artifact.
+- Research rounds (multi-round runs only): `round.done` (stage `score`),
+  `gap.ready` (stage `gap`), `research.done` (stage `gap`).
 - Write: `report.delta` and `report.snapshot` (server only, live).
 
 Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
@@ -625,17 +709,23 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `run.done` | `until`, `totals` |
 | `run.failed` | `stage`, `error` |
 | `run.cancelled` | `stage` |
-| `stage.started` | `device`, `provider` |
-| `stage.progress` | `done`, `total`, `failed` (at most every 250 ms, plus a final one) |
-| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough` |
+| `stage.started` | `device`, `provider`, `round` |
+| `stage.progress` | `done`, `total`, `failed`, `round` (at most every 250 ms, plus a final one) |
+| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`, that round's), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough`, `unfetched`, `round` |
 | `stage.failed` | `error`, `next` (empty when none) |
 | `resource.waiting`, `resource.released` | `device`, `released_stage` |
 | `plan.ready` | `queries` |
 | `hit.found` | `url`, `title`, `query_ids` |
-| `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached` |
+| `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached`, `round` |
 | `page.failed` | `url`, `reason` |
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
+| `round.done` | `round`, `query_ids`, `new_pages`, `known_pages`, `kept` |
+| `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `stop` |
+| `research.done` | `planned`, `ran`, `reason`, `note` |
 | `report.delta`, `report.snapshot` | `text` |
+
+`round` is the research round (1 for single-round runs and for stages
+outside the loop).
 
 `provider` is `<provider>:<model>`, or `<provider>` when the block has no
 model (`built-in` for stages without a block). On `stage.started` it is
@@ -702,7 +792,8 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `running`. `RunCreate` has `query`, optional `sources`, `until`,
   `profile`, `depth` (a preset name or `custom`; unknown is 422 naming
   `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`), `writing`, and `set`. Request
+  `passages_per_query`, `context_tokens`, `rounds` at most 8), `writing`,
+  and `set`. Request
   precedence, each later layer winning: defaults, profile, environment,
   global settings, the depth preset, the request's `sources`, `research`,
   and `writing`, then its `set`. The server builds the writing flags from
@@ -713,13 +804,17 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
   `until`; `depth`, null for older runs; resolved writing options; `duration_s`; `cost`;
   `queue_position`; `error`, the `run.failed` text when failed; `end_stage`,
-  the stage named by a final `run.failed` or `run.cancelled`), and for one
+  the stage named by a final `run.failed` or `run.cancelled`;
+  `rounds_planned`, the resolved `research.rounds`; `rounds_ran`, from
+  `research.done`, 1 for a single-round run past the loop, else null;
+  `stop_reason`, null for single-round runs), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
   Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
   `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`, `pages.jsonl`,
-  `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `context.json`,
-  `select.jsonl`, `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
+  `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `research.json`,
+  `context.json`, `select.jsonl`, `report.md`, `report.json`,
+  `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
 - `GET /api/runs/{id}/sources/{source_id}`: `SourceView`, one source's
@@ -779,8 +874,9 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 - `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
   `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
-  `context_tokens`, the built-in default where the preset sets none, and
-  `words`, null when the preset leaves it to the global setting).
+  `context_tokens`, `rounds`, `queries_per_round`, the built-in default
+  where the preset sets none, and `words`, null when the preset leaves it to
+  the global setting).
 - `GET /api/providers/health[?profile=P]`: sends no probe. It resolves the
   profile in the server process (400 `invalid_profile` on a configuration
   error) and lists one check per block, merged with the last stored check
@@ -945,8 +1041,10 @@ Depth presets are a per-run axis, separate from profiles:
 `src/wosarcher/depths/{quick,standard,deep,exhaustive}.toml`, each with a
 one-line `description`. A preset may set only `plan.max_sub_queries`,
 `search.max_results`, `fetch.max_pages`, `score.top_k`,
-`select.max_context_tokens`, and `write.words` (`DEPTH_KEYS`); any other key
-fails when it loads, naming the file and the key.
+`select.max_context_tokens`, `research.rounds`,
+`research.queries_per_round`, and `write.words` (`DEPTH_KEYS`); any other
+key, such as `research.gap_context_tokens`, fails when it loads, naming the
+file and the key.
 
 | key | quick | standard | deep | exhaustive |
 |---|---|---|---|---|
@@ -956,6 +1054,12 @@ fails when it loads, naming the file and the key.
 | `score.top_k` | 6 | - | 10 | 8 |
 | `select.max_context_tokens` | 8000 | - | 24000 | 32000 |
 | `write.words` | 600 | - | 2000 | 3000 |
+| `research.rounds` | - | - | 3 | 5 |
+| `research.queries_per_round` | - | - | 3 | 4 |
+
+The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
+(default 3), and `gap_context_tokens` (default 4000). The `gap` stage
+timeout defaults to 180 seconds.
 
 `standard` sets nothing, so it resolves like no depth. `custom` applies no
 preset; it only labels a run whose research values the user set. An unknown
@@ -1194,7 +1298,7 @@ These override the prototype where they differ:
   sub-query" while running and "top N/sub-query · q4, q5 passthrough" once
   done, with N from the run's `prefilter.top_k` and the IDs from
   `stage.done` `passthrough`.
-- **Method tags:** the Plan, Prefilter, Score, and Write cards show the
+- **Method tags:** the Plan, Prefilter, Score, Gap, and Write cards show the
   method under the label: the configured provider while running, the one
   that ran after `stage.done`. The tag is the model for LLM and embeddings
   providers, `BM25` for `bm25`, else the provider name. A phase whose
@@ -1202,6 +1306,24 @@ These override the prototype where they differ:
   fallback: "<tag> · fallback" in warn style, and its tooltip names the
   configured method and the reason from the stage's warnings. The Passages
   scorer tag decides fallback the same way (`run/providers.ts`).
+- **Research rounds:** a multi-round run (resolved `research.rounds` above
+  1, read from the run's settings) shows a Gap card between Score and
+  Select ("reading round k", "n follow-ups", "ran of N rounds"); loop cards
+  add a second line "round k/N" while running, "round k done" between
+  rounds, and "n rounds" at the end. The Research rounds panel
+  (`screens/live/ResearchRoundsPanel`) replaces Sub-queries: per round its
+  queries (collapsed to 2 above 3), new and kept pages or "0 new pages · m
+  already fetched", the gap note and follow-up line, then why research
+  stopped with the `r-stop` help. The reducer folds `plan.ready`,
+  `hit.found`, `page.fetched`, `round.done`, `gap.ready`, and
+  `research.done` into `rounds` and `research`. Sources fetched in a later
+  round show "round k"; the Report meta line ends with "ran of planned
+  rounds".
+- **Depth estimate:** "~P pages · R rounds · ~C LLM calls" with P the
+  smaller of Max pages and (Sub-queries + 1) × Results per query plus
+  (R − 1) × queries per round × Results per query, and C one planner call
+  (when Sub-queries > 0) plus R − 1 gap calls plus one writer call.
+  Rounds is editable (1-8); files-only runs lock it at 1.
 - **Theme:** dark and light both kept; the first visit follows
   `prefers-color-scheme`, and the choice is remembered in the browser.
 - **Additions to the prototype:** "Live updates unavailable" is a banner

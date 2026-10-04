@@ -59,6 +59,9 @@ export function ReportScreen({ runId }: { runId: string }) {
     recipe,
     `${sourceCount} sources`,
     `${passageCount} passages`,
+    ...(detail.rounds_planned && detail.rounds_planned > 1 && detail.rounds_ran
+      ? [`${detail.rounds_ran} of ${detail.rounds_planned} rounds`]
+      : []),
   ].join(" · ");
 
   async function copy(text: string, message: string) {
