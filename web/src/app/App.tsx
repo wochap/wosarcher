@@ -11,6 +11,7 @@ import { LiveScreen } from "../screens/live/LiveScreen";
 import { LoginScreen, type LoginState } from "../screens/login/LoginScreen";
 import { NewRunScreen } from "../screens/new/NewRunScreen";
 import { ReportScreen } from "../screens/report/ReportScreen";
+import { healthWarns } from "../screens/settings/ProvidersSection";
 import { SettingsScreen } from "../screens/settings/SettingsScreen";
 import {
   ApiContext,
@@ -91,6 +92,14 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
     followActive();
   }, [followActive]);
   const [healthWarn, setHealthWarn] = useState(false);
+  // One read of the stored checks after sign-in; it never probes, and nothing polls.
+  useEffect(() => {
+    if (!ready || locked) return;
+    api.health().then(
+      (report) => setHealthWarn(healthWarns(report)),
+      () => {},
+    );
+  }, [api, ready, locked]);
   const services = useMemo(() => ({ api, Socket }), [api, Socket]);
   const live = useRun(followed, services);
   const { view } = live;

@@ -1,8 +1,9 @@
-// Settings: the profile and GPU policy lines, and provider cards with their last health result.
+// Settings: the profile and GPU policy lines, and provider cards with their last stored health check.
 import {
   ArrowClockwise,
   CheckCircle,
   CircleDashed,
+  CircleNotch,
   Cpu,
   Heartbeat,
   type Icon,
@@ -51,67 +52,88 @@ const ICONS: Record<string, Icon> = {
   degraded: WarningCircle,
   down: XCircle,
   skipped: MinusCircle,
+  unchecked: CircleDashed,
 };
-const HEALTHY = new Set(["ok", "skipped"]);
+const SLOW_MS = 1000;
 const ms = (n: number | null | undefined) => `${Math.round(n ?? 0).toLocaleString("en-US")} ms`;
 
-export function healthText(check: ProviderCheck): string {
-  const detail = check.detail ? ` · ${check.detail}` : "";
-  switch (check.status) {
-    case "ok":
-      return `Healthy · ${ms(check.latency_ms)}`;
-    case "degraded":
-      return `Slow · ${ms(check.latency_ms)}${detail}`;
-    case "down":
-      return `Unreachable${detail}`;
-    default:
-      return `Skipped${detail}`;
-  }
+/** True when the report has a slow or down provider: the sidebar's warn dot. */
+export function healthWarns(report: HealthReport): boolean {
+  return report.checks.some((c) => c.status === "degraded" || c.status === "down");
 }
 
-function ago(at: number, now: number): string {
-  const s = Math.max(0, Math.round((now - at) / 1000));
-  if (s < 5) return "just now";
+/** "just now" under 10 s, "N s ago" under a minute, else "N m ago". */
+export function ago(at: string, now: number): string {
+  const s = Math.max(0, Math.round((now - Date.parse(at)) / 1000));
+  if (s < 10) return "just now";
   if (s < 60) return `${s} s ago`;
-  return `${Math.round(s / 60)} min ago`;
+  return `${Math.round(s / 60)}m ago`;
+}
+
+/** The strip's status line and detail line for a stored check. */
+export function healthLines(check: ProviderCheck, now: number): [string, string] {
+  const when = check.checked_at ? `checked ${ago(check.checked_at, now)}` : "";
+  switch (check.status) {
+    case "ok":
+      return [`OK · ${when}`, ms(check.latency_ms)];
+    case "degraded": {
+      const slow = (check.latency_ms ?? 0) > SLOW_MS;
+      return [
+        `Slow · ${when}`,
+        slow ? `${ms(check.latency_ms)}, limit 1,000 ms` : (check.detail ?? ""),
+      ];
+    }
+    case "down":
+      return [`Down · ${when}`, check.detail ?? ""];
+    case "skipped":
+      return [check.detail ? `Skipped · ${check.detail}` : "Skipped", ""];
+    default:
+      return ["Not checked yet", ""];
+  }
 }
 
 export function ProvidersSection() {
   const api = useApi();
   const { setHealthWarn } = useUi();
   const [report, setReport] = useState<HealthReport | null>(null);
-  const [checkedAt, setCheckedAt] = useState(0);
-  const [checking, setChecking] = useState(false);
+  const [checking, setChecking] = useState<ReadonlySet<string>>(new Set());
   const [error, setError] = useState("");
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [now, setNow] = useState(Date.now);
 
-  // The server checks every provider of the profile at once: one request serves every card.
-  const check = useCallback(async () => {
-    setChecking(true);
-    setError("");
-    try {
-      const result = await api.health();
+  const show = useCallback(
+    (result: HealthReport) => {
       setReport(result);
-      setCheckedAt(Date.now());
       setNow(Date.now());
-      setHealthWarn(result.checks.some((c) => !HEALTHY.has(c.status)));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setChecking(false);
-    }
-  }, [api, setHealthWarn]);
+      setHealthWarn(healthWarns(result));
+    },
+    [setHealthWarn],
+  );
 
+  // Opening Settings only reads the stored results; a probe runs only when the user clicks Check.
   useEffect(() => {
-    void check();
+    api.health().then(show, (e: Error) => setError(e.message));
     api.listProfiles().then(setProfiles, () => {});
-  }, [api, check]);
+  }, [api, show]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const check = async (roles: string[], blocks?: string[]) => {
+    setChecking((current) => new Set([...current, ...roles]));
+    setError("");
+    try {
+      show(await api.checkHealth(blocks, report?.profile));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setChecking((current) => new Set([...current].filter((role) => !roles.includes(role))));
+    }
+  };
+  const allRoles = (report?.checks ?? []).map((c) => c.role);
+  const checkAll = () => check(allRoles);
 
   const profile = report?.profile ?? profiles.find((p) => p.active)?.name ?? "";
   const description = profiles.find((p) => p.name === profile)?.description;
@@ -119,7 +141,12 @@ export function ProvidersSection() {
     <>
       <div className={css.header}>
         <h1 className={page.h1}>Settings</h1>
-        <button type="button" className="btn btn-secondary" onClick={check} disabled={checking}>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={checkAll}
+          disabled={!report || checking.size > 0}
+        >
           <Heartbeat aria-hidden="true" />
           Check all providers
         </button>
@@ -152,7 +179,12 @@ export function ProvidersSection() {
           </span>
         )}
       </div>
-      <h2 className={`${page.section} ${css.providersTitle}`}>Providers</h2>
+      <div className={css.providersTitle}>
+        <h2 className={page.section}>Providers</h2>
+        <span className={css.note}>
+          Checked only when you click, so idle GPU servers stay asleep.
+        </span>
+      </div>
       {error && (
         <div role="alert" className={css.error}>
           {error}
@@ -163,9 +195,9 @@ export function ProvidersSection() {
           <Card
             key={c.role}
             check={c}
-            checking={checking}
-            ago={ago(checkedAt, now)}
-            onCheck={check}
+            checking={checking.has(c.role)}
+            now={now}
+            onCheck={() => check([c.role], [c.role])}
           />
         ))}
       </div>
@@ -173,11 +205,13 @@ export function ProvidersSection() {
   );
 }
 
-type CardProps = { check: ProviderCheck; checking: boolean; ago: string; onCheck: () => void };
+type CardProps = { check: ProviderCheck; checking: boolean; now: number; onCheck: () => void };
 
-function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
+function Card({ check: c, checking, now, onCheck }: CardProps) {
   const state = checking ? "checking" : c.status;
-  const Glyph = checking ? CircleDashed : (ICONS[c.status] ?? MinusCircle);
+  const Glyph = checking ? CircleNotch : (ICONS[c.status] ?? MinusCircle);
+  const [text, detail] = checking ? ["Checking…", c.url] : healthLines(c, now);
+  const mono = checking || c.status === "down";
   return (
     <section className={`card elev-sm ${css.card}`} aria-label={roleTitle(c)}>
       <div className={css.cardTop}>
@@ -187,6 +221,7 @@ function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
           className={`btn btn-ghost ${css.check}`}
           onClick={onCheck}
           disabled={checking}
+          aria-label={`Check ${roleTitle(c)} provider`}
         >
           <ArrowClockwise className={checking ? css.spinFast : undefined} aria-hidden="true" />
           Check
@@ -210,12 +245,14 @@ function Card({ check: c, checking, ago: when, onCheck }: CardProps) {
         <dd>{c.release ?? "none"}</dd>
       </dl>
       <div role="status" className={css.health} data-state={state}>
-        <Glyph weight="fill" className={css.healthIcon} aria-hidden="true" />
-        <span className={css.healthText}>
-          {checking ? "Checking…" : healthText(c)}
-          <HelpTip help="health" />
-        </span>
-        <span className={css.ago}>{checking ? "" : when}</span>
+        <div className={css.healthLine}>
+          <Glyph weight="fill" className={css.healthIcon} aria-hidden="true" />
+          <span className={css.healthText}>
+            {text}
+            <HelpTip help="health" />
+          </span>
+        </div>
+        {detail && <div className={mono ? `${css.detail} ${css.mono}` : css.detail}>{detail}</div>}
       </div>
     </section>
   );

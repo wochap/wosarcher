@@ -117,3 +117,23 @@ def test_doctor_json_reports_release_and_gpu_policy(config_home: Path) -> None:
     assert report["gpu_policy"] == "exclusive"
     releases = {row["block"]: row["release"] for row in report["providers"]}
     assert releases == {"search": "none", "fetch": "none", "prefilter": "llama-swap", "score": "none", "llm": "none"}
+
+
+@respx.mock
+def test_doctor_one_block() -> None:
+    healthy_routes()
+    result = runner.invoke(app, ["doctor", "--profile", "test", "--block", "score", "--json"])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert [row["block"] for row in report["providers"]] == ["score"]
+    assert respx.calls.call_count == 1
+    assert respx.calls.last.request.url.host == "rerank.test"
+
+
+@respx.mock
+def test_doctor_unknown_block() -> None:
+    result = runner.invoke(app, ["doctor", "--profile", "test", "--block", "scorer"])
+    assert result.exit_code != 0
+    for name in ("search", "fetch", "prefilter", "score", "llm"):
+        assert name in result.output
+    assert not respx.calls

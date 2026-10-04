@@ -137,6 +137,8 @@ class RunConfig(Block):
     page_cache_ttl_hours: float = Field(default=24, ge=0)
     """0 disables the page cache."""
     stage_timeouts: dict[Stage, float] = DEFAULT_STAGE_TIMEOUTS
+    preflight: Literal["off", "cloud", "all"] = "off"
+    """Probe the run's providers before the first stage: none, cloud blocks only, or every block."""
 
     @field_validator("stage_timeouts", mode="before")
     @classmethod

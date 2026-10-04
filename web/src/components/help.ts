@@ -123,7 +123,7 @@ export const HELP: Record<string, Help> = {
   },
   health: {
     title: "Health",
-    body: "ok · degraded (slow, or cannot unload) · down · skipped (not used by this profile).",
+    body: "Not checked yet, OK, slow (degraded), down, or skipped (built in, no endpoint). Checks run only when you click Check, so idle GPU servers are never woken by opening this page.",
   },
   gpupolicy: {
     title: "GPU policy",

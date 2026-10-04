@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from tests.runner.helpers import PAGES, QUERY, Releases, adapters, kinds, new_run, settings
-from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
+from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeManaged, FakeScorer, FakeSearcher, healthy
 from wosarcher.config import LLMConfig, PrefilterConfig, ScoreConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
@@ -18,6 +18,7 @@ from wosarcher.models import (
     Page,
     PageFailed,
     PassagesScored,
+    ProviderHealth,
     Query,
     RunCancelled,
     RunCancelledData,
@@ -381,3 +382,75 @@ async def test_cancel_writes_costs(tmp_path: Path) -> None:
     assert ending(store, run_id) == RunCancelledData(stage="fetch")
     costs = json.loads((store.run_dir(run_id) / "costs.json").read_text())
     assert (costs["stages"]["plan"]["input_tokens"], costs["total"]["input_tokens"]) == (100, 100)
+
+
+class Probed(FakeManaged):
+    """A Managed that records each probe in a shared list; `down` makes the probe fail."""
+
+    def __init__(self, name: str, log: list[str], down: bool = False) -> None:
+        health = healthy(name, "fake")
+        if down:
+            health = health.model_copy(update={"status": "failed", "error": "connection refused"})
+        super().__init__(health)
+        self.name, self.log = name, log
+
+    async def probe(self) -> ProviderHealth:
+        self.log.append(self.name)
+        return self.health
+
+
+def preflight_settings(tmp_path: Path, mode: str) -> Settings:
+    cfg = settings(tmp_path, preflight=mode)
+    return cfg.model_copy(
+        update={
+            "score": ScoreConfig(provider="rerank"),
+            "llm": LLMConfig(provider="llm", device="desktop:gpu0"),
+        }
+    )
+
+
+def probed(log: list[str], down: str | None = None) -> dict[str, Managed]:
+    return {name: Probed(name, log, name == down) for name in ("search", "fetch", "score", "llm")}
+
+
+async def test_preflight_default_sends_no_probe(tmp_path: Path) -> None:
+    cfg = preflight_settings(tmp_path, "off")
+    log: list[str] = []
+    run_id = new_run(store_of(cfg), cfg)
+    await run(cfg, run_id, adapters(scorers={"rerank": FakeScorer("rerank")}, managed=probed(log)))
+    assert log == []
+
+
+async def test_preflight_cloud_skips_local(tmp_path: Path) -> None:
+    cfg = preflight_settings(tmp_path, "cloud")
+    log: list[str] = []
+    run_id = new_run(store_of(cfg), cfg)
+    assert await run(cfg, run_id, adapters(scorers={"rerank": FakeScorer("rerank")}, managed=probed(log))) == "done"
+    assert "search" in log
+    assert "llm" not in log
+
+
+async def test_preflight_down_fails_early(tmp_path: Path) -> None:
+    cfg = preflight_settings(tmp_path, "all")
+    store = store_of(cfg)
+    log: list[str] = []
+    run_id = new_run(store, cfg)
+    fakes = adapters(scorers={"rerank": FakeScorer("rerank")}, managed=probed(log, down="score"))
+    assert await run(cfg, run_id, fakes) == "failed"
+    failed = ending(store, run_id)
+    assert isinstance(failed, RunFailedData)
+    assert failed.stage == "score"
+    assert failed.error.startswith("preflight: score")
+    assert not [name for name in kinds(store.read_events(run_id)) if name.startswith("stage.started")]
+
+
+async def test_preflight_skipped_stages_not_probed(tmp_path: Path) -> None:
+    cfg = preflight_settings(tmp_path, "all")
+    store = store_of(cfg)
+    (tmp_path / "notes.md").write_text("# Notes\nBattery recycling notes.\n")
+    log: list[str] = []
+    run_id = new_run(store, cfg, sources="files", attachments=[str(tmp_path / "notes.md")])
+    await run(cfg, run_id, adapters(scorers={"rerank": FakeScorer("rerank")}, managed=probed(log)))
+    assert "search" not in log
+    assert "fetch" not in log
+    assert "score" in log

@@ -62,7 +62,20 @@
 }
 
 .providersTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   margin-top: 8px;
+}
+
+.providersTitle h2 {
+  margin: 0;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .grid {
@@ -121,13 +134,21 @@
 
 .health {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  flex-direction: column;
+  gap: 2px;
   padding: 6px 9px;
   margin-top: 2px;
   border-radius: var(--radius-md);
+  border: 1px solid transparent;
   font-size: 12.5px;
   background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+.health[data-state="unchecked"] {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--color-divider);
+  color: var(--muted);
 }
 
 .health[data-state="degraded"] {
@@ -138,12 +159,23 @@
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
 }
 
+.healthLine {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .healthIcon {
   flex: none;
   color: var(--muted);
 }
 
-[data-state="ok"] .healthIcon {
+[data-state="unchecked"] .healthIcon {
+  color: var(--faint);
+}
+
+[data-state="ok"] .healthIcon,
+[data-state="checking"] .healthIcon {
   color: var(--color-accent);
 }
 
@@ -167,9 +199,15 @@
   gap: 5px;
 }
 
-.ago {
-  font-size: 11px;
-  color: var(--faint);
+.detail {
+  font-size: 11.5px;
+  color: var(--muted);
+  padding-left: 21px;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--mono);
 }
 
 .spinFast {

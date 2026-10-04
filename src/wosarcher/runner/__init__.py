@@ -34,6 +34,7 @@ from wosarcher.runner import steps
 from wosarcher.runner.caches import CachedFetcher
 from wosarcher.runner.devices import GPU_BLOCK, gpu_device, needs_release, next_gpu_stage, stage_provider
 from wosarcher.runner.events import EventLog, Listener
+from wosarcher.runner.preflight import preflight
 from wosarcher.store import STAGE_ARTIFACTS, RunStore
 from wosarcher.store.caches import PageCache
 
@@ -108,6 +109,9 @@ class Runner:
         log.emit("run.started", None, self.started(record, until))
         current: Stage | None = None
         try:
+            down = await preflight(self.settings, self.adapters.managed, runnable)
+            if down:
+                raise StageError(*down)
             for stage in todo:
                 current = stage
                 if stage in skipped:

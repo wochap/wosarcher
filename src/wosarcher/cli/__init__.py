@@ -74,13 +74,13 @@ def profile_use(name: str) -> None:
     typer.echo(f"default profile: {name}")
 
 
-async def check_providers(settings: Settings) -> DoctorReport:
+async def check_providers(settings: Settings, chosen: list[str] | None = None) -> DoctorReport:
     async with httpx.AsyncClient() as http:
         try:
             adapters = build(settings, http, UsageLedger({}))
         except ValueError as error:
             raise ConfigError(str(error)) from None
-        return await health.check(settings, adapters.managed)
+        return await health.check(settings, adapters.managed, chosen)
 
 
 def render(report: DoctorReport) -> None:
@@ -109,6 +109,7 @@ def doctor(
     profile: ProfileOption = None,
     set_: SetOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the report as JSON.")] = False,
+    block: Annotated[list[str] | None, typer.Option("--block", help="Check only this block; repeat for more.")] = None,
 ) -> None:
     """Check that every configured provider answers, which model it serves, and whether it can unload.
 
@@ -116,9 +117,12 @@ def doctor(
     https://example.com, which spends one credit on the cloud API.
     Exit code 1 when any probe fails.
     """
+    unknown = [name for name in block or [] if name not in health.BLOCKS]
+    if unknown:
+        raise fail(ValueError(f"unknown block {', '.join(unknown)}; choose from {', '.join(health.BLOCKS)}"))
     try:
         settings = resolve(profile, set_ or [], os.environ)
-        report = asyncio.run(check_providers(settings))
+        report = asyncio.run(check_providers(settings, block or None))
     except ConfigError as error:
         raise fail(error) from None
     if as_json:

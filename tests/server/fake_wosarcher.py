@@ -19,7 +19,8 @@ when it names a mode, else `FAKE_MODE`:
 - `partial-kill`: like `ignore-term`, but first writes half an event line without a newline.
 
 SIGTERM logs `run.cancelled` at the next chunk and exits 130. `doctor --json` prints a
-`DoctorReport` chosen by `FAKE_DOCTOR` (`ok`, `failed`, or `garbage`).
+`DoctorReport` chosen by `FAKE_DOCTOR` (`ok`, `slow`, `failed`, `hang`, or `garbage`),
+limited to the `--block` names.
 """
 
 import argparse
@@ -72,21 +73,29 @@ def parse(argv: list[str]) -> argparse.Namespace:
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--profile")
+    doctor.add_argument("--block", action="append", default=[])
     return parser.parse_args(argv)
 
 
-def doctor(store: RunStore, argv: list[str]) -> int:
+def doctor(store: RunStore, argv: list[str], chosen: list[str]) -> int:
     store.runs_dir.mkdir(parents=True, exist_ok=True)
     (store.runs_dir / "doctor-argv.json").write_text(json.dumps(argv))
     kind = os.environ.get("FAKE_DOCTOR", "ok")
     if kind == "garbage":
         print("not json")
         return 1
+    if kind == "hang":
+        time.sleep(60)
     status = "failed" if kind == "failed" else "ok"
+    latency = 1840 if kind == "slow" else 120
     rows = (
-        ProviderHealth(block="search", provider="searxng", base_url="http://s", status="ok", latency_ms=120),
+        ProviderHealth(block="search", provider="searxng", base_url="http://s", status="ok", latency_ms=latency),
+        ProviderHealth(block="fetch", provider="firecrawl", base_url="http://f", status="ok", latency_ms=90),
+        ProviderHealth(block="prefilter", provider="embeddings", base_url="http://e", status="ok", latency_ms=30),
         ProviderHealth(block="score", provider="rerank", base_url="http://r", status=status, error="refused"),
+        ProviderHealth(block="llm", provider="llm", base_url="http://l", status="ok", latency_ms=200),
     )
+    rows = tuple(row for row in rows if not chosen or row.block in chosen)
     print(DoctorReport(providers=rows).model_dump_json(indent=2))
     return 1 if status == "failed" else 0
 
@@ -133,7 +142,7 @@ def main(argv: list[str]) -> int:
     store = RunStore(Path(os.environ["WOSARCHER_RUN__RUNS_DIR"]), Path())
     args = parse(argv)
     if args.command == "doctor":
-        return doctor(store, argv)
+        return doctor(store, argv, args.block)
     query = getattr(args, "query", None)
     if (query if query in MODES else os.environ.get("FAKE_MODE")) == "early-exit":
         print("error: unknown profile 'x'", file=sys.stderr)

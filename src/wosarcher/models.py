@@ -454,9 +454,10 @@ class ProviderCheck(Contract):
     model: str | None = None
     device: str | None = None
     release: Literal["none", "llama-swap", "ollama"] = "none"
-    status: Literal["ok", "degraded", "down", "skipped"]
+    status: Literal["ok", "degraded", "down", "skipped", "unchecked"]
     latency_ms: float | None = None
     detail: str = ""
+    checked_at: datetime | None = None
 
 
 class HealthReport(Contract):
@@ -464,6 +465,12 @@ class HealthReport(Contract):
     gpu_policy: Literal["shared", "exclusive"] = "shared"
     checks: list[ProviderCheck]
     warnings: list[str] = []
+
+
+class HealthCheckRequest(Contract):
+    """Body of `POST /api/providers/health/check`; no blocks means every block."""
+
+    blocks: list[str] = []
 
 
 class ApiError(Contract):
@@ -834,6 +841,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ProfileInfo,
     ProviderCheck,
     HealthReport,
+    HealthCheckRequest,
     ApiError,
     RunNotActive,
     LoginRequest,

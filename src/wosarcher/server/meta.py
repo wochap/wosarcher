@@ -1,14 +1,23 @@
-"""`/api/settings`, `/api/profiles`, and `/api/providers/health`."""
+"""`/api/settings`, `/api/profiles`, `/api/providers/health`, and `/api/providers/health/check`."""
 
 import asyncio
 import os
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 
-from wosarcher.config import list_profiles, profile_description, select_profile
-from wosarcher.models import DoctorReport, HealthReport, ProfileInfo, ProviderCheck, ProviderHealth, ServerSettings
+from wosarcher.config import (
+    ConfigError,
+    Settings,
+    list_profiles,
+    profile_description,
+    resolve,
+    select_profile,
+)
+from wosarcher.doctor import BLOCKS
+from wosarcher.models import DoctorReport, HealthCheckRequest, HealthReport, ProfileInfo, ServerSettings
 from wosarcher.server import settings as global_settings
 from wosarcher.server.errors import RouteError
 from wosarcher.server.state import ServerState, get_state
@@ -17,7 +26,6 @@ router = APIRouter(prefix="/api")
 State = Annotated[ServerState, Depends(get_state)]
 
 DOCTOR_TIMEOUT = 60.0
-SLOW_MS = 1000
 
 
 @router.get("/settings")
@@ -45,38 +53,9 @@ async def profiles() -> list[ProfileInfo]:
     ]
 
 
-def provider_check(row: ProviderHealth) -> ProviderCheck:
-    if row.status == "failed":
-        status, detail = "down", row.error or "probe failed"
-    elif row.status == "built-in":
-        status, detail = "skipped", "built in, no endpoint"
-    elif row.unload == "no":
-        status, detail = "degraded", "model cannot be unloaded"
-    elif row.latency_ms is not None and row.latency_ms > SLOW_MS:
-        status, detail = "degraded", "slow response"
-    else:
-        status, detail = "ok", row.note or ""
-    return ProviderCheck(
-        role=row.block,
-        provider=row.provider,
-        url=row.base_url,
-        model=row.model,
-        device=row.device,
-        release=row.release,
-        status=status,
-        latency_ms=row.latency_ms,
-        detail=detail,
-    )
-
-
-def health_report(profile: str, doctor: DoctorReport) -> HealthReport:
-    checks = [provider_check(row) for row in doctor.providers]
-    return HealthReport(profile=profile, gpu_policy=doctor.gpu_policy, checks=checks, warnings=list(doctor.warnings))
-
-
-async def run_doctor(command: list[str], profile: str | None) -> DoctorReport:
+async def run_doctor(command: list[str], profile: str, chosen: list[str]) -> DoctorReport:
     """`<command> doctor --json`; exit code 1 (a failed probe) still prints a report."""
-    argv = [*command, "doctor", "--json", *(["--profile", profile] if profile else [])]
+    argv = [*command, "doctor", "--json", "--profile", profile, *(f"--block={name}" for name in chosen)]
     process = await asyncio.create_subprocess_exec(
         *argv, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
@@ -93,7 +72,32 @@ async def run_doctor(command: list[str], profile: str | None) -> DoctorReport:
         raise RouteError(502, "health_unavailable", f"doctor failed: {reason}") from None
 
 
+def profile_settings(profile: str | None) -> tuple[str, Settings]:
+    name = select_profile(profile, os.environ)
+    try:
+        return name, resolve(name, [], os.environ)
+    except ConfigError as error:
+        raise RouteError(400, "invalid_profile", str(error)) from None
+
+
 @router.get("/providers/health")
 async def providers_health(state: State, profile: str | None = None) -> HealthReport:
-    doctor = await run_doctor(state.command, profile)
-    return health_report(profile or select_profile(None, os.environ), doctor)
+    """The configured providers with the last stored check of each; sends no probe."""
+    name, settings = profile_settings(profile)
+    return state.health.report(name, settings)
+
+
+@router.post("/providers/health/check")
+async def check_health(
+    state: State, body: HealthCheckRequest | None = None, profile: str | None = None
+) -> HealthReport:
+    """Probe the chosen blocks (every block when none), store the results, and return the merged report."""
+    name, settings = profile_settings(profile)
+    chosen = body.blocks if body else []
+    unknown = [block for block in chosen if block not in BLOCKS]
+    if unknown:
+        raise RouteError(400, "invalid_block", f"unknown block {', '.join(unknown)}; choose from {', '.join(BLOCKS)}")
+    async with state.health.lock:
+        doctor = await run_doctor(state.command, name, chosen)
+        state.health.store(name, settings, doctor, datetime.now(UTC))
+    return state.health.report(name, settings)

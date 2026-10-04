@@ -7,6 +7,7 @@ from starlette.requests import HTTPConnection
 
 from wosarcher.auth import AuthStore
 from wosarcher.config import Settings
+from wosarcher.server.health import HealthCache
 from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import RunManager
 from wosarcher.store import RunStore
@@ -22,6 +23,7 @@ class ServerState:
     manager: RunManager
     auth: AuthStore
     limiter: LoginLimiter
+    health: HealthCache
 
 
 def get_state(connection: HTTPConnection) -> ServerState:

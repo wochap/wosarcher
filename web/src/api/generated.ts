@@ -76,6 +76,8 @@ export type ReferenceStyle = (string | null)
 export type Tone = (string | null)
 export type ToneInstructions = (string | null)
 export type Words = (number | null)
+export type Blocks = string[]
+export type CheckedAt = (string | null)
 export type Detail1 = string
 export type Device1 = (string | null)
 export type LatencyMs1 = (number | null)
@@ -83,7 +85,7 @@ export type Model2 = (string | null)
 export type Provider1 = string
 export type Release1 = ("none" | "llama-swap" | "ollama")
 export type Role = string
-export type Status1 = ("ok" | "degraded" | "down" | "skipped")
+export type Status1 = ("ok" | "degraded" | "down" | "skipped" | "unchecked")
 export type Url = string
 export type Checks = ProviderCheck[]
 export type GpuPolicy1 = ("shared" | "exclusive")
@@ -562,6 +564,15 @@ tone_instructions?: ToneInstructions
 words?: Words
 }
 /**
+ * Body of `POST /api/providers/health/check`; no blocks means every block.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "HealthCheckRequest".
+ */
+export interface HealthCheckRequest {
+blocks?: Blocks
+}
+/**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "HealthReport".
  */
@@ -576,6 +587,7 @@ warnings?: Warnings1
  * via the `definition` "ProviderCheck".
  */
 export interface ProviderCheck {
+checked_at?: CheckedAt
 detail?: Detail1
 device?: Device1
 latency_ms?: LatencyMs1

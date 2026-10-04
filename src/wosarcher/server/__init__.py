@@ -16,6 +16,7 @@ from wosarcher.auth import AuthStore
 from wosarcher.config import Settings
 from wosarcher.server import errors, login, meta, routes, stream, tokens
 from wosarcher.server.guard import Guard
+from wosarcher.server.health import HealthCache
 from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import GRACE_SECONDS, RunManager
 from wosarcher.server.state import ServerState
@@ -29,7 +30,7 @@ def create_app(
     store = RunStore(runs_dir, runs_dir)
     manager = RunManager(runs_dir, command, settings.server.max_concurrent_runs, store, grace)
     auth = AuthStore.from_settings(settings, config_dir)
-    state = ServerState(settings, runs_dir, config_dir, command, store, manager, auth, LoginLimiter())
+    state = ServerState(settings, runs_dir, config_dir, command, store, manager, auth, LoginLimiter(), HealthCache())
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:

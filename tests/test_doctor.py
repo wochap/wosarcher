@@ -1,3 +1,5 @@
+import asyncio
+
 from wosarcher.adapters.fakes import FakeManaged
 from wosarcher.config import Settings
 from wosarcher.doctor import check, exclusive_warnings
@@ -100,3 +102,48 @@ async def test_context_large_enough_no_warning() -> None:
 
 async def test_no_context_no_warning() -> None:
     assert (await check(window(32768), managed())).warnings == ()
+
+
+class Recorder(FakeManaged):
+    """Records probe start, probe end, and release, in order, into a shared log."""
+
+    def __init__(self, block: str, log: list[str], **fields: object) -> None:
+        super().__init__(row(block, **fields).health)
+        self.block, self.log = block, log
+
+    async def probe(self) -> ProviderHealth:
+        self.log.append(f"start {self.block}")
+        await asyncio.sleep(0.01)
+        self.log.append(f"end {self.block}")
+        return self.health
+
+    async def release(self) -> None:
+        self.log.append(f"release {self.block}")
+
+
+def local_pair(policy: str, release: str) -> Settings:
+    device = {"device": "desktop:gpu0", "release": release}
+    return Settings.model_validate(
+        {"run": {"gpu_policy": policy}, "score": {"provider": "rerank", **device}, "llm": {"provider": "llm", **device}}
+    )
+
+
+async def test_local_probes_one_at_a_time() -> None:
+    log: list[str] = []
+    fakes: dict[str, Managed] = {name: Recorder(name, log) for name in ("search", "score", "llm")}
+    await check(local_pair("shared", "none"), fakes)
+    assert log.index("start llm") > log.index("end score")
+    assert log.index("start search") < log.index("end score")
+
+
+async def test_exclusive_policy_releases_between_local_probes() -> None:
+    log: list[str] = []
+    fakes: dict[str, Managed] = {name: Recorder(name, log, unload="yes") for name in ("score", "llm")}
+    await check(local_pair("exclusive", "llama-swap"), fakes)
+    assert log == ["start score", "end score", "release score", "start llm", "end llm"]
+
+
+async def test_chosen_blocks_only() -> None:
+    fakes = managed()
+    report = await check(remote(), fakes, ["score"])
+    assert [health.block for health in report.providers] == ["score"]

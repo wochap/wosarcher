@@ -146,6 +146,7 @@ export const health: HealthReport = {
       status: "degraded",
       latency_ms: 1840,
       detail: "probe over 1000 ms",
+      checked_at: "2026-10-03T09:00:00Z",
     },
     {
       role: "fetch",
@@ -157,6 +158,7 @@ export const health: HealthReport = {
       status: "skipped",
       latency_ms: null,
       detail: "built in",
+      checked_at: null,
     },
     {
       role: "prefilter",
@@ -168,6 +170,7 @@ export const health: HealthReport = {
       status: "ok",
       latency_ms: 38,
       detail: "",
+      checked_at: "2026-10-03T09:00:00Z",
     },
     {
       role: "score",
@@ -176,9 +179,10 @@ export const health: HealthReport = {
       model: "bge-reranker-v2-m3-Q8_0.gguf",
       device: "desktop:gpu0",
       release: "llama-swap",
-      status: "ok",
-      latency_ms: 61,
+      status: "unchecked",
+      latency_ms: null,
       detail: "",
+      checked_at: null,
     },
     {
       role: "llm",
@@ -190,6 +194,7 @@ export const health: HealthReport = {
       status: "ok",
       latency_ms: 212,
       detail: "",
+      checked_at: "2026-10-03T09:00:00Z",
     },
   ],
 };

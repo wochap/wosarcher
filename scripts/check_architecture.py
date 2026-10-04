@@ -36,7 +36,7 @@ ALLOWED: dict[str, set[str]] = {
     "adapters": {"models", "ports", "lexical", "config", "http"},
     # The health check is shared by the CLI and, later, `GET /providers/health`.
     "doctor": {"models", "ports", "config"},
-    "runner": {"models", "ports", "lexical", "config", "http", "stages", "store", "prompts", "attachments"},
+    "runner": {"models", "ports", "lexical", "config", "http", "stages", "store", "prompts", "attachments", "doctor"},
     "build": {
         "models",
         "ports",

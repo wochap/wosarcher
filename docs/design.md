@@ -163,7 +163,13 @@ Remote endpoints:
   `<cache_dir>/embeddings/<model>/<dim>/<sha[:2]>/<sha>.f32` (raw float32).
 - **Health.** `wosarcher doctor` checks each endpoint: reachable, model name,
   latency of one small request, unload support (llama-swap answers
-  `GET <root>/running`, Ollama `GET <root>/api/version`).
+  `GET <root>/running`, Ollama `GET <root>/api/version`). Checks run only on
+  request (the CLI, a Check click in Settings, or `run.preflight`), because
+  a probe to a self-hosted server loads its model. A block is local when its
+  `release` is not `none` or it sets a `device`; local blocks are probed one
+  at a time in block order, beside the concurrent cloud probes, and under
+  `gpu_policy = "exclusive"` a local model that can unload is released
+  before the next local probe.
 
 ### Scoring
 
@@ -423,7 +429,8 @@ src/wosarcher/
                  # serve.py: serve; auth.py: auth; progress.py: rich Live view
   __main__.py    # python -m wosarcher
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
-                 # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health; stream.py: event socket;
+                 # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
+                 # health.py: HealthCache (stored provider checks); stream.py: event socket;
                  # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState;
                  # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
 skill/SKILL.md
@@ -512,7 +519,9 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   environment) plus the overrides. With `--profile`, settings come from that
   profile plus the parent's and the new overrides. Used for resume, for
   changing writing options, and by the eval harness.
-- `wosarcher doctor [--profile <name>] [--set k=v] [--json]`: one row per
+- `wosarcher doctor [--profile <name>] [--set k=v] [--block <name>...] [--json]`:
+  `--block` (repeatable) limits the check, its rows, and its warnings to the
+  named blocks; an unknown name fails before any request. One row per
   block (provider, base URL, device, status, model, latency, unload support;
   `--json` adds each block's configured `release` and the profile's
   `gpu_policy`);
@@ -691,11 +700,23 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   running one.
 - `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`,
   `description` (empty when the profile sets none).
-- `GET /api/providers/health[?profile=P]`: runs `wosarcher doctor --json`
-  (60 s timeout; 502 when it times out or prints no report) and maps each
-  row: failed is `down` (error as detail), built in is `skipped`, a model
-  that cannot unload or a probe over 1000 ms is `degraded`, else `ok`. The
-  report carries the profile's `gpu_policy` and each check its `release`.
+- `GET /api/providers/health[?profile=P]`: sends no probe. It resolves the
+  profile in the server process (400 `invalid_profile` on a configuration
+  error) and lists one check per block, merged with the last stored check
+  of that profile and block: built in is `skipped`, a block never checked
+  is `unchecked`, and a stored check whose configured provider, base URL,
+  or model no longer matches is ignored. Each check carries its
+  `checked_at`, the report the profile's `gpu_policy`, the last check's
+  warnings, and each check its `release`. Stored checks live in memory on
+  `ServerState.health` (`server/health.py`) until the server restarts.
+- `POST /api/providers/health/check[?profile=P]` with optional
+  `{"blocks": [...]}` (`HealthCheckRequest`; none means every block): 400
+  `invalid_block` for an unknown name, else runs `wosarcher doctor --json
+  [--block ...]` under a lock (one check at a time; 60 s timeout; 502 when
+  it times out or prints no report, stored checks unchanged), stores each
+  row with the time of the check, and returns the merged report. Mapping:
+  failed is `down` (error as detail), a model that cannot unload or a probe
+  over 1000 ms is `degraded`, else `ok`.
 - `POST /api/login`, `POST /api/logout`, `GET /api/session`
   (`SessionInfo`): see Authentication.
 - `GET /api/tokens` (`TokenInfo`: ID, name, masked last 4 characters,
@@ -709,7 +730,7 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
 
 Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
 `RunSummary`, `RunDetail`, `ServerSettings`, `ProfileInfo`,
-`ProviderCheck`, `HealthReport`, `ApiError`, `RunNotActive`, `LoginRequest`,
+`ProviderCheck`, `HealthReport`, `HealthCheckRequest`, `ApiError`, `RunNotActive`, `LoginRequest`,
 `SessionInfo`, `TokenInfo`, `TokenCreate`, `TokenCreated`, `LoginError`) are models in `models.py` and
 part of `wosarcher schema`.
 
@@ -854,6 +875,13 @@ reasoning models that count hidden reasoning tokens); the `score` block adds
 A profile may start with a top-level `description` string, one line that
 says what it is for. It is file metadata, not a setting: it is not part of
 the resolved configuration and cannot be set by environment or `--set`.
+
+`run.preflight` (`off` by default, `cloud`, `all`): before the first stage
+the runner probes, as `wosarcher doctor` does, the provider blocks of the
+stages it will run (skipped stages and built-in providers excluded; `cloud`
+also excludes local blocks). A failed probe ends the run with `run.failed`
+naming the first stage that uses the block and an error starting
+`preflight: <block>`; no stage starts.
 
 Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
 `workstation` (shared), `cloud` (no local models, high concurrency;

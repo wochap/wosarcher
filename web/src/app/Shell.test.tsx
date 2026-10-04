@@ -2,7 +2,7 @@ import { act, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ev } from "../test/events";
 import { FakeWebSocket } from "../test/FakeWebSocket";
-import { fakeApi } from "../test/fakeApi";
+import { callsTo, fakeApi } from "../test/fakeApi";
 import { renderApp } from "../test/renderApp";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -29,7 +29,7 @@ describe("Shell", () => {
 
   it("shows the live dot while the followed run runs and the warn dot after a slow check", async () => {
     renderApp({ hash: "#/settings" });
-    await screen.findByText("Slow · 1,840 ms · probe over 1000 ms");
+    await screen.findByText(/^Slow · checked/);
     const socket = FakeWebSocket.last();
     act(() => {
       socket.open();
@@ -47,6 +47,24 @@ describe("Shell", () => {
     expect(live.querySelector('[data-tone="live"]')).toBeTruthy();
     const settings = within(nav()).getByRole("button", { name: /Settings/ });
     expect(settings.querySelector('[data-tone="warn"]')).toBeTruthy();
+  });
+
+  it("sets the warn dot from a stored result without posting a check", async () => {
+    const api = fakeApi();
+    api.data.health.checks[4] = { ...api.data.health.checks[4], status: "down", detail: "refused" };
+    renderApp({ hash: "#/", api });
+    const settings = within(nav()).getByRole("button", { name: /Settings/ });
+    await vi.waitFor(() => expect(settings.querySelector('[data-tone="warn"]')).toBeTruthy());
+    expect(callsTo(api, "checkHealth")).toHaveLength(0);
+  });
+
+  it("shows no warn dot when nothing is checked", async () => {
+    const api = fakeApi();
+    for (const c of api.data.health.checks) if (c.status !== "skipped") c.status = "unchecked";
+    renderApp({ hash: "#/", api });
+    await vi.waitFor(() => expect(callsTo(api, "health")).toHaveLength(1));
+    const settings = within(nav()).getByRole("button", { name: /Settings/ });
+    expect(settings.querySelector('[data-tone="warn"]')).toBeNull();
   });
 
   it("names the product wosarcher and never Sift", async () => {

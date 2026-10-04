@@ -127,6 +127,17 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       record("health", profile);
       return structuredClone(data.health);
     },
+    async checkHealth(blocks, profile) {
+      record("checkHealth", blocks, profile);
+      const at = new Date().toISOString();
+      for (const c of data.health.checks) {
+        if (c.status !== "skipped" && (!blocks?.length || blocks.includes(c.role))) {
+          if (c.status === "unchecked") c.status = "ok";
+          c.checked_at = at;
+        }
+      }
+      return structuredClone(data.health);
+    },
     async getSession() {
       record("getSession");
       return structuredClone(data.session);

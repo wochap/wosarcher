@@ -36,7 +36,10 @@ export interface ApiClient {
   getSettings(): Promise<ServerSettings>;
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
   listProfiles(): Promise<ProfileInfo[]>;
+  /** The stored provider checks; sends no probe. */
   health(profile?: string): Promise<HealthReport>;
+  /** Probes the named blocks (every block when none) and returns the merged report. */
+  checkHealth(blocks?: string[], profile?: string): Promise<HealthReport>;
   getSession(): Promise<SessionInfo>;
   login(password: string): Promise<LoginResult>;
   logout(): Promise<void>;
@@ -107,6 +110,8 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
   }
 
   const run = (id: string) => `/runs/${encodeURIComponent(id)}`;
+  const profileQuery = (profile?: string) =>
+    profile ? `?profile=${encodeURIComponent(profile)}` : "";
 
   return {
     listRuns: () => json("GET", "/runs"),
@@ -141,8 +146,9 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     getSettings: () => json("GET", "/settings"),
     putSettings: (settings) => json("PUT", "/settings", settings),
     listProfiles: () => json("GET", "/profiles"),
-    health: (profile) =>
-      json("GET", `/providers/health${profile ? `?profile=${encodeURIComponent(profile)}` : ""}`),
+    health: (profile) => json("GET", `/providers/health${profileQuery(profile)}`),
+    checkHealth: (blocks, profile) =>
+      json("POST", `/providers/health/check${profileQuery(profile)}`, { blocks: blocks ?? [] }),
     getSession: () => json("GET", "/session"),
     login: async (password) => {
       const response = await fetch("/api/login", {
