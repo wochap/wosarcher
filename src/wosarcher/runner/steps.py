@@ -36,6 +36,7 @@ from wosarcher.models import (
 )
 from wosarcher.ports import Adapters, Searcher
 from wosarcher.runner.caches import CachedFetcher, EmbeddingMapping
+from wosarcher.runner.devices import stage_provider
 from wosarcher.runner.events import EventLog
 from wosarcher.stages import chunk as chunking
 from wosarcher.stages import fetch as fetching
@@ -83,6 +84,7 @@ class Outcome:
     """Items the stage produced; for `write`, characters of report text."""
     provider: str | None = None
     warnings: list[str] = field(default_factory=list[str])
+    passthrough: list[str] = field(default_factory=list[str])
 
 
 def short_reason(text: str) -> str:
@@ -220,8 +222,9 @@ async def prefilter(ctx: StepContext) -> Outcome:
             cache = EmbeddingMapping(EmbeddingCache(ctx.store.cache_dir / "embeddings"), info.model, info.dimension)
         except Exception as error:
             warnings.append(f"embedding model unknown, cache not used: {error}")
+    plan = ctx.plan()
     result = await prefiltering.prefilter(
-        ctx.plan().queries,
+        plan.queries,
         ctx.pages(),
         ctx.items("chunks.jsonl", Chunk),
         method=cfg.provider,
@@ -231,7 +234,14 @@ async def prefilter(ctx: StepContext) -> Outcome:
         cache=cache,
     )
     ctx.store.write_artifact(ctx.run_id, "candidates.jsonl", result.candidates)
-    return Outcome(len(result.candidates), provider=result.method, warnings=[*warnings, *result.warnings])
+    provider = stage_provider("prefilter", ctx.settings) if result.method == cfg.provider else result.method
+    passed = {candidate.query_id for candidate in result.candidates if candidate.passthrough}
+    return Outcome(
+        len(result.candidates),
+        provider=provider,
+        warnings=[*warnings, *result.warnings],
+        passthrough=[query.id for query in plan.queries if query.id in passed],
+    )
 
 
 def kept_passages(report: QueryScores, chunks: dict[str, Chunk], pages: dict[str, Page]) -> list[KeptPassage]:

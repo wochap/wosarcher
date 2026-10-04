@@ -1,10 +1,10 @@
 // Inline help: the `?` button after a label, and the one tooltip the app shows for it.
 // Hover or focus opens the tooltip, leaving closes it after 140 ms, a click pins it.
 import { Question } from "@phosphor-icons/react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { type HelpState, type HelpUi, useHelp } from "../app/context";
 import css from "./HelpTip.module.css";
-import { helpFor } from "./help";
+import { type Help, helpFor } from "./help";
 import { placeHelp } from "./helpPlacement";
 
 export const HELP_TOOLTIP_ID = "help-tooltip";
@@ -15,25 +15,32 @@ type Props = {
   help: string;
   /** The accessible label after "Help: "; defaults to the entry's title. */
   label?: string;
+  /** Help built at run time, shown instead of the `HELP` entry for `help`. */
+  entry?: Help;
+  /** The whole accessible label, replacing "Help: <label>". */
+  ariaLabel?: string;
+  /** Button content and class in place of the `?` icon. */
+  children?: ReactNode;
+  className?: string;
 };
 
-export function HelpTip({ help: key, label }: Props) {
+export function HelpTip({ help: key, label, entry, ariaLabel, children, className }: Props) {
   const ui = useHelp();
   const owner = useId();
   const open = ui?.help?.owner === owner;
   const pinned = open && !!ui?.help?.pinned;
   const show = (el: HTMLElement, pin: boolean) =>
-    ui?.openHelp({ key, owner, rect: el.getBoundingClientRect(), pinned: pin });
+    ui?.openHelp({ key, owner, rect: el.getBoundingClientRect(), pinned: pin, entry });
   const hover = (el: HTMLElement) => {
     if (!ui?.help?.pinned) show(el, false);
   };
   return (
     <button
       type="button"
-      className={css.button}
+      className={className ?? css.button}
       data-help={key}
       data-pinned={pinned || undefined}
-      aria-label={`Help: ${label ?? helpFor(key).title}`}
+      aria-label={ariaLabel ?? `Help: ${label ?? (entry ?? helpFor(key)).title}`}
       aria-describedby={HELP_TOOLTIP_ID}
       onMouseEnter={(e) => hover(e.currentTarget)}
       onFocus={(e) => hover(e.currentTarget)}
@@ -44,7 +51,7 @@ export function HelpTip({ help: key, label }: Props) {
         else show(e.currentTarget, true);
       }}
     >
-      <Question aria-hidden="true" />
+      {children ?? <Question aria-hidden="true" />}
     </button>
   );
 }
@@ -92,7 +99,7 @@ export function HelpPopover() {
   const ui = useHelp();
   const help = ui?.help;
   if (!ui || !help) return null;
-  const entry = helpFor(help.key);
+  const entry = help.entry ?? helpFor(help.key);
   const place = placeHelp(help.rect, { width: window.innerWidth, height: window.innerHeight });
   return (
     <div

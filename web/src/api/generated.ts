@@ -323,6 +323,7 @@ export type Since = (string | null)
 export type TokenName = (string | null)
 export type CopiedFrom = (string | null)
 export type Count = number
+export type Passthrough1 = string[]
 export type Provider2 = (string | null)
 export type Seconds = number
 export type Skipped2 = boolean
@@ -1248,6 +1249,7 @@ type?: Type14
 export interface StageDoneData {
 copied_from?: CopiedFrom
 count: Count
+passthrough?: Passthrough1
 provider?: Provider2
 seconds: Seconds
 skipped?: Skipped2

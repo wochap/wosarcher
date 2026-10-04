@@ -1,6 +1,8 @@
 import { act, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithHelp } from "../test/help";
 import { renderApp } from "../test/renderApp";
+import { HelpTip } from "./HelpTip";
 
 const tooltip = () => screen.queryByRole("tooltip");
 
@@ -77,5 +79,22 @@ describe("HelpTip", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Help: Writing defaults" }));
     fireEvent.scroll(document.body);
     expect(tooltip()).toBeNull();
+  });
+});
+
+describe("HelpTip with a runtime entry", () => {
+  it("shows the entry's title and body", () => {
+    renderWithHelp(
+      <HelpTip
+        help="m-plan"
+        entry={{ title: "Planner · qwen2.5-7b", body: "The configured LLM, on gpu0." }}
+        ariaLabel="Method: qwen2.5-7b, details"
+      >
+        qwen2.5-7b
+      </HelpTip>,
+    );
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Method: qwen2.5-7b, details" }));
+    expect(tooltip()?.textContent).toContain("Planner · qwen2.5-7b");
+    expect(tooltip()?.textContent).toContain("The configured LLM, on gpu0.");
   });
 });

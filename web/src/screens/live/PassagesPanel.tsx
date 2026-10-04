@@ -5,6 +5,7 @@ import type { Context } from "../../api/generated";
 import type { WritingOptions } from "../../api/types";
 import { HelpTip } from "../../components/HelpTip";
 import { domain, label } from "../../run/citations";
+import { isFallback } from "../../run/providers";
 import type { RunView } from "../../run/reducer";
 import type { PassageItem } from "../../run/scores";
 import { unloading } from "./model";
@@ -29,7 +30,7 @@ const fixed = (n: number) => n.toFixed(2);
 export function scorerTag(run: RunView, configured?: string): string | null {
   if (!run.passages.length) return null;
   const scorer = run.passages.find((q) => q.scorer !== "passthrough")?.scorer ?? "passthrough";
-  return configured && scorer !== configured ? `${scorer} · fallback` : scorer;
+  return isFallback(configured, scorer) ? `${scorer} · fallback` : scorer;
 }
 
 /** " · ≥ 0.60" when every scored query shares one display threshold. */
@@ -108,7 +109,7 @@ export function PassagesPanel(props: Props) {
           </span>
         )}
         <span className={`${panel.summary} ${css.summary}`}>
-          {summary}
+          <span className={css.summaryText}>{summary}</span>
           {summary && <HelpTip help="score" />}
         </span>
         <button

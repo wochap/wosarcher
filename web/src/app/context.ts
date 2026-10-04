@@ -3,6 +3,7 @@ import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
 import type { SocketFactory } from "../api/events";
 import type { WritingOptions } from "../api/types";
+import type { Help } from "../components/help";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -66,7 +67,14 @@ export type Ui = {
 export const UiContext = createContext<Ui | null>(null);
 
 /** The open help tooltip: its key, the button it belongs to, and that button's rectangle. */
-export type HelpState = { key: string; owner: string; rect: DOMRect; pinned: boolean };
+export type HelpState = {
+  key: string;
+  owner: string;
+  rect: DOMRect;
+  pinned: boolean;
+  /** Help built at run time; shown instead of the `HELP` entry for `key`. */
+  entry?: Help;
+};
 
 export type HelpUi = {
   help: HelpState | null;

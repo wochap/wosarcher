@@ -173,6 +173,7 @@ class Runner:
             usage=totals(usage),
             provider=outcome.provider or stage_provider(stage, self.settings),
             warnings=[*self.warnings, *outcome.warnings],
+            passthrough=outcome.passthrough,
         )
         self.warnings = []
         ctx.log.emit("stage.done", stage, data)

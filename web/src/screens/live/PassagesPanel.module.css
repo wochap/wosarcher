@@ -23,6 +23,13 @@
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  overflow: hidden;
+}
+
+.summaryText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .toggle {
@@ -35,7 +42,7 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  padding: 3px 6px;
+  padding: 2px 4px;
   border-radius: var(--radius-sm);
 }
 

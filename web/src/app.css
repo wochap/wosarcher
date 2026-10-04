@@ -25,3 +25,21 @@ body {
   position: absolute;
   left: -9999px;
 }
+
+/* Nocturne clips .seg children to its radius, which cuts the corners off the checked option's
+   inset ring. Let the options draw their own inner radius instead. */
+.seg {
+  overflow: visible;
+}
+
+.seg-opt:first-child {
+  border-radius: calc(var(--radius-md) - 1px) 0 0 calc(var(--radius-md) - 1px);
+}
+
+.seg-opt:last-child {
+  border-radius: 0 calc(var(--radius-md) - 1px) calc(var(--radius-md) - 1px) 0;
+}
+
+.seg-opt:only-child {
+  border-radius: calc(var(--radius-md) - 1px);
+}

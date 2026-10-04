@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from tests.runner.helpers import PAGES, QUERY, Releases, adapters, kinds, new_run, settings
-from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
-from wosarcher.config import LLMConfig, ScoreConfig, Settings
+from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
+from wosarcher.config import LLMConfig, PrefilterConfig, ScoreConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     Chunk,
@@ -174,6 +174,48 @@ async def test_scorer_fallback_reported(tmp_path: Path) -> None:
     scored = [event for event in events if isinstance(event, PassagesScored)]
     assert [event.data.query_id for event in scored] == ["q0", "q1"]
     assert all(passage.uri for event in scored for passage in event.data.passages)
+
+
+class BrokenEmbedder(FakeEmbedder):
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("connection refused")
+
+
+def embeddings_settings(tmp_path: Path, passthrough_chars: int) -> Settings:
+    cfg = settings(tmp_path)
+    return cfg.model_copy(
+        update={
+            "prefilter": PrefilterConfig(provider="embeddings", model="bge-small-en-v1.5"),
+            "select": cfg.select.model_copy(update={"passthrough_chars": passthrough_chars}),
+        }
+    )
+
+
+async def test_prefilter_provider_keeps_model(tmp_path: Path) -> None:
+    cfg = embeddings_settings(tmp_path, 0)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg, until="prefilter")
+    assert await run(cfg, run_id) == "done"
+    done = done_of(store, run_id, "prefilter").data
+    assert (done.provider, done.passthrough) == ("embeddings:bge-small-en-v1.5", [])
+
+
+async def test_prefilter_fallback_reported(tmp_path: Path) -> None:
+    cfg = embeddings_settings(tmp_path, 0)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg, until="prefilter")
+    assert await run(cfg, run_id, adapters(embedder=BrokenEmbedder())) == "done"
+    done = done_of(store, run_id, "prefilter").data
+    assert done.provider == "bm25"
+    assert "embeddings prefilter failed, used bm25: connection refused" in done.warnings
+
+
+async def test_prefilter_passthrough_reported(tmp_path: Path) -> None:
+    cfg = embeddings_settings(tmp_path, 60)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg, until="prefilter")
+    assert await run(cfg, run_id) == "done"
+    assert done_of(store, run_id, "prefilter").data.passthrough == ["q1"]
 
 
 async def test_report_streams_into_file(tmp_path: Path) -> None:

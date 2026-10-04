@@ -567,7 +567,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `run.cancelled` | `stage` |
 | `stage.started` | `device`, `provider` |
 | `stage.progress` | `done`, `total`, `failed` (at most every 250 ms, plus a final one) |
-| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`), `provider`, `skipped`, `copied_from`, `warnings` |
+| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough` |
 | `stage.failed` | `error`, `next` (empty when none) |
 | `resource.waiting`, `resource.released` | `device`, `released_stage` |
 | `plan.ready` | `queries` |
@@ -576,6 +576,14 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `page.failed` | `url`, `reason` |
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
 | `report.delta`, `report.snapshot` | `text` |
+
+`provider` is `<provider>:<model>`, or `<provider>` when the block has no
+model (`built-in` for stages without a block). On `stage.started` it is
+the configured block; on `stage.done` it names what actually ran, in the
+same form. Prefilter reports `embeddings:<model>` when embeddings ran as
+configured, and `bm25` or `none` otherwise. `passthrough` lists, in plan
+order, the sub-queries whose pairs skipped ranking (small-input
+passthrough); only prefilter sets it.
 
 `seq` is assigned by the store's append, so the log has no gaps.
 `run.queued`, `report.delta`, and `report.snapshot` are live only and never
@@ -970,7 +978,8 @@ orchestration; every model is behind HTTP.
 | Tests | pytest, pytest-asyncio, respx, httpx2 | adapter tests without network; httpx2 is what Starlette's `TestClient` uses |
 | Quality | ruff (lint and format), basedpyright (strict) | readability enforced by tools |
 
-Frontend: Vite, React, TypeScript, react-markdown, Biome (format and lint);
+Frontend: Vite, React, TypeScript, react-markdown with remark-gfm (tables in
+reports), Biome (format and lint);
 pnpm. No server-side
 rendering: FastAPI serves the static build from the same origin, which keeps
 the cookie and `Origin` checks simple. The event and API types are generated
@@ -1039,7 +1048,18 @@ These override the prototype where they differ:
 - **GPU policy:** shown from the checked profile, not editable in the
   browser; to change it, edit the profile's `run.gpu_policy`.
 - **Prefilter card:** titled Embeddings only for the `embeddings` provider,
-  Prefilter otherwise (for example `bm25`).
+  Prefilter otherwise (for example `bm25`). A second line reads "top N per
+  sub-query" while running and "top N/sub-query · q4, q5 passthrough" once
+  done, with N from the run's `prefilter.top_k` and the IDs from
+  `stage.done` `passthrough`.
+- **Method tags:** the Plan, Prefilter, Score, and Write cards show the
+  method under the label: the configured provider while running, the one
+  that ran after `stage.done`. The tag is the model for LLM and embeddings
+  providers, `BM25` for `bm25`, else the provider name. A phase whose
+  method (the part before `:`) differs from the configured one is a
+  fallback: "<tag> · fallback" in warn style, and its tooltip names the
+  configured method and the reason from the stage's warnings. The Passages
+  scorer tag decides fallback the same way (`run/providers.ts`).
 - **Theme:** dark and light both kept; the first visit follows
   `prefers-color-scheme`, and the choice is remembered in the browser.
 - **Additions to the prototype:** "Live updates unavailable" is a banner

@@ -570,6 +570,8 @@ class StageDoneData(Contract):
     skipped: bool = False
     copied_from: str | None = None
     warnings: list[str] = []
+    passthrough: list[str] = []
+    """Sub-query IDs whose pairs skipped ranking; set by prefilter only."""
 
 
 class StageFailedData(Contract):

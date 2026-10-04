@@ -2,6 +2,7 @@
 // caret at the end while it streams. `variant` picks the Live panel or Report article sizes.
 import { type ComponentProps, useMemo } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { Context } from "../api/generated";
 import type { WritingOptions } from "../api/types";
 import { HelpTip } from "../components/HelpTip";
@@ -32,12 +33,25 @@ export function ReportMarkdown({
 }: Props) {
   // One component per marker, context, and handlers, so chips keep focus while text streams.
   const components = useMemo(
-    () => ({ a: link({ marker, context, onCite, onLeave }) }),
+    () => ({ a: link({ marker, context, onCite, onLeave }), table: Table }),
     [marker, context, onCite, onLeave],
   );
   return (
     <div className={css.report} data-variant={variant}>
-      <Markdown components={components}>{prepare(body, streaming)}</Markdown>
+      <Markdown remarkPlugins={REMARK} components={components}>
+        {prepare(body, streaming)}
+      </Markdown>
+    </div>
+  );
+}
+
+const REMARK = [remarkGfm];
+
+/** A GFM table in Nocturne's style, scrolling sideways inside its own area. */
+function Table({ children }: ComponentProps<"table">) {
+  return (
+    <div className={css.tableWrap}>
+      <table className="table">{children}</table>
     </div>
   );
 }

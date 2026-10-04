@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../api/types";
 import { ev, stageDone, usage } from "../test/events";
+import { isFallback } from "./providers";
 import { applySummary, initialRunView, type RunView, runReducer } from "./reducer";
 
 const fold = (events: RunEvent[], from: RunView = initialRunView("r1")) =>
@@ -84,6 +85,42 @@ describe("runReducer", () => {
     ]);
     expect(state.status).toBe("cancelled");
     expect(state.phases.fetch.state).toBe("cancelled");
+  });
+
+  it("keeps the configured provider and the one that ran (prefilter fallback)", () => {
+    const warning = "embeddings prefilter failed, used bm25: connection refused";
+    const state = fold([
+      started,
+      ev(
+        2,
+        "stage.started",
+        { device: "gpu0", provider: "embeddings:bge-small-en-v1.5" },
+        "prefilter",
+      ),
+      stageDone(3, "prefilter", {
+        provider: "bm25",
+        warnings: [warning],
+        passthrough: ["q4", "q5"],
+      }),
+    ]);
+    const phase = state.phases.prefilter;
+    expect(phase).toMatchObject({
+      configuredProvider: "embeddings:bge-small-en-v1.5",
+      provider: "bm25",
+      warnings: [warning],
+    });
+    expect(isFallback(phase.configuredProvider, phase.provider)).toBe(true);
+    expect(state.passthrough).toEqual(["q4", "q5"]);
+  });
+
+  it("is not a fallback when the same method ran without its model", () => {
+    const state = fold([
+      started,
+      ev(2, "stage.started", { device: "gpu0", provider: "rerank:bge-reranker" }, "score"),
+      stageDone(3, "score", { provider: "rerank" }),
+    ]);
+    const phase = state.phases.score;
+    expect(isFallback(phase.configuredProvider, phase.provider)).toBe(false);
   });
 
   it("sums tokens and cost over stage.done", () => {

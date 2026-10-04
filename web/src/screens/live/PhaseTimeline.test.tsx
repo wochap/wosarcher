@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../../api/types";
-import { stageDone } from "../../test/events";
+import { ev, stageDone } from "../../test/events";
 import { live } from "../../test/fixtures/live";
 import { RUN_ID, upTo } from "../../test/fixtures/sample";
 import { REWRITE_ID, versions } from "../../test/fixtures/versions";
+import { renderWithHelp } from "../../test/help";
 import { viewOf } from "../../test/views";
 import { PhaseTimeline } from "./PhaseTimeline";
 
@@ -56,5 +57,63 @@ describe("PhaseTimeline", () => {
     expect(card("Write").dataset.state).toBe("done");
     expect(card("Write").textContent).toContain("skipped");
     expect(card("Load").textContent).toContain("skipped");
+  });
+
+  const begin = all[0];
+  const embeddings = "embeddings:bge-small-en-v1.5";
+  const prefilterStarted = ev(
+    2,
+    "stage.started",
+    { device: "gpu0", provider: embeddings },
+    "prefilter",
+  );
+
+  it("tags embeddings that ran as configured with the model", () => {
+    render(
+      <PhaseTimeline
+        run={viewOf([begin, prefilterStarted, stageDone(3, "prefilter", { provider: embeddings })])}
+      />,
+    );
+    const tag = screen.getByRole("button", { name: "Method: bge-small-en-v1.5, details" });
+    expect(tag.className).not.toContain("fallback");
+  });
+
+  it("marks a prefilter that fell back to BM25 and names the reason", () => {
+    const warning = "embeddings prefilter failed, used bm25: connection refused";
+    renderWithHelp(
+      <PhaseTimeline
+        run={viewOf([
+          begin,
+          prefilterStarted,
+          stageDone(3, "prefilter", { provider: "bm25", warnings: [warning] }),
+        ])}
+        topK={50}
+      />,
+    );
+    const tag = screen.getByRole("button", { name: "Method: BM25 · fallback, details" });
+    expect(tag.className).toContain("fallback");
+    expect(tag.querySelector("svg")).toBeTruthy();
+    fireEvent.mouseEnter(tag);
+    const text = screen.getByRole("tooltip").textContent;
+    expect(text).toContain("Fallback · keyword (BM25)");
+    expect(text).toContain("embeddings (bge-small-en-v1.5)");
+    expect(text).toContain("connection refused");
+  });
+
+  it("shows no tag on a pending phase", () => {
+    render(<PhaseTimeline run={viewOf([begin, prefilterStarted])} />);
+    expect(card("Score").querySelector("[data-help^='m-']")).toBeNull();
+    expect(card("Prefilter").querySelector("[data-help='m-prefilter']")).toBeTruthy();
+  });
+
+  it("shows the prefilter detail while running", () => {
+    render(<PhaseTimeline run={viewOf([begin, prefilterStarted])} topK={50} />);
+    expect(card("Prefilter").textContent).toContain("top 50 per sub-query");
+  });
+
+  it("shows the prefilter detail with passthrough sub-queries once done", () => {
+    const done = stageDone(3, "prefilter", { provider: embeddings, passthrough: ["q4", "q5"] });
+    render(<PhaseTimeline run={viewOf([begin, prefilterStarted, done])} topK={50} />);
+    expect(card("Prefilter").textContent).toContain("top 50/sub-query · q4, q5 passthrough");
   });
 });

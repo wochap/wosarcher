@@ -34,6 +34,11 @@ export type Phase = {
   skipped?: boolean;
   copiedFrom?: string;
   error?: string;
+  /** From `stage.started`: `<provider>:<model>`, or `<provider>`. */
+  configuredProvider?: string;
+  /** From `stage.done`: what actually ran, in the same form. */
+  provider?: string;
+  warnings: string[];
 };
 
 export type SubQuery = { id: string; text: string; results: number; done: boolean };
@@ -77,6 +82,8 @@ export type RunView = {
   /** Keyed by URL (web) or path (file). */
   sources: Record<string, SourceView>;
   passages: ScoredQuery[];
+  /** Sub-query IDs that skipped prefilter ranking (small-input passthrough). */
+  passthrough: string[];
   report: string;
   tokensIn: number;
   tokensOut: number;
@@ -85,7 +92,7 @@ export type RunView = {
 
 export function initialRunView(runId: string): RunView {
   const phases = {} as Record<PhaseId, Phase>;
-  for (const id of PHASES) phases[id] = { state: "pending", counters: {} };
+  for (const id of PHASES) phases[id] = { state: "pending", counters: {}, warnings: [] };
   return {
     runId,
     lastSeq: 0,
@@ -94,6 +101,7 @@ export function initialRunView(runId: string): RunView {
     subQueries: [],
     sources: {},
     passages: [],
+    passthrough: [],
     report: "",
     tokensIn: 0,
     tokensOut: 0,
@@ -168,6 +176,7 @@ function apply(state: RunView, event: RunEvent): RunView {
       return withPhase(state, event.stage, {
         state: "running",
         device: event.data.device ?? undefined,
+        configuredProvider: event.data.provider ?? undefined,
         waitReason: undefined,
       });
     case "stage.progress": {
@@ -183,7 +192,10 @@ function apply(state: RunView, event: RunEvent): RunView {
         copiedFrom: d.copied_from ?? undefined,
         skipped: d.skipped ?? false,
         counters: { ...phase?.counters, count: d.count },
+        provider: d.provider ?? undefined,
+        warnings: d.warnings ?? [],
       });
+      if (event.stage === "prefilter") next = { ...next, passthrough: d.passthrough ?? [] };
       if (event.stage === "search" || event.stage === "plan") {
         next = { ...next, subQueries: next.subQueries.map((q) => ({ ...q, done: true })) };
       }

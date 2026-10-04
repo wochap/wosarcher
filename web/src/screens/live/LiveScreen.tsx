@@ -26,6 +26,12 @@ function configuredScorer(detail: RunDetail | null | undefined): string | undefi
   return score?.provider;
 }
 
+/** The run's `prefilter.top_k`, from the settings in its `request.json`. */
+function prefilterTopK(detail: RunDetail | null | undefined): number | undefined {
+  const prefilter = detail?.request?.settings.prefilter as { top_k?: number } | undefined;
+  return prefilter?.top_k;
+}
+
 const typing = (target: EventTarget | null) =>
   /^(INPUT|TEXTAREA|SELECT)$/.test((target as HTMLElement | null)?.tagName ?? "");
 
@@ -125,7 +131,7 @@ export function LiveScreen() {
         rewriteOf={detail?.fork_from === "write" ? detail.parent_run_id : null}
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
-      {shows("progress") && <PhaseTimeline run={run} />}
+      {shows("progress") && <PhaseTimeline run={run} topK={prefilterTopK(detail)} />}
       <div className={css.grid}>
         {(shows("progress") || shows("sources")) && (
           <div className={css.column}>
