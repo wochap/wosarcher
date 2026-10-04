@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import type { ServerSettings } from "../../api/types";
@@ -9,7 +9,9 @@ describe("WritingDefaults", () => {
   it("saves a changed length once, on blur, and shows Saved", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
-    const words = await screen.findByLabelText("Length (words)");
+    const words = await screen.findByLabelText<HTMLInputElement>("Length (words)");
+    // The input renders before the saved settings arrive; edit only after they load.
+    await waitFor(() => expect(words.value).toBe("1200"));
     fireEvent.change(words, { target: { value: "800" } });
     expect(callsTo(api, "putSettings")).toHaveLength(0);
     await act(async () => {

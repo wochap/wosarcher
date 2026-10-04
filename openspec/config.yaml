@@ -33,8 +33,8 @@ context: |
   License MIT.
 
   Frontend design: design/ is a Claude Design handoff bundle and the source
-  of truth for the UI. The frontend must match design/project/"Sift
-  Research.dc.html" screen by screen (all its scenario states, dark and
+  of truth for the UI. The frontend must match
+  design/project/wosarcher.dc.html screen by screen (all its scenario states, dark and
   light, phone and desktop), styled with the bundle's Nocturne styles.css
   (vendored) and CSS modules on its variables. No Tailwind or shadcn/ui.
   Read design/README.md before any frontend change.
