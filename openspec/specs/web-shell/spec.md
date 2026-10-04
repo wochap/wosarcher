@@ -681,3 +681,17 @@ SHALL NOT poll health in the background.
 #### Scenario: Nothing checked
 - **WHEN** every entry of the report is `unchecked` or `skipped`
 - **THEN** the Settings item shows no warn dot
+
+### Requirement: Run history depth tag
+Each Run history row SHALL show the run's depth as an outline tag next to
+its status tag ("Quick", "Standard", "Deep", "Exhaustive", or "Custom"), as
+in the prototype's Run history screen, taken from the run's summary in
+`GET /api/runs`. A run with no depth SHALL show "Standard".
+
+#### Scenario: Depth in a row
+- **WHEN** `GET /api/runs` returns a run with `depth = "exhaustive"`
+- **THEN** its row shows the status tag followed by "Exhaustive"
+
+#### Scenario: Older run
+- **WHEN** a run's summary has `depth = null`
+- **THEN** its row shows "Standard"

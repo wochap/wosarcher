@@ -51,12 +51,12 @@ both sides, by the same round-robin rule.
 - **THEN** file passages fill the remaining budget beyond their own share
 
 ### Requirement: Token budget
-The context budget SHALL be the smaller of `select.max_context_tokens`
-(default 16000) and `llm.context_window` minus
+The context budget SHALL be `llm.context_window` minus
 `select.prompt_reserve_tokens` (default 2000) minus the output allowance,
-where the output allowance is the larger of 1024 and twice the target word
-count. A budget of zero or less SHALL fail with an error that names
-`llm.context_window`.
+capped at `select.max_context_tokens` (default 16000) unless that is
+`auto`. The output allowance is the writer's output limit (report-writing
+"Length and language"). A budget of zero or less SHALL fail with an error
+that names `llm.context_window`.
 
 #### Scenario: Small context window
 - **WHEN** `llm.context_window = 8192`, `select.max_context_tokens = 16000`, and the target is 1200 words
@@ -65,6 +65,14 @@ count. A budget of zero or less SHALL fail with an error that names
 #### Scenario: Window too small
 - **WHEN** `llm.context_window = 4000` and the target is 1200 words
 - **THEN** selection fails and the error names `llm.context_window`
+
+#### Scenario: Auto context
+- **WHEN** `llm.context_window = 1000000`, `select.max_context_tokens = "auto"`, and the target is 1200 words
+- **THEN** the budget is 1000000 - 2000 - 2400 = 995600 tokens
+
+#### Scenario: Output cap lowers the allowance
+- **WHEN** `llm.context_window = 32768`, `select.max_context_tokens = "auto"`, the target is 3000 words, and `llm.max_output_tokens = 4000`
+- **THEN** the budget is 32768 - 2000 - 4000 = 26768 tokens
 
 ### Requirement: Token estimate
 The token count of a passage SHALL be estimated as its character count

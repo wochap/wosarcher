@@ -50,15 +50,23 @@ An invalid request body SHALL answer 422 and name each invalid field.
 ### Requirement: Create a run
 `POST /api/runs` SHALL accept a multipart form with one `request` field
 holding JSON and zero or more `attachments` file fields. The request JSON
-SHALL have `query` (required, non-empty), and optional `sources` (`web`,
-`files`, or `both`), `until` (a stage name), `profile`, `writing` (any
-subset of the writing option fields), and `set` (a list of
-`dotted.key=value` overrides). The response SHALL be 201 with the new
-`run_id` and its status (`queued` or `running`). Attachment file names
-SHALL be reduced to their base name; two attachments with the same base
-name SHALL be rejected with 422. A request whose resolved sources are
-`files` with no attachment SHALL be rejected with 422
-`invalid_attachment` before anything is staged.
+SHALL have `query` (required, non-empty), and these optional fields:
+- `sources` (`web`, `files`, or `both`)
+- `until` (a stage name)
+- `profile`
+- `depth` (a preset name or `custom`)
+- `research` (any subset of `sub_queries`, `results_per_query`,
+  `max_pages`, `passages_per_query`, and `context_tokens`, each a positive
+  integer)
+- `writing` (any subset of the writing option fields)
+- `set` (a list of `dotted.key=value` overrides)
+
+An unknown `depth` SHALL be rejected with 422 that names `depth`. The
+response SHALL be 201 with the new `run_id` and its status (`queued` or
+`running`). Attachment file names SHALL be reduced to their base name; two
+attachments with the same base name SHALL be rejected with 422. A request
+whose resolved sources are `files` with no attachment SHALL be rejected
+with 422 `invalid_attachment` before anything is staged.
 
 #### Scenario: Run with an attachment
 - **WHEN** a client posts `request = {"query": "q", "sources": "both"}` and one attachment `notes.md`
@@ -76,12 +84,25 @@ name SHALL be rejected with 422. A request whose resolved sources are
 - **WHEN** a client posts `request = {"query": "q", "sources": "files"}` with no attachment
 - **THEN** the response is 422 with `error = "invalid_attachment"`, and no run is queued or staged
 
+#### Scenario: Custom research values
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80}}`
+- **THEN** the run resolves `plan.max_sub_queries` 6 and `fetch.max_pages` 80, and its summary has `depth = "custom"`
+
+#### Scenario: Unknown depth
+- **WHEN** a client posts `request = {"query": "q", "depth": "huge"}`
+- **THEN** the response is 422 and names `depth`
+
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
-(defaults, profile, environment), then apply the global settings, then the
-request's `sources` and `writing` fields, then the request's `set`
-overrides, each later layer winning. The profile SHALL be read when the run
-process starts, so profile edits apply without restarting the server.
+(defaults, profile, environment). It SHALL then apply, each later layer
+winning:
+1. the global settings;
+2. the request's depth preset;
+3. the request's `sources`, `research`, and `writing` fields;
+4. the request's `set` overrides.
+
+The profile SHALL be read when the run process starts, so profile edits
+apply without restarting the server.
 
 #### Scenario: Request overrides global default
 - **WHEN** the global settings have tone `formal` and a run request has `"writing": {"tone": "critical"}`
@@ -90,6 +111,18 @@ process starts, so profile edits apply without restarting the server.
 #### Scenario: Global default applies
 - **WHEN** the global settings have words 600 and a run request has no `writing`
 - **THEN** the run's resolved words is 600
+
+#### Scenario: Preset beats global default
+- **WHEN** the global settings have words 1500 and a run request has `"depth": "quick"` and no `writing`
+- **THEN** the run's resolved words is 600
+
+#### Scenario: Request writing beats preset
+- **WHEN** a run request has `"depth": "deep"` and `"writing": {"words": 800}`
+- **THEN** the run's resolved words is 800
+
+#### Scenario: Standard keeps the global default
+- **WHEN** the global settings have words 1500 and a run request has `"depth": "standard"`
+- **THEN** the run's resolved words is 1500
 
 ### Requirement: List and show runs
 `GET /api/runs` SHALL list every run in the runs directory, every queued
@@ -279,13 +312,13 @@ is queued or running SHALL answer 409; an unknown stage name SHALL answer
 ### Requirement: Rerun a run
 `POST /api/runs/{id}/rerun` SHALL start, through the run queue, a new
 `wosarcher run` with the original run's request (query, sources, `until`,
-profile, and its saved overrides, including writing options) and a copy of
-the original run directory's attachments, with nothing uploaded again. The
-new run SHALL have version 1 and no parent run; it is not a fork. The
-response SHALL be 201 with the new `run_id` and its status. An unknown run
-SHALL answer 404, a run that is still queued SHALL answer 409, and a run
-with sources `files` whose run directory has no attachments SHALL answer
-422 `invalid_attachment`.
+profile, depth, and its saved overrides, including writing options) and a
+copy of the original run directory's attachments, with nothing uploaded
+again. The new run SHALL have version 1 and no parent run; it is not a
+fork. The response SHALL be 201 with the new `run_id` and its status. An
+unknown run SHALL answer 404, a run that is still queued SHALL answer 409,
+and a run with sources `files` whose run directory has no attachments
+SHALL answer 422 `invalid_attachment`.
 
 #### Scenario: Rerun with attachments
 - **WHEN** a client reruns a finished run that had the attachment `notes.md`
@@ -298,6 +331,10 @@ with sources `files` whose run directory has no attachments SHALL answer
 #### Scenario: Rerun of a files run without attachments
 - **WHEN** a client reruns a run with sources `files` whose `attachments/` directory is missing
 - **THEN** the response is 422 with `error = "invalid_attachment"`
+
+#### Scenario: Rerun keeps the depth
+- **WHEN** a client reruns a run that used depth `deep`
+- **THEN** the rerun's summary has `depth = "deep"` and its resolved `plan.max_sub_queries` is 5
 
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
@@ -315,9 +352,14 @@ SHALL apply when the file does not exist.
 - **THEN** the response is 422 and the stored settings are unchanged
 
 ### Requirement: Profiles
-`GET /api/profiles` SHALL return every profile with its `name`, its
-`source` (`builtin` or `user`), whether it is `active`, and its
-`description` (empty when the profile sets none).
+`GET /api/profiles` SHALL return every profile with:
+- its `name`;
+- its `source` (`builtin` or `user`);
+- whether it is `active`;
+- its `description` (empty when the profile sets none);
+- its resolved `context_window`, `prompt_reserve_tokens`, and
+  `max_output_tokens` (null when unset), so a client can show the
+  effective context budget.
 
 #### Scenario: Active profile marked
 - **WHEN** the stored default profile is `cloud`
@@ -326,6 +368,10 @@ SHALL apply when the file does not exist.
 #### Scenario: Descriptions
 - **WHEN** a client requests `GET /api/profiles` and a user profile `nixos` sets no description
 - **THEN** the `workstation` entry has `description` "One GPU fits all models; models stay loaded." and the `nixos` entry has `description` ""
+
+#### Scenario: Limits
+- **WHEN** the `workstation` profile resolves `llm.context_window = 32768`
+- **THEN** its entry has `context_window = 32768`, `prompt_reserve_tokens = 2000`, and `max_output_tokens = null`
 
 ### Requirement: Provider health
 `GET /api/providers/health` SHALL return, without sending any probe, the
@@ -421,3 +467,24 @@ and stored results SHALL stay unchanged.
 #### Scenario: Doctor timeout
 - **WHEN** the doctor does not finish within its timeout
 - **THEN** the response is 502 with the reason and a following `GET /api/providers/health` returns the previous results
+
+### Requirement: Depths
+`GET /api/depths` SHALL return the depth presets in the order `quick`,
+`standard`, `deep`, `exhaustive`. Each entry SHALL have:
+- its `name` and `description`;
+- `values` with `sub_queries`, `results_per_query`, `max_pages`,
+  `passages_per_query`, `context_tokens`, and `words`.
+
+Each value SHALL be the one the preset sets, or the built-in default when
+it sets none. The exception is `words`: it SHALL be null when the preset
+does not set it (the global default applies). Run summaries from
+`GET /api/runs` and `GET /api/runs/{id}` SHALL include the run's `depth`
+(a preset name, `custom`, or null).
+
+#### Scenario: Standard values
+- **WHEN** a client requests `GET /api/depths`
+- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` 16000, and `words` null
+
+#### Scenario: Summary depth
+- **WHEN** a run was started with `"depth": "quick"`
+- **THEN** its summary in `GET /api/runs` has `depth = "quick"`

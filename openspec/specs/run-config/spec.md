@@ -76,9 +76,11 @@ then the `WOSARCHER_PROFILE` environment variable, then the name stored by
 
 ### Requirement: Precedence
 Each setting SHALL be resolved with this precedence, lowest first: built-in
-defaults, the active profile, environment variables, then command-line or
-request overrides. Environment variables SHALL use the prefix `WOSARCHER_` and `__`
-as the nesting separator (for example `WOSARCHER_SCORE__PROVIDER=jev`).
+defaults, the active profile, environment variables, the server's global
+settings (runs started by the server only), the run's depth preset, then
+command-line or request overrides. Environment variables SHALL use the
+prefix `WOSARCHER_` and `__` as the nesting separator (for example
+`WOSARCHER_SCORE__PROVIDER=jev`).
 
 #### Scenario: Environment overrides profile
 - **WHEN** the profile sets `score.provider = "rerank"` and `WOSARCHER_SCORE__PROVIDER=jev` is set
@@ -91,6 +93,10 @@ as the nesting separator (for example `WOSARCHER_SCORE__PROVIDER=jev`).
 #### Scenario: Unset values fall back to defaults
 - **WHEN** neither the profile, the environment, nor an override sets `chunk.size`
 - **THEN** the resolved `chunk.size` is the built-in default 1000
+
+#### Scenario: Preset between environment and overrides
+- **WHEN** the profile sets `select.max_context_tokens = 12000`, the run uses depth `deep`, and the command adds `--set select.max_context_tokens=20000`
+- **THEN** the resolved value is 20000, and it is 24000 without the `--set`
 
 ### Requirement: Field overrides
 The CLI SHALL accept repeated `--set <dotted.key>=<value>` options that
@@ -172,3 +178,22 @@ show [name]` (the fully resolved configuration with secrets redacted), and
 #### Scenario: List shows descriptions
 - **WHEN** the user runs `wosarcher profile list` with only the built-in profiles
 - **THEN** the `low-vram` line reads `  low-vram  (built-in)  Models take turns on one small GPU; slower, fits 8 GB.`
+
+### Requirement: Output and context sizing
+The `llm` block SHALL accept `max_output_tokens`, a positive integer or
+unset (the default). When it is set, it caps the writer's output limit.
+`select.max_context_tokens` SHALL accept a positive integer (default 16000)
+or the string `auto`, which means no cap other than the room the context
+window leaves. `fetch.max_pages` SHALL be a positive integer, default 40.
+
+#### Scenario: Auto context in a profile
+- **WHEN** a profile sets `select.max_context_tokens = "auto"` and `llm.context_window = 1000000`
+- **THEN** the configuration resolves, and selection may use all the room the window leaves
+
+#### Scenario: Invalid context value
+- **WHEN** a profile sets `select.max_context_tokens = "all"`
+- **THEN** loading fails with an error naming the field
+
+#### Scenario: Page cap default
+- **WHEN** no source sets `fetch.max_pages`
+- **THEN** the resolved value is 40

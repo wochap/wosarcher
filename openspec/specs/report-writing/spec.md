@@ -68,11 +68,16 @@ is called, with an error that lists the known tones.
 ### Requirement: Length and language
 The system message SHALL state the target length in words and the report
 language from the writing options. The LLM output limit SHALL be the
-larger of 1024 and twice the target word count, in tokens.
+larger of 1024 and twice the target word count, in tokens, lowered to
+`llm.max_output_tokens` when that is set.
 
 #### Scenario: Options in the prompt
 - **WHEN** the options are 600 words in German
 - **THEN** the system message asks for about 600 words in German and the LLM is called with an output limit of 1200 tokens
+
+#### Scenario: Provider output cap
+- **WHEN** the target is 3000 words and `llm.max_output_tokens = 4000`
+- **THEN** the LLM is called with an output limit of 4000 tokens and the system message still asks for about 3000 words
 
 ### Requirement: Streaming
 The report text SHALL be streamed: each piece of text from the LLM SHALL be

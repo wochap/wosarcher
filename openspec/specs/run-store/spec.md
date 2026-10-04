@@ -47,14 +47,30 @@ time.
 - **THEN** the fork's directory contains the parent's `context.json` and `select.jsonl`
 
 ### Requirement: Request record
-`request.json` SHALL hold the run request (query, sources, `until`, and
-attachment names), the profile name, the list of overrides, the resolved configuration with every secret replaced by `***`,
-the parent run ID (empty for a new run), the stage a fork started from, the
-version, and the creation time.
+`request.json` SHALL hold:
+- the run request (query, sources, `until`, and attachment names);
+- the profile name;
+- the depth (a preset name, `custom`, or empty);
+- the list of overrides (the user's own, not the preset's expansion);
+- the resolved configuration with every secret replaced by `***`;
+- the parent run ID (empty for a new run);
+- the stage a fork started from;
+- the version;
+- the creation time.
+
+A fork SHALL record its parent's depth.
 
 #### Scenario: Secrets redacted
 - **WHEN** a run is created with `WOSARCHER_SCORE__API_KEY` set
 - **THEN** `request.json` contains `"api_key": "***"` for the score block and does not contain the key
+
+#### Scenario: Depth recorded
+- **WHEN** a run is created with depth `deep` and `--words 800`
+- **THEN** `request.json` has depth `deep`, the overrides list only `write.words=800`, and the resolved configuration has `plan.max_sub_queries` 5
+
+#### Scenario: Fork keeps depth
+- **WHEN** a run with depth `quick` is forked from `write`
+- **THEN** the fork's `request.json` has depth `quick`
 
 ### Requirement: Attachments copied
 Attachment files, directories (recursively), and glob matches SHALL be

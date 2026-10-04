@@ -105,3 +105,26 @@ marked as pdf-ingest markdown, so chunking keeps its page and block IDs.
 #### Scenario: Converted PDF
 - **WHEN** an attachment contains `<!-- page: 3 -->` and `<!-- a: p3-b2 -->`
 - **THEN** its page is marked as pdf-ingest markdown
+
+### Requirement: Fetch page cap and order
+The fetch stage SHALL fetch at most `fetch.max_pages` pages successfully.
+Unique hits SHALL be queued round-robin across queries in query order (`q0`
+first), taking each query's hits in rank order. A hit found by several
+queries SHALL be queued once, at its earliest turn. Fetches SHALL start in
+queue order, within the `fetch.concurrency` limit. A failed or empty fetch
+SHALL NOT count toward the cap: the next queued hit is fetched in its place.
+No new fetch SHALL start once the pages fetched plus the fetches in flight
+reach the cap. Queued hits that were never fetched SHALL NOT be recorded as
+failures. The stage SHALL report how many there were.
+
+#### Scenario: Fair order
+- **WHEN** `fetch.max_pages = 4`, `fetch.concurrency = 1`, `q1` found A1, A2, A3, and `q2` found B1, B2, B3
+- **THEN** the pages fetched are A1, B1, A2, B2 and 2 hits are reported as not fetched
+
+#### Scenario: Failure replaced
+- **WHEN** `fetch.max_pages = 2`, `fetch.concurrency = 1`, and the queue is X, Y, Z with X failing
+- **THEN** Y and Z are fetched, X is a failure, and no hit is reported as not fetched
+
+#### Scenario: Under the cap
+- **WHEN** 10 unique hits are found and `fetch.max_pages = 40`
+- **THEN** all 10 are fetched

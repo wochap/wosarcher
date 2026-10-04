@@ -44,17 +44,21 @@ size (`B` or `KB` with one decimal), and a remove button.
 
 ### Requirement: Run options
 The New run screen (scenario `new`) SHALL show the collapsible "Options"
-panel, collapsed by default, whose header shows a summary of every value:
-"<recipe> · <sources> · <profile> · <Tone> · <N> words · <Language> ·
-<citation marker label> · <reference style>". The Run group SHALL offer
-Recipe (segmented, `report` then `context`), Sources (segmented, `web`,
-`files`, `both`), and Profile: a select `min(260px, 100%)` wide listing
-the profiles from `GET /api/profiles` by name, a profile whose `source` is
-`user` followed by "  (user profile)", the active one preselected, with the
-selected profile's `description` under the select (12px, muted, 4px
-above) when it is not empty. Each Run label sits at the top of its row in
-the prototype's form grid. Recipe `context` SHALL start the run with
-`until` set to `select`, so no report is written.
+panel, collapsed by default. Its header SHALL show the summary "<Depth> ·
+<recipe> · <sources> · <profile> · <N> words · <Tone>", as in scenario
+`new-depth`. The panel SHALL start with the Depth group (Requirement:
+Depth control), then the Run group. The Run group SHALL offer:
+- Recipe (segmented, `report` then `context`);
+- Sources (segmented, `web`, `files`, `both`);
+- Profile: a select `min(260px, 100%)` wide listing the profiles from
+  `GET /api/profiles` by name. A profile whose `source` is `user` is
+  followed by "  (user profile)", and the active one is preselected. The
+  selected profile's `description` is shown under the select (12px, muted,
+  4px above) when it is not empty.
+
+Each Run label sits at the top of its row in the prototype's form grid.
+Recipe `context` SHALL start the run with `until` set to `select`, so no
+report is written.
 
 #### Scenario: Context recipe
 - **WHEN** the user picks Recipe `context` and starts a run
@@ -68,22 +72,33 @@ the prototype's form grid. Recipe `context` SHALL start the run with
 - **WHEN** `GET /api/profiles` returns a profile `nixos` with `source` `user`
 - **THEN** its option reads "nixos  (user profile)" and selecting it sends `profile` = `nixos`
 
+#### Scenario: Summary
+- **WHEN** the depth is Deep, recipe `report`, sources `both`, profile `workstation`, tone objective, and words 2000
+- **THEN** the collapsed header reads "Deep · report · both · workstation · 2000 words · Objective"
+
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
 writing fields, labels, and controls of the Settings "Writing defaults"
-panel and start from the saved writing defaults. A field whose value
-differs from its default SHALL show the "overridden" mark followed by its
-help button, "default: <value>", and a Reset button; a custom instruction
-longer than 28 characters SHALL read as its first 28 characters followed
-by "…" in that text. The panel header SHALL show "N overridden" and the
-group SHALL offer "Reset all to defaults" while any field is overridden,
-and an "edit defaults" link to Settings. When a default changes in
-Settings, the New run value of that field SHALL follow it unless it is
-overridden. The run request SHALL carry only the overridden writing
-fields.
+panel. It SHALL start from the saved writing defaults, except Length
+(words): its default is the selected depth's `words`, or the saved default
+when the depth sets none (Standard), or the last Custom value for Custom.
+
+A field whose value differs from its default SHALL show the "overridden"
+mark followed by its help button, "default: <value>", and a Reset button.
+For Length (words) under a depth that sets the default, that text reads
+"<Depth> default: <N> words" and the help button is "Depth default". While
+Length is not overridden, its hint reads "set by <Depth>" (none for Custom).
+A custom instruction longer than 28 characters SHALL read as its first 28
+characters followed by "…" in that text.
+
+The panel header SHALL show "N overridden". The group SHALL offer "Reset all
+to defaults" while any field is overridden, and an "edit defaults" link to
+Settings. When a default changes in Settings or through the depth, the New
+run value of that field SHALL follow it unless it is overridden. The run
+request SHALL carry only the overridden writing fields.
 
 #### Scenario: One override
-- **WHEN** the default length is 1200 and the user sets 600
+- **WHEN** the depth is Standard, the default length is 1200, and the user sets 600
 - **THEN** Length (words) shows "overridden" and "default: 1200 words", the header shows "1 overridden", and the request sends `words` 600 and no other writing field
 
 #### Scenario: Default follows Settings
@@ -93,6 +108,14 @@ fields.
 #### Scenario: Long custom instructions as default
 - **WHEN** the default custom instructions are "Assume the reader knows CUDA well." and the user clears them for this run
 - **THEN** the field shows "default: “Assume the reader knows CUDA…”"
+
+#### Scenario: Length follows depth
+- **WHEN** Length is not overridden and the user picks Deep
+- **THEN** Length shows 2000 with the hint "set by Deep", and the request sends no `words`
+
+#### Scenario: Edited length survives a depth change
+- **WHEN** the user sets Length to 800 under Deep and then picks Quick
+- **THEN** Length stays 800 and shows "Quick default: 600 words"
 
 ### Requirement: Start a run
 Starting a run SHALL send `POST /api/runs` with the question, the run options,
@@ -835,3 +858,72 @@ saved results of earlier stages."
 #### Scenario: Fate legend
 - **WHEN** the user hovers the help button after "Fates"
 - **THEN** the tooltip lists the six fates with their icons, terms, and texts
+
+### Requirement: Depth control
+The Options panel SHALL show the Depth group of scenarios `new-depth` and
+`new-custom`:
+- A "Depth" label with its help button.
+- A segmented control: Quick, Standard, Deep, Exhaustive, then Custom.
+  Standard is preselected. Quick through Exhaustive come from
+  `GET /api/depths`.
+- Under it, the selected depth's description ("Set every value yourself."
+  for Custom).
+- An estimate line: "~<P> pages · 1 round · ~<C> LLM calls".
+  - P is the smaller of Max pages and (Sub-queries + 1) × Results per query.
+  - C is 2, or 1 when Sub-queries is 0.
+  - When context is clamped, the line adds " · context <asked> →
+    <effective> (model window)", in thousands of tokens such as "32k".
+- An "Advanced" disclosure listing, each with its help button: Sub-queries
+  (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds,
+  Passages per query (1-40), and Context tokens (1000-128000, step 1000).
+  - With a preset selected, the fields show the preset's values and look
+    read-only (dashed, muted), but accept typing. Editing a field switches
+    the depth to Custom with the edited values.
+  - Picking Custom opens Advanced. Its fields start with the last Custom
+    values saved in browser storage, or else with the values of the depth
+    selected before.
+- Rounds is disabled with the lock icon. It shows 1 and the note "This
+  server runs 1 round only."
+- Context tokens shows "<asked> → <effective> (model window)" when the
+  asked value is above the effective budget.
+  - The effective budget is the selected profile's `context_window` minus
+    `prompt_reserve_tokens` minus the output limit.
+  - The output limit is the larger of 1024 and twice the words, capped at
+    `max_output_tokens` when set.
+  - Asked and effective are formatted with thousands separators.
+
+The run request SHALL send `depth` set to the preset name and no `research`
+for a preset. For Custom it SHALL send `depth` = `custom` and `research`
+with all five values. Help texts SHALL be verbatim from the prototype's
+help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
+`d-ctx`, and `w-words-def`.
+
+#### Scenario: Pick a preset
+- **WHEN** the user picks Deep and starts a run
+- **THEN** the request has `depth` = `deep` and no `research`
+
+#### Scenario: Edit switches to Custom
+- **WHEN** Deep is selected and the user changes Max pages to 80
+- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those five values
+
+#### Scenario: Clamped context
+- **WHEN** Exhaustive asks 32,000 context tokens, the profile has `context_window` 32768, `prompt_reserve_tokens` 2000, no `max_output_tokens`, and words is 3000
+- **THEN** Context tokens shows "32,000 → 24,768 (model window)" and the estimate line ends with "context 32k → 25k (model window)"
+
+#### Scenario: Custom remembered
+- **WHEN** the user started a Custom run with Sub-queries 6, then opens New run again and picks Custom
+- **THEN** Sub-queries shows 6
+
+#### Scenario: Rounds disabled
+- **WHEN** the user opens Advanced
+- **THEN** Rounds is disabled at 1 with "This server runs 1 round only."
+
+### Requirement: Depth tags
+The Live run header and the Report screen header SHALL show the run's depth
+as an outline tag after the status tag ("Quick", "Standard", "Deep",
+"Exhaustive", or "Custom"), as in scenarios `live` and `finished`. A run
+with no depth SHALL show "Standard".
+
+#### Scenario: Deep run
+- **WHEN** the user opens a finished run whose summary has `depth = "deep"`
+- **THEN** the Report header shows Completed followed by the tag "Deep"

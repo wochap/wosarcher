@@ -10,11 +10,17 @@ list runs, with readable progress on a terminal and stable JSON for scripts.
 ### Requirement: Run command
 `wosarcher run "<query>"` SHALL start a run and accept these options:
 `--attach PATH` (repeatable; files, directories, globs), `--sources
-files|web|both` (default `both`), `--until STAGE`, `--profile NAME`, `--set
-KEY=VALUE` (repeatable), `--tone`, `--tone-instructions`, `--words`,
-`--language`, `--citation-marker`, `--reference-style`, `--run-id ID`,
-and `--json`. Each writing flag SHALL act as `--set
-write.<field>=<value>` and take precedence over `--set` for the same field.
+files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
+`--depth NAME`, `--set KEY=VALUE` (repeatable), `--tone`,
+`--tone-instructions`, `--words`, `--language`, `--citation-marker`,
+`--reference-style`, `--sub-queries N`, `--results-per-query N`,
+`--max-pages N`, `--passages-per-query N`, `--context-tokens N`, `--run-id
+ID`, and `--json`. Each writing flag SHALL act as `--set
+write.<field>=<value>`. Each research flag SHALL act as `--set` on its key:
+`plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`,
+`score.top_k`, and `select.max_context_tokens`. Writing and research flags
+SHALL take precedence over `--set` for the same field. The depth preset
+SHALL apply below all of them (depth-presets "Preset expansion").
 
 #### Scenario: Writing flag
 - **WHEN** the user runs `wosarcher run "q" --tone critical --words 500`
@@ -27,6 +33,10 @@ write.<field>=<value>` and take precedence over `--set` for the same field.
 #### Scenario: Unknown stage
 - **WHEN** the user runs `wosarcher run "q" --until rank`
 - **THEN** the command fails with an error listing the valid stage names
+
+#### Scenario: Depth with a research flag
+- **WHEN** the user runs `wosarcher run "q" --depth deep --max-pages 80`
+- **THEN** the resolved `fetch.max_pages` is 80, `plan.max_sub_queries` is 5, and `request.json` records depth `deep` and the `fetch.max_pages` override
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
