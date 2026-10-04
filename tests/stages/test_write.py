@@ -186,14 +186,22 @@ def test_pdf_ingest_locator() -> None:
     ("style", "entry"),
     [
         ("APA", "*Paper* (n.d.). paper.pdf"),
-        ("MLA", '"Paper." *paper.pdf*, n.d..'),
-        ("Chicago", '"Paper." paper.pdf. n.d..'),
-        ("IEEE", '[1] "Paper," paper.pdf, n.d..'),
+        ("MLA", '"Paper." *paper.pdf*, n.d.'),
+        ("Chicago", '"Paper." paper.pdf. n.d.'),
+        ("IEEE", '[1] "Paper," paper.pdf, n.d.'),
     ],
 )
 def test_file_reference(style: str, entry: str) -> None:
     found = context([passage(1, PAPER)], [PAPER])
     assert render("A [1].", found, WritingOptions(reference_style=style)).references[0].entry == entry
+
+
+@pytest.mark.parametrize("style", ["APA", "MLA", "Chicago", "IEEE"])
+def test_no_double_period(style: str) -> None:
+    found = context([passage(1, PAPER), passage(2, SITE)], [PAPER, SITE])
+    references = render("A [1]. B [2].", found, WritingOptions(reference_style=style)).references
+    assert len(references) == 2
+    assert all(".." not in reference.entry for reference in references)
 
 
 def test_reference_order() -> None:

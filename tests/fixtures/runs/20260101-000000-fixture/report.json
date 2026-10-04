@@ -1,0 +1,25 @@
+{
+  "body": "## Battery recycling\n\nBattery recycling recovers metals such as lithium, cobalt and nickel from spent cells [1]. The main industrial routes are pyrometallurgy and hydrometallurgy, and their economics depend on the cell chemistry and on the cost of collection [2].\n\nCollection and safe transport remain the largest practical obstacles [1][2].",
+  "markdown": "## Battery recycling\n\nBattery recycling recovers metals such as lithium, cobalt and nickel from spent cells [1]. The main industrial routes are pyrometallurgy and hydrometallurgy, and their economics depend on the cell chemistry and on the cost of collection [2].\n\nCollection and safe transport remain the largest practical obstacles [1][2].\n\n## References\n\n- *Field notes: battery collection pilot* (n.d.). notes.md\n  - [1] Field notes: battery collection pilot › Summary\n- *Lithium-Ion Battery Recycling | US EPA* (n.d.). epa.gov. https://www.epa.gov/hw/lithium-ion-battery-recycling\n  - [2] Lithium-Ion Battery Recycling › Why recycle lithium-ion batteries\n",
+  "cited": [
+    1,
+    2
+  ],
+  "references": [
+    {
+      "source_id": "ddd1e1eda5245f75",
+      "entry": "*Field notes: battery collection pilot* (n.d.). notes.md",
+      "passages": [
+        1
+      ]
+    },
+    {
+      "source_id": "bad9a45a31f6f5cd",
+      "entry": "*Lithium-Ion Battery Recycling | US EPA* (n.d.). epa.gov. https://www.epa.gov/hw/lithium-ion-battery-recycling",
+      "passages": [
+        2
+      ]
+    }
+  ],
+  "warnings": []
+}

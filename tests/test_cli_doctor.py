@@ -90,6 +90,7 @@ def test_doctor_other_profile() -> None:
 def test_doctor_json() -> None:
     healthy_routes()
     result = runner.invoke(app, ["doctor", "--profile", "test", "--json"])
+    assert result.exit_code == 0, result.output
     report = json.loads(result.output)
     assert [row["block"] for row in report["providers"]] == ["search", "fetch", "prefilter", "score", "llm"]
     assert report["providers"][2]["status"] == "built-in"

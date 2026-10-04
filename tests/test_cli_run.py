@@ -200,7 +200,8 @@ app(["run", "battery recycling", "--run-id", "20260101-120000-abcdef"])
 
 
 def test_sigterm_exits_130(tmp_path: Path) -> None:
-    env = {**os.environ, "XDG_DATA_HOME": str(tmp_path / "data"), "XDG_CACHE_HOME": str(tmp_path / "cache")}
+    env = {key: value for key, value in os.environ.items() if not key.startswith("WOSARCHER_")}
+    env |= {"XDG_DATA_HOME": str(tmp_path / "data"), "XDG_CACHE_HOME": str(tmp_path / "cache")}
     env["XDG_CONFIG_HOME"] = str(tmp_path / "config")
     root = Path(__file__).resolve().parent.parent
     process = subprocess.Popen(

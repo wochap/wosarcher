@@ -68,6 +68,14 @@ def test_fixture_parses() -> None:
             pytest.fail(f"events.jsonl line {number} does not parse ({REGENERATE}): {error}")
 
 
+def test_fixture_has_no_machine_paths() -> None:
+    for path in (RUNS / FIXTURE_RUN).rglob("*"):
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            assert "/tmp/" not in text, path.name
+            assert str(Path.home()) not in text, path.name
+
+
 def test_fixture_forks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("WOSARCHER_PROFILE", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home(tmp_path / "config")))

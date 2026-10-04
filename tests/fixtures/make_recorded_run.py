@@ -37,6 +37,11 @@ def main() -> int:
             return result.exit_code
         shutil.rmtree(target, ignore_errors=True)
         shutil.copytree(root / "runs" / FIXTURE_RUN, target)
+        # The run records its runs and cache directories; keep the generating machine's paths out.
+        for path in target.rglob("*"):
+            if path.is_file():
+                text = path.read_text(encoding="utf-8")
+                path.write_text(text.replace(str(root), "/fixture"), encoding="utf-8")
     print(f"wrote {target}")
     return 0
 

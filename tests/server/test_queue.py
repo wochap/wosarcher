@@ -1,4 +1,5 @@
 import logging
+import time
 from pathlib import Path
 
 import pytest
@@ -66,8 +67,11 @@ def test_cancel_running(client: TestClient, runs_dir: Path) -> None:
 def test_cancel_ignores_term_killed(client: TestClient, runs_dir: Path) -> None:
     run_id = create(client, {"query": "ignore-term"})
     wait_until(lambda: (runs_dir / run_id / "report.md").is_file())
+    started = time.monotonic()
     assert client.post(f"/api/runs/{run_id}/cancel").status_code == 202
     finished(client, run_id)
+    # The child ignores SIGTERM, so it is killed only after the app's grace (0.5 s).
+    assert time.monotonic() - started >= 0.5
     assert events(runs_dir, run_id)[-1]["type"] == "run.cancelled"
     assert status(client, run_id) == "cancelled"
 

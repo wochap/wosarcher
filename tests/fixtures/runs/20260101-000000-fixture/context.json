@@ -1,0 +1,224 @@
+{
+  "query": "battery recycling",
+  "passages": [
+    {
+      "n": 1,
+      "chunk_id": "f814c31f15a16ca0",
+      "source_id": "ddd1e1eda5245f75",
+      "query_id": "q1",
+      "text": "The municipal pilot collected 4.2 tonnes of portable batteries in six months from 38 drop-off points. Lithium-ion cells made up 31 percent of the weight, and 12 swollen or damaged cells were set aside for special handling.",
+      "heading_path": [
+        "Field notes: battery collection pilot",
+        "Summary"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.6390290702335465
+    },
+    {
+      "n": 2,
+      "chunk_id": "2ce7feceb272c14d",
+      "source_id": "bad9a45a31f6f5cd",
+      "query_id": "q0",
+      "text": "Recycling lithium-ion batteries conserves critical minerals such as cobalt, lithium and nickel, reduces the environmental impact of mining, and prevents fires caused by batteries placed in household trash or curbside recycling bins.",
+      "heading_path": [
+        "Lithium-Ion Battery Recycling",
+        "Why recycle lithium-ion batteries"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 1.0
+    },
+    {
+      "n": 3,
+      "chunk_id": "140e09bb5196347c",
+      "source_id": "bad9a45a31f6f5cd",
+      "query_id": "q1",
+      "text": "Lithium-ion batteries power devices such as mobile phones, laptops, power tools and electric vehicles. When they are damaged or improperly disposed of, they can cause fires during transport and at recycling and waste facilities.",
+      "heading_path": [
+        "Lithium-Ion Battery Recycling"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.861664316716464
+    },
+    {
+      "n": 4,
+      "chunk_id": "0f3c8a2be5b7490c",
+      "source_id": "571383a59a7314d6",
+      "query_id": "q2",
+      "text": "The profitability of a battery recycling plant depends on metal prices, the chemistry of the incoming batteries and the cost of collection and transport. When lithium and cobalt prices fell in 2023, margins for recyclers dropped sharply. Gate fees charged for low value chemistries help keep plants economic.",
+      "heading_path": [
+        "Recycling of critical minerals",
+        "Costs and revenues"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 1.0
+    },
+    {
+      "n": 5,
+      "chunk_id": "517baecc904f7cbb",
+      "source_id": "82930979fc30e1dc",
+      "query_id": "q0",
+      "text": "Battery recycling is a recycling activity that aims to reduce the number of batteries being disposed of as municipal solid waste. Batteries contain a number of heavy metals and toxic chemicals, and disposing of them by the same process as regular household waste has raised concerns over soil contamination and water pollution.",
+      "heading_path": [
+        "Battery recycling"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.9776282782469307
+    },
+    {
+      "n": 6,
+      "chunk_id": "448f53d0e08a6140",
+      "source_id": "e94ab9a9817e74e0",
+      "query_id": "q1",
+      "text": "Recycling lithium-ion batteries from electric vehicles\n\nGavin Harper, Roberto Sommerville, Emma Kendrick, et al.\n\nAbstract. Rapid growth in the market for electric vehicles is imperative to meet global targets for reducing greenhouse gas emissions. The resulting volume of spent lithium-ion batteries presents both a waste management challenge and an opportunity to recover valuable materials. Here we outline the approaches available to recycle the batteries and the research needed to make the recycling of electric vehicle batteries economic.\n\n1 Introduction\n\nA single electric vehicle pack can weigh more than 250 kg and contain hundreds of cells. Disassembly is labour intensive and hazardous because packs can retain high voltage. Automated disassembly and design for recycling would lower costs.\n\n2 Recycling routes",
+      "heading_path": [],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.8550354761635062
+    },
+    {
+      "n": 7,
+      "chunk_id": "2c0d700f58c2cf72",
+      "source_id": "bad9a45a31f6f5cd",
+      "query_id": "q0",
+      "text": "Do not put lithium-ion batteries in the trash or in municipal recycling bins. Take them to separate recycling or household hazardous waste collection points. Many retailers that sell rechargeable batteries offer free drop-off. Tape the terminals or place each battery in a separate plastic bag to prevent short circuits.\n\nDamaged, defective or recalled batteries need special handling; contact the manufacturer or the local waste authority before transporting them.",
+      "heading_path": [
+        "Lithium-Ion Battery Recycling",
+        "How to recycle"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.8735272645071813
+    },
+    {
+      "n": 8,
+      "chunk_id": "fda5cef7b3dc209f",
+      "source_id": "bad9a45a31f6f5cd",
+      "query_id": "q1",
+      "text": "Most lithium-ion batteries are managed under the universal waste regulations, which simplify collection and transport for businesses. Batteries that are sent for recycling are counted as universal waste until they reach the destination facility. EPA is developing best management practices for battery collection, sorting and transport as required by the Infrastructure Investment and Jobs Act.",
+      "heading_path": [
+        "Lithium-Ion Battery Recycling",
+        "Regulations"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.8242477698364307
+    },
+    {
+      "n": 9,
+      "chunk_id": "3833b51481272af6",
+      "source_id": "82930979fc30e1dc",
+      "query_id": "q0",
+      "text": "Electric vehicle batteries that no longer meet vehicle requirements usually retain 70 to 80 percent of their capacity. Before recycling, such packs can be reused in stationary energy storage, which extends their useful life by several years.",
+      "heading_path": [
+        "Battery recycling",
+        "Second life"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.7341302555647155
+    },
+    {
+      "n": 10,
+      "chunk_id": "a718e6f0770fee6a",
+      "source_id": "82930979fc30e1dc",
+      "query_id": "q0",
+      "text": "Collection is the main obstacle to battery recycling. Small batteries are often thrown away with household waste, where they can start fires in waste trucks and sorting plants. Many countries require retailers to take back used batteries, and the European Union battery regulation sets collection targets for portable batteries of 63 percent by 2027 and 73 percent by 2030.",
+      "heading_path": [
+        "Battery recycling",
+        "Collection"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.727940221973362
+    },
+    {
+      "n": 11,
+      "chunk_id": "272b70eabf192c8a",
+      "source_id": "82930979fc30e1dc",
+      "query_id": "q0",
+      "text": "Lead-acid batteries are the most recycled consumer product. In the United States the recycling rate of lead-acid batteries is about 99 percent. The batteries are broken apart in a hammer mill, the lead grids and paste are smelted, and the polypropylene cases are washed and turned into pellets for new cases. The sulfuric acid is neutralised or converted to sodium sulfate for use in detergent and glass manufacture.",
+      "heading_path": [
+        "Battery recycling",
+        "Lead-acid batteries"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.6874051565915282
+    },
+    {
+      "n": 12,
+      "chunk_id": "5cdc7d15f22f20cd",
+      "source_id": "82930979fc30e1dc",
+      "query_id": "q0",
+      "text": "Lithium-ion batteries contain cobalt, nickel, manganese, lithium, copper and aluminium. Only a small share of lithium-ion batteries were recycled in the 2010s, although the rate is rising as electric vehicle packs reach the end of their life. Recycling recovers valuable metals and reduces the need for new mining.\n\nThe main industrial routes are pyrometallurgy, where cells are smelted and cobalt, nickel and copper are recovered as an alloy, and hydrometallurgy, where the black mass obtained by shredding is leached in acid and the metals are separated by solvent extraction and precipitation. Lithium is lost to the slag in most smelting processes, which is one reason hydrometallurgical plants have grown.",
+      "heading_path": [
+        "Battery recycling",
+        "Lithium-ion batteries"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.5081190113009466
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "ddd1e1eda5245f75",
+      "kind": "file",
+      "uri": "notes.md",
+      "title": "Field notes: battery collection pilot",
+      "author": null,
+      "published": null
+    },
+    {
+      "source_id": "bad9a45a31f6f5cd",
+      "kind": "web",
+      "uri": "https://www.epa.gov/hw/lithium-ion-battery-recycling",
+      "title": "Lithium-Ion Battery Recycling | US EPA",
+      "author": null,
+      "published": null
+    },
+    {
+      "source_id": "571383a59a7314d6",
+      "kind": "web",
+      "uri": "https://www.iea.org/reports/recycling-of-critical-minerals",
+      "title": "Recycling of critical minerals - IEA",
+      "author": null,
+      "published": null
+    },
+    {
+      "source_id": "82930979fc30e1dc",
+      "kind": "web",
+      "uri": "https://en.wikipedia.org/wiki/Battery_recycling",
+      "title": "Battery recycling - Wikipedia",
+      "author": null,
+      "published": null
+    },
+    {
+      "source_id": "e94ab9a9817e74e0",
+      "kind": "web",
+      "uri": "https://www.nature.com/articles/s41586-019-1682-5.pdf",
+      "title": "Recycling lithium-ion batteries from electric vehicles",
+      "author": null,
+      "published": null
+    }
+  ],
+  "budget_tokens": 16000,
+  "used_tokens": 1686
+}

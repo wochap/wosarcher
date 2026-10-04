@@ -81,6 +81,11 @@ def year(source: Source) -> str:
     return found.group() if found else "n.d."
 
 
+def end(text: str) -> str:
+    """`text` ending in one period: `n.d.` stays `n.d.`."""
+    return text if text.endswith(".") else text + "."
+
+
 def author_year(numbers: list[int], passages: dict[int, Passage], sources: dict[str, Source]) -> str:
     source_ids = list(dict.fromkeys(passages[n].source_id for n in numbers))
     parts = [f"{source.author or site(source)}, {year(source)}" for source in (sources[sid] for sid in source_ids)]
@@ -109,19 +114,19 @@ def apa(source: Source, _: int) -> str:
 def mla(source: Source, _: int) -> str:
     author = f"{source.author}. " if source.author else ""
     url = f", {source.uri}" if source.kind == "web" else ""
-    return f'{author}"{source.title}." *{site(source)}*, {year(source)}{url}.'
+    return end(f'{author}"{source.title}." *{site(source)}*, {year(source)}{url}')
 
 
 def chicago(source: Source, _: int) -> str:
     author = f"{source.author}. " if source.author else ""
     url = f" {source.uri}." if source.kind == "web" else ""
-    return f'{author}"{source.title}." {site(source)}. {year(source)}.{url}'
+    return end(f'{author}"{source.title}." {site(source)}. {year(source)}') + url
 
 
 def ieee(source: Source, k: int) -> str:
     author = f"{source.author}, " if source.author else ""
     url = f" [Online]. Available: {source.uri}" if source.kind == "web" else ""
-    return f'[{k}] {author}"{source.title}," {site(source)}, {year(source)}.{url}'
+    return end(f'[{k}] {author}"{source.title}," {site(source)}, {year(source)}') + url
 
 
 STYLES: dict[str, Callable[[Source, int], str]] = {"APA": apa, "MLA": mla, "Chicago": chicago, "IEEE": ieee}

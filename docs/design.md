@@ -928,15 +928,18 @@ inputs. It drives the public CLI only, so it measures what users run.
   and records precision (relevant / selected) in `DIR/judgements.jsonl`;
   judged runs are skipped next time. Only the query goes through
   `evals/prompts/precision.md`; passages go in a separate user message. An
-  unparsable answer records precision as missing.
+  unparsable answer, including a list that is not valid JSON such as
+  `[1, 2,]`, records precision as missing and the judge goes on.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,
-a full `wosarcher run` of the `e2e` profile against recorded SearXNG,
+tracked in git (only the root `/runs/` is ignored) so tests pass on a fresh
+clone, a full `wosarcher run` of the `e2e` profile against recorded SearXNG,
 Firecrawl, and LLM responses in `tests/fixtures/http/` (served by the respx
 router in `tests/fixtures/recorded.py`; any other request fails naming its
 URL). When a contract changes, `test_fixture_parses` names the artifact
 that no longer parses; regenerate the fixture with `uv run python -m
-tests.fixtures.make_recorded_run`. `tests/test_e2e_run.py` runs the same
+tests.fixtures.make_recorded_run`, which replaces its temporary directory
+with `/fixture` so the fixture holds no path of the generating machine. `tests/test_e2e_run.py` runs the same
 pipeline with the real adapters and no network.
 
 ## Tech stack
@@ -1107,7 +1110,11 @@ License: MIT.
 - One adapter per file, aim for under 200 lines.
 - `scripts/check` (format, lint, architecture layering) passes before any
   work is done; `scripts/check_architecture.py` enforces the layering in
-  Patterns used.
+  Patterns used: allowed internal imports, adapters independent in every
+  import form with no registry in `adapters/__init__.py`, and no stdlib
+  file, process, or network I/O in pure parts (`prompts` may read its own
+  files with `importlib.resources`); `tests/test_check_architecture.py`
+  tests it.
 - Stages are pure; chunking and selection have unit tests.
 - Pydantic models document every contract; hot per-chunk paths may use
   `model_construct`.

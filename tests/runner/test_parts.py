@@ -76,10 +76,7 @@ def test_progress_throttled(run: tuple[RunStore, str]) -> None:
         log.progress("fetch", n + 1, 1000)
     log.flush("fetch")
     events = store.read_events(run_id)
-    assert len(events) <= 2
-    last = events[-1]
-    assert isinstance(last, StageProgress)
-    assert last.data.done == 1000
+    assert [e.data.done for e in events if isinstance(e, StageProgress)] == [1, 1000]
 
 
 def test_snapshot(run: tuple[RunStore, str]) -> None:

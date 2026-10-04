@@ -33,10 +33,18 @@ and skips a side that does not exist yet:
 
 - Backend: `ruff format --check`, `ruff check`, and
   `scripts/check_architecture.py`, which enforces the ports-and-adapters
-  layering: stages, models, ports, and lexical are pure (no adapters, store,
-  runner, or I/O libraries); only `build`, `server`, and `cli` import
-  adapters; adapters never import each other. A new top-level module must be
-  added to its `ALLOWED` table with the imports it may use.
+  layering: stages, models, ports, lexical, and prompts are pure (no
+  adapters, store, runner, or I/O libraries); only `build`, `server`, and
+  `cli` import adapters; adapters never import each other in any import form
+  (`from wosarcher.adapters import x` and relative imports included), and
+  `adapters/__init__.py` imports no adapter (no registry). Pure parts also
+  may not use the standard library's file, process, and network modules
+  (`os`, `io`, `subprocess`, `socket`, `shutil`, `tempfile`, `sqlite3`,
+  `urllib.request`, `http.client`, `importlib`), `pathlib.Path` (pure path
+  classes are fine), or the `open` and `__import__` builtins; `prompts` may
+  use `importlib.resources` to read its own files. A new top-level module
+  must be added to its `ALLOWED` table with the imports it may use. The
+  script has its own tests in `tests/test_check_architecture.py`.
 - Frontend: `biome check` (format and lint), plus design-token rules: no raw
   hex colors and no font families outside the Nocturne variables
   (`web/src/vendor/` is exempt).

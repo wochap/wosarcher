@@ -1,0 +1,97 @@
+{
+  "stages": {
+    "load": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 0,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "plan": {
+      "input_tokens": 412,
+      "output_tokens": 24,
+      "requests": 2,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "search": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 2,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "fetch": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 4,
+      "units": 4.0,
+      "cost": 0.0
+    },
+    "chunk": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 0,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "prefilter": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 0,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "score": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 0,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "select": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 0,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "write": {
+      "input_tokens": 2310,
+      "output_tokens": 71,
+      "requests": 1,
+      "units": 0.0,
+      "cost": 0.0
+    }
+  },
+  "providers": {
+    "searxng": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 3,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "llm": {
+      "input_tokens": 2722,
+      "output_tokens": 95,
+      "requests": 2,
+      "units": 0.0,
+      "cost": 0.0
+    },
+    "firecrawl": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requests": 4,
+      "units": 4.0,
+      "cost": 0.0
+    }
+  },
+  "total": {
+    "input_tokens": 2722,
+    "output_tokens": 95,
+    "requests": 9,
+    "units": 4.0,
+    "cost": 0.0
+  }
+}

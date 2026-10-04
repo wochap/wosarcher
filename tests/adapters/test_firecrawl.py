@@ -86,13 +86,13 @@ async def test_empty_page(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
 @respx.mock
 async def test_credits_recorded(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     respx.post(f"{BASE}/scrape").mock(
-        side_effect=[httpx.Response(200, json=scraped(creditsUsed=1)), httpx.Response(200, json=scraped())]
+        side_effect=[httpx.Response(200, json=scraped(creditsUsed=5)), httpx.Response(200, json=scraped())]
     )
     adapter = fetcher(http, ledger)
     await adapter.fetch(URL)
     await adapter.fetch(URL)
     usage = ledger.totals[("firecrawl", "fetch")]
-    assert (usage.requests, usage.units) == (2, 2)
+    assert (usage.requests, usage.units) == (2, 6)
 
 
 @respx.mock

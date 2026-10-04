@@ -16,6 +16,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from string import Template
+from typing import cast
 
 import httpx
 from pydantic import BaseModel
@@ -49,8 +50,17 @@ def parse_answer(text: str, count: int) -> set[int] | None:
     found = ANSWER.search(text)
     if found is None:
         return None
-    indexes: list[int] = json.loads(found.group()) if found.group().strip("[] ,") else []
-    return {index for index in indexes if 0 <= index < count}
+    try:
+        indexes: object = json.loads(found.group()) if found.group().strip("[] ,") else []
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(indexes, list):
+        return None
+    items = cast(list[object], indexes)
+    numbers = [item for item in items if type(item) is int]
+    if len(numbers) != len(items):
+        return None
+    return {index for index in numbers if 0 <= index < count}
 
 
 async def judge_result(llm: LLM, query: str, passages: Sequence[str]) -> float | None:

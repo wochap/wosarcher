@@ -20,5 +20,5 @@ node_modules/
 web/dist/
 
 # Runs and caches
-runs/
+/runs/
 .cache/

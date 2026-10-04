@@ -54,3 +54,25 @@ def test_second_call_skips_judged(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert judged.precision is not None
     assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
     assert len(llm.calls) == 1
+
+
+def test_parse_answer_malformed_list() -> None:
+    assert judge.parse_answer("[1, 2,]", 4) is None
+
+
+def test_malformed_list_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env, parent = eval_env(tmp_path)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "out"
+    assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
+    llm = FakeLLM(["[1, 2,]", "[0]"])
+
+    def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
+        return adapters(writer=llm)
+
+    monkeypatch.setattr(building, "build", fake_build)
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    first, second = judge.read_judgements(out / "judgements.jsonl")
+    assert first.precision is None
+    assert second.precision is not None

@@ -88,26 +88,56 @@ ALLOWED: dict[str, set[str]] = {
 
 # Parts that must stay free of I/O and interface libraries.
 PURE = {"models", "ports", "lexical", "stages", "prompts"}
-IO_LIBRARIES = {"httpx", "fastapi", "starlette", "uvicorn", "typer", "rich", "respx"}
+# Module prefixes pure parts may not import: `urllib.request` is caught, `urllib.parse` is not.
+PURE_FORBIDDEN = {
+    "httpx",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "typer",
+    "rich",
+    "respx",
+    "requests",
+    "aiohttp",
+    "os",
+    "io",
+    "subprocess",
+    "socket",
+    "shutil",
+    "tempfile",
+    "sqlite3",
+    "urllib.request",
+    "http.client",
+    "importlib",
+}
+# Prompt files are package data, read through importlib.resources.
+PURE_EXCEPTIONS: dict[str, set[str]] = {"prompts": {"importlib.resources"}}
+# Builtins that open files or load modules.
+PURE_FORBIDDEN_CALLS = {"open", "__import__"}
+PURE_PATH_CLASSES = {"PurePath", "PurePosixPath", "PureWindowsPath"}
 
 
-def part_of(path: Path) -> str:
+def part_of(path: Path, root: Path) -> str:
     """The top-level part a file belongs to: `stages/plan.py` -> `stages`."""
-    relative = path.relative_to(ROOT)
+    relative = path.relative_to(root)
     return relative.parts[0].removesuffix(".py")
 
 
-def module_name(path: Path) -> list[str]:
+def module_name(path: Path, root: Path) -> list[str]:
     """Dotted module path as a list: `stages/plan.py` -> [wosarcher, stages, plan]."""
-    relative = path.relative_to(ROOT).with_suffix("")
+    relative = path.relative_to(root).with_suffix("")
     parts = [PACKAGE, *relative.parts]
     return parts[:-1] if parts[-1] == "__init__" else parts
 
 
-def imported_modules(path: Path, tree: ast.Module) -> list[tuple[int, str]]:
-    """Absolute names of every module the file imports, with line numbers."""
+def imported_modules(path: Path, root: Path, tree: ast.Module) -> list[tuple[int, str]]:
+    """Absolute names of every module the file imports, with line numbers.
+
+    `from P import name` records both `P` and `P.name`, since `name` may be a submodule;
+    `from wosarcher import name` records only `wosarcher.name`.
+    """
     is_package = path.name == "__init__.py"
-    current = module_name(path)
+    current = module_name(path, root)
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -119,17 +149,26 @@ def imported_modules(path: Path, tree: ast.Module) -> list[tuple[int, str]]:
                 package = current if is_package else current[:-1]
                 anchor = package[: len(package) - (node.level - 1)]
                 base = ".".join([*anchor, *([node.module] if node.module else [])])
-            if node.module is None and node.level > 0:
-                # `from . import x` imports submodules x of the anchor package.
-                found.extend((node.lineno, f"{base}.{alias.name}") for alias in node.names)
-            else:
+            if base != PACKAGE:
                 found.append((node.lineno, base))
+            found.extend((node.lineno, f"{base}.{alias.name}") for alias in node.names)
     return found
 
 
-def check_file(path: Path) -> list[str]:
-    part = part_of(path)
-    where = path.relative_to(ROOT.parent.parent)
+def forbidden_in_pure(part: str, name: str) -> str | None:
+    """The forbidden prefix `name` falls under in a pure part, if any."""
+    allowed = PURE_EXCEPTIONS.get(part, set())
+    if any(name == prefix or name.startswith(prefix + ".") for prefix in allowed):
+        return None
+    for prefix in PURE_FORBIDDEN:
+        if name == prefix or name.startswith(prefix + "."):
+            return prefix
+    return None
+
+
+def check_file(path: Path, root: Path) -> list[str]:
+    part = part_of(path, root)
+    where = path.relative_to(root.parent.parent)
     if part not in ALLOWED:
         return [
             f"{where}: '{part}' is not in ALLOWED in scripts/check_architecture.py; add it with its allowed imports"
@@ -137,40 +176,69 @@ def check_file(path: Path) -> list[str]:
 
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     errors: list[str] = []
-    for line, name in imported_modules(path, tree):
+    seen: set[tuple[int, str]] = set()
+    for line, name in imported_modules(path, root, tree):
         top = name.split(".")[0]
         if top == PACKAGE:
             target = name.split(".")[1] if "." in name else "__init__"
             if target == part:
                 if part == "adapters":
-                    errors.extend(check_adapter_independence(path, line, name, where))
+                    error = adapter_independence(path, root, line, name, where)
+                    if error and (line, error) not in seen:
+                        seen.add((line, error))
+                        errors.append(error)
                 continue
-            if target not in ALLOWED[part]:
+            if target not in ALLOWED[part] and (line, target) not in seen:
+                seen.add((line, target))
                 errors.append(f"{where}:{line}: '{part}' must not import '{target}' ({name})")
-        elif part in PURE and top in IO_LIBRARIES:
-            errors.append(f"{where}:{line}: '{part}' is pure and must not import '{top}'")
+        elif part in PURE:
+            prefix = forbidden_in_pure(part, name)
+            if prefix and (line, prefix) not in seen:
+                seen.add((line, prefix))
+                errors.append(f"{where}:{line}: '{part}' is pure and must not import '{prefix}'")
+    if part in PURE:
+        errors.extend(pure_names(part, tree, where))
     return errors
 
 
-def check_adapter_independence(path: Path, line: int, name: str, where: Path) -> list[str]:
-    """An adapter module may not import another adapter module."""
-    own = path.relative_to(ROOT / "adapters").with_suffix("").parts
-    if not own or own[0] == "__init__":
-        return []
+def pure_names(part: str, tree: ast.Module, where: Path) -> list[str]:
+    """Concrete `pathlib` paths and calls to the `open` and `__import__` builtins."""
+    errors: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import) and any(alias.name == "pathlib" for alias in node.names):
+            errors.append(
+                f"{where}:{node.lineno}: '{part}' is pure and must not import 'pathlib'; use a pure path class"
+            )
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module == "pathlib":
+            errors.extend(
+                f"{where}:{node.lineno}: '{part}' is pure and must not import 'pathlib.{alias.name}'"
+                for alias in node.names
+                if alias.name not in PURE_PATH_CLASSES
+            )
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in PURE_FORBIDDEN_CALLS:
+            errors.append(f"{where}:{node.lineno}: '{part}' is pure and must not call '{node.func.id}'")
+    return errors
+
+
+def adapter_independence(path: Path, root: Path, line: int, name: str, where: Path) -> str | None:
+    """An adapter module, `adapters/__init__.py` included, may not import another adapter module."""
+    own = path.relative_to(root / "adapters").with_suffix("").parts[0]
     parts = name.split(".")
-    if len(parts) < 3:
-        return []
-    other = parts[2]
-    if other != own[0]:
-        return [f"{where}:{line}: adapter '{own[0]}' must not import adapter '{other}'"]
-    return []
+    if len(parts) < 3 or parts[2] == own:
+        return None
+    return f"{where}:{line}: adapter '{own}' must not import adapter '{parts[2]}'"
+
+
+def check_tree(root: Path) -> list[str]:
+    """Every violation in the package at `root`."""
+    return [error for path in sorted(root.rglob("*.py")) for error in check_file(path, root)]
 
 
 def main() -> int:
     if not ROOT.is_dir():
         print(f"architecture: skipped ({ROOT.relative_to(ROOT.parent.parent)} does not exist)")
         return 0
-    errors = [error for path in sorted(ROOT.rglob("*.py")) for error in check_file(path)]
+    errors = check_tree(ROOT)
     for error in errors:
         print(error)
     if errors:

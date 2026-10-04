@@ -68,6 +68,31 @@ async def test_embeddings_use_cache() -> None:
     assert text_key(chunks[2].text) in cache
 
 
+class NearEmbedder:
+    """The query and the `near` texts point one way, every other chunk the opposite way."""
+
+    def __init__(self, chunk_texts: set[str], near: set[str]) -> None:
+        self.chunk_texts = chunk_texts
+        self.near = near
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] if text in self.near or text not in self.chunk_texts else [-1.0, 0.1] for text in texts]
+
+    async def describe(self) -> EmbedderInfo:
+        return EmbedderInfo(model="near", dimension=2)
+
+
+async def test_embeddings_keep_nearest() -> None:
+    pages, chunks = many(6)
+    near = {chunks[1].text, chunks[4].text}
+    embedder = NearEmbedder({chunk.text for chunk in chunks}, near)
+    result = await prefilter(
+        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000
+    )
+    assert result.method == "embeddings"
+    assert {candidate.chunk_id for candidate in result.candidates} == {chunks[1].chunk_id, chunks[4].chunk_id}
+
+
 class DownEmbedder:
     async def embed(self, texts: list[str]) -> list[list[float]]:
         raise RuntimeError("connection refused")

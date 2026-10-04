@@ -55,6 +55,13 @@ async def test_unreadable_answer() -> None:
     assert len(result.warnings) == 1
 
 
+async def test_truncated_json() -> None:
+    llm = FakeLLM(['{"queries": ["a", "b"'])
+    result = await plan("q", [], [], llm, sources="both", max_sub_queries=3)
+    assert [query.id for query in result.queries] == ["q0"]
+    assert len(result.warnings) == 1
+
+
 async def test_files_only_makes_no_call() -> None:
     llm = FakeLLM()
     result = await plan("q", HITS, ["# Notes"], llm, sources="files", max_sub_queries=3)
