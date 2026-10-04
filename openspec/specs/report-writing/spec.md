@@ -112,11 +112,12 @@ The unrendered body with `[n]` markers SHALL be kept in the report.
 When any passage is cited, the rendered report SHALL end with a
 `## References` section listing each cited source once, in order of first
 citation, formatted in the `reference_style` (`APA`, `MLA`, `Chicago`, or
-`IEEE`, matched without regard to case). Under each source, the cited
-passages SHALL be listed as `[n]` followed by the pdf-ingest page ID (as
-`p. <id>`, with block IDs in parentheses) or, when there is none, the
-heading path. An unknown reference style SHALL fail before the LLM is
-called, with an error that lists the known styles.
+`IEEE`, matched without regard to case). A reference entry SHALL never
+contain two periods in a row, including when the year is `n.d.`. Under
+each source, the cited passages SHALL be listed as `[n]` followed by the
+pdf-ingest page ID (as `p. <id>`, with block IDs in parentheses) or, when
+there is none, the heading path. An unknown reference style SHALL fail
+before the LLM is called, with an error that lists the known styles.
 
 #### Scenario: APA web source
 - **WHEN** the style is `APA` and passage 2 from "Draft models" by "Lee" (2024) at `https://example.org/d` under "Results" is cited
@@ -129,6 +130,10 @@ called, with an error that lists the known styles.
 #### Scenario: pdf-ingest file
 - **WHEN** a cited passage 4 comes from an attached file with page ID `12` and block ID `p12-b3`
 - **THEN** that source's entry lists `[4] p. 12 (p12-b3)`
+
+#### Scenario: Undated file source
+- **WHEN** the style is `MLA`, `Chicago`, or `IEEE` and a cited file source `paper.pdf` titled "Paper" has no date
+- **THEN** its entry ends with `n.d.` and contains no `..` (MLA `"Paper." *paper.pdf*, n.d.`)
 
 #### Scenario: Unknown style
 - **WHEN** the reference style is `Harvard`
