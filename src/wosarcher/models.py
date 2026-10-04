@@ -324,6 +324,10 @@ class Report(Contract):
     """Known cited numbers, in order of first citation."""
     references: list[Reference]
     warnings: list[str] = []
+    continuations: int = 0
+    """Continuation calls that added text after the output limit was reached."""
+    truncated: bool = False
+    """The last call ended at the output limit, or a continuation failed."""
 
 
 Stage = Literal["load", "plan", "search", "fetch", "chunk", "prefilter", "score", "select", "write"]

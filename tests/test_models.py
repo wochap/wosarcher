@@ -184,3 +184,8 @@ def test_one_chunk_two_queries_gives_two_scores() -> None:
 def test_unknown_drop_reason() -> None:
     with pytest.raises(ValidationError, match="dropped"):
         Score.model_validate({"query_id": "q1", "chunk_id": "c", "value": 1.0, "scorer": "jev", "dropped": "budget"})
+
+
+def test_report_without_continuation_fields() -> None:
+    report = Report.model_validate_json('{"body": "x", "markdown": "x", "cited": [], "references": []}')
+    assert (report.continuations, report.truncated) == (0, False)

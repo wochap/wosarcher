@@ -235,6 +235,21 @@ async def test_report_streams_into_file(tmp_path: Path) -> None:
     assert "report.delta" not in {event.type for event in store.read_events(run_id)}
 
 
+async def test_report_continued(tmp_path: Path) -> None:
+    cfg = settings(tmp_path)
+    store = store_of(cfg)
+    run_id = new_run(store, cfg)
+    writer = FakeLLM(["First part [1].", " Second part [1]."])
+    writer.finish_reasons = ["length", "stop"]
+    runner = Runner(store, cfg, adapters(writer=writer), UsageLedger({}), [])
+    assert await runner.run(run_id) == "done"
+    markdown = (store.run_dir(run_id) / "report.md").read_text()
+    assert "First part" in markdown
+    assert "Second part" in markdown
+    report = json.loads((store.run_dir(run_id) / "report.json").read_text())
+    assert (report["continuations"], report["truncated"]) == (1, False)
+
+
 async def test_score_timeout(tmp_path: Path) -> None:
     class Slow(FakeScorer):
         async def score(self, query: Query, chunks: list[Chunk]) -> list[Score]:

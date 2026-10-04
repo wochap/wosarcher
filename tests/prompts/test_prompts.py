@@ -14,6 +14,12 @@ def test_unknown_prompt_named() -> None:
         load("missing-prompt")
 
 
+def test_write_continue_has_no_placeholders() -> None:
+    text = load("write_continue").substitute()
+    assert "Continue" in text
+    assert "$" not in text
+
+
 def test_query_dollar_kept_literally() -> None:
     text = load("plan").substitute(query="a $b", max_sub_queries=3)
     assert "a $b" in text

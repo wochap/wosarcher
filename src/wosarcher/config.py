@@ -99,6 +99,7 @@ class LLMConfig(Provider):
     token_margin: float = Field(default=1.1, ge=1)
     max_tokens_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
     reasoning_tokens: int = Field(default=0, ge=0)
+    max_continuations: int = Field(default=2, ge=0)
 
 
 class PlanConfig(Block):

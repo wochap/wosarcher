@@ -120,7 +120,8 @@ class FakeLLM(FakeManaged):
         super().__init__(healthy("llm", "fake", "fake-llm"))
         self.replies = list(replies or ["ok"])
         self.calls: list[list[Message]] = []
-        self.finish_reason: str | None = "stop"
+        self.finish_reasons: list[str | None] = ["stop"]
+        """One per stream call; the last one repeats."""
 
     def _next(self, messages: list[Message]) -> str:
         self.calls.append(list(messages))
@@ -135,4 +136,5 @@ class FakeLLM(FakeManaged):
         words = self._next(messages).split(" ")
         for position, word in enumerate(words):
             yield word if position == len(words) - 1 else word + " "
-        on_finish(self.finish_reason)
+        reasons = self.finish_reasons
+        on_finish(reasons.pop(0) if len(reasons) > 1 else reasons[0])

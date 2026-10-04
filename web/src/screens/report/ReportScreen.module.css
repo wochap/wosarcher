@@ -170,6 +170,48 @@
   margin-bottom: 4px;
 }
 
+.contNote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.contIcon {
+  font-size: 13px;
+  flex: none;
+}
+
+.cutNote {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  padding: 6px 10px;
+  margin: 6px 0 4px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-warn);
+  background: color-mix(in srgb, var(--color-warn) 8%, transparent);
+}
+
+.cutIcon {
+  color: var(--color-warn);
+  font-size: 15px;
+  margin-top: 1px;
+  flex: none;
+}
+
+.cutEnd {
+  margin: 4px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-warn);
+}
+
 .aside {
   display: flex;
   flex-direction: column;

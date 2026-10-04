@@ -235,6 +235,7 @@ def test_wire_format_defaults() -> None:
     assert settings.llm.retry_budget == 60.0
     assert settings.llm.max_tokens_field == "max_completion_tokens"
     assert settings.llm.reasoning_tokens == 0
+    assert settings.llm.max_continuations == 2
     assert settings.score.rerank_scale == "auto"
 
 
@@ -253,6 +254,11 @@ def test_negative_retry_budget_rejected(env: dict[str, str]) -> None:
 def test_negative_reasoning_tokens_rejected(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError, match=r"llm\.reasoning_tokens"):
         resolve("workstation", ["llm.reasoning_tokens=-1"], env)
+
+
+def test_negative_continuations_rejected(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"llm\.max_continuations"):
+        resolve("workstation", ["llm.max_continuations=-1"], env)
 
 
 @pytest.mark.parametrize("name", ["workstation", "low-vram"])

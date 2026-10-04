@@ -195,8 +195,10 @@ export type Passages3 = number[]
 export type SourceId5 = string
 export type Body = string
 export type Cited = number[]
+export type Continuations = number
 export type Markdown = string
 export type References = Reference[]
+export type Truncated1 = boolean
 export type Warnings4 = string[]
 export type Text6 = string
 export type RunId5 = string
@@ -352,7 +354,7 @@ export type Queries4 = Query1[]
 export type QueryCap = number
 export type SourceCap = number
 export type Threshold = (number | null)
-export type Truncated1 = boolean
+export type Truncated2 = boolean
 export type CopiedFrom = (string | null)
 export type Count = number
 export type Passthrough1 = string[]
@@ -900,8 +902,10 @@ source_id: SourceId5
 export interface Report {
 body: Body
 cited: Cited
+continuations?: Continuations
 markdown: Markdown
 references: References
+truncated?: Truncated1
 warnings?: Warnings4
 }
 /**
@@ -1340,7 +1344,7 @@ query_cap: QueryCap
 source: Source
 source_cap: SourceCap
 threshold?: Threshold
-truncated?: Truncated1
+truncated?: Truncated2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema

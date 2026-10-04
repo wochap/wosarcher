@@ -333,6 +333,22 @@ one more entry in that file. The write stage checks `tone` against that file
 and `reference_style` against the four known styles before calling the LLM;
 an unknown name fails with the list of known names.
 
+A report cut at the output limit (finish reason `length`) is continued, up
+to `llm.max_continuations` times (default 2; 0 turns it off). A
+continuation sends the first two messages, then the text so far as an
+`assistant` message and the instruction in `prompts/write_continue.md` as a
+`user` message. Its output limit is the report's, lowered to the room left
+in `llm.context_window` by the estimated input (`llm.chars_per_token`,
+`llm.token_margin`); under 256 tokens of room, the writer stops. A
+continuation that starts by repeating at least 20 characters of the text's
+end has the repeat removed before it streams. A failed continuation keeps
+the text and warns `continuation failed: <error>`. `report.json` records
+`continuations` and `truncated`; a truncated report warns `report
+truncated at the output limit of <N> tokens`, plus ` after <k>
+continuations` when k > 0. Each continuation re-sends the passages, so
+hosted models bill their input again. The Report screen shows "Continued
+N×", or the cut note and an end marker before References.
+
 Writing options affect only the write stage, so changing them on a finished
 run is cheap: `wosarcher fork <id> --from write --tone critical` reuses all context
 and only rewrites the report.
@@ -396,9 +412,8 @@ The LLM adapter sends the output limit plus `llm.reasoning_tokens` under
 servers that need it; never both). An answer with empty content and finish
 reason `length` fails with an error naming `llm.reasoning_tokens`. Streaming
 fails with a provider error on an event with an `error` member, and reports
-the last `finish_reason` to the caller's `on_finish` callback; the writer
-warns `report truncated at the output limit of <N> tokens` when it is
-`length`.
+the last `finish_reason` to the caller's `on_finish` callback. When it is
+`length`, the writer continues the report (see Writing options).
 
 Every remote adapter also has `probe()` (one small request, for
 `wosarcher doctor`) and `release()` (unload as configured by `release`; a
@@ -897,7 +912,9 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `output_per_mtok`, `per_unit` for cost recording). The `llm` block adds
 `max_tokens_field` (`max_completion_tokens` or `max_tokens`) and
 `reasoning_tokens` (default 0, added to every LLM request's limit, for
-reasoning models that count hidden reasoning tokens); the `score` block adds
+reasoning models that count hidden reasoning tokens), and `max_continuations`
+(default 2, how often the writer continues a report cut at the output
+limit); the `score` block adds
 `rerank_scale` (`auto`, `probability`, `logit`).
 
 A profile may start with a top-level `description` string, one line that

@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { finished } from "../../test/fixtures/finished";
-import { QUERY, RUN_ID, summary } from "../../test/fixtures/sample";
+import { MD1, QUERY, RUN_ID, reportJson, summary } from "../../test/fixtures/sample";
 import { versions } from "../../test/fixtures/versions";
 import { renderApp } from "../../test/renderApp";
 import { openScenario } from "../../test/scenario";
@@ -21,6 +21,58 @@ function clipboard() {
   });
   return writes;
 }
+
+function withReport(continuations: number, truncated: boolean) {
+  const report = { ...reportJson(MD1, "numeric"), continuations, truncated };
+  const own = finished.data.artifacts?.[RUN_ID] ?? {};
+  return {
+    ...finished,
+    data: {
+      ...finished.data,
+      artifacts: { [RUN_ID]: { ...own, "report.json": JSON.stringify(report) } },
+    },
+  };
+}
+
+describe("ReportScreen continuation notes", () => {
+  it("shows the continued note with its help", async () => {
+    await openScenario(withReport(1, false));
+    expect(
+      await screen.findByText(/^Continued 1× after reaching the output limit\.$/),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Continued" })).toBeTruthy();
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText("Output limit reached here")).toBeNull();
+  });
+
+  it("shows the cut note and end marker for a report still cut off", async () => {
+    await openScenario(withReport(2, true));
+    const note = await screen.findByRole("note");
+    expect(note.textContent).toBe(
+      "Still cut off after 2 continuations. The last section may be incomplete.",
+    );
+    const end = screen.getByText("Output limit reached here");
+    const references = screen.getByRole("heading", { name: /^References/ });
+    expect(end.compareDocumentPosition(references) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText(/^Continued/)).toBeNull();
+  });
+
+  it("shows the cut note without continuations", async () => {
+    await openScenario(withReport(0, true));
+    expect((await screen.findByRole("note")).textContent).toBe(
+      "Cut off at the output limit. The last section may be incomplete.",
+    );
+    expect(screen.getByText("Output limit reached here")).toBeTruthy();
+  });
+
+  it("shows no note for a normal report", async () => {
+    await openScenario(withReport(0, false));
+    await screen.findByRole("heading", { name: /^References/ });
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.queryByText(/^Continued/)).toBeNull();
+    expect(screen.queryByText("Output limit reached here")).toBeNull();
+  });
+});
 
 describe("ReportScreen", () => {
   it("shows the finished report with its sources and selected passages", async () => {

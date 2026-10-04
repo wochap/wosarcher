@@ -1,7 +1,16 @@
 // The Report screen: a run's cited report (or, for the context recipe, its selected
 // passages), its sources and passages, exports, versions, and Rewrite. Keyed by run id.
-import { BracketsCurly, Copy, DownloadSimple, GitBranch, PenNib } from "@phosphor-icons/react";
+import {
+  ArrowBendDownRight,
+  BracketsCurly,
+  Copy,
+  DownloadSimple,
+  GitBranch,
+  PenNib,
+  Scissors,
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
+import type { Report } from "../../api/generated";
 import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { HelpTip } from "../../components/HelpTip";
@@ -147,6 +156,7 @@ export function ReportScreen({ runId }: { runId: string }) {
                   Written with {wSummary(detail.writing)}
                   {detail.writing.tone_instructions ? " · custom instructions" : ""}
                 </div>
+                {report && <ContinuationNote report={report} />}
                 {report && (
                   <>
                     <ReportMarkdown
@@ -157,6 +167,12 @@ export function ReportScreen({ runId }: { runId: string }) {
                       onCite={onCite}
                       onLeave={onLeave}
                     />
+                    {report.truncated && (
+                      <div className={css.cutEnd}>
+                        <Scissors aria-hidden="true" />
+                        Output limit reached here
+                      </div>
+                    )}
                     <References
                       entries={report.references.map((r) => r.entry)}
                       style={detail.writing.reference_style}
@@ -180,6 +196,31 @@ export function ReportScreen({ runId }: { runId: string }) {
         />
       )}
       <CitationTooltip cite={cite} context={context} marker={marker} />
+    </div>
+  );
+}
+
+/** "Continued N×" for a report the writer continued, or the cut note for one still cut off. */
+function ContinuationNote({ report }: { report: Report }) {
+  const count = report.continuations ?? 0;
+  if (report.truncated) {
+    return (
+      <div role="note" className={css.cutNote}>
+        <Scissors className={css.cutIcon} aria-hidden="true" />
+        <span>
+          {count
+            ? `Still cut off after ${count} continuations. The last section may be incomplete.`
+            : "Cut off at the output limit. The last section may be incomplete."}
+        </span>
+      </div>
+    );
+  }
+  if (!count) return null;
+  return (
+    <div className={css.contNote}>
+      <ArrowBendDownRight className={css.contIcon} aria-hidden="true" />
+      Continued {count}× after reaching the output limit.
+      <HelpTip help="cont" />
     </div>
   );
 }

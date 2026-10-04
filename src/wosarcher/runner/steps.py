@@ -331,7 +331,14 @@ async def write(ctx: StepContext) -> Outcome:
         ctx.store.append_report(ctx.run_id, text)
         ctx.log.live("report.delta", "write", ReportTextData(text=text))
 
-    report = await writing.write(context, ctx.settings.write, ctx.adapters.writer, on_delta=on_delta)
+    llm = ctx.settings.llm
+    sizing = writing.Sizing(
+        context_window=llm.context_window,
+        chars_per_token=llm.chars_per_token,
+        token_margin=llm.token_margin,
+        max_continuations=llm.max_continuations,
+    )
+    report = await writing.write(context, ctx.settings.write, ctx.adapters.writer, sizing=sizing, on_delta=on_delta)
     ctx.store.write_text(ctx.run_id, "report.md", report.markdown)
     ctx.store.write_artifact(ctx.run_id, "report.json", report)
     return Outcome(len(report.body.strip()), warnings=list(report.warnings))

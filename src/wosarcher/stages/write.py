@@ -1,24 +1,44 @@
-"""Write: one streamed LLM call answers the query from the selected passages; code renders citations and references.
+"""Write: a streamed LLM call answers the query from the selected passages; code renders citations and references.
 
 Only the query and options go through the templates; passage titles and
 text go in a delimited data block of the user message, before the task.
+A report cut at the output limit is continued with the text so far as an
+`assistant` message, while the context window has room.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
 from wosarcher.models import Context, Message, Passage, Reference, Report, Source, WritingOptions
 from wosarcher.ports import LLM
 from wosarcher.prompts import load, tones
-from wosarcher.stages.select import output_tokens
+from wosarcher.stages.select import estimate_tokens, output_tokens
 
 CITATION = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\](?!\()")
 YEAR = re.compile(r"\d{4}")
 NO_CITATIONS = "report cites no passage"
 HEADING_SEPARATOR = " \u203a "
 """Joins a heading path (single right-pointing angle quotation mark)."""
+MIN_CONTINUATION_TOKENS = 256
+SEAM_CHARS = 2000
+"""How much of the text so far a continuation's start is checked against."""
+MIN_SEAM_CHARS = 20
+
+
+@dataclass(frozen=True)
+class Sizing:
+    """The LLM settings continuation needs (`llm.*`)."""
+
+    context_window: int = 32768
+    chars_per_token: float = 3.5
+    token_margin: float = 1.1
+    max_continuations: int = 2
+
+
+DEFAULT_SIZING = Sizing()
 
 
 def noop(_: str) -> None:
@@ -207,8 +227,55 @@ def render(body: str, context: Context, options: WritingOptions) -> Report:
     return Report(body=body, markdown=markdown, cited=cited, references=found, warnings=warnings)
 
 
+def continuation(first: list[Message], body: str) -> list[Message]:
+    return [
+        *first,
+        Message(role="assistant", content=body),
+        Message(role="user", content=load("write_continue").template.strip()),
+    ]
+
+
+def room(sent: list[Message], sizing: Sizing) -> int:
+    used = sum(
+        estimate_tokens(message.content, chars_per_token=sizing.chars_per_token, margin=sizing.token_margin)
+        for message in sent
+    )
+    return sizing.context_window - used
+
+
+def seam(body: str, start: str) -> str:
+    """`start` without the longest suffix of `body` it repeats (at least `MIN_SEAM_CHARS`)."""
+    tail = body[-SEAM_CHARS:]
+    for size in range(min(len(tail), len(start)), MIN_SEAM_CHARS - 1, -1):
+        if tail.endswith(start[:size]):
+            return start[size:]
+    return start
+
+
+async def trimmed(pieces: AsyncIterator[str], body: str) -> AsyncIterator[str]:
+    """Hold back a continuation's start until its repeat of `body` is removed, then pass pieces through."""
+    held = ""
+    holding = True
+    async for piece in pieces:
+        if not holding:
+            yield piece
+            continue
+        held += piece
+        if len(held) >= min(len(body), SEAM_CHARS):
+            holding = False
+            if rest := seam(body, held):
+                yield rest
+    if holding and (rest := seam(body, held)):
+        yield rest
+
+
 async def write(
-    context: Context, options: WritingOptions, llm: LLM, *, on_delta: Callable[[str], None] = noop
+    context: Context,
+    options: WritingOptions,
+    llm: LLM,
+    *,
+    sizing: Sizing = DEFAULT_SIZING,
+    on_delta: Callable[[str], None] = noop,
 ) -> Report:
     description = tone_description(options.tone)
     style(options.reference_style)
@@ -217,11 +284,38 @@ async def write(
     pieces: list[str] = []
     reasons: list[str | None] = []
     limit = output_tokens(options.words)
-    async for piece in llm.stream(messages(context, options, description), max_tokens=limit, on_finish=reasons.append):
-        on_delta(piece)
-        pieces.append(piece)
+    first = messages(context, options, description)
+
+    async def call(stream: AsyncIterator[str]) -> int:
+        added = 0
+        async for piece in stream:
+            on_delta(piece)
+            pieces.append(piece)
+            added += len(piece)
+        return added
+
+    await call(llm.stream(first, max_tokens=limit, on_finish=reasons.append))
+    continuations = 0
+    failed: list[str] = []
+    while reasons[-1:] == ["length"] and continuations < sizing.max_continuations:
+        body = "".join(pieces)
+        sent = continuation(first, body)
+        tokens = min(limit, room(sent, sizing))
+        if tokens < MIN_CONTINUATION_TOKENS:
+            break
+        reasons.clear()
+        try:
+            added = await call(trimmed(llm.stream(sent, max_tokens=tokens, on_finish=reasons.append), body))
+        except Exception as error:
+            failed.append(f"continuation failed: {error}")
+            break
+        if not added:
+            break
+        continuations += 1
     report = render("".join(pieces), context, options)
-    if reasons != ["length"]:
-        return report
-    truncated = f"report truncated at the output limit of {limit} tokens"
-    return report.model_copy(update={"warnings": [*report.warnings, truncated]})
+    truncated = bool(failed) or reasons[-1:] == ["length"]
+    warnings = [*report.warnings, *failed]
+    if truncated:
+        after = f" after {continuations} continuations" if continuations else ""
+        warnings.append(f"report truncated at the output limit of {limit} tokens{after}")
+    return report.model_copy(update={"warnings": warnings, "continuations": continuations, "truncated": truncated})

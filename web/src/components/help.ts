@@ -57,6 +57,10 @@ export const HELP: Record<string, Help> = {
     title: "Reference style",
     body: "Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE.",
   },
+  cont: {
+    title: "Continued",
+    body: "The writer reached its output limit, so it was asked to continue from where it stopped. The parts are joined into one report.",
+  },
   overridden: {
     title: "Overridden",
     body: "This value differs from your default in Settings and applies to this run only.",
