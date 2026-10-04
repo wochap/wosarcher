@@ -157,18 +157,36 @@ run screen.
 - **THEN** the Cancel button is disabled
 
 ### Requirement: Phase timeline
-The Live run screen (scenario `live`) SHALL show the nine phases Plan,
-Search, Fetch, Load, Chunk, Prefilter, Score, Select, and Write as the
-prototype's cards, each with icon, the full label (never truncated)
+The Live run screen (scenario `live`) SHALL show the phases Plan, Search,
+Fetch, Load, Chunk, Prefilter, Score, Select, and Write as the prototype's
+cards. A multi-round run (resolved `research.rounds` > 1) SHALL also show
+a Gap card between Score and Select (scenarios `rounds-live`,
+`rounds-done`). Each card has an icon, the full label (never truncated)
 followed by the phase's help button, progress text, and a 3px progress
-bar, styled per state: pending, waiting (warn dashed border, stripes, CPU
-icon, text "waiting for GPU · <reason>"), running (accent, spinning icon,
-glow), done, reused ("reused from <parent id>"), failed (danger, with the
-error), and cancelled. Cards SHALL have no title tooltip. On desktop each
-card SHALL be at least 98px wide and the row SHALL scroll sideways when
-the nine cards do not fit; on phone the cards use two columns. Waiting
-SHALL never look like running. Phases that a run's recipe skips SHALL show
-done with "skipped".
+bar. Cards are styled per state:
+- pending;
+- waiting: warn dashed border, stripes, CPU icon, text "waiting for GPU ·
+  <reason>";
+- running: accent, spinning icon, glow;
+- done;
+- reused: "reused from <parent id>";
+- failed: danger, with the error;
+- cancelled.
+
+Cards SHALL have no title tooltip. On desktop each card SHALL be at least
+98px wide, and the row SHALL scroll sideways when the cards do not fit. On
+phone the cards use two columns. Waiting SHALL never look like running.
+Phases that a run's recipe skips SHALL show done with "skipped".
+
+In a multi-round run, loop cards (Search to Score) SHALL show "round
+<k>/<N>" while running, "round <k> done" between rounds, and "<n> rounds"
+when the loop is done. The Gap card SHALL show:
+- "pending" before it first runs;
+- "reading round <k>" while it runs;
+- "<n> follow-ups" after a gap step that continued;
+- "<ran> of <N> rounds" once research is done.
+
+The Gap help text SHALL be verbatim from the prototype's `ph-gap` entry.
 
 #### Scenario: Waiting for a device
 - **WHEN** the score stage has `resource.waiting` with released stage `prefilter` and has not started
@@ -177,6 +195,14 @@ done with "skipped".
 #### Scenario: Narrow desktop window
 - **WHEN** the Live run screen is 900px wide
 - **THEN** every phase label is shown in full and the phase row scrolls sideways
+
+#### Scenario: Round 2 running
+- **WHEN** a three-round run is in round 2's fetch (scenario `rounds-live`)
+- **THEN** the Fetch card shows "round 2/3", and the Gap card shows the follow-up count of the gap step after round 1
+
+#### Scenario: Single round
+- **WHEN** a run has `research.rounds = 1`
+- **THEN** no Gap card is shown
 
 ### Requirement: Phase method tags
 On the Live run screen (scenario `live`), the Plan, Prefilter, Score, and
@@ -868,22 +894,27 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
   `GET /api/depths`.
 - Under it, the selected depth's description ("Set every value yourself."
   for Custom).
-- An estimate line: "~<P> pages · 1 round · ~<C> LLM calls".
-  - P is the smaller of Max pages and (Sub-queries + 1) × Results per query.
-  - C is 2, or 1 when Sub-queries is 0.
+- An estimate line: "~<P> pages · <R> round(s) · ~<C> LLM calls".
+  - R is Rounds, and the word is "round" when R is 1.
+  - P is the smaller of Max pages and the sum of two terms:
+    (Sub-queries + 1) × Results per query, and (R − 1) × queries per round
+    × Results per query. Queries per round is the selected preset's
+    `queries_per_round`, or the last preset's for Custom.
+  - C is (1 when Sub-queries > 0) + (R − 1) + 1.
   - When context is clamped, the line adds " · context <asked> →
     <effective> (model window)", in thousands of tokens such as "32k".
 - An "Advanced" disclosure listing, each with its help button: Sub-queries
-  (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds,
-  Passages per query (1-40), and Context tokens (1000-128000, step 1000).
+  (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds
+  (1-8), Passages per query (1-40), and Context tokens (1000-128000, step
+  1000).
   - With a preset selected, the fields show the preset's values and look
     read-only (dashed, muted), but accept typing. Editing a field switches
     the depth to Custom with the edited values.
   - Picking Custom opens Advanced. Its fields start with the last Custom
     values saved in browser storage, or else with the values of the depth
     selected before.
-- Rounds is disabled with the lock icon. It shows 1 and the note "This
-  server runs 1 round only."
+- When Sources is `files`, Rounds is disabled with the lock icon at 1 and
+  the note "Files-only runs use 1 round.", and the estimate counts 1 round.
 - Context tokens shows "<asked> → <effective> (model window)" when the
   asked value is above the effective budget.
   - The effective budget is the selected profile's `context_window` minus
@@ -894,7 +925,7 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
 
 The run request SHALL send `depth` set to the preset name and no `research`
 for a preset. For Custom it SHALL send `depth` = `custom` and `research`
-with all five values. Help texts SHALL be verbatim from the prototype's
+with all six values. Help texts SHALL be verbatim from the prototype's
 help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 `d-ctx`, and `w-words-def`.
 
@@ -904,7 +935,7 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 
 #### Scenario: Edit switches to Custom
 - **WHEN** Deep is selected and the user changes Max pages to 80
-- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those five values
+- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those six values
 
 #### Scenario: Clamped context
 - **WHEN** Exhaustive asks 32,000 context tokens, the profile has `context_window` 32768, `prompt_reserve_tokens` 2000, no `max_output_tokens`, and words is 3000
@@ -915,8 +946,12 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 - **THEN** Sub-queries shows 6
 
 #### Scenario: Rounds disabled
-- **WHEN** the user opens Advanced
-- **THEN** Rounds is disabled at 1 with "This server runs 1 round only."
+- **WHEN** Sources is `files` and the user opens Advanced
+- **THEN** Rounds is disabled at 1 with "Files-only runs use 1 round."
+
+#### Scenario: Deep estimate
+- **WHEN** Deep is selected with Sub-queries 5, Results per query 10, Max pages 60, Rounds 3, and queries per round 3
+- **THEN** the estimate line reads "~60 pages · 3 rounds · ~4 LLM calls"
 
 ### Requirement: Depth tags
 The Live run header and the Report screen header SHALL show the run's depth
@@ -927,3 +962,78 @@ with no depth SHALL show "Standard".
 #### Scenario: Deep run
 - **WHEN** the user opens a finished run whose summary has `depth = "deep"`
 - **THEN** the Report header shows Completed followed by the tag "Deep"
+
+### Requirement: Research rounds panel
+On a multi-round run, the Live run screen SHALL show the "Research rounds"
+panel in place of the Sub-queries panel (scenarios `rounds-live`,
+`rounds-done`, `rounds-nonew`, `rounds-max`). It is built from `plan.ready`,
+`hit.found`, `round.done`, `gap.ready`, and `research.done` events.
+
+The panel header shows "Research rounds", its help button (prototype entry
+`rounds`), and a summary:
+- "up to <N> rounds" before round 1;
+- "round <k>/<N>" during a round;
+- "gap after round <k>" during a gap step;
+- "<ran> of <N> rounds" when research is done;
+- "cancelled" when cancelled.
+
+Each round that has started shows:
+- An icon (spinner while running, check when done, minus-circle for 0 new
+  pages, stop when cancelled), "Round <k>", and the kind ("planner queries"
+  for round 1, "gap follow-ups" after).
+- A status:
+  - "<p> new pages · <kept> kept" when done;
+  - "<p> new pages · <searching|fetching|chunking|prefiltering|scoring>"
+    while running;
+  - "0 new pages · <m> already fetched" for a round with no new pages.
+- The gap note written after it, when there is one.
+- Its queries, each with its ID, text, and status: "queued", "searching",
+  or "<n> results". With more than 3 queries, only 2 are shown, plus a
+  "+<n> more" button that toggles to "Show fewer". A running round is
+  expanded.
+- A gap line: "Gap: reading the best passages so far…" while the gap step
+  runs, and "Gap: <n> follow-up queries for round <k+1>" after it.
+
+When research is done, a final line shows:
+- "All <N> rounds ran · max rounds", or "Stopped after round <ran> of <N> ·
+  <reason>";
+- the reason's icon (prohibit for no new sources, files for page limit
+  reached, check-circle for coverage sufficient, stack for max rounds,
+  warning for gap step failed);
+- the "Why research stopped" help button (prototype entry `r-stop`, with a
+  row for `gap step failed`: "The gap step's model call failed; the report
+  uses the rounds that ran.");
+- the end note under it.
+
+While research runs and rounds remain, a dashed line shows "Up to <m> more
+round(s) if the gap step finds gaps". Before any round starts, the panel
+shows "Planning round 1 queries…".
+
+#### Scenario: Live round
+- **WHEN** a three-round run is fetching in round 2 (scenario `rounds-live`)
+- **THEN** round 1 shows its pages and kept count and its gap note, round 2 shows a spinner with "fetching", and the line "Up to 1 more round if the gap step finds gaps" is shown
+
+#### Scenario: No new sources
+- **WHEN** research stopped after round 2 with `no new sources` (scenario `rounds-nonew`)
+- **THEN** round 2 shows "0 new pages · <m> already fetched" and the final line reads "Stopped after round 2 of 3 · no new sources" with the end note "Follow-up searches returned only pages fetched in earlier rounds."
+
+#### Scenario: Max rounds
+- **WHEN** all three rounds ran (scenario `rounds-max`)
+- **THEN** the final line reads "All 3 rounds ran · max rounds" with no end note
+
+### Requirement: Source round tags
+In a multi-round run, a source in the Live Sources panel that was fetched
+in round k > 1 SHALL show the tag "round <k>" under its status, taken from
+`page.fetched`.
+
+#### Scenario: Round 2 source
+- **WHEN** a page is fetched in round 2
+- **THEN** its Sources row shows "round 2"
+
+### Requirement: Report rounds meta
+The Report screen meta line of a multi-round run SHALL end with " · <ran> of
+<planned> rounds", from the run summary (scenario `finished`).
+
+#### Scenario: Deep report
+- **WHEN** a deep run's summary has `rounds_planned` 3 and `rounds_ran` 2
+- **THEN** the meta line ends with "· 2 of 3 rounds"

@@ -55,9 +55,9 @@ SHALL have `query` (required, non-empty), and these optional fields:
 - `until` (a stage name)
 - `profile`
 - `depth` (a preset name or `custom`)
-- `research` (any subset of `sub_queries`, `results_per_query`,
-  `max_pages`, `passages_per_query`, and `context_tokens`, each a positive
-  integer)
+- `research`: any subset of `sub_queries`, `results_per_query`,
+  `max_pages`, `passages_per_query`, `context_tokens`, and `rounds`. Each
+  is a positive integer, and `rounds` is at most 8.
 - `writing` (any subset of the writing option fields)
 - `set` (a list of `dotted.key=value` overrides)
 
@@ -85,12 +85,16 @@ with 422 `invalid_attachment` before anything is staged.
 - **THEN** the response is 422 with `error = "invalid_attachment"`, and no run is queued or staged
 
 #### Scenario: Custom research values
-- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80}}`
-- **THEN** the run resolves `plan.max_sub_queries` 6 and `fetch.max_pages` 80, and its summary has `depth = "custom"`
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80, "rounds": 2}}`
+- **THEN** the run resolves `plan.max_sub_queries` 6, `fetch.max_pages` 80, and `research.rounds` 2, and its summary has `depth = "custom"`
 
 #### Scenario: Unknown depth
 - **WHEN** a client posts `request = {"query": "q", "depth": "huge"}`
 - **THEN** the response is 422 and names `depth`
+
+#### Scenario: Too many rounds
+- **WHEN** a client posts `request = {"query": "q", "research": {"rounds": 9}}`
+- **THEN** the response is 422 and names `rounds`
 
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
@@ -189,8 +193,8 @@ forgotten (204). A running run SHALL answer 409 with
 `GET /api/runs/{id}/artifacts/{name}` SHALL serve only these names:
 `request.json`, `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`,
 `pages.jsonl`, `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`,
-`context.json`, `select.jsonl`, `report.md`, `report.json`,
-`events.jsonl`, `costs.json`. JSON files SHALL be served as
+`research.json`, `context.json`, `select.jsonl`, `report.md`,
+`report.json`, `events.jsonl`, `costs.json`. JSON files SHALL be served as
 `application/json`, JSONL as `application/x-ndjson`, and Markdown as
 `text/markdown`, all UTF-8. Any other name, or a listed file that does not
 exist, SHALL answer 404.
@@ -210,6 +214,10 @@ exist, SHALL answer 404.
 #### Scenario: Name outside the allowlist
 - **WHEN** a client requests the artifact `..%2Fother%2Freport.md` or `attachments`
 - **THEN** the response is 404 and no file outside the allowlist is read
+
+#### Scenario: Research record
+- **WHEN** a client requests `research.json` of a finished multi-round run
+- **THEN** the response is 200 with the rounds and the stop reason as `application/json`
 
 ### Requirement: Source view
 `GET /api/runs/{id}/sources/{source_id}` SHALL return one source of a run
@@ -473,18 +481,27 @@ and stored results SHALL stay unchanged.
 `standard`, `deep`, `exhaustive`. Each entry SHALL have:
 - its `name` and `description`;
 - `values` with `sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`, and `words`.
+  `passages_per_query`, `context_tokens`, `rounds`, `queries_per_round`,
+  and `words`.
 
 Each value SHALL be the one the preset sets, or the built-in default when
 it sets none. The exception is `words`: it SHALL be null when the preset
 does not set it (the global default applies). Run summaries from
-`GET /api/runs` and `GET /api/runs/{id}` SHALL include the run's `depth`
-(a preset name, `custom`, or null).
+`GET /api/runs` and `GET /api/runs/{id}` SHALL include:
+- the run's `depth` (a preset name, `custom`, or null);
+- `rounds_planned` (the resolved `research.rounds`);
+- `rounds_ran` (from `research.done`, null until then; 1 for single-round
+  runs that finished the loop);
+- `stop_reason` (null for single-round runs).
 
 #### Scenario: Standard values
 - **WHEN** a client requests `GET /api/depths`
-- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` 16000, and `words` null
+- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` 16000, `rounds` 1, `queries_per_round` 3, and `words` null
 
 #### Scenario: Summary depth
 - **WHEN** a run was started with `"depth": "quick"`
 - **THEN** its summary in `GET /api/runs` has `depth = "quick"`
+
+#### Scenario: Summary rounds
+- **WHEN** a deep run stopped after round 2 with `no new sources`
+- **THEN** its summary has `rounds_planned` 3, `rounds_ran` 2, and `stop_reason` "no new sources"

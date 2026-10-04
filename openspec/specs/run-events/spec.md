@@ -27,19 +27,28 @@ The system SHALL define exactly these event types and data:
 | `run.done` | until, totals |
 | `run.failed` | stage, error |
 | `run.cancelled` | stage |
-| `stage.started` | device, provider |
-| `stage.progress` | done, total, failed |
-| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings, passthrough sub-query IDs |
+| `stage.started` | device, provider, round |
+| `stage.progress` | done, total, failed, round |
+| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings, passthrough sub-query IDs, hits not fetched, round |
 | `stage.failed` | error, next fallback (empty when none) |
 | `resource.waiting` | device, released stage |
 | `resource.released` | device, released stage |
 | `plan.ready` | sub-queries |
 | `hit.found` | URL, title, query IDs |
-| `page.fetched` | URL, source ID, title, characters, cached |
+| `page.fetched` | URL, source ID, title, characters, cached, round |
 | `page.failed` | URL, reason |
 | `passages.scored` | query ID, scorer, pair count, kept count, display threshold, kept passages |
+| `round.done` | round, query IDs, new pages, known pages, kept passages |
+| `gap.ready` | round it followed, follow-up queries (ID, text), note, stop |
+| `research.done` | planned rounds, rounds ran, stop reason, end note |
 | `report.delta` | text |
 | `report.snapshot` | text |
+
+The `round` of stage and page events SHALL be the research round (1 for
+single-round runs and for stages outside the loop). `round.done`,
+`gap.ready`, and `research.done` SHALL be emitted only by multi-round runs.
+`gap.ready` SHALL carry the stage `gap`. `round.done` SHALL carry `score`,
+and `research.done` SHALL carry `gap`.
 
 Each kept passage in `passages.scored` SHALL carry chunk ID, source ID,
 source title and URI, heading path, text, and the display score from 0 to
@@ -76,6 +85,10 @@ stage.
 #### Scenario: Passthrough sub-queries
 - **WHEN** the pages paired with `q4` and `q5` are shorter than `select.passthrough_chars`
 - **THEN** `stage.done` for prefilter carries `passthrough` = `["q4", "q5"]`
+
+#### Scenario: Round events
+- **WHEN** a three-round run stops after round 2 because the gap step judged coverage sufficient
+- **THEN** the log has `round.done` for rounds 1 and 2, `gap.ready` after round 1 (with `stop` false) and after round 2 (with `stop` true), and one `research.done` with 3 planned, 2 ran, and reason `model judged coverage sufficient`
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

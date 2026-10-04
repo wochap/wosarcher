@@ -14,8 +14,8 @@ The package SHALL ship the depth presets `quick`, `standard`, `deep`, and
 
 - `quick`: "Fast overview: few searches, short report."
 - `standard`: "Balanced: today's default."
-- `deep`: "More searches and sources, longer report."
-- `exhaustive`: "Many searches and sources; slow, for thorough reports."
+- `deep`: "Several research rounds that follow up on gaps."
+- `exhaustive`: "Many rounds and sources; slow, for thorough reports."
 
 The presets SHALL set these values:
 
@@ -27,6 +27,8 @@ The presets SHALL set these values:
 | `score.top_k` | 6 | - | 10 | 8 |
 | `select.max_context_tokens` | 8000 | - | 24000 | 32000 |
 | `write.words` | 600 | - | 2000 | 3000 |
+| `research.rounds` | - | - | 3 | 5 |
+| `research.queries_per_round` | - | - | 3 | 4 |
 
 `standard` SHALL set no key, so a `standard` run resolves like a run with no
 depth.
@@ -37,13 +39,14 @@ depth.
 
 #### Scenario: Deep values
 - **WHEN** a run uses depth `deep`
-- **THEN** the resolved `plan.max_sub_queries` is 5, `fetch.max_pages` is 60, and `write.words` is 2000
+- **THEN** the resolved `plan.max_sub_queries` is 5, `fetch.max_pages` is 60, `write.words` is 2000, and `research.rounds` is 3
 
 ### Requirement: Allowed preset keys
 A preset SHALL only set the keys listed in Requirement: Built-in presets,
-plus `description`. Any other key, such as a provider field, SHALL fail
-when the preset is loaded, with an error that names the preset file and the
-key. A preset value SHALL be validated like any other setting.
+plus `description`. Any other key, such as a provider field or
+`research.gap_context_tokens`, SHALL fail when the preset is loaded, with
+an error that names the preset file and the key. A preset value SHALL be
+validated like any other setting.
 
 #### Scenario: Provider key rejected
 - **WHEN** a preset file sets `llm.model`

@@ -10,13 +10,17 @@ timeouts and cancellation, and records costs.
 
 ### Requirement: Stage order and phases
 A run SHALL execute the stages in this order: `load`, `plan`, `search`,
-`fetch`, `chunk`, `prefilter`, `score`, `select`, `write`, where `plan`
-first searches the main query (the initial search) and then plans, and
-`search` searches the sub-queries reusing the initial search's hits. Each stage SHALL
-run once over all sub-queries (a phase), never once per sub-query. A stage
-SHALL start only after the previous stage is finished. The `plan` stage
-SHALL include one search for the main query (the initial search) before
-planning, unless the run's sources are `files`.
+`fetch`, `chunk`, `prefilter`, `score`, `gap`, `select`, `write`.
+- `plan` first searches the main query (the initial search), then plans.
+- `search` searches the sub-queries, reusing the initial search's hits.
+- With more than one research round, `search` through `gap` repeat once
+  per round (research-rounds "Rounds"). Otherwise `gap` is skipped.
+
+Each stage SHALL run once per round over all of that round's queries (a
+phase), never once per query. A stage SHALL start only after the previous
+stage is finished. The `plan` stage SHALL include one search for the main
+query (the initial search) before planning, unless the run's sources are
+`files`.
 
 #### Scenario: Phases across sub-queries
 - **WHEN** the plan produces three sub-queries
@@ -25,6 +29,10 @@ planning, unless the run's sources are `files`.
 #### Scenario: Initial search
 - **WHEN** a run with sources `both` reaches the plan stage
 - **THEN** one search for the main query runs before the planner is called, and the planner receives its result titles and snippets
+
+#### Scenario: Gap skipped in a single round
+- **WHEN** a run has `research.rounds = 1`
+- **THEN** the `gap` stage is reported done with `skipped` and select follows score
 
 ### Requirement: Sources select stages
 With `--sources web` the `load` stage SHALL be skipped. With `--sources
@@ -117,21 +125,33 @@ no chunks; an empty context from `select`; no report text from `write`.
 - **THEN** the run continues with the attachment pages
 
 ### Requirement: Stage timeouts
-Each stage SHALL have a timeout from `run.stage_timeouts`. A stage that
-exceeds it SHALL be cancelled and SHALL fail the run.
+Each stage SHALL have a timeout from `run.stage_timeouts` (the `gap`
+default is 180 seconds). In a multi-round run the timeout SHALL apply to
+each round's run of a stage separately. A stage that exceeds it SHALL be
+cancelled and SHALL fail the run, except `gap`: a gap timeout SHALL stop
+research as a failed gap step (research-rounds "Stop rules").
 
 #### Scenario: Score timeout
 - **WHEN** the score stage exceeds its timeout
 - **THEN** the stage is cancelled and the run emits `run.failed` naming `score` and the timeout
 
+#### Scenario: Timeout per round
+- **WHEN** `run.stage_timeouts.fetch = 600` and each of three rounds fetches for 400 seconds
+- **THEN** no fetch timeout occurs
+
 ### Requirement: Stop early
 A run started with `--until <stage>` SHALL stop after that stage has
-finished and SHALL end with `run.done`. An unknown stage name SHALL be
-rejected before the run starts.
+finished and SHALL end with `run.done`. When the stage is in the research
+loop (`search` to `gap`), the run SHALL stop after that stage in round 1.
+An unknown stage name SHALL be rejected before the run starts.
 
 #### Scenario: Until select
 - **WHEN** a run uses `--until select`
 - **THEN** `context.json` is written, no write stage runs, and the run ends with `run.done`
+
+#### Scenario: Until a loop stage
+- **WHEN** a three-round run uses `--until score`
+- **THEN** the run ends after round 1's score with `run.done`, and no gap step runs
 
 ### Requirement: Cancellation
 Cancelling the run task, or the process receiving SIGTERM or SIGINT, SHALL
@@ -202,3 +222,12 @@ the block and the probe error; no stage SHALL start.
 #### Scenario: Skipped stages not probed
 - **WHEN** `run.preflight = "all"` and the run uses `--sources files`
 - **THEN** the search and fetch endpoints are not probed
+
+### Requirement: Usage across rounds
+The usage and cost of a stage that runs in several rounds SHALL be the sum
+over its rounds, both in `costs.json` and in the run totals. Each
+`stage.done` SHALL carry that round's usage.
+
+#### Scenario: Summed usage
+- **WHEN** score costs $0.01 in each of three rounds
+- **THEN** `costs.json` shows $0.03 for score

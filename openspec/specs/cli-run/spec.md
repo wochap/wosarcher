@@ -14,13 +14,20 @@ files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
 `--depth NAME`, `--set KEY=VALUE` (repeatable), `--tone`,
 `--tone-instructions`, `--words`, `--language`, `--citation-marker`,
 `--reference-style`, `--sub-queries N`, `--results-per-query N`,
-`--max-pages N`, `--passages-per-query N`, `--context-tokens N`, `--run-id
-ID`, and `--json`. Each writing flag SHALL act as `--set
-write.<field>=<value>`. Each research flag SHALL act as `--set` on its key:
-`plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`,
-`score.top_k`, and `select.max_context_tokens`. Writing and research flags
-SHALL take precedence over `--set` for the same field. The depth preset
-SHALL apply below all of them (depth-presets "Preset expansion").
+`--max-pages N`, `--passages-per-query N`, `--context-tokens N`,
+`--rounds N`, `--run-id ID`, and `--json`. Each writing flag SHALL act as
+`--set write.<field>=<value>`. Each research flag SHALL act as `--set` on
+its key:
+- `--sub-queries`: `plan.max_sub_queries`
+- `--results-per-query`: `search.max_results`
+- `--max-pages`: `fetch.max_pages`
+- `--passages-per-query`: `score.top_k`
+- `--context-tokens`: `select.max_context_tokens`
+- `--rounds`: `research.rounds`
+
+Writing and research flags SHALL take precedence over `--set` for the same
+field. The depth preset SHALL apply below all of them (depth-presets
+"Preset expansion").
 
 #### Scenario: Writing flag
 - **WHEN** the user runs `wosarcher run "q" --tone critical --words 500`
@@ -37,6 +44,10 @@ SHALL apply below all of them (depth-presets "Preset expansion").
 #### Scenario: Depth with a research flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --max-pages 80`
 - **THEN** the resolved `fetch.max_pages` is 80, `plan.max_sub_queries` is 5, and `request.json` records depth `deep` and the `fetch.max_pages` override
+
+#### Scenario: Rounds flag
+- **WHEN** the user runs `wosarcher run "q" --depth deep --rounds 2`
+- **THEN** the resolved `research.rounds` is 2
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
@@ -154,3 +165,18 @@ configuration, as for `wosarcher runs`.
 #### Scenario: Long data shortened
 - **WHEN** a `page.failed` event has a 200-character reason
 - **THEN** its printed line's summary is at most 160 characters
+
+### Requirement: Round progress
+The CLI progress view SHALL show a `gap` row for multi-round runs only. A
+loop stage's row SHALL show "round <k>/<N>" while it runs, and the number
+of rounds it ran when done. The gap row SHALL show the follow-up count
+after each gap step. When research ends, the view SHALL print one line:
+"research: <ran> of <planned> rounds · <stop reason>".
+
+#### Scenario: Multi-round progress
+- **WHEN** a three-round run is in round 2's fetch
+- **THEN** the fetch row shows "round 2/3"
+
+#### Scenario: Research line
+- **WHEN** a deep run stops after round 2 with `no new sources`
+- **THEN** the view prints "research: 2 of 3 rounds · no new sources"
