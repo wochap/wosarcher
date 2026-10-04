@@ -139,6 +139,8 @@ class SearchResult(Contract):
 class FetchResult(Contract):
     pages: list[Page]
     failures: list[Skipped] = []
+    unfetched: int = 0
+    """Queued hits never fetched because the page cap was reached."""
 
 
 class LoadResult(Contract):
@@ -342,6 +344,8 @@ class RunRequest(Contract):
     """None runs to the report; `select` stops at the context."""
     attachments: list[str] = []
     """Paths under the run's `attachments/`, as copied."""
+    depth: str | None = None
+    """The depth preset name, `custom`, or None (no depth: Standard)."""
 
 
 class Message(Contract):
@@ -423,6 +427,8 @@ class RunSummary(Contract):
     profile: str
     sources: Sources = "both"
     until: Stage | None = None
+    depth: str | None = None
+    """A preset name, `custom`, or None (an older run or no depth)."""
     writing: WritingOptions = WritingOptions()
     """The run's resolved writing options."""
     duration_s: float | None = None
@@ -479,6 +485,16 @@ class WritingPatch(Contract):
     reference_style: str | None = None
 
 
+class ResearchPatch(Contract):
+    """Typed research values; each sets one key (`config.RESEARCH_KEYS`)."""
+
+    sub_queries: int | None = Field(default=None, gt=0)
+    results_per_query: int | None = Field(default=None, gt=0)
+    max_pages: int | None = Field(default=None, gt=0)
+    passages_per_query: int | None = Field(default=None, gt=0)
+    context_tokens: int | None = Field(default=None, gt=0)
+
+
 class RunCreate(Contract):
     """The `request` field of `POST /api/runs`."""
 
@@ -487,6 +503,9 @@ class RunCreate(Contract):
     """None: the global default."""
     until: Stage | None = None
     profile: str | None = None
+    depth: str | None = None
+    """A depth preset name or `custom`; None applies no preset."""
+    research: ResearchPatch = ResearchPatch()
     writing: WritingPatch = WritingPatch()
     set: list[str] = []
     """`dotted.key=value` overrides, applied last."""
@@ -529,6 +548,28 @@ class ProfileInfo(Contract):
     source: Literal["builtin", "user"]
     active: bool
     description: str = ""
+    context_window: int | None = None
+    """None (with `prompt_reserve_tokens`) when the profile does not resolve."""
+    prompt_reserve_tokens: int | None = None
+    max_output_tokens: int | None = None
+
+
+class DepthValues(Contract):
+    sub_queries: int
+    results_per_query: int
+    max_pages: int
+    passages_per_query: int
+    context_tokens: int
+    words: int | None = None
+    """None: the preset sets no length, so the global default applies."""
+
+
+class DepthInfo(Contract):
+    """One depth preset as `GET /api/depths` lists it."""
+
+    name: str
+    description: str
+    values: DepthValues
 
 
 class ProviderCheck(Contract):
@@ -663,6 +704,8 @@ class StageDoneData(Contract):
     warnings: list[str] = []
     passthrough: list[str] = []
     """Sub-query IDs whose pairs skipped ranking; set by prefilter only."""
+    unfetched: int = 0
+    """Queued hits left unfetched at the page cap; set by fetch only."""
 
 
 class StageFailedData(Contract):
@@ -922,12 +965,15 @@ CONTRACTS: tuple[type[Contract], ...] = (
     RunOutput,
     RunCosts,
     WritingPatch,
+    ResearchPatch,
     RunCreate,
     ForkCreate,
     RunCreated,
     RunDetail,
     ServerSettings,
     ProfileInfo,
+    DepthValues,
+    DepthInfo,
     ProviderCheck,
     HealthReport,
     HealthCheckRequest,

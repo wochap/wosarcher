@@ -1,5 +1,6 @@
 // Typed client for the server's /api routes. Everything goes to the page's own origin.
 import type {
+  DepthInfo,
   ForkCreate,
   HealthReport,
   ProfileInfo,
@@ -39,6 +40,7 @@ export interface ApiClient {
   getSettings(): Promise<ServerSettings>;
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
   listProfiles(): Promise<ProfileInfo[]>;
+  listDepths(): Promise<DepthInfo[]>;
   /** The stored provider checks; sends no probe. */
   health(profile?: string): Promise<HealthReport>;
   /** Probes the named blocks (every block when none) and returns the merged report. */
@@ -150,6 +152,7 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     getSettings: () => json("GET", "/settings"),
     putSettings: (settings) => json("PUT", "/settings", settings),
     listProfiles: () => json("GET", "/profiles"),
+    listDepths: () => json("GET", "/depths"),
     health: (profile) => json("GET", `/providers/health${profileQuery(profile)}`),
     checkHealth: (blocks, profile) =>
       json("POST", `/providers/health/check${profileQuery(profile)}`, { blocks: blocks ?? [] }),

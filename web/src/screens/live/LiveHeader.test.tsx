@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { RunEvent } from "../../api/types";
+import type { RunDetail, RunEvent } from "../../api/types";
 import { ev } from "../../test/events";
 import { cancelled } from "../../test/fixtures/cancelled";
 import { failure } from "../../test/fixtures/failure";
 import { live } from "../../test/fixtures/live";
 import { loading } from "../../test/fixtures/loading";
-import { RUN_ID, upTo } from "../../test/fixtures/sample";
+import { RUN_ID, summary, upTo } from "../../test/fixtures/sample";
 import { viewOf } from "../../test/views";
 import { deviceLabel } from "./DeviceChip";
 import { LiveHeader } from "./LiveHeader";
@@ -14,12 +14,12 @@ import { LiveHeader } from "./LiveHeader";
 const all = live.data.events?.[RUN_ID] as RunEvent[];
 const at = (match: (e: RunEvent) => boolean) => viewOf(upTo(all, match), RUN_ID);
 
-function header(events: RunEvent[], isPhone = false) {
+function header(events: RunEvent[], isPhone = false, detail: RunDetail | null = null) {
   const handlers = { onCancel: vi.fn(), onOpenReport: vi.fn(), onRerun: vi.fn() };
   render(
     <LiveHeader
       run={viewOf(events, RUN_ID)}
-      detail={null}
+      detail={detail}
       files={2}
       isPhone={isPhone}
       cancelling={false}
@@ -97,5 +97,17 @@ describe("deviceLabel", () => {
     const idle = at((e) => e.type === "stage.started" && e.stage === "select");
     expect(deviceLabel(idle)).toEqual({ text: "desktop:gpu0", tone: "idle" });
     expect(deviceLabel(viewOf([ev(1, "run.started", {} as never, null, RUN_ID)]))).toBeNull();
+  });
+});
+
+describe("LiveHeader depth tag", () => {
+  it("shows the depth after the status, Standard when the run has none", () => {
+    header(all, false, { ...summary({ depth: "quick" }), last_seq: 0 });
+    expect(screen.getByText("Quick")).toBeTruthy();
+  });
+
+  it("reads Standard for an older run", () => {
+    header(all);
+    expect(screen.getByText("Standard")).toBeTruthy();
   });
 });

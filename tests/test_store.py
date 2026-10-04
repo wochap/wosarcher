@@ -327,3 +327,22 @@ def test_summary_error_and_end_stage(store: RunStore) -> None:
     store.append_event(done, "run.done", None, RunDoneData(until=None, totals=UsageTotals()))
     summary = store.summary(store.read_record(done))
     assert (summary.error, summary.end_stage) == (None, None)
+
+
+def test_depth_recorded(store: RunStore) -> None:
+    overrides = ["write.words=800"]
+    settings = resolve(None, overrides, {}, depth="deep")
+    request = RunRequest(query="battery recycling", depth="deep")
+    run_id = store.create(request, "workstation", overrides, settings, []).run_id
+    saved = json.loads((store.run_dir(run_id) / "request.json").read_text())
+    assert saved["request"]["depth"] == "deep"
+    assert saved["overrides"] == ["write.words=800"]
+    assert saved["settings"]["plan"]["max_sub_queries"] == 5
+    assert store.list_runs()[0].depth == "deep"
+
+
+def test_fork_keeps_depth(store: RunStore) -> None:
+    run_id = store.create(RunRequest(query="q", depth="quick"), "workstation", [], Settings(), []).run_id
+    finish(store, run_id, *STAGES[:-1])
+    record = store.fork(run_id, "write", [], Settings())
+    assert record.request.depth == "quick"

@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import type { Report } from "../../api/generated";
 import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
+import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime } from "../../format";
@@ -80,6 +81,7 @@ export function ReportScreen({ runId }: { runId: string }) {
         <header className={css.header}>
           <div className={css.line}>
             <StatusTag status={detail.status} />
+            <DepthTag depth={detail.depth} />
             <span className={css.id}>{runId}</span>
             <span>{meta}</span>
           </div>

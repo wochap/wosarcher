@@ -24,7 +24,7 @@ import wosarcher.build as building
 from wosarcher.cli import ProfileOption, SetOption, fail
 from wosarcher.cli.logs import stderr_listener
 from wosarcher.cli.progress import ProgressView
-from wosarcher.config import ConfigError, Prices, Settings, resolve, restore_secrets, select_profile
+from wosarcher.config import RESEARCH_KEYS, ConfigError, Prices, Settings, resolve, restore_secrets, select_profile
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     STAGES,
@@ -55,6 +55,7 @@ WordsOption = Annotated[int | None, typer.Option("--words", help="Target report 
 LanguageOption = Annotated[str | None, typer.Option("--language", help="Report language.")]
 MarkerOption = Annotated[str | None, typer.Option("--citation-marker", help="numeric, superscript, or author-year.")]
 StyleOption = Annotated[str | None, typer.Option("--reference-style", help="APA, MLA, Chicago, or IEEE.")]
+DepthOption = Annotated[str | None, typer.Option("--depth", help="Depth preset; see `wosarcher depth list`.")]
 
 
 def stage_option(value: str | None) -> Stage | None:
@@ -68,6 +69,11 @@ def stage_option(value: str | None) -> Stage | None:
 def writing_overrides(**fields: str | int | None) -> list[str]:
     """Writing flags as `write.<field>=<value>`, appended after `--set` so they win."""
     return [f"write.{name}={json.dumps(value)}" for name, value in fields.items() if value is not None]
+
+
+def research_overrides(**fields: int | None) -> list[str]:
+    """Research flags as `--set` on their keys (`RESEARCH_KEYS`), appended after `--set` so they win."""
+    return [f"{RESEARCH_KEYS[name]}={value}" for name, value in fields.items() if value is not None]
 
 
 def checked(make: Callable[[], Settings]) -> Settings:
@@ -172,6 +178,7 @@ def run(
     sources: Annotated[str, typer.Option("--sources", help="files, web, or both.")] = "both",
     until: UntilOption = None,
     profile: ProfileOption = None,
+    depth: DepthOption = None,
     set_: SetOption = None,
     tone: ToneOption = None,
     tone_instructions: ToneInstructionsOption = None,
@@ -179,6 +186,15 @@ def run(
     language: LanguageOption = None,
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
+    sub_queries: Annotated[int | None, typer.Option("--sub-queries", min=0, help="Sub-queries to plan.")] = None,
+    results_per_query: Annotated[
+        int | None, typer.Option("--results-per-query", min=1, help="Search results per query.")
+    ] = None,
+    max_pages: Annotated[int | None, typer.Option("--max-pages", min=1, help="Pages to fetch at most.")] = None,
+    passages_per_query: Annotated[
+        int | None, typer.Option("--passages-per-query", min=1, help="Passages kept per query.")
+    ] = None,
+    context_tokens: Annotated[int | None, typer.Option("--context-tokens", min=1, help="Context token cap.")] = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -196,12 +212,19 @@ def run(
         citation_marker=citation_marker,
         reference_style=reference_style,
     )
-    overrides = [*(set_ or []), *flags]
+    research = research_overrides(
+        sub_queries=sub_queries,
+        results_per_query=results_per_query,
+        max_pages=max_pages,
+        passages_per_query=passages_per_query,
+        context_tokens=context_tokens,
+    )
+    overrides = [*(set_ or []), *flags, *research]
     env = os.environ
-    settings = checked(lambda: resolve(profile, overrides, env))
+    settings = checked(lambda: resolve(profile, overrides, env, depth))
     store = RunStore.from_settings(settings)
     try:
-        request = RunRequest(query=query, sources=sources, until=stop)  # pyright: ignore[reportArgumentType]
+        request = RunRequest(query=query, sources=sources, until=stop, depth=depth)  # pyright: ignore[reportArgumentType]
         record = store.create(request, select_profile(profile, env), overrides, settings, attach or [], run_id)
     except (ValidationError, RunStoreError) as error:
         raise fail(error, 2) from None
@@ -244,7 +267,7 @@ def fork(
     except RunStoreError as error:
         raise fail(error, 2) from None
     if profile:
-        settings = checked(lambda: resolve(profile, [*parent.overrides, *new], env))
+        settings = checked(lambda: resolve(profile, [*parent.overrides, *new], env, parent.request.depth))
     else:
         settings = checked(lambda: restore_secrets(parent.settings, resolve(parent.profile, [], env), new))
     place = {"runs_dir": here.run.runs_dir, "cache_dir": here.run.cache_dir}

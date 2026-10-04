@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from wosarcher.config import CUSTOM_DEPTH, RESEARCH_KEYS, depth_values, load_depth
 from wosarcher.models import (
     Attachment,
     ForkCreate,
@@ -71,6 +72,14 @@ def merged(base: WritingOptions, patch: WritingPatch) -> WritingOptions:
     return base.model_copy(update=patch.model_dump(exclude_none=True))
 
 
+def preset_words(depth: str | None) -> WritingPatch:
+    """The preset's `write.words`, as a patch between the global settings and the request."""
+    if depth is None or depth == CUSTOM_DEPTH:
+        return WritingPatch()
+    _, data = load_depth(depth)
+    return WritingPatch(words=depth_values(data).get("write.words"))
+
+
 def base_name(name: str) -> str:
     """The last path part of an uploaded file name, with Windows separators too."""
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
@@ -95,9 +104,10 @@ def write(runs_dir: Path, staged: StagedRun, uploads: list[Attachment]) -> Stage
 def stage_run(
     runs_dir: Path, request: RunCreate, uploads: list[Attachment], defaults: ServerSettings, profile: str
 ) -> StagedRun:
-    """A new run: global settings below the request's sources and writing."""
+    """A new run: global settings, then the depth preset's words, below the request's sources and writing."""
     if (request.sources or defaults.sources) == "files" and not uploads:
         raise StagingError(NO_ATTACHMENT)
+    writing = merged(merged(defaults.writing, preset_words(request.depth)), request.writing)
     staged = StagedRun(
         **request.model_dump(),
         run_id=fresh_id(runs_dir),
@@ -105,8 +115,8 @@ def stage_run(
         created=datetime.now(UTC),
         resolved_sources=request.sources or defaults.sources,
         resolved_profile=request.profile or profile,
-        writing_options=merged(defaults.writing, request.writing),
-        writing_flags=merged(defaults.writing, request.writing).model_dump(),
+        writing_options=writing,
+        writing_flags=writing.model_dump(),
     )
     return write(runs_dir, staged, uploads)
 
@@ -118,6 +128,7 @@ def stage_fork(runs_dir: Path, parent: RunRecord, request: ForkCreate) -> Staged
         query=parent.request.query,
         until=parent.request.until,
         profile=request.profile,
+        depth=parent.request.depth,
         writing=request.writing,
         set=request.set,
         run_id=fresh_id(runs_dir),
@@ -141,6 +152,7 @@ def stage_rerun(runs_dir: Path, original: RunRecord) -> StagedRun:
         sources=original.request.sources,
         until=original.request.until,
         profile=original.profile,
+        depth=original.request.depth,
         set=original.overrides,
         run_id=fresh_id(runs_dir),
         kind="rerun",
@@ -189,8 +201,16 @@ def attach_flags(path: Path) -> list[str]:
 
 
 def set_flags(staged: StagedRun) -> list[str]:
+    """Writing, then research, then the request's own `set`, each later one winning."""
     writing = [f"write.{name}={toml_value(value)}" for name, value in staged.writing_flags.items()]
-    return [flag for value in [*writing, *staged.set] for flag in ("--set", value)]
+    research = [
+        f"{RESEARCH_KEYS[name]}={value}" for name, value in staged.research.model_dump(exclude_none=True).items()
+    ]
+    return [flag for value in [*writing, *research, *staged.set] for flag in ("--set", value)]
+
+
+def depth_flags(staged: StagedRun) -> list[str]:
+    return ["--depth", staged.depth] if staged.depth else []
 
 
 def build_run_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
@@ -199,7 +219,7 @@ def build_run_argv(command: list[str], staged: StagedRun, path: Path) -> list[st
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
-    return argv + attach_flags(path) + set_flags(staged)
+    return argv + depth_flags(staged) + attach_flags(path) + set_flags(staged)
 
 
 def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
@@ -215,7 +235,7 @@ def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[
     argv = [*command, "run", staged.query, "--run-id", staged.run_id, "--sources", staged.resolved_sources]
     if staged.until:
         argv += ["--until", staged.until]
-    argv += ["--profile", staged.resolved_profile]
+    argv += ["--profile", staged.resolved_profile, *depth_flags(staged)]
     return argv + attach_flags(path) + [flag for value in staged.set for flag in ("--set", value)]
 
 

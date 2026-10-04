@@ -78,3 +78,17 @@ def test_until_select_json(runs: Path) -> None:
     assert output.report is None
     assert output.context is not None
     assert output.context.passages
+
+
+def test_quick_depth(runs: Path) -> None:
+    with recorded_router():
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--depth", "quick", "--run-id", RUN_ID])
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    record = json.loads((run_dir / "request.json").read_text())
+    assert record["request"]["depth"] == "quick"
+    assert record["settings"]["fetch"]["max_pages"] == 15
+    events = [parse_event(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    assert len([event for event in events if event.type == "page.fetched"]) <= 15
+    listed = runner.invoke(app, ["runs", "--json"])
+    assert json.loads(listed.stdout)[0]["depth"] == "quick"

@@ -155,3 +155,6 @@ app.command("runs")(run_commands.runs)
 app.command("logs")(logs_command.logs)
 app.command("serve")(serve_command.serve)
 app.add_typer(auth_app, name="auth")
+from wosarcher.cli.depth import depth_app  # noqa: E402
+
+app.add_typer(depth_app, name="depth")

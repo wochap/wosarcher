@@ -64,6 +64,18 @@ fetched content never reaches the planner.
   sub-queries find them. A hit records every query ID that found it.
 - Chunks with the same normalised-text hash are kept once.
 
+### Fetch cap and order
+
+Fetch succeeds on at most `fetch.max_pages` pages (default 40, the most
+that default settings find: (1 + 3 sub-queries) × 10 results). Unique hits
+are queued round-robin over query IDs in query order (`q0` first), each
+query's hits by rank; a hit found by several queries is queued once, at its
+earliest turn. Up to `fetch.concurrency` workers take hits in queue order,
+and a worker takes the next one only while pages fetched plus fetches in
+flight are below the cap, so a failed or empty fetch frees its slot for the
+next hit. Hits never fetched are not failures: fetch's `stage.done` reports
+them as `unfetched`.
+
 ### Small-input passthrough
 
 When all pages for a query total less than `select.passthrough_chars`
@@ -263,9 +275,11 @@ tried.
 
 The token budget is
 `min(select.max_context_tokens, llm.context_window - select.prompt_reserve_tokens - output)`,
-where `output = max(1024, 2 * words)` is also the write call's output
-limit, sent as `llm.max_tokens_field` (defaults 16000 and 2000). A budget of zero or less is an
-error naming `llm.context_window`.
+where `output = max(1024, 2 * words)`, lowered to `llm.max_output_tokens`
+when that is set, is also the write call's output limit, sent as
+`llm.max_tokens_field` (defaults 16000 and 2000). `select.max_context_tokens
+= "auto"` drops the cap: the budget is all the room the window leaves. A
+budget of zero or less is an error naming `llm.context_window`.
 
 File and web shares are soft and run in two phases: when both sides have
 passages, files first get `floor(select.file_share * budget)` (default
@@ -290,7 +304,7 @@ to `context.json` and the skips to `select.jsonl`.
   so the server can pass uploads without touching disk.
 - Formats: `.md` and `.txt`; other files in a directory are skipped with a
   warning. UTF-8 with replacement; size limit `attach.max_bytes`. Identical
-  content is loaded once. No page cap: `fetch.max_chars` is for web pages
+  content is loaded once. Neither `fetch.max_chars` nor `fetch.max_pages` applies: both are for web pages
   only.
 - pdf-ingest output is detected by its `<!-- page: … -->` and `<!-- a: … -->`
   comments; chunks keep page and block IDs for citations.
@@ -322,7 +336,7 @@ global settings (see Server) between the profile and the request.
 |---|---|---|
 | `tone` | `objective` | objective, formal, analytical, persuasive, informative, explanatory, descriptive, critical, comparative, speculative, reflective, or a custom entry in `prompts/tones.toml`; case-insensitive |
 | `tone_instructions` | empty | free text added to the tone, for one-off styles |
-| `words` | 1200 | target length |
+| `words` | 1200 | target length; a depth preset sets its own default (Quick 600, Deep 2000, Exhaustive 3000; Standard keeps this one) |
 | `language` | english | report language |
 | `citation_marker` | numeric | numeric (`[1]`), superscript, author-year: how citations appear in the text |
 | `reference_style` | APA | APA, MLA, Chicago, IEEE (case-insensitive): how the reference list is formatted |
@@ -532,8 +546,12 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--tone ...] [--words ...] [--run-id ID] [--json]`:
-  writing flags act as `--set write.<field>=...` after the `--set` values.
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N] [--run-id ID] [--json]`:
+  writing flags act as `--set write.<field>=...` and research flags as
+  `--set` on `plan.max_sub_queries`, `search.max_results`,
+  `fetch.max_pages`, `score.top_k`, and `select.max_context_tokens`, after
+  the `--set` values. `--depth` applies a depth preset below all of them
+  and is recorded in `request.json` (`request.depth`); forks keep it.
   `--run-id` lets a caller (the server) choose the ID; an existing directory
   exits 2. `--json` prints one `RunOutput` document (status, error, run
   directory, context when select finished, report when write finished). On a
@@ -549,6 +567,9 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   environment) plus the overrides. With `--profile`, settings come from that
   profile plus the parent's and the new overrides. Used for resume, for
   changing writing options, and by the eval harness.
+- `wosarcher depth list` (each preset with its description) and `wosarcher
+  depth show NAME` (the keys it sets, or "sets nothing; uses the
+  defaults"); an unknown name exits 2 with the known names.
 - `wosarcher doctor [--profile <name>] [--set k=v] [--block <name>...] [--json]`:
   `--block` (repeatable) limits the check, its rows, and its warnings to the
   named blocks; an unknown name fails before any request. One row per
@@ -678,10 +699,19 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `attachments` files, reduced to their base names; duplicates are 422,
   and so are sources `files` with no attachment, as `invalid_attachment`
   before anything is staged) returns 201 with `run_id` and `queued` or
-  `running`.
+  `running`. `RunCreate` has `query`, optional `sources`, `until`,
+  `profile`, `depth` (a preset name or `custom`; unknown is 422 naming
+  `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
+  `passages_per_query`, `context_tokens`), `writing`, and `set`. Request
+  precedence, each later layer winning: defaults, profile, environment,
+  global settings, the depth preset, the request's `sources`, `research`,
+  and `writing`, then its `set`. The server builds the writing flags from
+  the global writing, then the preset's `write.words`, then the request's
+  `writing`; passes `--depth`; and emits the research values as `--set`
+  after the writing flags and before the request's `set`.
 - `GET /api/runs`, `GET /api/runs/{id}`: `RunSummary` (status `queued`,
   `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
-  `until`; resolved writing options; `duration_s`; `cost`;
+  `until`; `depth`, null for older runs; resolved writing options; `duration_s`; `cost`;
   `queue_position`; `error`, the `run.failed` text when failed; `end_stage`,
   the stage named by a final `run.failed` or `run.cancelled`), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
@@ -719,7 +749,7 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   not the global settings. 409 for a queued or running parent or an
   unfinished earlier stage; 422 for an unknown stage.
 - `POST /api/runs/{id}/rerun`: a new run (version 1, no parent) with the
-  original query, sources, `until`, profile, and saved overrides, and a
+  original query, sources, `until`, profile, depth, and saved overrides, and a
   copy of its `attachments/`; global settings are not applied. 404 for an
   unknown run, 409 for a queued one, 422 `invalid_attachment` for sources
   `files` without attachments.
@@ -742,7 +772,15 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   that ended without a run directory (forgotten), 409 `run_active` for a
   running one.
 - `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`,
-  `description` (empty when the profile sets none).
+  `description` (empty when the profile sets none), and the resolved
+  `context_window`, `prompt_reserve_tokens`, and `max_output_tokens` (null
+  when unset, or all null when the profile does not resolve), so the New
+  run form can show the effective context budget.
+- `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
+  `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
+  (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
+  `context_tokens`, the built-in default where the preset sets none, and
+  `words`, null when the preset leaves it to the global setting).
 - `GET /api/providers/health[?profile=P]`: sends no probe. It resolves the
   profile in the server process (400 `invalid_profile` on a configuration
   error) and lists one check per block, merged with the last stored check
@@ -895,11 +933,33 @@ Settings: `auth.password_hash`, `auth.session_days`, `auth.allowed_origins`.
 
 ### Configuration
 
-Precedence: built-in defaults < profile < environment < CLI flags or request
-fields. The profile name itself is read from the CLI or environment first,
-then the profile loads. `config.resolve(profile, overrides, env)` does the
+Precedence: built-in defaults < profile < environment < server global
+settings (server runs only) < depth preset < CLI flags or request fields.
+The profile name itself is read from the CLI or environment first, then the
+profile loads. `config.resolve(profile, overrides, env, depth)` does the
 whole resolution in one function and validates once; errors name the source
-of the bad value (profile file, environment variable, or `--set` override).
+of the bad value (profile file, environment variable, depth preset file, or
+`--set` override).
+
+Depth presets are a per-run axis, separate from profiles:
+`src/wosarcher/depths/{quick,standard,deep,exhaustive}.toml`, each with a
+one-line `description`. A preset may set only `plan.max_sub_queries`,
+`search.max_results`, `fetch.max_pages`, `score.top_k`,
+`select.max_context_tokens`, and `write.words` (`DEPTH_KEYS`); any other key
+fails when it loads, naming the file and the key.
+
+| key | quick | standard | deep | exhaustive |
+|---|---|---|---|---|
+| `plan.max_sub_queries` | 2 | - | 5 | 8 |
+| `search.max_results` | 5 | - | 10 | 10 |
+| `fetch.max_pages` | 15 | - | 60 | 100 |
+| `score.top_k` | 6 | - | 10 | 8 |
+| `select.max_context_tokens` | 8000 | - | 24000 | 32000 |
+| `write.words` | 600 | - | 2000 | 3000 |
+
+`standard` sets nothing, so it resolves like no depth. `custom` applies no
+preset; it only labels a run whose research values the user set. An unknown
+name fails before any provider is called and lists the presets.
 
 Environment variables use the prefix `WOSARCHER_` and `__` for nesting
 (`WOSARCHER_SCORE__API_KEY`). `--set` values are parsed as TOML values, so
@@ -914,7 +974,9 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `reasoning_tokens` (default 0, added to every LLM request's limit, for
 reasoning models that count hidden reasoning tokens), and `max_continuations`
 (default 2, how often the writer continues a report cut at the output
-limit); the `score` block adds
+limit), and `max_output_tokens` (unset by default; caps the writer's output
+limit for providers with a lower output ceiling); the `fetch` block adds
+`max_pages` (default 40, see Fetch cap and order); the `score` block adds
 `rerank_scale` (`auto`, `probability`, `logit`).
 
 A profile may start with a top-level `description` string, one line that

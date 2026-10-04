@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import ValidationError
 
-from wosarcher.config import select_profile
+from wosarcher.config import CUSTOM_DEPTH, list_depths, select_profile
 from wosarcher.models import (
     STAGES,
     Attachment,
@@ -69,6 +69,7 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         profile=staged.resolved_profile,
         sources=staged.resolved_sources,
         until=staged.until,
+        depth=staged.depth,
         writing=staged.writing_options,
         queue_position=state.manager.queue_position(staged.run_id),
     )
@@ -128,6 +129,9 @@ async def create_run(
         body = RunCreate.model_validate_json(request)
     except ValidationError as error:
         raise invalid(error.errors()) from None
+    known = [*list_depths(), CUSTOM_DEPTH]
+    if body.depth is not None and body.depth not in known:
+        raise RouteError(422, "invalid_request", f"depth: unknown depth '{body.depth}'; available: {', '.join(known)}")
     uploads = [Attachment(name=upload.filename or "", data=await upload.read()) for upload in attachments or []]
     defaults = global_settings.load(state.config_dir)
     try:

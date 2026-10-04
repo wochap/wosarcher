@@ -69,6 +69,15 @@ def test_writing_flags(world: World, tmp_path: Path) -> None:
     assert "## References" in result.stdout
 
 
+def test_depth_with_research_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--max-pages", "80"])
+    assert result.exit_code == 0, result.output
+    settings = world.built[0]
+    assert (settings.fetch.max_pages, settings.plan.max_sub_queries) == (80, 5)
+    record = only_run(tmp_path)
+    assert (record.request.depth, record.overrides) == ("deep", ["fetch.max_pages=80"])
+
+
 def test_files_without_attach(world: World, tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", "q", "--sources", "files"])
     assert result.exit_code == 2

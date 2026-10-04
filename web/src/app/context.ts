@@ -2,8 +2,9 @@
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
 import type { SocketFactory } from "../api/events";
-import type { WritingOptions } from "../api/types";
+import type { ResearchValues, WritingOptions } from "../api/types";
 import type { Help } from "../components/help";
+import type { Depth } from "../run/depth";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -26,6 +27,7 @@ export type RunOptions = {
   recipe: "report" | "context";
   sources: "web" | "files" | "both";
   profile: string;
+  depth: Depth;
 };
 
 /** The New run form, kept while the user visits other screens. Options hold overrides only. */
@@ -34,6 +36,8 @@ export type Draft = {
   files: File[];
   options: Partial<RunOptions>;
   writing: Partial<WritingOptions>;
+  /** The Custom depth's values and its default Length, once Custom was picked or edited. */
+  custom?: { values: ResearchValues; words: number };
 };
 export const EMPTY_DRAFT: Draft = { query: "", files: [], options: {}, writing: {} };
 

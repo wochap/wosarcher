@@ -14,6 +14,17 @@ def test_budget_small_window() -> None:
     assert budget(context_window=8192, max_context_tokens=16000, prompt_reserve_tokens=2000, words=1200) == 3792
 
 
+def test_budget_auto_context() -> None:
+    assert budget(context_window=1_000_000, max_context_tokens=None, prompt_reserve_tokens=2000, words=1200) == 995_600
+
+
+def test_budget_output_cap() -> None:
+    tokens = budget(
+        context_window=32768, max_context_tokens=None, prompt_reserve_tokens=2000, words=3000, max_output_tokens=4000
+    )
+    assert tokens == 26768
+
+
 def test_budget_window_too_small() -> None:
     with pytest.raises(ValueError, match=r"llm\.context_window"):
         budget(context_window=4000, max_context_tokens=16000, prompt_reserve_tokens=2000, words=1200)

@@ -347,6 +347,7 @@ class RunStore:
             profile=record.profile,
             sources=record.request.sources,
             until=record.request.until,
+            depth=record.request.depth,
             writing=WritingOptions.model_validate(record.settings.get("write", {})),
             duration_s=duration,
             cost=costs.total.cost if costs else None,

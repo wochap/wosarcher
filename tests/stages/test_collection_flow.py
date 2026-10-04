@@ -31,7 +31,7 @@ async def test_collection_flow() -> None:
         QUERY, initial.hits, [outline(page) for page in loaded.pages], llm, sources="both", max_sub_queries=3
     )
     found = await search(planned.queries[1:], searcher, initial=initial.hits)
-    fetched = await fetch(found.hits, fetcher, concurrency=2)
+    fetched = await fetch(found.hits, fetcher, concurrency=2, max_pages=40)
     chunked = chunk([*loaded.pages, *fetched.pages], size=1000, overlap=100)
 
     assert [query.id for query in planned.queries] == ["q0", "q1"]

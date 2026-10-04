@@ -1,6 +1,7 @@
 // The Run history table. Every column comes from the one GET /api/runs response.
 import { ArrowClockwise, ArrowElbowDownRight, ArrowSquareOut, Trash } from "@phosphor-icons/react";
 import type { RunSummary } from "../../api/types";
+import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime, minSec } from "../../format";
@@ -70,7 +71,10 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
                 <td className={css.date}>{dateTime(run.created)}</td>
                 <td>{recipeOf(run)}</td>
                 <td>
-                  <StatusTag status={run.status} />
+                  <div className={css.tags}>
+                    <StatusTag status={run.status} />
+                    <DepthTag depth={run.depth} />
+                  </div>
                 </td>
                 <td className={css.num}>{durationOf(run)}</td>
                 <td className={css.num}>{costOf(run)}</td>

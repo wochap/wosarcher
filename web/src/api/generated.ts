@@ -53,6 +53,14 @@ export type Title = string
 export type Uri = string
 export type Sources = Source[]
 export type UsedTokens = number
+export type Description = string
+export type Name1 = string
+export type ContextTokens = number
+export type MaxPages = number
+export type PassagesPerQuery = number
+export type ResultsPerQuery = number
+export type SubQueries = number
+export type Words = (number | null)
 export type GpuPolicy = ("shared" | "exclusive")
 export type BaseUrl = string
 export type Block = string
@@ -79,6 +87,7 @@ export type Rank1 = number
 export type Text3 = string
 export type Truncated = boolean
 export type Pages = Page[]
+export type Unfetched = number
 export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write")
 export type Profile = (string | null)
 export type Set = string[]
@@ -87,7 +96,7 @@ export type Language = (string | null)
 export type ReferenceStyle = (string | null)
 export type Tone = (string | null)
 export type ToneInstructions = (string | null)
-export type Words = (number | null)
+export type Words1 = (number | null)
 export type Blocks = string[]
 export type CheckedAt = (string | null)
 export type Detail1 = string
@@ -174,8 +183,11 @@ export type Candidates = Candidate[]
 export type Method = ("embeddings" | "bm25" | "none")
 export type Warnings3 = string[]
 export type Active = boolean
-export type Description = string
-export type Name1 = string
+export type ContextWindow1 = (number | null)
+export type Description1 = string
+export type MaxOutputTokens = (number | null)
+export type Name2 = string
+export type PromptReserveTokens = (number | null)
 export type Source1 = ("builtin" | "user")
 export type Kept1 = number
 export type ChunkId4 = string
@@ -211,6 +223,11 @@ export type Seq6 = number
 export type Stage6 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts6 = string
 export type Type6 = "report.snapshot"
+export type ContextTokens1 = (number | null)
+export type MaxPages1 = (number | null)
+export type PassagesPerQuery1 = (number | null)
+export type ResultsPerQuery1 = (number | null)
+export type SubQueries1 = (number | null)
 export type Device2 = string
 export type ReleasedStage = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write")
 export type RunId7 = string
@@ -234,6 +251,7 @@ export type InputTokens1 = number
 export type OutputTokens1 = number
 export type Requests = number
 export type Units = number
+export type Depth = (string | null)
 export type Profile2 = (string | null)
 export type Query2 = string
 export type Set1 = string[]
@@ -243,6 +261,7 @@ export type RunId10 = string
 export type Status2 = ("queued" | "running")
 export type Cost1 = (number | null)
 export type Created = string
+export type Depth1 = (string | null)
 export type DurationS = (number | null)
 export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Error3 = (string | null)
@@ -259,6 +278,7 @@ export type Overrides = string[]
 export type ParentRunId1 = (string | null)
 export type Profile4 = string
 export type Attachments = string[]
+export type Depth2 = (string | null)
 export type Query4 = string
 export type Sources2 = ("both" | "web" | "files")
 export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
@@ -274,7 +294,7 @@ export type Language1 = string
 export type ReferenceStyle1 = string
 export type Tone1 = string
 export type ToneInstructions1 = string
-export type Words1 = number
+export type Words2 = number
 export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type RunId13 = string
 export type Seq10 = number
@@ -314,6 +334,7 @@ export type Ts13 = string
 export type Type13 = "run.started"
 export type Cost2 = (number | null)
 export type Created1 = string
+export type Depth3 = (string | null)
 export type DurationS1 = (number | null)
 export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Error7 = (string | null)
@@ -361,6 +382,7 @@ export type Passthrough1 = string[]
 export type Provider2 = (string | null)
 export type Seconds = number
 export type Skipped2 = boolean
+export type Unfetched1 = number
 export type Warnings5 = string[]
 export type RunId20 = string
 export type Seq14 = number
@@ -389,15 +411,15 @@ export type Seq17 = number
 export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "select" | "write") | null)
 export type Ts17 = string
 export type Type17 = "stage.started"
-export type Name2 = string
-export type Id1 = string
 export type Name3 = string
+export type Id1 = string
+export type Name4 = string
 export type Token = string
 export type Created2 = string
 export type Id2 = string
 export type LastUsed = (string | null)
 export type Masked = string
-export type Name4 = string
+export type Name5 = string
 
 export interface WosarcherContracts {
 [k: string]: unknown
@@ -532,6 +554,29 @@ title: Title
 uri: Uri
 }
 /**
+ * One depth preset as `GET /api/depths` lists it.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "DepthInfo".
+ */
+export interface DepthInfo {
+description: Description
+name: Name1
+values: DepthValues
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "DepthValues".
+ */
+export interface DepthValues {
+context_tokens: ContextTokens
+max_pages: MaxPages
+passages_per_query: PassagesPerQuery
+results_per_query: ResultsPerQuery
+sub_queries: SubQueries
+words?: Words
+}
+/**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "DoctorReport".
  */
@@ -577,6 +622,7 @@ model: Model1
 export interface FetchResult {
 failures?: Failures
 pages: Pages
+unfetched?: Unfetched
 }
 /**
  * An item that did not make it: a failed search or fetch, or a skipped file.
@@ -621,7 +667,7 @@ language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone
 tone_instructions?: ToneInstructions
-words?: Words
+words?: Words1
 }
 /**
  * Body of `POST /api/providers/health/check`; no blocks means every block.
@@ -855,8 +901,11 @@ warnings?: Warnings3
  */
 export interface ProfileInfo {
 active: Active
-description?: Description
-name: Name1
+context_window?: ContextWindow1
+description?: Description1
+max_output_tokens?: MaxOutputTokens
+name: Name2
+prompt_reserve_tokens?: PromptReserveTokens
 source: Source1
 }
 /**
@@ -938,6 +987,19 @@ seq: Seq6
 stage?: Stage6
 ts: Ts6
 type?: Type6
+}
+/**
+ * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ResearchPatch".
+ */
+export interface ResearchPatch {
+context_tokens?: ContextTokens1
+max_pages?: MaxPages1
+passages_per_query?: PassagesPerQuery1
+results_per_query?: ResultsPerQuery1
+sub_queries?: SubQueries1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1025,12 +1087,24 @@ export interface Stages {
  * via the `definition` "RunCreate".
  */
 export interface RunCreate {
+depth?: Depth
 profile?: Profile2
 query: Query2
+research?: ResearchPatch1
 set?: Set1
 sources?: Sources1
 until?: Until
 writing?: WritingPatch1
+}
+/**
+ * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
+ */
+export interface ResearchPatch1 {
+context_tokens?: ContextTokens1
+max_pages?: MaxPages1
+passages_per_query?: PassagesPerQuery1
+results_per_query?: ResultsPerQuery1
+sub_queries?: SubQueries1
 }
 /**
  * Any subset of the writing options; unset fields keep the value from the layer below.
@@ -1041,7 +1115,7 @@ language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone
 tone_instructions?: ToneInstructions
-words?: Words
+words?: Words1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1061,6 +1135,7 @@ export interface RunDetail {
 cost?: Cost1
 costs?: (RunCosts | null)
 created: Created
+depth?: Depth1
 duration_s?: DurationS
 end_stage?: EndStage
 error?: Error3
@@ -1102,6 +1177,7 @@ version?: Version
  */
 export interface RunRequest {
 attachments?: Attachments
+depth?: Depth2
 query: Query4
 sources?: Sources2
 until?: Until1
@@ -1115,7 +1191,7 @@ language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
 tone_instructions?: ToneInstructions1
-words?: Words1
+words?: Words2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1234,6 +1310,7 @@ version: Version2
 export interface RunSummary {
 cost?: Cost2
 created: Created1
+depth?: Depth3
 duration_s?: DurationS1
 end_stage?: EndStage1
 error?: Error7
@@ -1255,7 +1332,7 @@ language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
 tone_instructions?: ToneInstructions1
-words?: Words1
+words?: Words2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1304,7 +1381,7 @@ language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
 tone_instructions?: ToneInstructions1
-words?: Words1
+words?: Words2
 }
 /**
  * `GET /api/session`: how this request is authenticated.
@@ -1369,6 +1446,7 @@ passthrough?: Passthrough1
 provider?: Provider2
 seconds: Seconds
 skipped?: Skipped2
+unfetched?: Unfetched1
 usage?: UsageTotals1
 warnings?: Warnings5
 }
@@ -1445,7 +1523,7 @@ provider: Provider3
  * via the `definition` "TokenCreate".
  */
 export interface TokenCreate {
-name: Name2
+name: Name3
 }
 /**
  * The new token, shown only in this response.
@@ -1455,7 +1533,7 @@ name: Name2
  */
 export interface TokenCreated {
 id: Id1
-name: Name3
+name: Name4
 token: Token
 }
 /**
@@ -1469,7 +1547,7 @@ created: Created2
 id: Id2
 last_used?: LastUsed
 masked: Masked
-name: Name4
+name: Name5
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1481,7 +1559,7 @@ language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
 tone_instructions?: ToneInstructions1
-words?: Words1
+words?: Words2
 }
 /**
  * Any subset of the writing options; unset fields keep the value from the layer below.
@@ -1495,5 +1573,5 @@ language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone
 tone_instructions?: ToneInstructions
-words?: Words
+words?: Words1
 }

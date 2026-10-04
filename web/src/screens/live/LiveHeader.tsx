@@ -1,6 +1,7 @@
-// The Live run header: status tag, rewrite tag, id, meta, query, device chip, and actions.
+// The Live run header: status tag, depth tag, rewrite tag, id, meta, query, device chip, and actions.
 import { ArrowClockwise, Article, Circle, GitBranch, Stop } from "@phosphor-icons/react";
 import type { RunDetail, RunStatus } from "../../api/types";
+import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import type { RunView } from "../../run/reducer";
 import { DeviceChip } from "./DeviceChip";
@@ -56,6 +57,7 @@ export function LiveHeader({
             <Circle weight="fill" className={css.dot} aria-hidden="true" />
             {LABELS[status]}
           </span>
+          <DepthTag depth={detail?.depth} />
           {detail?.fork_from === "write" && parent && (
             <span className={`tag tag-outline ${css.rewrite}`}>
               <GitBranch aria-hidden="true" />

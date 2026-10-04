@@ -1,6 +1,7 @@
 // Sample data for tests and the dev preview, after the prototype's History, Settings, and
 // Security panels.
 import type {
+  DepthInfo,
   HealthReport,
   ProfileInfo,
   RunStatus,
@@ -115,20 +116,60 @@ export const profiles: ProfileInfo[] = [
     source: "builtin",
     active: true,
     description: "Models take turns on one small GPU; slower, fits 8 GB.",
+    context_window: 32768,
+    prompt_reserve_tokens: 2000,
+    max_output_tokens: null,
   },
   {
     name: "workstation",
     source: "builtin",
     active: false,
     description: "One GPU fits all models; models stay loaded.",
+    context_window: 32768,
+    prompt_reserve_tokens: 2000,
+    max_output_tokens: null,
   },
   {
     name: "cloud",
     source: "builtin",
     active: false,
     description: "Hosted APIs only; needs API keys.",
+    context_window: 1000000,
+    prompt_reserve_tokens: 2000,
+    max_output_tokens: 32000,
   },
   { name: "nixos", source: "user", active: false, description: "" },
+];
+
+const research = (sub: number, rpq: number, pages: number, ppq: number, ctx: number) => ({
+  sub_queries: sub,
+  results_per_query: rpq,
+  max_pages: pages,
+  passages_per_query: ppq,
+  context_tokens: ctx,
+});
+
+export const depths: DepthInfo[] = [
+  {
+    name: "quick",
+    description: "Fast overview: few searches, short report.",
+    values: { ...research(2, 5, 15, 6, 8000), words: 600 },
+  },
+  {
+    name: "standard",
+    description: "Balanced: today's default.",
+    values: { ...research(3, 10, 40, 10, 16000), words: null },
+  },
+  {
+    name: "deep",
+    description: "More searches and sources, longer report.",
+    values: { ...research(5, 10, 60, 10, 24000), words: 2000 },
+  },
+  {
+    name: "exhaustive",
+    description: "Many searches and sources; slow, for thorough reports.",
+    values: { ...research(8, 10, 100, 8, 32000), words: 3000 },
+  },
 ];
 
 export const health: HealthReport = {

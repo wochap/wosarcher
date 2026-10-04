@@ -33,7 +33,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from wosarcher.config import override_layer
+from wosarcher.config import redact, resolve
 from wosarcher.models import (
     STAGES,
     DoctorReport,
@@ -70,6 +70,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
         command.add_argument("--until")
         command.add_argument("--profile")
         command.add_argument("--set", action="append", default=[])
+    run.add_argument("--depth")
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--profile")
@@ -113,14 +114,14 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
         else:
             shutil.copyfile(path, run_dir / "attachments" / path.name)
         names.append(path.name)
-    tree, _ = override_layer(args.set)
+    depth = getattr(args, "depth", None)
     if args.command == "fork":
         parent = store.read_record(args.parent)
         request = parent.request.model_copy(update={"until": args.until})
         lineage = {"parent_run_id": args.parent, "fork_from": args.from_stage, "version": parent.version + 1}
         profile, overrides = args.profile or parent.profile, [*parent.overrides, *args.set]
     else:
-        request = RunRequest(query=args.query, sources=args.sources, until=args.until, attachments=names)
+        request = RunRequest(query=args.query, sources=args.sources, until=args.until, attachments=names, depth=depth)
         lineage = {}
         profile, overrides = args.profile or "workstation", args.set
     record = RunRecord.model_validate(
@@ -130,7 +131,7 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
             "request": request,
             "profile": profile,
             "overrides": overrides,
-            "settings": {"write": tree.get("write", {})},
+            "settings": redact(resolve("workstation", overrides, {}, request.depth)),
             **lineage,
         }
     )

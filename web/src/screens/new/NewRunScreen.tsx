@@ -1,24 +1,54 @@
 // New run: the question, attachments, and options; starts the run and opens it on Live run.
 import { Play } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import type { ProfileInfo, RunCreate, ServerSettings, WritingOptions } from "../../api/types";
+import type {
+  DepthInfo,
+  ProfileInfo,
+  ResearchValues,
+  RunCreate,
+  ServerSettings,
+  WritingOptions,
+} from "../../api/types";
 import { EMPTY_DRAFT, type RunOptions, useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import type { WritingField } from "../../components/WritingOptionsForm";
+import {
+  CUSTOM_DESCRIPTION,
+  type Depth,
+  effectiveContext,
+  loadCustom,
+  researchOf,
+  saveCustom,
+} from "../../run/depth";
 import { Attachments } from "./Attachments";
 import css from "./NewRunScreen.module.css";
 import { OptionsPanel, overriddenFields } from "./OptionsPanel";
 
-/** The request for `draft`: the context recipe stops after select; writing holds overrides. */
+/**
+ * The request for the form: the context recipe stops after select; writing holds overrides of
+ * the depth-aware `defaults`. Custom sends its five values, and Length whenever it differs from
+ * the saved default, since no preset sets it on the server.
+ */
 export function runRequest(
   query: string,
   options: RunOptions,
   writing: WritingOptions,
   defaults: WritingOptions,
+  saved: WritingOptions,
+  custom?: ResearchValues,
 ): RunCreate {
-  const request: RunCreate = { query, sources: options.sources, profile: options.profile };
+  const request: RunCreate = {
+    query,
+    sources: options.sources,
+    profile: options.profile,
+    depth: options.depth,
+  };
   if (options.recipe === "context") request.until = "select";
   const overrides = overriddenFields(writing, defaults);
+  if (options.depth === "custom") {
+    if (custom) request.research = custom;
+    if (writing.words !== saved.words) overrides.words = writing.words;
+  }
   if (Object.keys(overrides).length) request.writing = overrides;
   return request;
 }
@@ -28,6 +58,7 @@ export function NewRunScreen() {
   const { draft, setDraft, follow } = useUi();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
+  const [depths, setDepths] = useState<DepthInfo[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const question = useRef<HTMLTextAreaElement>(null);
@@ -36,6 +67,7 @@ export function NewRunScreen() {
     question.current?.focus();
     api.getSettings().then(setSettings, () => {});
     api.listProfiles().then(setProfiles, () => {});
+    api.listDepths().then(setDepths, () => {});
   }, [api]);
 
   const active = profiles.find((p) => p.active)?.name ?? profiles[0]?.name ?? "";
@@ -43,9 +75,21 @@ export function NewRunScreen() {
     recipe: "report",
     sources: (settings?.sources as RunOptions["sources"] | undefined) ?? "both",
     profile: active,
+    depth: "standard",
     ...draft.options,
   };
-  const defaults = settings?.writing;
+  const saved = settings?.writing;
+  const presetOf = (d: Depth) => depths.find((info) => info.name === d);
+  const standard = presetOf("standard");
+  const valuesOf = (d: Depth) => {
+    if (d === "custom") return draft.custom?.values;
+    const info = presetOf(d) ?? standard;
+    return info && researchOf(info);
+  };
+  const wordsOf = (d: Depth) =>
+    (d === "custom" ? draft.custom?.words : presetOf(d)?.values.words) ?? saved?.words;
+  const values = valuesOf(options.depth);
+  const defaults = saved && { ...saved, words: wordsOf(options.depth) ?? saved.words };
   const writing = defaults && { ...defaults, ...draft.writing };
   const blank = !draft.query.trim();
 
@@ -55,7 +99,7 @@ export function NewRunScreen() {
     setError("");
     try {
       const created = await api.createRun(
-        runRequest(draft.query.trim(), options, writing, defaults),
+        runRequest(draft.query.trim(), options, writing, defaults, saved ?? defaults, values),
         draft.files,
       );
       setDraft(() => EMPTY_DRAFT);
@@ -65,6 +109,36 @@ export function NewRunScreen() {
       setError((e as Error).message);
       setBusy(false);
     }
+  }
+
+  /** Switches the depth; Length keeps an edit unless it equals the new depth's default. */
+  function pickDepth(depth: Depth) {
+    setDraft((d) => {
+      const custom =
+        depth === "custom" && !d.custom && values
+          ? { values: loadCustom() ?? values, words: wordsOf(options.depth) ?? 0 }
+          : d.custom;
+      const base = depth === "custom" ? custom?.words : wordsOf(depth);
+      const { words, ...rest } = d.writing;
+      const writing = words === undefined || words === base ? rest : d.writing;
+      return { ...d, custom, writing, options: { ...d.options, depth } };
+    });
+  }
+
+  /** Editing an Advanced value switches to Custom with the values shown, the edit applied. */
+  function editResearch(field: keyof ResearchValues, value: number) {
+    if (!values) return;
+    const next = { ...values, [field]: value };
+    saveCustom(next);
+    setDraft((d) => ({
+      ...d,
+      custom: {
+        values: next,
+        words:
+          d.custom && options.depth === "custom" ? d.custom.words : (wordsOf(options.depth) ?? 0),
+      },
+      options: { ...d.options, depth: "custom" },
+    }));
   }
 
   /** A value equal to its default is no override, so later default changes reach it. */
@@ -79,6 +153,8 @@ export function NewRunScreen() {
   const profileList: ProfileInfo[] = profiles.length
     ? profiles
     : [{ name: options.profile, source: "builtin", active: true, description: "" }];
+  const profile = profileList.find((p) => p.name === options.profile);
+  const depthNames = depths.map((info) => info.name as Depth);
   return (
     <div className={css.page}>
       <div className={css.inner}>
@@ -127,10 +203,22 @@ export function NewRunScreen() {
           )}
         </div>
         <Attachments files={draft.files} onChange={(files) => setDraft((d) => ({ ...d, files }))} />
-        {defaults && writing && (
+        {defaults && writing && values && (
           <OptionsPanel
             options={options}
             profiles={profileList}
+            depth={{
+              depths: [...depthNames, "custom"],
+              description:
+                options.depth === "custom"
+                  ? CUSTOM_DESCRIPTION
+                  : (presetOf(options.depth)?.description ?? ""),
+              values,
+              effective: effectiveContext(profile, writing.words),
+              wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
+              onPick: pickDepth,
+              onEdit: editResearch,
+            }}
             onOption={(key, value) =>
               setDraft((d) => ({ ...d, options: { ...d.options, [key]: value } }))
             }

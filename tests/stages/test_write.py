@@ -221,6 +221,13 @@ async def test_tone_and_options_in_system() -> None:
     assert llm.calls[0][1] == 1200
 
 
+async def test_provider_output_cap() -> None:
+    llm = StreamLLM(["x [1]"])
+    await write(FIVE, WritingOptions(words=3000), llm, sizing=Sizing(max_output_tokens=4000))
+    assert "3000 words" in llm.calls[0][0][0].content
+    assert llm.calls[0][1] == 4000
+
+
 async def test_deltas() -> None:
     llm = StreamLLM(["Intro ", "text [1]", "."])
     received: list[str] = []

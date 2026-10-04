@@ -1,14 +1,19 @@
-// The collapsible Options panel of New run: run options and the writing options, which start
-// from the saved defaults and mark per-run overrides.
+// The collapsible Options panel of New run: depth, run options, and the writing options, which
+// start from the saved defaults (Length from the depth) and mark per-run overrides.
 import { ArrowCounterClockwise, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
-import type { ProfileInfo, WritingOptions } from "../../api/types";
+import type { ProfileInfo, ResearchValues, WritingOptions } from "../../api/types";
 import type { RunOptions } from "../../app/context";
 import { go } from "../../app/route";
 import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
-import { type WritingField, WritingOptionsForm } from "../../components/WritingOptionsForm";
-import { wSummary } from "../../run/format";
+import {
+  describeValue,
+  type WritingField,
+  WritingOptionsForm,
+} from "../../components/WritingOptionsForm";
+import { DEPTH_LABELS, type Depth } from "../../run/depth";
+import { DepthGroup } from "./DepthGroup";
 import css from "./OptionsPanel.module.css";
 
 /** The fields of `value` that differ from `defaults`. */
@@ -22,9 +27,21 @@ export function overriddenFields(
   );
 }
 
+/** What the Depth row shows; `wordsSet` is false when the depth leaves Length to Settings. */
+export type DepthView = {
+  depths: Depth[];
+  description: string;
+  values: ResearchValues;
+  effective: number | null;
+  wordsSet: boolean;
+  onPick: (depth: Depth) => void;
+  onEdit: (field: keyof ResearchValues, value: number) => void;
+};
+
 type Props = {
   options: RunOptions;
   profiles: ProfileInfo[];
+  depth: DepthView;
   onOption: <K extends keyof RunOptions>(key: K, value: RunOptions[K]) => void;
   writing: WritingOptions;
   defaults: WritingOptions;
@@ -33,12 +50,20 @@ type Props = {
 };
 
 export function OptionsPanel(props: Props) {
-  const { options, profiles, onOption, writing, defaults } = props;
+  const { options, profiles, onOption, writing, defaults, depth } = props;
   const [open, setOpen] = useState(false);
   const overridden = Object.keys(overriddenFields(writing, defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
   const description = profiles.find((p) => p.name === options.profile)?.description;
-  const summary = `${options.recipe} · ${options.sources} · ${options.profile} · ${wSummary(writing)}`;
+  const label = DEPTH_LABELS[options.depth];
+  const summary = [
+    label,
+    options.recipe,
+    options.sources,
+    options.profile,
+    `${writing.words} words`,
+    describeValue("tone", writing.tone),
+  ].join(" · ");
   return (
     <div className={css.panel}>
       <button
@@ -57,6 +82,15 @@ export function OptionsPanel(props: Props) {
       {open && (
         <div className={css.body}>
           <div className={css.group}>Run</div>
+          <DepthGroup
+            depth={options.depth}
+            depths={depth.depths}
+            description={depth.description}
+            values={depth.values}
+            effective={depth.effective}
+            onPick={depth.onPick}
+            onEdit={depth.onEdit}
+          />
           <Row label="Recipe" help="recipe">
             <Seg
               label="Recipe"
@@ -121,6 +155,8 @@ export function OptionsPanel(props: Props) {
             mark="overridden"
             baseLabel="default: "
             onChange={props.onWriting}
+            wordsBaseText={depth.wordsSet ? `${label} default: ${defaults.words} words` : undefined}
+            wordsHint={options.depth === "custom" ? undefined : `set by ${label}`}
           />
         </div>
       )}

@@ -1,4 +1,4 @@
-"""`/api/settings`, `/api/profiles`, `/api/providers/health`, and `/api/providers/health/check`."""
+"""`/api/settings`, `/api/profiles`, `/api/depths`, `/api/providers/health`, and `/api/providers/health/check`."""
 
 import asyncio
 import os
@@ -9,15 +9,27 @@ from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 
 from wosarcher.config import (
+    RESEARCH_KEYS,
     ConfigError,
     Settings,
+    depth_values,
+    list_depths,
     list_profiles,
     profile_description,
+    read_depth,
     resolve,
     select_profile,
 )
 from wosarcher.doctor import BLOCKS
-from wosarcher.models import DoctorReport, HealthCheckRequest, HealthReport, ProfileInfo, ServerSettings
+from wosarcher.models import (
+    DepthInfo,
+    DepthValues,
+    DoctorReport,
+    HealthCheckRequest,
+    HealthReport,
+    ProfileInfo,
+    ServerSettings,
+)
 from wosarcher.server import settings as global_settings
 from wosarcher.server.errors import RouteError
 from wosarcher.server.state import ServerState, get_state
@@ -39,18 +51,48 @@ async def put_settings(state: State, body: ServerSettings) -> ServerSettings:
     return body
 
 
+def profile_info(name: str, source: str, active: str) -> ProfileInfo:
+    info = ProfileInfo(
+        name=name,
+        source="builtin" if source == "built-in" else "user",
+        active=name == active,
+        description=profile_description(name, os.environ),
+    )
+    try:
+        settings = resolve(name, [], os.environ)
+    except ConfigError:
+        return info
+    limits = {
+        "context_window": settings.llm.context_window,
+        "prompt_reserve_tokens": settings.select.prompt_reserve_tokens,
+        "max_output_tokens": settings.llm.max_output_tokens,
+    }
+    return info.model_copy(update=limits)
+
+
 @router.get("/profiles")
 async def profiles() -> list[ProfileInfo]:
     active = select_profile(None, os.environ)
-    return [
-        ProfileInfo(
-            name=name,
-            source="builtin" if source == "built-in" else "user",
-            active=name == active,
-            description=profile_description(name, os.environ),
-        )
-        for name, (_, source) in list_profiles(os.environ).items()
-    ]
+    return [profile_info(name, source, active) for name, (_, source) in list_profiles(os.environ).items()]
+
+
+def depth_info(name: str) -> DepthInfo:
+    """The preset's values, the built-in default where it sets none; `words` stays None then."""
+    _, description, data = read_depth(name)
+    values = depth_values(data)
+    defaults = Settings()
+    research = {
+        field: values.get(key, getattr(getattr(defaults, key.split(".")[0]), key.split(".")[1]))
+        for field, key in RESEARCH_KEYS.items()
+    }
+    return DepthInfo(
+        name=name, description=description, values=DepthValues(**research, words=values.get("write.words"))
+    )
+
+
+@router.get("/depths")
+async def depths() -> list[DepthInfo]:
+    return [depth_info(name) for name in list_depths()]
 
 
 async def run_doctor(command: list[str], profile: str, chosen: list[str]) -> DoctorReport:

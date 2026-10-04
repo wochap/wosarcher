@@ -54,3 +54,30 @@ def test_schema_is_stable_and_complete() -> None:
     assert first == second
     definitions = json.loads(first)["$defs"]
     assert {model.__name__ for model in CONTRACTS} <= set(definitions)
+
+
+def test_depth_list() -> None:
+    result = runner.invoke(app, ["depth", "list"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    assert [line.split()[0] for line in lines] == ["quick", "standard", "deep", "exhaustive"]
+    assert lines[0] == "quick  Fast overview: few searches, short report."
+
+
+def test_depth_show_quick() -> None:
+    result = runner.invoke(app, ["depth", "show", "quick"])
+    assert result.exit_code == 0
+    lines = result.output.splitlines()
+    assert lines[0] == "plan.max_sub_queries = 2"
+    assert lines[-1] == "write.words = 600"
+
+
+def test_depth_show_standard() -> None:
+    result = runner.invoke(app, ["depth", "show", "standard"])
+    assert result.output == "sets nothing; uses the defaults\n"
+
+
+def test_depth_show_unknown() -> None:
+    result = runner.invoke(app, ["depth", "show", "huge"])
+    assert result.exit_code == 2
+    assert "quick, standard, deep, exhaustive" in result.output

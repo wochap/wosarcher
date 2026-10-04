@@ -2,6 +2,7 @@
 // replaced on the returned object to script a test.
 import { type ApiClient, ApiError, type LoginResult } from "../api/client";
 import type {
+  DepthInfo,
   HealthReport,
   ProfileInfo,
   RunCreated,
@@ -24,6 +25,7 @@ export type FakeData = {
   sources: Record<string, Record<string, SourceView>>;
   settings: ServerSettings;
   profiles: ProfileInfo[];
+  depths: DepthInfo[];
   health: HealthReport;
   session: SessionInfo;
   tokens: TokenInfo[];
@@ -42,6 +44,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     sources: {},
     settings: fixtures.settings,
     profiles: fixtures.profiles,
+    depths: fixtures.depths,
     health: fixtures.health,
     session: fixtures.session,
     tokens: fixtures.tokens,
@@ -133,6 +136,10 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     async listProfiles() {
       record("listProfiles");
       return structuredClone(data.profiles);
+    },
+    async listDepths() {
+      record("listDepths");
+      return structuredClone(data.depths);
     },
     async health(profile) {
       record("health", profile);

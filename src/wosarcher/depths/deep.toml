@@ -1,0 +1,19 @@
+description = "More searches and sources, longer report."
+
+[plan]
+max_sub_queries = 5
+
+[search]
+max_results = 10
+
+[fetch]
+max_pages = 60
+
+[score]
+top_k = 10
+
+[select]
+max_context_tokens = 24000
+
+[write]
+words = 2000

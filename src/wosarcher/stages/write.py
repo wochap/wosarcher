@@ -36,6 +36,7 @@ class Sizing:
     chars_per_token: float = 3.5
     token_margin: float = 1.1
     max_continuations: int = 2
+    max_output_tokens: int | None = None
 
 
 DEFAULT_SIZING = Sizing()
@@ -283,7 +284,7 @@ async def write(
         raise ValueError("no passages to write from")
     pieces: list[str] = []
     reasons: list[str | None] = []
-    limit = output_tokens(options.words)
+    limit = output_tokens(options.words, sizing.max_output_tokens)
     first = messages(context, options, description)
 
     async def call(stream: AsyncIterator[str]) -> int:

@@ -1,0 +1,19 @@
+description = "Many searches and sources; slow, for thorough reports."
+
+[plan]
+max_sub_queries = 8
+
+[search]
+max_results = 10
+
+[fetch]
+max_pages = 100
+
+[score]
+top_k = 8
+
+[select]
+max_context_tokens = 32000
+
+[write]
+words = 3000

@@ -128,3 +128,14 @@ describe("HistoryScreen", () => {
     expect(rows()).toHaveLength(7);
   });
 });
+
+describe("HistoryScreen depth tags", () => {
+  it("shows each run's depth, Standard when it has none", async () => {
+    const api = fakeApi();
+    api.data.runs[0] = { ...api.data.runs[0], depth: "exhaustive" };
+    api.data.runs[1] = { ...api.data.runs[1], depth: null };
+    await open(api);
+    expect(within(rows()[0]).getByText("Exhaustive")).toBeTruthy();
+    expect(within(rows()[1]).getByText("Standard")).toBeTruthy();
+  });
+});

@@ -6,6 +6,7 @@ from wosarcher.config import (
     ConfigError,
     Settings,
     list_profiles,
+    load_depth,
     profile_description,
     redact,
     resolve,
@@ -293,3 +294,69 @@ def test_builtin_descriptions(env: dict[str, str]) -> None:
     assert profile_description("workstation", env) == "One GPU fits all models; models stay loaded."
     assert profile_description("low-vram", env) == "Models take turns on one small GPU; slower, fits 8 GB."
     assert profile_description("cloud", env) == "Hosted APIs only; needs API keys."
+
+
+PROVIDERS = '[search]\nprovider = "searxng"\n[fetch]\nprovider = "firecrawl"\n[score]\nprovider = "bm25"\n'
+
+
+def test_auto_context_in_profile(env: dict[str, str]) -> None:
+    user_profile(
+        env,
+        "big",
+        PROVIDERS + '[llm]\nprovider = "llm"\ncontext_window = 1000000\n[select]\nmax_context_tokens = "auto"\n',
+    )
+    assert resolve("big", [], env).select.max_context_tokens == "auto"
+
+
+def test_invalid_context_value(env: dict[str, str]) -> None:
+    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "llm"\n[select]\nmax_context_tokens = "all"\n')
+    with pytest.raises(ConfigError, match=r"select\.max_context_tokens"):
+        resolve("bad", [], env)
+
+
+def test_page_cap_default(env: dict[str, str]) -> None:
+    assert resolve(None, [], env).fetch.max_pages == 40
+
+
+def test_standard_equals_defaults(env: dict[str, str]) -> None:
+    assert resolve(None, [], env, depth="standard") == resolve(None, [], env)
+
+
+def test_deep_values(env: dict[str, str]) -> None:
+    settings = resolve(None, [], env, depth="deep")
+    assert (settings.plan.max_sub_queries, settings.fetch.max_pages, settings.write.words) == (5, 60, 2000)
+
+
+def test_custom_applies_no_preset(env: dict[str, str]) -> None:
+    assert resolve(None, [], env, depth="custom") == resolve(None, [], env)
+
+
+def test_unknown_depth_lists_presets(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match="quick, standard, deep, exhaustive"):
+        resolve(None, [], env, depth="huge")
+
+
+def test_provider_key_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "odd.toml"
+    path.write_text('[llm]\nmodel = "x"\n')
+    with pytest.raises(ConfigError) as error:
+        load_depth("odd", tmp_path)
+    assert str(path) in str(error.value)
+    assert "llm.model" in str(error.value)
+
+
+def test_preset_beats_environment(env: dict[str, str]) -> None:
+    env["WOSARCHER_PLAN__MAX_SUB_QUERIES"] = "4"
+    assert resolve(None, [], env, depth="quick").plan.max_sub_queries == 2
+
+
+def test_flag_beats_preset(env: dict[str, str]) -> None:
+    settings = resolve(None, ["write.words=800"], env, depth="deep")
+    assert (settings.write.words, settings.plan.max_sub_queries) == (800, 5)
+
+
+def test_preset_between_environment_and_overrides(env: dict[str, str]) -> None:
+    user_profile(env, "mid", PROVIDERS + '[llm]\nprovider = "llm"\n' + "[select]\nmax_context_tokens = 12000\n")
+    assert resolve("mid", [], env, depth="deep").select.max_context_tokens == 24000
+    overrides = ["select.max_context_tokens=20000"]
+    assert resolve("mid", overrides, env, depth="deep").select.max_context_tokens == 20000

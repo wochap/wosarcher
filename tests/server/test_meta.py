@@ -154,3 +154,24 @@ def test_health_release_and_policy(client: TestClient) -> None:
     response = client.get("/api/providers/health", params={"profile": "low-vram"})
     assert response.json()["gpu_policy"] == "exclusive"
     assert checks(response)["prefilter"]["release"] == "llama-swap"
+
+
+def test_depths_standard_values(client: TestClient) -> None:
+    found = {d["name"]: d for d in client.get("/api/depths").json()}
+    assert list(found) == ["quick", "standard", "deep", "exhaustive"]
+    assert found["standard"]["values"] == {
+        "sub_queries": 3,
+        "results_per_query": 10,
+        "max_pages": 40,
+        "passages_per_query": 10,
+        "context_tokens": 16000,
+        "words": None,
+    }
+    assert found["quick"]["values"]["words"] == 600
+
+
+def test_profile_limits(client: TestClient) -> None:
+    found = {p["name"]: p for p in client.get("/api/profiles").json()}
+    workstation = found["workstation"]
+    assert workstation["context_window"] == 32768
+    assert (workstation["prompt_reserve_tokens"], workstation["max_output_tokens"]) == (2000, None)

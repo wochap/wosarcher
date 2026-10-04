@@ -35,7 +35,12 @@ describe("NewRunScreen", () => {
     fireEvent.change(question, { target: { value: " What is RAG? " } });
     await ctrlEnter(question);
     const [request, files] = callsTo(api, "createRun")[0] as [RunCreate, File[]];
-    expect(request).toEqual({ query: "What is RAG?", sources: "both", profile: "low-vram" });
+    expect(request).toEqual({
+      query: "What is RAG?",
+      sources: "both",
+      profile: "low-vram",
+      depth: "standard",
+    });
     expect(files).toEqual([]);
     expect(window.location.hash).toBe("#/live/r_new1");
     expect(await screen.findByText("r_new1")).toBeTruthy();

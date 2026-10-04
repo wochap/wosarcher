@@ -190,3 +190,14 @@ describe("Export", () => {
     expect(callsTo(api, "getArtifact").map((c) => c[1])).toContain("report.md");
   });
 });
+
+describe("ReportScreen depth tag", () => {
+  it("shows the run's depth after the status", async () => {
+    await openScenario({
+      ...finished,
+      data: { ...finished.data, runs: [summary({ depth: "deep" })] },
+    });
+    const status = await screen.findByText("Completed");
+    expect(status.closest("span")?.nextElementSibling?.textContent).toBe("Deep");
+  });
+});

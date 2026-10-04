@@ -51,10 +51,15 @@ export type Props = {
   idPrefix: string;
   compact?: boolean;
   errors?: Partial<Record<WritingField, string>>;
+  /** Length's base text when a depth sets its default ("Deep default: 2000 words"). */
+  wordsBaseText?: string;
+  /** Shown after Length's unit while it is not changed ("set by Deep"). */
+  wordsHint?: string;
 };
 
 export function WritingOptionsForm(props: Props) {
   const { value, base, mark, baseLabel = "default: ", idPrefix, compact, errors = {} } = props;
+  const { wordsBaseText, wordsHint } = props;
   return (
     <div className={compact ? css.compact : undefined}>
       {FIELDS.map((field) => {
@@ -62,6 +67,7 @@ export function WritingOptionsForm(props: Props) {
         const id = `${idPrefix}-${field}`;
         const segmented = field === "citation_marker" || field === "reference_style";
         const Label = segmented ? "span" : "label";
+        const depthBase = field === "words" && wordsBaseText;
         return (
           <div key={field} className={css.row}>
             <div className={css.head}>
@@ -76,7 +82,15 @@ export function WritingOptionsForm(props: Props) {
                       <Tag variant="outline" small>
                         {mark}
                       </Tag>
-                      <HelpTip help={mark === "changed" ? "rwchanged" : "overridden"} />
+                      <HelpTip
+                        help={
+                          depthBase
+                            ? "w-words-def"
+                            : mark === "changed"
+                              ? "rwchanged"
+                              : "overridden"
+                        }
+                      />
                     </span>
                     <button
                       type="button"
@@ -87,14 +101,18 @@ export function WritingOptionsForm(props: Props) {
                     </button>
                   </div>
                   <span className={css.base}>
-                    {baseLabel}
-                    {describeValue(field, base[field])}
+                    {depthBase || `${baseLabel}${describeValue(field, base[field])}`}
                   </span>
                 </>
               )}
             </div>
             <div className={css.control}>
-              <Control {...props} field={field} id={id} />
+              <Control
+                {...props}
+                field={field}
+                id={id}
+                wordsHint={field === "words" && !changed ? wordsHint : undefined}
+              />
               {errors[field] && (
                 <div role="alert" className={css.error}>
                   {errors[field]}

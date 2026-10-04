@@ -85,6 +85,7 @@ class Outcome:
     provider: str | None = None
     warnings: list[str] = field(default_factory=list[str])
     passthrough: list[str] = field(default_factory=list[str])
+    unfetched: int = 0
 
 
 def short_reason(text: str) -> str:
@@ -199,9 +200,11 @@ async def fetch(ctx: StepContext) -> Outcome:
         ctx.log.progress("fetch", done, total, failed)
 
     concurrency = ctx.settings.fetch.concurrency or DEFAULT_CONCURRENCY["firecrawl"]
-    result = await fetching.fetch(hits, ctx.fetcher, concurrency=concurrency, on_item=on_item)
+    result = await fetching.fetch(
+        hits, ctx.fetcher, concurrency=concurrency, max_pages=ctx.settings.fetch.max_pages, on_item=on_item
+    )
     ctx.store.write_artifact(ctx.run_id, "pages.jsonl", result.pages)
-    return Outcome(len(result.pages))
+    return Outcome(len(result.pages), unfetched=result.unfetched)
 
 
 async def chunk(ctx: StepContext) -> Outcome:
@@ -300,11 +303,13 @@ async def score(ctx: StepContext) -> Outcome:
 
 async def select(ctx: StepContext) -> Outcome:
     settings = ctx.settings
+    max_context = settings.select.max_context_tokens
     budget = selecting.budget(
         context_window=settings.llm.context_window,
-        max_context_tokens=settings.select.max_context_tokens,
+        max_context_tokens=None if max_context == "auto" else max_context,
         prompt_reserve_tokens=settings.select.prompt_reserve_tokens,
         words=settings.write.words,
+        max_output_tokens=settings.llm.max_output_tokens,
     )
     selection = selecting.select(
         ctx.record.request.query,
@@ -337,6 +342,7 @@ async def write(ctx: StepContext) -> Outcome:
         chars_per_token=llm.chars_per_token,
         token_margin=llm.token_margin,
         max_continuations=llm.max_continuations,
+        max_output_tokens=llm.max_output_tokens,
     )
     report = await writing.write(context, ctx.settings.write, ctx.adapters.writer, sizing=sizing, on_delta=on_delta)
     ctx.store.write_text(ctx.run_id, "report.md", report.markdown)

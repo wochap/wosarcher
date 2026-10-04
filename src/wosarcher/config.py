@@ -1,14 +1,15 @@
 """Run configuration: settings models, profiles, precedence, and secret redaction.
 
 `resolve()` is the whole story: pick a profile, then merge built-in defaults <
-profile < `WOSARCHER_*` environment < `--set` overrides, and validate once.
+profile < `WOSARCHER_*` environment < depth preset < `--set` overrides, and
+validate once.
 """
 
 import json
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_core import to_jsonable_python
@@ -18,6 +19,20 @@ from wosarcher.models import Stage, WritingOptions
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
 BUILTIN_PROFILES = Path(__file__).parent / "profiles"
+BUILTIN_DEPTHS = Path(__file__).parent / "depths"
+DEPTH_ORDER = ("quick", "standard", "deep", "exhaustive")
+CUSTOM_DEPTH = "custom"
+
+# Typed research fields (CLI flags, `RunCreate.research`) and the key each sets.
+RESEARCH_KEYS = {
+    "sub_queries": "plan.max_sub_queries",
+    "results_per_query": "search.max_results",
+    "max_pages": "fetch.max_pages",
+    "passages_per_query": "score.top_k",
+    "context_tokens": "select.max_context_tokens",
+}
+# The only keys a depth preset may set, besides its `description`.
+DEPTH_KEYS = (*RESEARCH_KEYS.values(), "write.words")
 
 # Seconds each stage may take; `run.stage_timeouts` overrides single stages.
 DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
@@ -76,6 +91,7 @@ class SearchConfig(Provider):
 
 class FetchConfig(Provider):
     max_chars: int = Field(default=50000, ge=1)
+    max_pages: int = Field(default=40, gt=0)
     only_main_content: bool = True
     page_timeout: float = Field(default=45.0, gt=0)
 
@@ -100,6 +116,8 @@ class LLMConfig(Provider):
     max_tokens_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
     reasoning_tokens: int = Field(default=0, ge=0)
     max_continuations: int = Field(default=2, ge=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
+    """Caps the writer's output limit; None: no cap."""
 
 
 class PlanConfig(Block):
@@ -124,7 +142,8 @@ class ChunkConfig(Block):
 class SelectConfig(Block):
     passthrough_chars: int = Field(default=8000, ge=0)
     max_chunks_per_source: int = Field(default=5, gt=0)
-    max_context_tokens: int = Field(default=16000, gt=0)
+    max_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = 16000
+    """`auto`: all the room the context window leaves."""
     file_share: float = Field(default=0.5, ge=0, le=1)
     prompt_reserve_tokens: int = Field(default=2000, ge=0)
 
@@ -345,9 +364,65 @@ def source_of(location: str, sources: Mapping[str, str]) -> str:
     return children[0] if children else "built-in defaults"
 
 
-def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str]) -> Settings:
+def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str], depth: str | None = None) -> Settings:
     path, data = load_profile(select_profile(profile, env), env)
-    return validate([profile_layer(path, data), env_layer(env), override_layer(overrides)])
+    layers = [profile_layer(path, data), env_layer(env)]
+    if depth is not None and depth != CUSTOM_DEPTH:
+        layers.append(depth_layer(*load_depth(depth)))
+    return validate([*layers, override_layer(overrides)])
+
+
+# Depth presets
+
+
+def list_depths(directory: Path = BUILTIN_DEPTHS) -> dict[str, Path]:
+    """Every preset by name, in DEPTH_ORDER first, then by name."""
+    found = {path.stem: path for path in directory.glob("*.toml")}
+    order = {name: index for index, name in enumerate(DEPTH_ORDER)}
+    return dict(sorted(found.items(), key=lambda item: (order.get(item[0], len(order)), item[0])))
+
+
+def unknown_depth(name: str, available: Mapping[str, object]) -> ConfigError:
+    return ConfigError(f"unknown depth '{name}'; available: {', '.join(available)}")
+
+
+def read_depth(name: str, directory: Path = BUILTIN_DEPTHS) -> tuple[Path, str, dict[str, Any]]:
+    """The preset's path, description, and settings; any key outside DEPTH_KEYS fails."""
+    available = list_depths(directory)
+    if name not in available:
+        raise unknown_depth(name, available)
+    path = available[name]
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"depth {path}: {error}") from error
+    description = data.pop("description", "")
+    if not isinstance(description, str):
+        raise ConfigError(f"depth {path}: description must be a string")
+    for key in leaf_keys(data):
+        if key not in DEPTH_KEYS:
+            raise ConfigError(f"depth {path}: {key} cannot be set by a depth preset")
+    return path, description, data
+
+
+def load_depth(name: str, directory: Path = BUILTIN_DEPTHS) -> tuple[Path, dict[str, Any]]:
+    path, _, data = read_depth(name, directory)
+    return path, data
+
+
+def depth_values(data: Mapping[str, Any]) -> dict[str, Any]:
+    """The preset's settings as flat dotted keys."""
+    out: dict[str, Any] = {}
+    for key in leaf_keys(data):
+        value: Any = data
+        for part in key.split("."):
+            value = value[part]
+        out[key] = value
+    return out
+
+
+def depth_layer(path: Path, data: dict[str, Any]) -> Layer:
+    return data, {key: f"depth {path}" for key in leaf_keys(data)}
 
 
 def validate(layers: list[Layer]) -> Settings:

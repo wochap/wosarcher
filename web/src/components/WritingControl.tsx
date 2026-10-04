@@ -19,6 +19,7 @@ export function Control({
   id,
   idPrefix,
   compact,
+  wordsHint,
 }: Props & { field: WritingField; id: string }) {
   switch (field) {
     case "tone":
@@ -86,6 +87,7 @@ export function Control({
                 onKeyDown={(e) => e.key === "Enter" && done()}
               />
               <span className={css.unit}>{compact ? "words" : "words, approximately"}</span>
+              {wordsHint && <span className={css.hint}>· {wordsHint}</span>}
             </div>
           )}
         />

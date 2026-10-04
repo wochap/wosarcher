@@ -297,3 +297,46 @@ def test_rerun_queued_409(client: TestClient) -> None:
     assert client.post(f"/api/runs/{second}/rerun").status_code == 409
     finished(client, first)
     finished(client, second)
+
+
+def resolved(runs_dir: Path, run_id: str) -> dict[str, Any]:
+    return RunRecord.model_validate_json((runs_dir / run_id / "request.json").read_text()).settings
+
+
+def test_custom_research_values(client: TestClient, runs_dir: Path) -> None:
+    request = {"query": "q", "depth": "custom", "research": {"sub_queries": 6, "max_pages": 80}}
+    run_id = create(client, request)
+    finished(client, run_id)
+    settings = resolved(runs_dir, run_id)
+    assert (settings["plan"]["max_sub_queries"], settings["fetch"]["max_pages"]) == (6, 80)
+    assert summary(client, run_id)["depth"] == "custom"
+
+
+def test_unknown_depth_422(client: TestClient) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "depth": "huge"}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert response.status_code == 422
+    assert "depth" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    ("depth", "writing", "words"),
+    [("quick", {}, 600), ("deep", {"words": 800}, 800), ("standard", {}, 1500)],
+)
+def test_depth_and_global_words(
+    client: TestClient, runs_dir: Path, depth: str, writing: dict[str, Any], words: int
+) -> None:
+    client.put("/api/settings", json={"writing": {"words": 1500}, "sources": "both"})
+    run_id = create(client, {"query": "q", "depth": depth, "writing": writing})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["write"]["words"] == words
+    assert summary(client, run_id)["writing"]["words"] == words
+
+
+def test_rerun_keeps_depth(client: TestClient, runs_dir: Path) -> None:
+    original = create(client, {"query": "q", "depth": "deep"})
+    finished(client, original)
+    rerun = client.post(f"/api/runs/{original}/rerun").json()["run_id"]
+    finished(client, rerun)
+    assert summary(client, rerun)["depth"] == "deep"
+    assert resolved(runs_dir, rerun)["plan"]["max_sub_queries"] == 5

@@ -14,6 +14,35 @@ export type HelpItem = { icon: Icon; term: string; text: string };
 export type Help = { title: string; body: string; example?: string; items?: HelpItem[] };
 
 export const HELP: Record<string, Help> = {
+  depth: {
+    title: "Depth",
+    body: "How much research to do. Each preset sets the values under Advanced and a default report length. Deeper runs take longer and use more tokens.",
+  },
+  "d-subq": {
+    title: "Sub-queries",
+    body: "How many focused searches the planner writes from your question.",
+  },
+  "d-rpq": { title: "Results per query", body: "Search results kept for each sub-query." },
+  "d-pages": {
+    title: "Max pages",
+    body: "Upper limit on pages fetched across all rounds. Research stops when it is reached.",
+  },
+  "d-rounds": {
+    title: "Rounds",
+    body: "Search, fetch and score passes. After each round a gap step decides what to search next, or stops early.",
+  },
+  "d-ppq": {
+    title: "Passages per query",
+    body: "Top-scoring passages kept for each sub-query before selection.",
+  },
+  "d-ctx": {
+    title: "Context tokens",
+    body: "Token budget for the passages the writer sees. The profile’s model window can lower it.",
+  },
+  "w-words-def": {
+    title: "Depth default",
+    body: "Each depth sets a default length: Quick 600, Standard your Settings default, Deep 2,000, Exhaustive 3,000 words. Changing depth updates it until you edit it.",
+  },
   recipe: {
     title: "Recipe",
     body: "Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
