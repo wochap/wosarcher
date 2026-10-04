@@ -95,8 +95,10 @@ when it is `probability` or `logit`; with `auto` (the default) it SHALL be
 be kept unchanged in the scores artifact. BM25 SHALL follow the BM25
 ranking rule of lexical-bm25: pairs with score 0 are dropped, at most 25
 pairs per query are kept, and when no pair of a query matches any query
-term, the first pairs in page order are kept. Every scorer SHALL then keep
-at most `score.top_k` pairs per query (default 10), best first.
+term, the first pairs in page order are kept. Every scorer except
+`passthrough` SHALL then keep at most `score.top_k` pairs per query
+(default 10), best first. This per-query cap SHALL run before the best
+pair per chunk is chosen.
 
 #### Scenario: Calibrated threshold
 - **WHEN** Jev scores three pairs 2.5, 1.5, and 1.0 with `score.min_score = 1.5`
@@ -122,15 +124,25 @@ at most `score.top_k` pairs per query (default 10), best first.
 - **WHEN** `score.rerank_scale = "probability"` and a reranker scores every pair of a query below zero
 - **THEN** only the best pair of that query is kept
 
+#### Scenario: Passthrough is not capped
+- **WHEN** a query's pairs are scored by `passthrough` and there are 14 of them with `score.top_k = 10`
+- **THEN** all 14 pairs pass the per-query cap
+
 ### Requirement: Best pair per chunk
-After thresholds, a chunk with more than one kept pair SHALL keep only the
-pair with the highest display score (ties: the earlier query in the plan).
-That pair's query ID SHALL be the chunk's best query ID; the other pairs
-SHALL be marked not kept.
+After thresholds and the per-query cap, a chunk with more than one kept
+pair SHALL keep only the pair with the highest display score (ties: the
+earlier query in the plan). That pair's query ID SHALL be the chunk's best
+query ID; the other pairs SHALL be marked not kept. A pair removed by the
+per-query cap SHALL take no part in this choice, so a chunk cut by the cap
+of one query stays kept through another query that kept it.
 
 #### Scenario: File chunk kept once
 - **WHEN** a file chunk is kept for `q0` with display 0.6 and for `q2` with display 0.8
 - **THEN** only the `q2` pair is kept
+
+#### Scenario: Capped in its best query, kept in another
+- **WHEN** a chunk scores display 0.9 for `q1` and 0.8 for `q2` with `score.top_k = 10`, `q1` has ten pairs with a higher display, and `q2` has fewer than ten
+- **THEN** the `q2` pair is kept, and `q2` is the chunk's best query ID
 
 ### Requirement: Display score
 Each scored pair SHALL have a display score from 0 to 1: the Jev score
@@ -163,3 +175,21 @@ result SHALL include every pair, kept or not.
 #### Scenario: One report per query after fallback
 - **WHEN** `rerank` fails and `bm25` succeeds for a plan with three queries
 - **THEN** the item callback is called three times, each naming `bm25`
+### Requirement: Drop reasons
+Every pair that is not kept SHALL record why, with the first rule that
+dropped it: `threshold` when the scorer's keep rule (Thresholds) did not
+keep it, `query_cap` when the per-query cap removed it, and `other_query`
+when the chunk's best pair belongs to another query. A kept pair SHALL
+record no drop reason.
+
+#### Scenario: Below the threshold
+- **WHEN** Jev scores a pair 1.0 with `score.min_score = 1.5`
+- **THEN** the pair is not kept and its drop reason is `threshold`
+
+#### Scenario: Over the query cap
+- **WHEN** a query has eleven pairs above its threshold with `score.top_k = 10`
+- **THEN** the lowest of them is not kept and its drop reason is `query_cap`
+
+#### Scenario: Kept through another query
+- **WHEN** a chunk is kept for `q1` with display 0.6 and for `q2` with display 0.8, both within their caps
+- **THEN** the `q1` pair is not kept and its drop reason is `other_query`

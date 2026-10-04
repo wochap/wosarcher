@@ -248,42 +248,114 @@ page failed.
 - **THEN** that row shows "403 Forbidden" in the danger color and the header shows "1 failed · run continues"
 
 ### Requirement: Passages panel
-The Live run screen (scenario `live`) SHALL show scored passages, best
-first, each with its display score (two decimals), a 0 to 1 bar, a 1px
-marker at the scorer's display threshold for that passage's query (title
-"threshold <value>"), the domain or file path, the heading path joined by
-" › ", the text clamped to three lines, and a badge: "above threshold"
-before selection, the citation label once selected. The header SHALL wrap
-when narrow and show, after "Passages", a neutral mono tag with the scorer
-that produced the scores (the first query's scorer other than
-`passthrough`, else `passthrough`), reading "<scorer> · fallback" when it
-is not the run's configured `score.provider`, followed by the scorer help
-button; then the summary followed by the score help button; then the
-"Rejected" toggle followed by its help button. The "Rejected" toggle
-(also the R key outside text fields) SHALL show rejected passages at half
-opacity with "rejected · below <threshold>"; rejected passages come from
-the run's `scores.jsonl` and `chunks.jsonl` artifacts once the score stage
-is done, with display scores mapped as the server maps kept ones (`jev`
-divided by 3, `rerank` clamped to 0 to 1, `bm25` divided by the best score
-of the same query). Passages from the `passthrough` fallback have no score:
-they SHALL show "–" and no bar. The summary SHALL read "S/T scored" while
-scoring and "K kept of T scored" after selection, followed by " · ≥
-<threshold>" (two decimals) when every scored query has the same display
-threshold. Empty states SHALL use the prototype's texts (waiting for the
-run, scorer waiting for the GPU, cancelled before scoring, nothing above
-the threshold).
+The Live run screen SHALL show the Passages panel as the prototype does in
+scenarios `live` and `passages` (`design/project/wosarcher.dc.html`).
+
+Header, first row: "Passages"; a neutral mono tag with the scorer that
+produced the scores (the first query's scorer other than `passthrough`,
+else `passthrough`), reading "<scorer> · fallback" when it is not the
+run's configured `score.provider`, followed by the scorer help button; and,
+at the right, a segmented control labelled "Show passages (R cycles)" with
+the options Cited, Kept, and All, each followed by its count in the faint
+color, then an "R" key hint. The default option SHALL be Kept. The R key
+outside text fields SHALL select the next option (Cited, Kept, All, then
+Cited again).
+
+Header, second row: a funnel of four steps separated by caret icons:
+chunks (the chunk stage count), scored (pairs scored, summed over
+queries), kept (pairs kept, summed over queries), and cited (selected
+passages). Each step SHALL show its number and label, or "–" in the faint
+color until its stage reports it, and SHALL be a text button that opens
+its help tooltip (web-shell "Inline help" tooltip) with the accessible
+label "<number or pending> <label>, help". At the right of the row, the
+label "Fates" SHALL be followed by a help button that opens the fate
+legend. The header SHALL never overlap its controls; it wraps when narrow.
+
+Counts: Cited is the number of selected passages, shown once select is
+done; Kept is the kept count, shown once score is done; All is the scored
+count, shown once any query is scored.
+
+Cards, best display score first: the display score (two decimals), a 0 to
+1 bar with a 1px marker at the display threshold of that passage's query
+(title "threshold <value>"), the domain or file path, the heading path
+joined by " › ", the text clamped to three lines, and one fate badge. Each
+badge SHALL show its own icon, label, and border style, so fates differ
+without color:
+
+| Fate | When | Label | Card |
+|---|---|---|---|
+| cited | selected | "cited" and the citation label in the run's marker style | full |
+| kept · selecting | kept, select not done | "kept · selecting" | full |
+| ≥ threshold | kept, score not done | "≥ <threshold>" | full |
+| source cap | skipped by select, reason `source_cap` | "source cap" | dimmed |
+| over budget | skipped by select, reason `budget` | "over budget" | dimmed |
+| query cap | not kept, drop reason `query_cap` | "query cap" and the query tag (for example "q1") | dimmed |
+| below threshold | not kept, drop reason `threshold` | "below <threshold of its query>" | dimmed |
+
+The Cited option SHALL list cited passages; Kept SHALL list every kept
+passage (cited, kept · selecting, ≥ threshold, source cap, over budget);
+All SHALL add the passages that were not kept. A chunk SHALL appear once:
+when it is kept for any query, as that kept pair; otherwise as its pair
+with the highest display score. Passages not kept come from the run's
+`scores.jsonl` and `chunks.jsonl`, and select skips from `select.jsonl`,
+loaded when first needed, with display scores mapped as the server maps
+them. Passages from the `passthrough` scorer have no score: they SHALL show
+"–" and no bar.
+
+In the All view, passages below the threshold SHALL be collapsed into one
+line after the list, "<N> more below <threshold> not listed (<lowest>–
+<highest>)", with a "Show" button that lists them in score order and then
+reads "Hide". The threshold is the shared display threshold when every
+scored query has the same one, and "the threshold" otherwise.
+
+Empty states SHALL use the prototype's texts: waiting for the run, scorer
+waiting for the GPU, cancelled before scoring, the Cited option before
+select is done ("Citations are assigned when Select finishes. Switch to All
+to watch scores arrive."), the Kept option before score is done ("Kept
+passages are known once scoring finishes. Switch to All to watch scores
+arrive."), and passages not yet scored ("Passages appear as they are
+scored. The prefilter narrows <chunks> chunks to <candidates> for the
+scorer.").
+
+#### Scenario: Default filter
+- **WHEN** a finished run opens on the Live run screen
+- **THEN** the Kept option is selected and the list holds every kept passage with its fate badge
+
+#### Scenario: R cycles the filter
+- **WHEN** the Kept option is selected and the user presses R outside a text field
+- **THEN** All is selected; pressing R twice more selects Cited, then Kept
+
+#### Scenario: Query cap is not a threshold rejection
+- **WHEN** a passage with display 0.65 was dropped by the query cap of `q1` and a passage with display 0.64 is cited as [14]
+- **THEN** the first card shows "query cap" with the tag "q1" and is dimmed, and the second shows "cited" with "[14]"
+
+#### Scenario: Select skips
+- **WHEN** select is done and a kept passage was skipped with the reason `source_cap`
+- **THEN** its card shows "source cap" and is dimmed
+
+#### Scenario: Kept before select
+- **WHEN** score is done and select is still running
+- **THEN** kept passages show "kept · selecting" and the funnel shows "–" for cited
+
+#### Scenario: Funnel numbers
+- **WHEN** a run chunked 612 chunks, scored 150 pairs, kept 30, and cited 25
+- **THEN** the funnel reads "612 chunks › 150 scored › 30 kept › 25 cited"
+
+#### Scenario: Collapsed tail
+- **WHEN** the All option is selected and 121 scored passages are below a shared threshold of 0.50, scoring between 0.02 and 0.13
+- **THEN** the list ends with "121 more below 0.50 not listed (0.02–0.13)" and a Show button, and pressing Show lists those passages dimmed with "below 0.50"
 
 #### Scenario: Toggle rejected
-- **WHEN** scoring is done and the user presses R
-- **THEN** rejected passages appear at half opacity with their scores below the threshold marker
+- **WHEN** scoring is done and the user selects All
+- **THEN** passages that were not kept appear dimmed with their fate badges, in score order with the kept ones
+
+#### Scenario: Scorer tag and threshold in the summary
+- **WHEN** the run's configured scorer is `jev`, every query was scored by `jev` with display threshold 0.6, and the score stage kept 14 of 96
+- **THEN** the header shows the tag "jev", the funnel shows "96 scored › 14 kept", and the kept step's help reads "Scored at least 0.60 (threshold) …"
 
 #### Scenario: Threshold from the scorer
 - **WHEN** the scorer's display threshold for a query is 0.5
 - **THEN** the marker of that query's passages sits at 50% of the bar
-
-#### Scenario: Scorer tag and threshold in the summary
-- **WHEN** the run's configured scorer is `jev`, every query was scored by `jev` with display threshold 0.6, and selection kept 14 of 96
-- **THEN** the header shows the tag "jev" and "14 kept of 96 scored · ≥ 0.60"
 
 #### Scenario: Fallback scorer
 - **WHEN** the configured scorer is `rerank` and the passages were scored by `bm25`
@@ -573,13 +645,32 @@ accessible label is "Help: <label>"):
 | Device chip | Device | Device | The machine and GPU running the current stage, as labelled in the profile. | desktop:gpu0 |
 | Header, after Rerun | Rerun | Rerun | Starts a fresh run with the same question and attachments. | |
 | Passages header, after the scorer tag | Scorer | Scorer | Which scorer ranked the passages. “fallback” means the configured scorer failed and a simpler one took over. | jev · rerank · bm25 · fallback |
-| Passages header, after the summary | Score and threshold | Score and threshold | Each passage scores from 0 to 1. Passages right of the line are kept; the line is the scorer's configured threshold. | |
-| Passages header, after the Rejected toggle | Rejected passages | Rejected passages | Shows passages that scored below the threshold or did not fit the budget. | |
+| Passages funnel, chunks step | <n> chunks | Chunks | Pages and files split along their headings. The prefilter ranks them per sub-query and passes the top <P> of each to the scorer; the rest are “prefiltered” and never scored. | |
+| Passages funnel, scored step | <n> scored | Scored | Chunks the scorer rated from 0 to 1, after the prefilter. | |
+| Passages funnel, kept step | <n> kept | Kept | Scored at least <T> (threshold) and in the top <K> of their sub-query (query cap). | |
+| Passages funnel, cited step | <n> cited | Cited | Kept passages that fit the writer’s selection: at most <S> per source (source cap) and within the token budget. Numbered in the report. | |
+| Passages header, after "Fates" | Passage fates | Passage fates | (the fate legend below) | |
 | Failure card, after "Retry from Score" | Retry from Score | Retry from Score | Reruns scoring, selection and writing on the saved pages. Useful after changing the scorer or profile. | |
 | Live footer, after the cost | Tokens and cost | Tokens and cost | Prompt and completion tokens across all stages. Cost is $0 for local models. | |
 | Report, after Rewrite | Rewrite | Rewrite | Writes a new version from the same passages with different writing options. No new search; it creates a linked version. | |
 | Report, after "Versions" | Versions | Versions | Reports that share the same research. v1 is the original; rewrites follow. | |
 | Report, after the References style | Reference style | Reference style | Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE. | |
+
+In the funnel texts, `<P>` is the run's `prefilter.top_k`, `<T>` the shared
+display threshold with two decimals (or "the threshold" when queries
+differ), `<K>` the run's `score.top_k`, and `<S>` the run's
+`select.max_chunks_per_source`, all from the run's saved configuration.
+The "Passage fates" tooltip SHALL show, instead of a body, one row per fate
+with its badge icon, its term, and its text:
+
+| Icon | Term | Text |
+|---|---|---|
+| quotes | cited [n] | Selected and cited in the report. The marker follows your citation setting. |
+| stack | source cap | Kept, but its source already has the maximum of <S> cited passages. |
+| gauge | over budget | Kept, but too long for the tokens left in the writer’s budget. |
+| funnel | query cap · q1 | At or above <T>, but its sub-query already had <K> better passages. |
+| arrow-down | below <T> | Scored under the threshold. |
+| minus-circle | prefiltered | Never scored: outside the top <P> for every sub-query. Shown in the source view. |
 
 The writing fields of the Options panel and the Rewrite dialog SHALL carry
 the writing-field help of web-shell "Shell help placements". A phase card
@@ -602,3 +693,11 @@ saved results of earlier stages."
 #### Scenario: Rewrite mark help
 - **WHEN** a field in the Rewrite dialog shows "changed" and the user taps the help button after it
 - **THEN** the tooltip reads "Changed" and "This value differs from the version you are rewriting."
+
+#### Scenario: Funnel help uses the run's configuration
+- **WHEN** a run's configuration has `score.top_k = 10` and every query's display threshold is 0.5, and the user focuses the kept step
+- **THEN** the tooltip reads "Kept" and "Scored at least 0.50 (threshold) and in the top 10 of their sub-query (query cap)."
+
+#### Scenario: Fate legend
+- **WHEN** the user hovers the help button after "Fates"
+- **THEN** the tooltip lists the six fates with their icons, terms, and texts

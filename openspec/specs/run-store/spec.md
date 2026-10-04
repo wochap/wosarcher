@@ -23,14 +23,16 @@ by the stage named:
 | `chunks.jsonl` | chunk |
 | `candidates.jsonl` | prefilter |
 | `scores.jsonl` | score |
-| `context.json` | select |
+| `context.json`, `select.jsonl` | select |
 | `report.md`, `report.json` | write |
 | `events.jsonl` | every event that is logged |
 | `costs.json` | end of the run |
 
-`runs_dir` SHALL default to `$XDG_DATA_HOME/wosarcher/runs`
-(`~/.local/share/wosarcher/runs` when unset) and SHALL be set by
-`run.runs_dir`. Run IDs SHALL sort by creation time.
+`select.jsonl` SHALL hold one select skip per line (see context-selection
+"Skipped passages"). `runs_dir` SHALL default to
+`$XDG_DATA_HOME/wosarcher/runs` (`~/.local/share/wosarcher/runs` when
+unset) and SHALL be set by `run.runs_dir`. Run IDs SHALL sort by creation
+time.
 
 #### Scenario: Files after a full run
 - **WHEN** a run with sources `both` finishes
@@ -39,6 +41,10 @@ by the stage named:
 #### Scenario: Run IDs sort by time
 - **WHEN** two runs are created one after the other
 - **THEN** the second run ID sorts after the first
+
+#### Scenario: Fork copies the select skips
+- **WHEN** a finished run is forked with `--from write`
+- **THEN** the fork's directory contains the parent's `context.json` and `select.jsonl`
 
 ### Requirement: Request record
 `request.json` SHALL hold the run request (query, sources, `until`, and

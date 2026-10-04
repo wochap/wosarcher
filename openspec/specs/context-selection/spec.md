@@ -85,3 +85,24 @@ kind, URI, title, author, and date when known.
 #### Scenario: Numbers map to chunks
 - **WHEN** three passages are selected
 - **THEN** they have the numbers 1, 2, and 3, each with its chunk ID and source ID, and each source appears once in the context
+### Requirement: Skipped passages
+Selection SHALL report every passage kept by the score stage that it does
+not select, once, with its chunk ID, its best query ID, and a reason:
+`source_cap` when the per-source cap removed it, `budget` when it was still
+left after the last round-robin pass (it did not fit in its share or in the
+budget left over). A `budget` skip SHALL also carry `tokens_needed`, the
+passage's estimated cost, and `tokens_left`, the budget left when selection
+ended. Every kept passage SHALL be either selected or reported
+as skipped. The selected context SHALL NOT contain the skipped passages.
+
+#### Scenario: Source cap skip
+- **WHEN** one page has eight kept passages and `select.max_chunks_per_source = 5`
+- **THEN** the three passages the cap removes are reported with the reason `source_cap`
+
+#### Scenario: Budget skip
+- **WHEN** the budget fits four of six kept passages after the per-source cap
+- **THEN** the other two are reported with the reason `budget`, their `tokens_needed`, and the `tokens_left`
+
+#### Scenario: Every kept passage accounted for
+- **WHEN** selection finishes
+- **THEN** the selected passages and the skipped passages together are exactly the kept passages, with no chunk in both

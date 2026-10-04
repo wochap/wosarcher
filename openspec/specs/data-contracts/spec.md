@@ -10,8 +10,9 @@ frontend agree on one shape.
 
 ### Requirement: Contract types
 The system SHALL define these data types: run request, query, search hit,
-source, page, chunk, score, selected context, report, and writing options.
-Each type SHALL serialise to JSON and parse back to an equal value.
+source, page, chunk, score, selected context, select skip, report, and
+writing options. Each type SHALL serialise to JSON and parse back to an
+equal value.
 
 #### Scenario: Round trip
 - **WHEN** any contract value is serialised to JSON and parsed again
@@ -58,12 +59,19 @@ The same input SHALL always produce the same `chunk_id`.
 - **THEN** each chunk gets the same `chunk_id` both times
 
 ### Requirement: Scores are pairs
-A score SHALL record a query ID, a chunk ID, a numeric value, and the name
-of the scorer that produced it.
+A score SHALL record a query ID, a chunk ID, a numeric value, the name of
+the scorer that produced it, its display score, whether it is kept, and,
+when it is not kept, its drop reason: `threshold`, `query_cap`, or
+`other_query`. A select skip SHALL record a chunk ID, a query ID, and a
+reason: `source_cap` or `budget`.
 
 #### Scenario: Same chunk, two queries
 - **WHEN** one chunk is scored against two queries
 - **THEN** two scores exist, one per query, each naming the scorer
+
+#### Scenario: Unknown drop reason
+- **WHEN** JSON for a score has the drop reason `budget`
+- **THEN** parsing fails with an error that names the field
 
 ### Requirement: Writing options
 Writing options SHALL have the fields `tone`, `tone_instructions`, `words`,

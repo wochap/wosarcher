@@ -156,7 +156,8 @@ forgotten (204). A running run SHALL answer 409 with
 `GET /api/runs/{id}/artifacts/{name}` SHALL serve only these names:
 `request.json`, `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`,
 `pages.jsonl`, `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`,
-`context.json`, `report.md`, `report.json`, `events.jsonl`, `costs.json`. JSON files SHALL be served as
+`context.json`, `select.jsonl`, `report.md`, `report.json`,
+`events.jsonl`, `costs.json`. JSON files SHALL be served as
 `application/json`, JSONL as `application/x-ndjson`, and Markdown as
 `text/markdown`, all UTF-8. Any other name, or a listed file that does not
 exist, SHALL answer 404.
@@ -168,6 +169,10 @@ exist, SHALL answer 404.
 #### Scenario: Structured report
 - **WHEN** a client requests `report.json` of a finished run
 - **THEN** the response is 200 with the report body, references, and `application/json`
+
+#### Scenario: Select skips
+- **WHEN** a client requests `select.jsonl` of a run whose select stage is done
+- **THEN** the response is 200 with one select skip per line and `application/x-ndjson`
 
 #### Scenario: Name outside the allowlist
 - **WHEN** a client requests the artifact `..%2Fother%2Freport.md` or `attachments`
