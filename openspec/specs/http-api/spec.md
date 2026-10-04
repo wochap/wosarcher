@@ -178,6 +178,88 @@ exist, SHALL answer 404.
 - **WHEN** a client requests the artifact `..%2Fother%2Freport.md` or `attachments`
 - **THEN** the response is 404 and no file outside the allowlist is read
 
+### Requirement: Source view
+`GET /api/runs/{id}/sources/{source_id}` SHALL return one source of a run
+as JSON. The server SHALL compute the response from the run's stored
+artifacts only (`request.json`, `plan.json`, `files.jsonl`, `pages.jsonl`, `chunks.jsonl`,
+`candidates.jsonl`, `scores.jsonl`, `select.jsonl`, `context.json`). It SHALL
+read whichever of these exist, so a running run answers with its current
+state. It SHALL never run a pipeline stage.
+
+The response SHALL hold:
+- the source: `source_id`, `kind` (`web` or `file`), `uri`, `title`;
+- `truncated`, true when the fetch cut the page;
+- the run's sub-queries (`id` and `text`, in plan order);
+- `threshold`, the display threshold;
+- `query_cap`, the per-sub-query kept limit (`score.top_k`);
+- `source_cap`, the per-source limit (`select.max_chunks_per_source`);
+- `chunks`: every stored chunk of the source, in page order.
+
+Each chunk SHALL have:
+- `chunk_id`, `position`, `heading_path`, and `text`;
+- `removed_before`, the number of near-duplicate chunks the chunk stage
+  removed directly before it (counted from gaps in `position`);
+- `queries`: one entry per sub-query, with a `state` and, once scored,
+  `display`;
+- `fate`: the chunk's final fate.
+
+The per-sub-query `state` SHALL be one of:
+- `not_in_results`: a web chunk whose page that sub-query did not find;
+- `prefiltered`: paired with the sub-query, but not a candidate after the
+  prefilter stage;
+- `pending`: a candidate with no score yet;
+- `below_threshold`;
+- `query_cap`;
+- `other_query`: kept by another sub-query;
+- `kept`.
+
+File chunks SHALL pair with every sub-query.
+
+The `fate` SHALL hold:
+- `kind`, one of `cited`, `source_cap`, `budget`, `kept`, `query_cap`,
+  `below_threshold`, `prefiltered`, `pending`;
+- `query_id`, the primary sub-query: the kept pair's, else the
+  best-scored pair's, else none;
+- `display`;
+- `rank` and `ranked`: the chunk's rank among that sub-query's pairs at or
+  above the threshold, and their count;
+- `kept_in_query`: how many that sub-query kept;
+- `n`, the citation number, when cited;
+- `tokens_needed` and `tokens_left`, for a `budget` fate.
+
+A `query_cap` fate SHALL be reported for a chunk whose best pair was over
+its sub-query's cap and that no other sub-query kept. An unknown run SHALL
+answer 404 `run_not_found`. A source ID not in the run's `files.jsonl` or `pages.jsonl` SHALL answer
+404 `source_not_found`.
+
+#### Scenario: Cited chunk
+- **WHEN** a client requests a finished run's source whose chunk c3 is cited as passage 14 through q1
+- **THEN** c3's fate is `cited` with `n` 14 and `query_id` "q1", and its rank and `kept_in_query` come from q1's scores
+
+#### Scenario: Query cap with a higher score
+- **WHEN** chunk c5 scored 0.65 in q2, q2 kept its top 10, and c5 ranked 11th of 14 at or above 0.50
+- **THEN** c5's fate is `query_cap` with `display` 0.65, `rank` 11, `ranked` 14, and the response's `query_cap` is 10
+
+#### Scenario: Not in results versus prefiltered
+- **WHEN** a web page was found by q1 and q2 only, and chunk c2 was a q1 candidate but not a q2 candidate
+- **THEN** c2's q2 state is `prefiltered`, its q3 state is `not_in_results`, and its q1 state follows its q1 score
+
+#### Scenario: Over budget
+- **WHEN** chunk c7 was kept by q3 but skipped by select for the budget, needing 410 tokens with 120 left
+- **THEN** c7's fate is `budget` with `tokens_needed` 410 and `tokens_left` 120
+
+#### Scenario: Run still scoring
+- **WHEN** a client requests a source of a running run whose prefilter is done and whose score stage is not
+- **THEN** candidate pairs have state `pending`, the other pairs `prefiltered` or `not_in_results`, and no fate is `cited`
+
+#### Scenario: Removed near-duplicates
+- **WHEN** a page's stored chunks have positions 0, 1, and 4
+- **THEN** the chunk at position 4 has `removed_before` 2
+
+#### Scenario: Unknown source
+- **WHEN** a client requests a source ID that is not in the run's `files.jsonl` or `pages.jsonl`
+- **THEN** the response is 404 with `error = "source_not_found"`
+
 ### Requirement: Fork a run
 `POST /api/runs/{id}/fork` SHALL accept JSON with `from` (a stage name) and
 optional `writing`, `set`, and `profile`, and start

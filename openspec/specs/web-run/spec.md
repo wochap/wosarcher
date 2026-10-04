@@ -372,6 +372,103 @@ with no more than 4px of padding on each side.
 - **WHEN** the Passages panel is 440px wide and the summary reads "30 kept of 150 scored · ≥ 0.50"
 - **THEN** the summary, its help button, and the Rejected toggle do not overlap
 
+### Requirement: Source dialog
+Clicking a passage card in the Passages panel, or pressing Enter or Space on
+a focused card, SHALL open the Source dialog for that card's source with
+that chunk selected. It SHALL match prototype scenario `source`. The dialog
+SHALL load the source view of http-api "Source view".
+
+Header:
+- The source's title.
+- For a web source: the domain, and an "Open original" link that opens
+  the URL in a new tab.
+- For a file source: the file name and "Attached file · no URL" (scenario
+  `source-file`).
+- The line "<N> chunks · <S> scored · <C> cited".
+- A close button.
+
+Fate block, for the selected chunk:
+- its fate badge (the badge of the Passages panel for the same fate) and
+  its score (two decimals);
+- its heading path;
+- a "why" line in the prototype's wording:
+  - prefiltered: "Not scored: outside the top <k> for every sub-query.";
+  - pending: "Waiting for the scorer.";
+  - below threshold: "Scored <s> in <q>, below the <t> threshold.";
+  - query cap: "Scored <s> in <q> but ranked <r> of <n> above <t>; <q>
+    keeps only its top <cap>.";
+  - kept: "Kept: rank <r> of <k> in <q>. Selection is running.";
+  - cited: "Kept: rank <r> of <k> in <q>; cited as <label>.", with the
+    label in the run's citation marker style;
+  - source cap: "Kept: rank <r> of <k> in <q>; not cited: this source
+    already has <m> cited passages (cap <m> per source).";
+  - over budget: "Kept: rank <r> of <k> in <q>; not cited: needs <x>
+    tokens, <y> were left in the budget.".
+- A per-sub-query row: one chip per sub-query, holding its ID, its score
+  when scored, and its state ("kept", "query cap", "below <t>", "counted
+  in <q>", "prefiltered", "not in results", "pending"). The primary
+  sub-query's chip is outlined in the accent color. The title attribute
+  is the sub-query text.
+
+Body:
+- Every chunk of the source, in page order. A section heading shows
+  where the top-level heading changes, and the sub-heading path is muted.
+- Each chunk shows its fate badge and its score when scored.
+- The selected chunk has the accent tint and ring and full opacity, and
+  is scrolled into view. Other chunks are at half opacity.
+- Clicking a chunk, or pressing Enter or Space on a focused chunk,
+  selects it.
+- Where near-duplicates were removed, a muted line "<n> near-duplicate
+  chunks removed" appears.
+
+Footer:
+- "Chunk <i> of <N>".
+- Prev and Next buttons, disabled at the ends.
+
+Keys and states:
+- The arrow keys move the selection outside text fields.
+- Escape (through the overlay stack), the close button, or a backdrop
+  click closes the dialog and returns focus to the card that opened it.
+- While the view loads, the dialog SHALL show the loading line and
+  skeleton rows of scenario `source-loading`, and Prev and Next are
+  disabled.
+- A load error SHALL show the error inline with a Retry button.
+- For a truncated source, the dialog SHALL show the warning note at the
+  top and the "Fetch stopped here" end marker after the last chunk
+  (scenario `source-truncated`).
+- Below 720px the dialog SHALL be a full-screen sheet with 44px buttons
+  and 14px chunk text.
+- While the run is active, the dialog SHALL reload the view when a stage
+  finishes, and keep the selected chunk.
+
+#### Scenario: Open from a card
+- **WHEN** the user clicks the "query cap" card scored 0.65 in the finished run's Passages panel
+- **THEN** the Source dialog opens with that chunk highlighted and in view, the why line "Scored 0.65 in q1 but ranked 11 of 14 above 0.50; q1 keeps only its top 10.", and the q1 chip outlined
+
+#### Scenario: Retarget and navigate
+- **WHEN** the dialog shows chunk 3 of 9 and the user clicks chunk 5, then presses ArrowUp
+- **THEN** chunk 5 is selected and the header shows its fate, then chunk 4 is selected and the footer reads "Chunk 4 of 9"
+
+#### Scenario: Prefiltered chunk
+- **WHEN** the user selects a chunk that no sub-query kept after prefilter
+- **THEN** its badge reads "prefiltered", it shows no score, and the why line reads "Not scored: outside the top 50 for every sub-query."
+
+#### Scenario: Escape returns focus
+- **WHEN** the dialog was opened from a card with the keyboard and the user presses Escape
+- **THEN** the dialog closes and focus is back on that card
+
+#### Scenario: Attached file
+- **WHEN** the user opens a passage from an attached file
+- **THEN** the header shows the file name and "Attached file · no URL" and no "Open original" link
+
+#### Scenario: Truncated fetch
+- **WHEN** the source's page was cut by the fetch character limit
+- **THEN** the dialog shows the truncation note above the chunks and the end marker after the last chunk
+
+#### Scenario: Phone sheet
+- **WHEN** the viewport is narrower than 720px and the user opens a passage
+- **THEN** the dialog fills the screen and its buttons are 44px tall
+
 ### Requirement: Streaming report panel
 The Live run screen (scenario `live`) SHALL render the report markdown as
 it streams, with headings, lists, citation chips, and a blinking accent
