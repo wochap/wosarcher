@@ -1,11 +1,15 @@
 // Nocturne dialog: `.dialog-backdrop` and `.dialog`. Escape closes it through the overlay
 // stack; a backdrop click closes form dialogs only, never confirmations.
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, type Ref, useEffect, useId, useRef } from "react";
 import { useUi } from "../app/context";
 import css from "./Dialog.module.css";
 
 type Props = {
-  title: ReactNode;
+  /** Rendered as `.dialog-title`; omit it when `labelledBy` names a title inside `children`. */
+  title?: ReactNode;
+  labelledBy?: string;
+  onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
+  panelRef?: Ref<HTMLDivElement>;
   /** `alertdialog` for confirmations, `dialog` for forms. */
   role?: "dialog" | "alertdialog";
   onClose: () => void;
@@ -13,7 +17,8 @@ type Props = {
   children: ReactNode;
 };
 
-export function Dialog({ title, role = "dialog", onClose, className, children }: Props) {
+export function Dialog(props: Props) {
+  const { title, labelledBy, role = "dialog", onClose, className, children } = props;
   const { overlay } = useUi();
   const titleId = useId();
   const backdrop = useRef<HTMLDivElement>(null);
@@ -27,30 +32,29 @@ export function Dialog({ title, role = "dialog", onClose, className, children }:
   }, [role, onClose]);
   const content = (
     <>
-      <div id={titleId} className="dialog-title">
-        {title}
-      </div>
+      {title !== undefined && (
+        <div id={titleId} className="dialog-title">
+          {title}
+        </div>
+      )}
       {children}
     </>
   );
+  const shared = {
+    className: `dialog ${className ?? ""}`,
+    "aria-modal": true,
+    "aria-labelledby": labelledBy ?? titleId,
+    ref: props.panelRef,
+    onKeyDown: props.onKeyDown,
+  };
   return (
     <div ref={backdrop} className={`dialog-backdrop ${css.backdrop}`}>
       {role === "alertdialog" ? (
-        <div
-          className={`dialog ${className ?? ""}`}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-        >
+        <div role="alertdialog" {...shared}>
           {content}
         </div>
       ) : (
-        <div
-          className={`dialog ${className ?? ""}`}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-        >
+        <div role="dialog" tabIndex={-1} {...shared}>
           {content}
         </div>
       )}

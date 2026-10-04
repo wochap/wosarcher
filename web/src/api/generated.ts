@@ -15,6 +15,18 @@ export type PageId = (string | null)
 export type Position = number
 export type SourceId = string
 export type Text = string
+export type Display = (number | null)
+export type KeptInQuery = (number | null)
+export type Kind = ("cited" | "source_cap" | "budget" | "kept" | "query_cap" | "below_threshold" | "prefiltered" | "pending")
+export type N = (number | null)
+export type QueryId1 = (string | null)
+export type Rank = (number | null)
+export type Ranked = (number | null)
+export type TokensLeft = (number | null)
+export type TokensNeeded = (number | null)
+export type Display1 = (number | null)
+export type QueryId2 = string
+export type State = ("not_in_results" | "prefiltered" | "pending" | "below_threshold" | "query_cap" | "other_query" | "kept")
 export type Chunks = Chunk[]
 export type Duplicates = number
 export type InputTokens = number
@@ -23,18 +35,18 @@ export type Text1 = string
 export type BudgetTokens = number
 export type BlockIds1 = string[]
 export type ChunkId2 = string
-export type Display = (number | null)
+export type Display2 = (number | null)
 export type HeadingPath1 = string[]
-export type N = number
+export type N1 = number
 export type PageId1 = (string | null)
-export type QueryId1 = string
+export type QueryId3 = string
 export type Scorer = string
 export type SourceId1 = string
 export type Text2 = string
 export type Passages = Passage[]
 export type Query = string
 export type Author = (string | null)
-export type Kind = ("web" | "file")
+export type Kind1 = ("web" | "file")
 export type Published = (string | null)
 export type SourceId2 = string
 export type Title = string
@@ -63,7 +75,7 @@ export type Reason = string
 export type Failures = Skipped[]
 export type Format = ("markdown" | "pdf-ingest")
 export type QueryIds = string[]
-export type Rank = number
+export type Rank1 = number
 export type Text3 = string
 export type Truncated = boolean
 export type Pages = Page[]
@@ -92,7 +104,7 @@ export type GpuPolicy1 = ("shared" | "exclusive")
 export type Profile1 = string
 export type Warnings1 = string[]
 export type QueryIds1 = string[]
-export type Rank1 = number
+export type Rank2 = number
 export type Snippet = string
 export type Title1 = string
 export type Url1 = string
@@ -105,7 +117,7 @@ export type Stage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilte
 export type Ts = string
 export type Type = "hit.found"
 export type ChunkId3 = string
-export type Display1 = (number | null)
+export type Display3 = (number | null)
 export type HeadingPath2 = string[]
 export type SourceId3 = string
 export type Text4 = string
@@ -139,7 +151,7 @@ export type Ts2 = string
 export type Type2 = "page.fetched"
 export type Kept = number
 export type Passages1 = KeptPassage[]
-export type QueryId2 = string
+export type QueryId4 = string
 export type Scored = number
 export type Scorer1 = string
 export type ThresholdDisplay = (number | null)
@@ -167,14 +179,14 @@ export type Name1 = string
 export type Source1 = ("builtin" | "user")
 export type Kept1 = number
 export type ChunkId4 = string
-export type Display2 = (number | null)
+export type Display4 = (number | null)
 export type Dropped = (("threshold" | "query_cap" | "other_query") | null)
 export type Kept2 = boolean
-export type QueryId3 = string
+export type QueryId5 = string
 export type Scorer2 = string
 export type Value = number
 export type Passages2 = Score[]
-export type QueryId4 = string
+export type QueryId6 = string
 export type Scored1 = number
 export type Scorer3 = string
 export type ThresholdDisplay1 = (number | null)
@@ -320,15 +332,27 @@ export type Scores = Score[]
 export type Failures1 = Skipped[]
 export type Hits = Hit[]
 export type ChunkId5 = string
-export type QueryId5 = string
+export type QueryId7 = string
 export type Reason2 = ("source_cap" | "budget")
-export type TokensLeft = (number | null)
-export type TokensNeeded = (number | null)
+export type TokensLeft1 = (number | null)
+export type TokensNeeded1 = (number | null)
 export type Sources5 = ("both" | "web" | "files")
 export type Expires = (string | null)
 export type Method1 = ("cookie" | "token" | "none")
 export type Since = (string | null)
 export type TokenName = (string | null)
+export type ChunkId6 = string
+export type HeadingPath3 = string[]
+export type Position2 = number
+export type Queries3 = ChunkQueryFate[]
+export type RemovedBefore = number
+export type Text7 = string
+export type Chunks1 = SourceChunk[]
+export type Queries4 = Query1[]
+export type QueryCap = number
+export type SourceCap = number
+export type Threshold = (number | null)
+export type Truncated1 = boolean
 export type CopiedFrom = (string | null)
 export type Count = number
 export type Passthrough1 = string[]
@@ -420,6 +444,34 @@ source_id: SourceId
 text: Text
 }
 /**
+ * Where a chunk ended: cited, skipped by select, kept, or dropped before.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ChunkFate".
+ */
+export interface ChunkFate {
+display?: Display
+kept_in_query?: KeptInQuery
+kind: Kind
+n?: N
+query_id?: QueryId1
+rank?: Rank
+ranked?: Ranked
+tokens_left?: TokensLeft
+tokens_needed?: TokensNeeded
+}
+/**
+ * One chunk and sub-query pair as the Source dialog shows it.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ChunkQueryFate".
+ */
+export interface ChunkQueryFate {
+display?: Display1
+query_id: QueryId2
+state: State
+}
+/**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "ChunkResult".
  */
@@ -456,11 +508,11 @@ used_tokens: UsedTokens
 export interface Passage {
 block_ids?: BlockIds1
 chunk_id: ChunkId2
-display?: Display
+display?: Display2
 heading_path?: HeadingPath1
-n: N
+n: N1
 page_id?: PageId1
-query_id: QueryId1
+query_id: QueryId3
 scorer: Scorer
 source_id: SourceId1
 text: Text2
@@ -471,7 +523,7 @@ text: Text2
  */
 export interface Source {
 author?: Author
-kind: Kind
+kind: Kind1
 published?: Published
 source_id: SourceId2
 title: Title
@@ -541,7 +593,7 @@ reason: Reason
 export interface Page {
 format?: Format
 query_ids?: QueryIds
-rank?: Rank
+rank?: Rank1
 source: Source
 text: Text3
 truncated?: Truncated
@@ -610,7 +662,7 @@ url?: Url
  */
 export interface Hit {
 query_ids: QueryIds1
-rank: Rank1
+rank: Rank2
 snippet: Snippet
 title: Title1
 url: Url1
@@ -642,7 +694,7 @@ url: Url2
  */
 export interface KeptPassage {
 chunk_id: ChunkId3
-display: Display1
+display: Display3
 heading_path?: HeadingPath2
 source_id: SourceId3
 text: Text4
@@ -744,7 +796,7 @@ type?: Type3
 export interface PassagesScoredData {
 kept: Kept
 passages: Passages1
-query_id: QueryId2
+query_id: QueryId4
 scored: Scored
 scorer: Scorer1
 threshold_display: ThresholdDisplay
@@ -814,7 +866,7 @@ source: Source1
 export interface QueryScores {
 kept: Kept1
 passages: Passages2
-query_id: QueryId4
+query_id: QueryId6
 scored: Scored1
 scorer: Scorer3
 threshold_display: ThresholdDisplay1
@@ -825,10 +877,10 @@ threshold_display: ThresholdDisplay1
  */
 export interface Score {
 chunk_id: ChunkId4
-display?: Display2
+display?: Display4
 dropped?: Dropped
 kept?: Kept2
-query_id: QueryId3
+query_id: QueryId5
 scorer: Scorer2
 value: Value
 }
@@ -1227,10 +1279,10 @@ hits: Hits
  */
 export interface SelectSkip {
 chunk_id: ChunkId5
-query_id: QueryId5
+query_id: QueryId7
 reason: Reason2
-tokens_left?: TokensLeft
-tokens_needed?: TokensNeeded
+tokens_left?: TokensLeft1
+tokens_needed?: TokensNeeded1
 }
 /**
  * Global defaults for runs started by the server (`server-settings.json`).
@@ -1261,6 +1313,34 @@ expires?: Expires
 method: Method1
 since?: Since
 token_name?: TokenName
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SourceChunk".
+ */
+export interface SourceChunk {
+chunk_id: ChunkId6
+fate: ChunkFate
+heading_path?: HeadingPath3
+position: Position2
+queries: Queries3
+removed_before?: RemovedBefore
+text: Text7
+}
+/**
+ * `GET /api/runs/{id}/sources/{source_id}`: one source's chunks and their fates.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SourceView".
+ */
+export interface SourceView {
+chunks: Chunks1
+queries: Queries4
+query_cap: QueryCap
+source: Source
+source_cap: SourceCap
+threshold?: Threshold
+truncated?: Truncated1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema

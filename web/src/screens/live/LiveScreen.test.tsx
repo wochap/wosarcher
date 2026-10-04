@@ -6,9 +6,9 @@ import { callsTo, fakeApi } from "../../test/fakeApi";
 import { failure } from "../../test/fixtures/failure";
 import { live } from "../../test/fixtures/live";
 import { loading } from "../../test/fixtures/loading";
-import { otherRuns, RUN_ID } from "../../test/fixtures/sample";
+import { otherRuns, RUN_ID, upTo } from "../../test/fixtures/sample";
 import { renderApp } from "../../test/renderApp";
-import { openScenario, socketsFor } from "../../test/scenario";
+import { openScenario, play, socketsFor } from "../../test/scenario";
 
 afterEach(() => vi.useRealTimers());
 
@@ -130,5 +130,34 @@ describe("LiveScreen", () => {
       screen.getByText("Run r_gone does not exist on this server. It may have been deleted."),
     ).toBeTruthy();
     expect(screen.queryByText(/^seq /)).toBeNull();
+  });
+
+  it("opens a passage's source from the keyboard and returns focus on Escape", async () => {
+    const { api } = await openScenario(live);
+    const card = (await screen.findAllByRole("button", { name: /Open source$/ }))[0];
+    card.focus();
+    // Enter on a focused button activates it as a click.
+    fireEvent.click(card);
+    const dialog = await screen.findByRole("dialog");
+    expect(callsTo(api, "source")).toEqual([[RUN_ID, "s11"]]);
+    expect(dialog.querySelector('[data-chunk="c1"]')?.getAttribute("aria-current")).toBe("true");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(card));
+  });
+
+  it("reloads the open source when a stage finishes and keeps the selection", async () => {
+    const all = live.data.events?.[RUN_ID] ?? [];
+    const before = upTo(all, (e) => e.type === "stage.done" && e.stage === "select");
+    const { api } = await openScenario(live, { events: before });
+    fireEvent.click((await screen.findAllByRole("button", { name: /Open source$/ }))[1]);
+    const dialog = await screen.findByRole("dialog");
+    const chosen = () => dialog.querySelector('[aria-current="true"]')?.getAttribute("data-chunk");
+    await vi.waitFor(() => expect(chosen()).toBeTruthy());
+    fireEvent.keyDown(dialog, { key: "ArrowDown" });
+    const picked = chosen();
+    await play(RUN_ID, [all[before.length]]);
+    await vi.waitFor(() => expect(callsTo(api, "source")).toHaveLength(2));
+    expect(chosen()).toBe(picked);
   });
 });

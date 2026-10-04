@@ -677,6 +677,19 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `select.jsonl`, `report.md`, `report.json`, `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
+- `GET /api/runs/{id}/sources/{source_id}`: `SourceView`, one source's
+  stored chunks in page order, each with a state per sub-query
+  (`not_in_results`, `prefiltered`, `pending`, `below_threshold`,
+  `query_cap`, `other_query`, `kept`) and a final fate (`cited`,
+  `source_cap`, `budget`, `kept`, `query_cap`, `below_threshold`,
+  `prefiltered`, `pending`) with its rank, the sub-query's kept count, and
+  budget figures. `removed_before` counts near-duplicates from gaps in
+  `position`. It is computed by `server/sources.py` from whichever
+  artifacts exist (`request.json`, `plan.json`, `files.jsonl`,
+  `pages.jsonl`, `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`,
+  `select.jsonl`, `context.json`); the display threshold comes from the
+  score stage's `threshold_display`. 404 `run_not_found` or
+  `source_not_found`.
 - `POST /api/runs/{id}/cancel`:
 
   | Run state | Status | Body |
@@ -1164,6 +1177,12 @@ The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
 - **State**: React state in `App` behind three contexts (API, auth, UI:
   theme, toast, overlay stack for Escape, followed run, provider warning,
   pending History deletes). No store library.
+- **Source dialog**: a passage card in the Live run Passages panel opens
+  `screens/live/SourceDialog`, which loads `GET
+  /api/runs/{id}/sources/{source_id}` and lists the source's chunks with
+  their fates. It is a `components/Dialog`, so Escape goes through the
+  overlay stack, and focus returns to the card on close. The why line is
+  formatted by `run/sourceFates.ts`.
 - **Tests and preview**: screens are tested against `fakeApi` and
   `FakeWebSocket` (`src/test/`). In `pnpm --dir web dev`,
   `#/preview/<name>` renders the app on fixture data for side-by-side

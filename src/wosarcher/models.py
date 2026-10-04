@@ -241,6 +241,67 @@ class SelectSkip(Contract):
     """Budget left when selection ended; `budget` only."""
 
 
+ChunkQueryState = Literal[
+    "not_in_results", "prefiltered", "pending", "below_threshold", "query_cap", "other_query", "kept"
+]
+
+
+class ChunkQueryFate(Contract):
+    """One chunk and sub-query pair as the Source dialog shows it."""
+
+    query_id: str
+    state: ChunkQueryState
+    display: float | None = None
+    """Set once scored; None for passthrough."""
+
+
+class ChunkFate(Contract):
+    """Where a chunk ended: cited, skipped by select, kept, or dropped before."""
+
+    kind: Literal["cited", "source_cap", "budget", "kept", "query_cap", "below_threshold", "prefiltered", "pending"]
+    query_id: str | None = None
+    """The kept pair's query, else the best-scored pair's; None when unscored."""
+    display: float | None = None
+    rank: int | None = None
+    """Rank among the query's pairs at or above the threshold, 1-based."""
+    ranked: int | None = None
+    """How many of the query's pairs are at or above the threshold."""
+    kept_in_query: int | None = None
+    n: int | None = None
+    """Citation number; `cited` only."""
+    tokens_needed: int | None = None
+    tokens_left: int | None = None
+    """`budget` only."""
+
+
+class SourceChunk(Contract):
+    chunk_id: str
+    position: int
+    heading_path: list[str] = []
+    text: str
+    removed_before: int = 0
+    """Near-duplicate chunks the chunk stage removed directly before this one."""
+    queries: list[ChunkQueryFate]
+    """One entry per sub-query, in plan order."""
+    fate: ChunkFate
+
+
+class SourceView(Contract):
+    """`GET /api/runs/{id}/sources/{source_id}`: one source's chunks and their fates."""
+
+    source: Source
+    truncated: bool = False
+    queries: list[Query]
+    threshold: float | None = None
+    """Display threshold: the one every sub-query shares, else the main query's."""
+    query_cap: int
+    """`score.top_k`."""
+    source_cap: int
+    """`select.max_chunks_per_source`."""
+    chunks: list[SourceChunk]
+    """In page order."""
+
+
 class Selection(Contract):
     context: Context
     skipped: list[SelectSkip]
@@ -840,6 +901,10 @@ CONTRACTS: tuple[type[Contract], ...] = (
     Passage,
     Context,
     SelectSkip,
+    ChunkQueryFate,
+    ChunkFate,
+    SourceChunk,
+    SourceView,
     Reference,
     Report,
     WritingOptions,

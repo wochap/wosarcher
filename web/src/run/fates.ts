@@ -3,7 +3,17 @@ import type { Context, SelectSkip } from "../api/generated";
 import type { RunView } from "./reducer";
 import type { PassageItem } from "./scores";
 
-export type Fate = "cited" | "kept" | "above" | "srccap" | "budget" | "qcap" | "below";
+export type Fate =
+  | "cited"
+  | "kept"
+  | "above"
+  | "srccap"
+  | "budget"
+  | "qcap"
+  | "below"
+  /** Source dialog only: not a candidate after the prefilter, or not scored yet. */
+  | "pre"
+  | "pending";
 
 /**
  * The fates the Kept filter lists. "above" is left out: which passages are kept is known only

@@ -263,6 +263,16 @@
   border-style: dashed;
 }
 
+.badge[data-fate="pre"],
+.badge[data-fate="pending"] {
+  color: var(--muted);
+  border-style: dotted;
+}
+
+.badge[data-fate="pre"] {
+  border-color: var(--muted);
+}
+
 .mark {
   font-family: var(--mono);
   font-size: 11px;

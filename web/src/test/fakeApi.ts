@@ -10,6 +10,7 @@ import type {
   RunSummary,
   ServerSettings,
   SessionInfo,
+  SourceView,
   TokenInfo,
 } from "../api/types";
 import * as fixtures from "./fixtures/data";
@@ -19,6 +20,8 @@ export type FakeData = {
   events: Record<string, RunEvent[]>;
   /** Artifact text by run id and name; a missing one answers 404. */
   artifacts: Record<string, Record<string, string>>;
+  /** Source views by run id and source id; a missing one answers 404. */
+  sources: Record<string, Record<string, SourceView>>;
   settings: ServerSettings;
   profiles: ProfileInfo[];
   health: HealthReport;
@@ -36,6 +39,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     runs: fixtures.runs,
     events: {},
     artifacts: {},
+    sources: {},
     settings: fixtures.settings,
     profiles: fixtures.profiles,
     health: fixtures.health,
@@ -109,6 +113,13 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       const text = data.artifacts[id]?.[name];
       if (text === undefined) throw new ApiError(404, "not_found", `no artifact ${name}`);
       return text;
+    },
+    async source(id, sourceId) {
+      record("source", id, sourceId);
+      find(id);
+      const view = data.sources[id]?.[sourceId];
+      if (!view) throw new ApiError(404, "source_not_found", `no source ${sourceId}`);
+      return structuredClone(view);
     },
     async getSettings() {
       record("getSettings");

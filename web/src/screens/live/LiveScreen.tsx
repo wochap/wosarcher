@@ -16,6 +16,7 @@ import { FILTERS, type PassageFilter, PassagesPanel } from "./PassagesPanel";
 import { PhaseTimeline } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
 import { ReportPanel } from "./ReportPanel";
+import { SourceDialog } from "./SourceDialog";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBanner } from "./StatusBanner";
 import { SubQueriesPanel } from "./SubQueriesPanel";
@@ -44,6 +45,9 @@ function funnelConfig(detail: RunDetail | null | undefined) {
   };
 }
 
+/** The open Source dialog: the source, the chunk selected on open, and the card to refocus. */
+type OpenSource = { sourceId: string; chunkId: string; opener: HTMLElement };
+
 const typing = (target: EventTarget | null) =>
   /^(INPUT|TEXTAREA|SELECT)$/.test((target as HTMLElement | null)?.tagName ?? "");
 
@@ -53,6 +57,7 @@ export function LiveScreen() {
   const data = useRunData(followed, live.view);
   const [filter, setFilter] = useState<PassageFilter>("kept");
   const [cancelling, setCancelling] = useState(false);
+  const [source, setSource] = useState<OpenSource | null>(null);
   const { cite, onCite, onLeave } = useCitation();
   const { loadNotKept } = data;
 
@@ -64,15 +69,29 @@ export function LiveScreen() {
     [loadNotKept],
   );
 
+  const closeSource = useCallback(() => {
+    setSource((open) => {
+      if (open?.opener.isConnected) setTimeout(() => open.opener.focus(), 0);
+      return null;
+    });
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "r" || e.altKey || e.ctrlKey || e.metaKey || typing(e.target))
+      if (
+        source ||
+        e.key.toLowerCase() !== "r" ||
+        e.altKey ||
+        e.ctrlKey ||
+        e.metaKey ||
+        typing(e.target)
+      )
         return;
       pickFilter(FILTERS[(FILTERS.indexOf(filter) + 1) % FILTERS.length]);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filter, pickFilter]);
+  }, [filter, pickFilter, source]);
 
   const view = data.view ?? live.view;
   const running = view?.status === "running";
@@ -124,6 +143,10 @@ export function LiveScreen() {
     report: run.report ? (writing === "running" ? "…" : "✓") : "",
   };
   const marker = detail?.writing.citation_marker ?? "numeric";
+  // While the run is active, a finished stage reloads the open Source dialog.
+  const finishedStages = Object.values(run.phases).filter(
+    (p) => p.state === "done" || p.state === "reused",
+  ).length;
 
   return (
     <div className={css.live}>
@@ -165,6 +188,9 @@ export function LiveScreen() {
             onFilter={pickFilter}
             configuredScorer={configuredScorer(detail)}
             config={funnelConfig(detail)}
+            onOpen={(p, opener) =>
+              setSource({ sourceId: p.source_id, chunkId: p.chunk_id, opener })
+            }
           />
         )}
         {shows("report") && (
@@ -181,6 +207,19 @@ export function LiveScreen() {
       </div>
       <LiveFooter run={run} conn={live.conn} elapsed={elapsed} isPhone={isPhone} />
       <CitationTooltip cite={cite} context={context} marker={marker} />
+      {source && (
+        <SourceDialog
+          key={`${run.runId}-${source.sourceId}`}
+          runId={run.runId}
+          sourceId={source.sourceId}
+          chunkId={source.chunkId}
+          reloadKey={running ? finishedStages : undefined}
+          marker={marker}
+          context={context}
+          prefilterTopK={prefilterTopK(detail)}
+          onClose={closeSource}
+        />
+      )}
     </div>
   );
 }

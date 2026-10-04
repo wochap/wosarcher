@@ -12,6 +12,10 @@ const SCENARIOS: [string, RegExp][] = [
   ["cancelled", /^Cancelled at Fetch after/],
   ["finished", /^Recommendations$/],
   ["versions", /^Rewritten from r_8c21/],
+  ["source", /^Chunk 1 of 5$/],
+  ["source-loading", /^Loading cleaned text…$/],
+  ["source-truncated", /^Fetch stopped here$/],
+  ["source-file", /^Attached file · no URL$/],
 ];
 
 afterEach(() => vi.restoreAllMocks());

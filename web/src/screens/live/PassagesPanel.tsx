@@ -5,11 +5,13 @@ import {
   ArrowDown,
   CaretRight,
   Check,
+  CircleDashed,
   Cpu,
   Funnel,
   Gauge,
   Hourglass,
   type Icon,
+  MinusCircle,
   Quotes,
   Stack,
   StopCircle,
@@ -45,8 +47,8 @@ type Props = {
   configuredScorer?: string;
   /** The run's saved settings the funnel help quotes. */
   config?: Omit<FunnelConfig, "threshold">;
-  /** When set, each card is a button that opens its passage. */
-  onOpen?: (passage: PassageItem) => void;
+  /** When set, each card is a button that opens its passage; `opener` gets focus back on close. */
+  onOpen?: (passage: PassageItem, opener: HTMLElement) => void;
   className?: string;
 };
 
@@ -61,6 +63,8 @@ const FATES: Record<Fate, { icon: Icon; label: string; dim: boolean }> = {
   budget: { icon: Gauge, label: "over budget", dim: true },
   qcap: { icon: Funnel, label: "query cap", dim: true },
   below: { icon: ArrowDown, label: "below", dim: true },
+  pre: { icon: MinusCircle, label: "prefiltered", dim: true },
+  pending: { icon: CircleDashed, label: "not scored yet", dim: true },
 };
 
 /** The scorer that produced the scores: the first query's other than `passthrough`. */
@@ -132,24 +136,36 @@ function emptyText(
 
 type Card = PassageItem & { fate: Fate };
 
-function Badge({ card, mark }: { card: Card; mark: string }) {
-  const fate = FATES[card.fate];
-  const FateIcon = fate.icon;
-  let text = fate.label;
-  const threshold = card.threshold == null ? "threshold" : fixed(card.threshold);
-  if (card.fate === "above") text = `≥ ${threshold}`;
-  if (card.fate === "below") text = `below ${threshold}`;
+type BadgeProps = {
+  fate: Fate;
+  threshold: number | null | undefined;
+  /** The citation label, for `cited`. */
+  mark?: string;
+  /** The capping query, for `qcap`. */
+  queryId?: string | null;
+  className?: string;
+};
+
+/** One fate badge, as passage cards and the Source dialog show it. */
+export function FateBadge({ fate, threshold, mark, queryId, className }: BadgeProps) {
+  const { icon: FateIcon, label: fateLabel } = FATES[fate];
+  const shown = threshold == null ? "threshold" : fixed(threshold);
+  const text = fate === "above" ? `≥ ${shown}` : fate === "below" ? `below ${shown}` : fateLabel;
   return (
-    <span className={css.badge} data-fate={card.fate}>
+    <span className={`${css.badge} ${className ?? ""}`} data-fate={fate}>
       <FateIcon aria-hidden="true" className={css.badgeIcon} />
       <span className={css.badgeLabel}>{text}</span>
-      {card.fate === "cited" && mark && <span className={css.mark}>{mark}</span>}
-      {card.fate === "qcap" && <span className={css.query}>{card.queryId}</span>}
+      {fate === "cited" && mark && <span className={css.mark}>{mark}</span>}
+      {fate === "qcap" && queryId && <span className={css.query}>{queryId}</span>}
     </span>
   );
 }
 
-function PassageCard(props: { card: Card; mark: string; onOpen?: (p: PassageItem) => void }) {
+function PassageCard(props: {
+  card: Card;
+  mark: string;
+  onOpen?: (p: PassageItem, opener: HTMLElement) => void;
+}) {
   const { card: p, mark, onOpen } = props;
   const score = p.display == null ? "–" : fixed(p.display);
   return (
@@ -165,7 +181,7 @@ function PassageCard(props: { card: Card; mark: string; onOpen?: (p: PassageItem
           type="button"
           className={css.open}
           aria-label={`${score}, ${domain(p.uri)}. Open source`}
-          onClick={() => onOpen(p)}
+          onClick={(e) => onOpen(p, e.currentTarget)}
         />
       )}
       <div className={css.scoreLine}>
@@ -182,7 +198,7 @@ function PassageCard(props: { card: Card; mark: string; onOpen?: (p: PassageItem
             )}
           </div>
         )}
-        <Badge card={p} mark={mark} />
+        <FateBadge fate={p.fate} threshold={p.threshold} mark={mark} queryId={p.queryId} />
       </div>
       <div className={css.where}>
         <span className={css.domain}>{domain(p.uri)}</span>

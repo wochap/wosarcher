@@ -89,7 +89,7 @@ def _display(name: str, value: float, best: float) -> float | None:
     return _clamp(value)
 
 
-def _threshold_display(name: str, cfg: ScoreConfig, best: float | None) -> float | None:
+def threshold_display(name: str, cfg: ScoreConfig, best: float | None) -> float | None:
     if name == "passthrough":
         return None
     if name == "jev":
@@ -213,7 +213,7 @@ def report(group: Group, name: str, scores: list[Score], cfg: ScoreConfig, scale
         scorer=name,
         scored=len(scores),
         kept=len(passages),
-        threshold_display=_threshold_display(name, cfg, best),
+        threshold_display=threshold_display(name, cfg, best),
         passages=passages,
     )
 

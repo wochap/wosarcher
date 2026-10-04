@@ -1,7 +1,16 @@
 // The prototype's sample run (its query, sub-queries, sources, failures, files, passages,
 // report, and error) as typed events and artifacts, for the run scenario fixtures.
 import type { Chunk, Context, Page, Report, Score, SelectSkip, Source } from "../../api/generated";
-import type { KeptPassage, RunEvent, RunSummary, WritingOptions } from "../../api/types";
+import type {
+  ChunkFate,
+  ChunkQueryFate,
+  KeptPassage,
+  RunEvent,
+  RunSummary,
+  SourceChunk,
+  SourceView,
+  WritingOptions,
+} from "../../api/types";
 import type { Screen } from "../../app/route";
 import { ev, usage } from "../events";
 import type { FakeData } from "../fakeApi";
@@ -425,6 +434,135 @@ export const CONTEXT: Context = {
   })),
   sources: SOURCES.filter((s) => SELECTED.some((k) => CHUNKS[k].source_id === s.source_id)),
 };
+
+const PLAN = SUB_QUERIES.map((text, i) => ({ id: `q${i + 1}`, text }));
+const ranked = (s: Score) => s.kept || s.dropped === "query_cap" || s.dropped === "other_query";
+
+/** One chunk's fate from the sample scores, skips, and context, as the server computes it. */
+function chunkFate(chunk: Chunk): ChunkFate {
+  const own = SCORES.filter((s) => s.chunk_id === chunk.chunk_id);
+  const primary =
+    own.find((s) => s.kept) ??
+    own.find((s) => s.dropped === "query_cap") ??
+    [...own].sort((a, b) => (b.display ?? 0) - (a.display ?? 0))[0];
+  if (!primary) return { kind: "prefiltered" };
+  const above = SCORES.filter((s) => s.query_id === primary.query_id && ranked(s)).sort(
+    (a, b) => b.value - a.value,
+  );
+  const rank = above.findIndex((s) => s.chunk_id === chunk.chunk_id);
+  const figures = {
+    query_id: primary.query_id,
+    display: primary.display,
+    rank: rank < 0 ? null : rank + 1,
+    ranked: above.length,
+    kept_in_query: SCORES.filter((s) => s.query_id === primary.query_id && s.kept).length,
+  };
+  const cited = CONTEXT.passages.find((p) => p.chunk_id === chunk.chunk_id);
+  const skip = SELECT_SKIPS.find((s) => s.chunk_id === chunk.chunk_id);
+  if (primary.kept && cited) return { ...figures, kind: "cited", n: cited.n };
+  if (primary.kept && skip) {
+    const { tokens_needed, tokens_left } = skip;
+    return { ...figures, kind: skip.reason, tokens_needed, tokens_left };
+  }
+  if (primary.kept) return { ...figures, kind: "kept" };
+  return { ...figures, kind: primary.dropped === "query_cap" ? "query_cap" : "below_threshold" };
+}
+
+function queryRows(chunk: Chunk, found: string[]): ChunkQueryFate[] {
+  return PLAN.map(({ id }) => {
+    const score = SCORES.find((s) => s.chunk_id === chunk.chunk_id && s.query_id === id);
+    if (!score)
+      return { query_id: id, state: found.includes(id) ? "prefiltered" : "not_in_results" };
+    const state = score.kept
+      ? "kept"
+      : score.dropped === "threshold" || !score.dropped
+        ? "below_threshold"
+        : score.dropped;
+    return { query_id: id, state, display: score.display };
+  });
+}
+
+/** Chunks only the Source dialog shows: kept but not yet selected, pending, and prefiltered. */
+const EXTRA: Record<string, SourceChunk[]> = {
+  s11: [
+    {
+      chunk_id: "x1",
+      position: 20,
+      heading_path: ["5 Discussion"],
+      text: "Draft latency, not draft accuracy, sets the ceiling on speedup for memory-bound targets.",
+      queries: PLAN.map(({ id }) =>
+        id === "q1"
+          ? { query_id: id, state: "kept", display: 0.64 }
+          : { query_id: id, state: "not_in_results" },
+      ),
+      fate: { kind: "kept", query_id: "q1", display: 0.64, rank: 4, ranked: 4, kept_in_query: 4 },
+    },
+    {
+      chunk_id: "x2",
+      position: 21,
+      heading_path: ["5 Discussion", "5.1 Limits"],
+      text: "The analysis assumes a single request; batched serving changes the trade-off.",
+      queries: PLAN.map(({ id }) => ({
+        query_id: id,
+        state: id === "q1" ? "pending" : "not_in_results",
+      })),
+      fate: { kind: "pending" },
+    },
+    {
+      chunk_id: "x3",
+      position: 24,
+      heading_path: ["References"],
+      text: "[1] Leviathan, Y., Kalman, M., Matias, Y. Fast inference from transformers via speculative decoding.",
+      removed_before: 2,
+      queries: PLAN.map(({ id }) => ({
+        query_id: id,
+        state: id === "q1" ? "prefiltered" : "not_in_results",
+      })),
+      fate: { kind: "prefiltered" },
+    },
+  ],
+  f1: [0, 1].map((i) => ({
+    chunk_id: `f1c${i}`,
+    position: i,
+    heading_path: ["bench-3060.md"],
+    text: FILE_PAGES[0].text.slice(i * 600, i * 600 + 600),
+    queries: PLAN.map(({ id }) => ({ query_id: id, state: "prefiltered" as const })),
+    fate: { kind: "prefiltered" as const },
+  })),
+};
+
+/** The truncated source of scenario `source-truncated`. */
+export const TRUNCATED_SOURCE = "s13";
+
+/** The Source dialog's view of every sample source, by source ID. */
+export function sourceViews(): Record<string, SourceView> {
+  return Object.fromEntries(
+    SOURCES.map((source, i) => {
+      const found = source.kind === "web" ? [queryOf(i)] : [];
+      const own = CHUNKS.filter((c) => c.source_id === source.source_id).map(
+        (chunk): SourceChunk => ({
+          chunk_id: chunk.chunk_id,
+          position: chunk.position,
+          heading_path: chunk.heading_path,
+          text: chunk.text,
+          removed_before: 0,
+          queries: queryRows(chunk, found),
+          fate: chunkFate(chunk),
+        }),
+      );
+      const view: SourceView = {
+        source,
+        truncated: source.source_id === TRUNCATED_SOURCE,
+        queries: PLAN,
+        threshold: THRESHOLD,
+        query_cap: 10,
+        source_cap: 3,
+        chunks: [...own, ...(EXTRA[source.source_id] ?? [])],
+      };
+      return [source.source_id, view];
+    }),
+  );
+}
 
 export const MD1 = `## Summary
 On consumer GPUs the binding constraint for speculative decoding is usually memory, not draft accuracy. Smaller drafts tend to win end-to-end even with lower acceptance, because a rejected token costs only one extra target pass [1][2]. On 8–12 GB cards, draft-free methods are often the better trade [6][7][11].

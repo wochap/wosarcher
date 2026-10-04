@@ -24,6 +24,10 @@ export type SessionInfo = G.SessionInfo & { method: "cookie" | "token" | "none" 
 export type TokenInfo = G.TokenInfo;
 export type TokenCreated = G.TokenCreated;
 export type KeptPassage = G.KeptPassage;
+export type SourceView = G.SourceView;
+export type SourceChunk = G.SourceChunk;
+export type ChunkFate = G.ChunkFate;
+export type ChunkQueryFate = G.ChunkQueryFate;
 
 type Ev<T extends string, E> = Omit<E, "type"> & { type: T };
 export type RunEvent =

@@ -1,7 +1,7 @@
 // Development only: #/preview/<name> renders the app on fake data, for the side-by-side
 // comparison with the prototype's scenarios. main.tsx imports this module only when
 // import.meta.env.DEV, so production builds leave it out.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SocketFactory } from "../api/events";
 import type { RunEvent } from "../api/types";
 import { App } from "../app/App";
@@ -14,7 +14,7 @@ import { finished } from "../test/fixtures/finished";
 import { live } from "../test/fixtures/live";
 import { loading } from "../test/fixtures/loading";
 import { reconnecting } from "../test/fixtures/reconnecting";
-import { type Fixture, otherRuns } from "../test/fixtures/sample";
+import { type Fixture, otherRuns, sourceViews, TRUNCATED_SOURCE } from "../test/fixtures/sample";
 import { versions } from "../test/fixtures/versions";
 
 type Scenario = {
@@ -26,6 +26,11 @@ type Scenario = {
   dropAt?: number;
   /** Every socket closes 1006 without opening, as behind a proxy that refuses the upgrade. */
   refuse?: boolean;
+  /**
+   * Opens the Source dialog from the first passage card. The dialog shows this source instead
+   * of the card's (`loading` never answers).
+   */
+  source?: string;
 };
 
 const SCENARIOS: Record<string, Scenario> = {
@@ -49,7 +54,25 @@ const SCENARIOS: Record<string, Scenario> = {
   versions,
   unavailable: { ...live, stream: undefined, refuse: true },
   notFound: { screen: "live", runId: "r_deleted", data: { runs: otherRuns } },
+  source: { ...live, stream: undefined, source: "s11" },
+  "source-loading": { ...live, stream: undefined, source: "loading" },
+  "source-truncated": { ...live, stream: undefined, source: TRUNCATED_SOURCE },
+  "source-file": { ...live, stream: undefined, source: "f1" },
 };
+
+/** Clicks the first passage card once the Passages panel lists it. */
+function useOpenSource(scenario: Scenario | undefined) {
+  useEffect(() => {
+    if (!scenario?.source) return;
+    const timer = setInterval(() => {
+      const card = document.querySelector<HTMLButtonElement>('button[aria-label$="Open source"]');
+      if (!card) return;
+      clearInterval(timer);
+      card.click();
+    }, 100);
+    return () => clearInterval(timer);
+  }, [scenario]);
+}
 
 const TERMINAL = new Set(["run.done", "run.failed", "run.cancelled"]);
 const RECONNECTING_MS = 1500;
@@ -136,6 +159,9 @@ export function Preview({ name }: { name: string }) {
           : { screen: scenario.screen };
     window.history.replaceState(null, "", routeHash(route));
     const api = fakeApi(scenario.data);
+    const shown = scenario.source;
+    if (shown === "loading") api.source = () => new Promise(() => {});
+    else if (shown) api.source = async () => sourceViews()[shown];
     return {
       makeApi: () => api,
       Socket: previewSocket(
@@ -146,6 +172,7 @@ export function Preview({ name }: { name: string }) {
       login: scenario.login?.(),
     };
   });
+  useOpenSource(scenario);
   if (!setup) {
     return (
       <p>

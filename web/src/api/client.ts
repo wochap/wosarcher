@@ -10,6 +10,7 @@ import type {
   RunSummary,
   ServerSettings,
   SessionInfo,
+  SourceView,
   TokenCreated,
   TokenInfo,
 } from "./types";
@@ -33,6 +34,8 @@ export interface ApiClient {
   cancelRun(id: string): Promise<CancelOutcome>;
   deleteRun(id: string): Promise<void>;
   getArtifact(id: string, name: string): Promise<string>;
+  /** One source's chunks and their fates (`GET /api/runs/{id}/sources/{source_id}`). */
+  source(runId: string, sourceId: string): Promise<SourceView>;
   getSettings(): Promise<ServerSettings>;
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
   listProfiles(): Promise<ProfileInfo[]>;
@@ -143,6 +146,7 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     deleteRun: async (id) => void (await send("DELETE", run(id))),
     getArtifact: async (id, name) =>
       (await send("GET", `${run(id)}/artifacts/${encodeURIComponent(name)}`)).text(),
+    source: (id, sourceId) => json("GET", `${run(id)}/sources/${encodeURIComponent(sourceId)}`),
     getSettings: () => json("GET", "/settings"),
     putSettings: (settings) => json("PUT", "/settings", settings),
     listProfiles: () => json("GET", "/profiles"),

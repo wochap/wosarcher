@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from wosarcher.auth import AuthStore
 from wosarcher.config import Settings
-from wosarcher.server import errors, login, meta, routes, stream, tokens
+from wosarcher.server import errors, login, meta, routes, sources, stream, tokens
 from wosarcher.server.guard import Guard
 from wosarcher.server.health import HealthCache
 from wosarcher.server.limiter import LoginLimiter
@@ -43,6 +43,7 @@ def create_app(
     )
     app.state.server = state
     app.include_router(routes.router)
+    app.include_router(sources.router)
     app.include_router(meta.router)
     app.include_router(stream.router)
     app.include_router(login.router)

@@ -20,7 +20,7 @@ type Options = {
   filter?: PassageFilter;
   notKept?: PassageItem[] | null;
   skips?: typeof SELECT_SKIPS | null;
-  onOpen?: (p: PassageItem) => void;
+  onOpen?: (p: PassageItem, opener: HTMLElement) => void;
 };
 
 function panel(events: RunEvent[], options: Options = {}) {
@@ -245,7 +245,10 @@ describe("PassagesPanel", () => {
     panel([scored(0.5, 0.8)], { filter: "all", onOpen });
     const open = screen.getByRole("button", { name: "0.80, example.org. Open source" });
     fireEvent.click(open);
-    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ chunk_id: "c1" }));
+    expect(onOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ chunk_id: "c1" }),
+      expect.any(HTMLElement),
+    );
   });
 
   it("tags the scorer with its help", () => {
