@@ -29,7 +29,7 @@ The system SHALL define exactly these event types and data:
 | `run.cancelled` | stage |
 | `stage.started` | device, provider |
 | `stage.progress` | done, total, failed |
-| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings |
+| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings, passthrough sub-query IDs |
 | `stage.failed` | error, next fallback (empty when none) |
 | `resource.waiting` | device, released stage |
 | `resource.released` | device, released stage |
@@ -47,6 +47,16 @@ source title and URI, heading path, text, and the display score from 0 to
 best of the same query, others clamped), and the event SHALL carry the
 stage's display threshold.
 
+The `provider` of `stage.started` SHALL be the stage's configured provider
+block as `<provider>:<model>`, or `<provider>` when the block has no model
+(`built-in` for stages without a block). The `provider` of `stage.done`
+SHALL name what actually ran in the same form. For the prefilter stage it is
+`embeddings:<model>` when embeddings ran as configured, and `bm25` or `none`
+otherwise. The `passthrough` list of `stage.done` SHALL hold the IDs of the
+sub-queries whose pairs skipped ranking (small-input passthrough), in plan
+order. Only the prefilter stage SHALL set it; it is empty for every other
+stage.
+
 #### Scenario: Unknown type rejected
 - **WHEN** an event with type `stage.paused` is parsed
 - **THEN** parsing fails
@@ -54,6 +64,18 @@ stage's display threshold.
 #### Scenario: Display score for Jev
 - **WHEN** Jev scores a kept passage 2.4 with `score.min_score = 1.5`
 - **THEN** its display score is 0.8 and the display threshold is 0.5
+
+#### Scenario: Prefilter ran as configured
+- **WHEN** the prefilter block is `provider = "embeddings"`, `model = "bge-small-en-v1.5"` and embeddings ranked every sub-query
+- **THEN** `stage.started` and `stage.done` for prefilter both carry the provider `embeddings:bge-small-en-v1.5`
+
+#### Scenario: Prefilter fell back
+- **WHEN** the prefilter block is `provider = "embeddings"` and the embedder is unreachable
+- **THEN** `stage.done` for prefilter carries the provider `bm25` and a warning naming the embedder failure
+
+#### Scenario: Passthrough sub-queries
+- **WHEN** the pages paired with `q4` and `q5` are shorter than `select.passthrough_chars`
+- **THEN** `stage.done` for prefilter carries `passthrough` = `["q4", "q5"]`
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

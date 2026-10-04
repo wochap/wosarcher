@@ -155,6 +155,65 @@ done with "skipped".
 - **WHEN** the Live run screen is 900px wide
 - **THEN** every phase label is shown in full and the phase row scrolls sideways
 
+### Requirement: Phase method tags
+On the Live run screen (scenario `live`), the Plan, Prefilter, Score, and
+Write phase cards SHALL show the prototype's method tag below the label
+while the phase is running, done, reused, failed, or cancelled. The tag is
+a mono 10.5px button with a 1px solid divider border. It reads the model
+for `llm` and `embeddings` providers, `BM25` for `bm25`, and the provider
+name otherwise (`jev`, `rerank`, `passthrough`, `none`). While running the
+tag uses the configured provider. After `stage.done` it uses the provider
+that ran. A fallback phase (web-shell "Run view state") SHALL read
+"<tag> · fallback" with the warn icon, a dashed warn border, and warn text.
+The tag SHALL size to its text and end with "…" only when the card is too
+narrow for it. The tag SHALL open the inline help tooltip (web-shell
+"Inline help") with accessible label "Method: <tag>, details":
+
+- Plan and Write: title "Planner · <model>" or "Writer · <model>", body
+  "The configured LLM" plus ", on <device>." when the block has a device,
+  else ".".
+- Prefilter, as configured: title "Prefilter · embeddings" or "Prefilter ·
+  keyword (BM25)"; the body names the model when there is one, the top N
+  per sub-query, the kept count "K of C", and the passthrough sub-queries
+  when any.
+- Prefilter, fallback: title "Fallback · keyword (BM25)"; the body names
+  the configured method and model, the reason from the stage's warnings,
+  and the same counts.
+- Score: title "Scorer · <tag>"; the body says whether it ran as
+  configured, and on a fallback names the configured scorer and the reason
+  from the stage's warnings.
+
+The Passages panel scorer tag (`<scorer> · fallback`) and the phase tags
+SHALL decide fallback the same way.
+
+#### Scenario: Embeddings ran as configured
+- **WHEN** the prefilter stage started with `embeddings:bge-small-en-v1.5` and finished with the same provider
+- **THEN** the Prefilter card shows the tag "bge-small-en-v1.5" with a solid border
+
+#### Scenario: Prefilter fell back to BM25
+- **WHEN** the prefilter stage started with `embeddings:bge-small-en-v1.5` and finished with `bm25` and the warning "embeddings prefilter failed, used bm25: connection refused"
+- **THEN** the Prefilter card shows "BM25 · fallback" with a warn icon and a dashed warn border, and its tooltip names embeddings, bge-small-en-v1.5, and "connection refused"
+
+#### Scenario: Pending phase has no tag
+- **WHEN** the score stage has not started
+- **THEN** the Score card shows no method tag
+
+### Requirement: Prefilter card detail
+The Prefilter phase card (scenario `live`) SHALL show a second muted 11px
+line under its progress text, clipped with "…": "top N per sub-query"
+while running, and "top N/sub-query" once done or reused, followed by " ·
+<IDs> passthrough" when any sub-query skipped ranking (IDs joined by ", ").
+N SHALL come from the run's `prefilter.top_k` in its request settings. A
+pending, waiting, or skipped Prefilter card SHALL have no detail line.
+
+#### Scenario: Done with passthrough sub-queries
+- **WHEN** the prefilter stage is done with `prefilter.top_k = 50` and passthrough `q4`, `q5`
+- **THEN** the card's detail line reads "top 50/sub-query · q4, q5 passthrough"
+
+#### Scenario: Running
+- **WHEN** the prefilter stage is running with `prefilter.top_k = 50`
+- **THEN** the card's detail line reads "top 50 per sub-query"
+
 ### Requirement: Device chip
 On desktop, while the run is queued or running and any stage has a device
 label, the Live run header (scenario `live`) SHALL show the prototype's
@@ -229,6 +288,17 @@ the threshold).
 #### Scenario: Fallback scorer
 - **WHEN** the configured scorer is `rerank` and the passages were scored by `bm25`
 - **THEN** the tag reads "bm25 · fallback"
+
+### Requirement: Passages header layout
+The Passages panel header (scenario `live`) SHALL never draw its parts over
+each other at any panel width. The summary SHALL shorten with "…" before it
+reaches the Rejected toggle, and its help button SHALL stay visible. The
+Rejected toggle's clickable area SHALL fit its switch, label, and key hint
+with no more than 4px of padding on each side.
+
+#### Scenario: Narrow panel
+- **WHEN** the Passages panel is 440px wide and the summary reads "30 kept of 150 scored · ≥ 0.50"
+- **THEN** the summary, its help button, and the Rejected toggle do not overlap
 
 ### Requirement: Streaming report panel
 The Live run screen (scenario `live`) SHALL render the report markdown as
@@ -407,6 +477,26 @@ blurring, or Escape SHALL hide it.
 #### Scenario: Hover a citation
 - **WHEN** the user hovers the chip for [3]
 - **THEN** the tooltip shows passage 3's text, its source title and domain, and its score
+
+### Requirement: Report tables
+Report markdown on the Live run panel (scenario `live`) and the Report
+screen (scenario `finished`) SHALL render GitHub-style pipe tables as
+tables, styled with the design system's table style (header row, cell
+padding, row dividers). A table wider than the report SHALL scroll sideways
+inside its own area; the page and the panel SHALL NOT scroll sideways.
+Citation markers inside table cells SHALL render as citation chips.
+
+#### Scenario: Pipe table in a report
+- **WHEN** the report contains a header row, a `|---|---|` separator row, and three body rows
+- **THEN** the report shows a table with one header row and three body rows
+
+#### Scenario: Citation in a cell
+- **WHEN** a table cell contains "$0.50–$2 [13]"
+- **THEN** the cell shows the text and a citation chip for passage 13
+
+#### Scenario: Wide table
+- **WHEN** a table is wider than the Live run report panel
+- **THEN** only the table area scrolls sideways
 
 ### Requirement: Export
 On the Report screen (scenario `finished`), "Copy markdown" SHALL copy the

@@ -277,16 +277,21 @@ every run screen: run status (queued, running, done, failed, cancelled)
 and the failed stage with its error text; for each of the nine phases (Plan,
 Search, Fetch, Load, Chunk, Prefilter, Score, Select, Write) a state
 (pending, waiting, running, done, reused, failed, cancelled), its counters,
-its device label, and its wait reason; the sub-queries; the sources with
-their fetch state, failure reason, and kept count; the scored passages per
-query with the scorer and display threshold; the report text; prompt and
-completion tokens and cost summed over `stage.done`; and the run start and
-end times. A phase SHALL be `waiting` between `resource.waiting` and its
-`stage.started`, with the wait reason "<released stage> unloading" from
-the event, and `running` after `stage.started` until `stage.done` or
-`stage.failed`. A `stage.done` with `copied_from` SHALL make the phase
-`reused`, and one with `skipped` SHALL make it done and skipped. The
-device label SHALL come from `stage.started`. The run status SHALL be
+its device label, its wait reason, its configured provider, the provider
+that ran, and its warnings; the sub-queries, and which of them skipped
+prefilter ranking; the sources with their fetch state, failure reason, and
+kept count; the scored passages per query with the scorer and display
+threshold; the report text; prompt and completion tokens and cost summed
+over `stage.done`; and the run start and end times. A phase SHALL be
+`waiting` between `resource.waiting` and its `stage.started`, with the wait
+reason "<released stage> unloading" from the event, and `running` after
+`stage.started` until `stage.done` or `stage.failed`. A `stage.done` with
+`copied_from` SHALL make the phase `reused`, and one with `skipped` SHALL
+make it done and skipped. The device label and the configured provider
+SHALL come from `stage.started`; the provider that ran, the warnings, and
+the passthrough sub-queries SHALL come from `stage.done`. A phase is a
+fallback when the provider that ran names a different method (the part
+before `:`) than the configured provider. The run status SHALL be
 `interrupted` when the server reports it so. The initial search runs
 inside the `plan` stage and SHALL count as part of Plan.
 
@@ -305,6 +310,14 @@ inside the `plan` stage and SHALL count as part of Plan.
 #### Scenario: Costs
 - **WHEN** two `stage.done` events report 1200 and 38400 prompt tokens
 - **THEN** the run's prompt token total is 39600
+
+#### Scenario: Prefilter fallback
+- **WHEN** `stage.started` for prefilter carries `embeddings:bge-small-en-v1.5` and `stage.done` carries `bm25`
+- **THEN** the Prefilter phase has the configured provider `embeddings:bge-small-en-v1.5`, the provider that ran `bm25`, and is a fallback
+
+#### Scenario: Same method, model kept
+- **WHEN** `stage.started` for score carries `rerank:bge-reranker` and `stage.done` carries `rerank`
+- **THEN** the Score phase is not a fallback
 
 ### Requirement: Settings providers
 The Settings screen of the prototype (no dedicated scenario; reached with
