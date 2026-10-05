@@ -135,6 +135,47 @@ describe("runReducer", () => {
     expect(state.cost).toBeCloseTo(0.003);
   });
 
+  it("counts a topic searched in Search toward Search, not Plan", () => {
+    const state = fold([
+      started,
+      ev(2, "stage.started", { device: null, provider: "x" }, "plan"),
+      ev(3, "plan.ready", {
+        queries: [
+          { id: "q0", text: "topic" },
+          { id: "q1", text: "a" },
+        ],
+      }),
+      stageDone(4, "plan"),
+      ev(5, "stage.started", { device: null, provider: "x" }, "search"),
+      ev(6, "hit.found", { url: "https://a", title: "A", query_ids: ["q0"] }, "search"),
+      ev(7, "hit.found", { url: "https://b", title: "B", query_ids: ["q0", "q1"] }, "search"),
+    ]);
+    expect(state.phases.search.counters.hits).toBe(2);
+    expect(state.phases.plan.counters.hits).toBeUndefined();
+    expect(state.subQueries.map((q) => [q.id, q.results])).toEqual([
+      ["q0", 2],
+      ["q1", 1],
+    ]);
+    expect(state.rounds[0].queries.map((q) => q.id)).toEqual(["q0", "q1"]);
+  });
+
+  it("counts initial-search hits toward Plan and the topic row", () => {
+    const state = fold([
+      started,
+      ev(2, "stage.started", { device: null, provider: "x" }, "plan"),
+      ev(3, "hit.found", { url: "https://a", title: "A", query_ids: ["q0"] }, "plan"),
+      ev(4, "plan.ready", {
+        queries: [
+          { id: "q0", text: "topic" },
+          { id: "q1", text: "a" },
+        ],
+      }),
+    ]);
+    expect(state.phases.plan.counters.hits).toBe(1);
+    expect(state.subQueries[0].results).toBe(1);
+    expect(state.rounds[0].queries[0].results).toBe(1);
+  });
+
   it("tracks sources found, fetched, failed, and kept counts", () => {
     const state = fold([
       started,

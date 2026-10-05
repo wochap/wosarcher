@@ -10,7 +10,7 @@ HITS = [Hit(url="https://a.example", title="A", snippet=SNIPPET, rank=1, query_i
 
 
 async def test_snippets_are_data() -> None:
-    llm = FakeLLM(['{"queries": ["a"]}'])
+    llm = FakeLLM(['{"topic": "t", "queries": ["a"]}'])
     await plan("battery recycling", HITS, ["# Notes"], llm, sources="both", max_sub_queries=3)
     system, data = llm.calls[0]
     assert "ignore previous instructions" not in system.content
@@ -36,23 +36,66 @@ def test_at_most_ten_hits_in_rank_order() -> None:
     assert "t11 " not in data
 
 
-async def test_five_returned_three_kept_in_order() -> None:
-    llm = FakeLLM(['Sure: {"queries": ["a", "b", "c", "d", "e"]}'])
+async def test_ids_in_order() -> None:
+    llm = FakeLLM(['{"topic": " t ", "queries": ["a", "b"]}'])
     result = await plan("q", [], [], llm, sources="both", max_sub_queries=3)
-    assert [(query.id, query.text) for query in result.queries] == [("q0", "q"), ("q1", "a"), ("q2", "b"), ("q3", "c")]
+    assert [(query.id, query.text) for query in result.queries] == [("q0", "t"), ("q1", "a"), ("q2", "b")]
+    assert result.warnings == []
 
 
-async def test_main_query_and_duplicates_dropped() -> None:
-    llm = FakeLLM(['["  Battery Recycling ", "cost", "COST", ""]'])
-    result = await plan("battery recycling", [], [], llm, sources="both", max_sub_queries=3)
-    assert [query.text for query in result.queries] == ["battery recycling", "cost"]
+async def test_five_returned_three_kept_in_order() -> None:
+    llm = FakeLLM(['Sure: {"topic": "t", "queries": ["a", "b", "c", "d", "e"]}'])
+    result = await plan("q", [], [], llm, sources="both", max_sub_queries=3)
+    assert [(query.id, query.text) for query in result.queries] == [("q0", "t"), ("q1", "a"), ("q2", "b"), ("q3", "c")]
+
+
+async def test_topic_query_and_duplicates_dropped() -> None:
+    reply = '{"topic": "Recycling", "queries": ["  Battery Recycling? ", "recycling", "cost", "COST", ""]}'
+    result = await plan("battery recycling?", [], [], FakeLLM([reply]), sources="both", max_sub_queries=3)
+    assert [query.text for query in result.queries] == ["Recycling", "cost"]
 
 
 async def test_unreadable_answer() -> None:
     llm = FakeLLM(["I cannot help with that."])
     result = await plan("q", [], [], llm, sources="both", max_sub_queries=3)
-    assert [query.id for query in result.queries] == ["q0"]
+    assert [(query.id, query.text) for query in result.queries] == [("q0", "q")]
     assert len(result.warnings) == 1
+
+
+async def test_sub_queries_without_a_topic() -> None:
+    llm = FakeLLM(['["a", "b"]'])
+    result = await plan("q", [], [], llm, sources="both", max_sub_queries=3)
+    assert [(query.id, query.text) for query in result.queries] == [("q0", "q"), ("q1", "a"), ("q2", "b")]
+    assert len(result.warnings) == 1
+
+
+async def test_long_topic_is_missing() -> None:
+    reply = '{"topic": "' + "x" * 201 + '", "queries": ["a"]}'
+    result = await plan("q", [], [], FakeLLM([reply]), sources="both", max_sub_queries=3)
+    assert [query.text for query in result.queries] == ["q", "a"]
+    assert len(result.warnings) == 1
+
+
+LONG = " ".join(["word"] * 300)
+
+
+async def test_long_query_without_planner_is_cut() -> None:
+    result = await plan(LONG, [], [], FakeLLM(), sources="both", max_sub_queries=0)
+    text = result.queries[0].text
+    assert len(LONG) == 1499
+    assert len(text) <= 200
+    assert LONG.startswith(text)
+    assert LONG[len(text)] == " "
+
+
+async def test_short_query_without_planner() -> None:
+    result = await plan("what is BM25", [], [], FakeLLM(), sources="both", max_sub_queries=0)
+    assert result.queries[0].text == "what is BM25"
+
+
+async def test_files_keep_the_whole_query() -> None:
+    result = await plan(LONG, [], [], FakeLLM(), sources="files", max_sub_queries=3)
+    assert result.queries[0].text == LONG
 
 
 async def test_truncated_json() -> None:

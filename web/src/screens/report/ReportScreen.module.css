@@ -47,6 +47,27 @@
   font-size: 21px;
 }
 
+.h1Clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The whole query: plain text, line breaks kept, scrolling inside a tinted box. */
+.h1Full,
+[data-phone="true"] .h1Full {
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 400;
+  white-space: pre-wrap;
+  max-height: min(50vh, 480px);
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
 .actions {
   display: flex;
   gap: 8px;

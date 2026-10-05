@@ -15,10 +15,10 @@ from wosarcher.models import Context, GapResult, Message, Query
 from wosarcher.ports import LLM
 from wosarcher.prompts import load
 from wosarcher.stages.plan import escape
+from wosarcher.stages.search import MAX_SEARCH_CHARS
 from wosarcher.stages.write import passage_locator
 
 MAX_TOKENS = 768
-MAX_QUERY_CHARS = 200
 URL = re.compile(r"https?://|www\.", re.IGNORECASE)
 QUERY_ID = re.compile(r"q(\d+)")
 
@@ -73,7 +73,7 @@ def follow_ups(found: Sequence[str], queries: Sequence[Query], limit: int) -> li
     next_round = max((item.round for item in queries), default=1) + 1
     kept: list[str] = []
     for text in (item.strip() for item in found):
-        if not text or len(text) > MAX_QUERY_CHARS or URL.search(text) or text.casefold() in seen:
+        if not text or len(text) > MAX_SEARCH_CHARS or URL.search(text) or text.casefold() in seen:
             continue
         seen.add(text.casefold())
         kept.append(text)

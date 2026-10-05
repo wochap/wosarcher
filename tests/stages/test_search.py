@@ -56,3 +56,13 @@ async def test_initial_hits_reused() -> None:
         "https://b.example": ["q1"],
     }
     assert [q.id for q in searcher.calls] == ["q1"]
+
+
+async def test_long_query_text_is_cut_for_the_searcher() -> None:
+    searcher = FakeSearcher()
+    text = " ".join(["word"] * 300)
+    await search([Query(id="q0", text=text)], searcher)
+    sent = searcher.calls[0].text
+    assert len(sent) <= 200
+    assert text.startswith(sent)
+    assert text[len(sent)] == " "

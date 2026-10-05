@@ -7,6 +7,7 @@ import type {
   ResearchValues,
   RunCreate,
   ServerSettings,
+  TokenBudget,
   WritingOptions,
 } from "../../api/types";
 import { EMPTY_DRAFT, type RunOptions, useApi, useUi } from "../../app/context";
@@ -16,6 +17,7 @@ import {
   CUSTOM_DESCRIPTION,
   type Depth,
   effectiveContext,
+  effectiveGapContext,
   loadCustom,
   researchOf,
   saveCustom,
@@ -126,7 +128,7 @@ export function NewRunScreen() {
   }
 
   /** Editing an Advanced value switches to Custom with the values shown, the edit applied. */
-  function editResearch(field: keyof ResearchValues, value: number) {
+  function editResearch(field: keyof ResearchValues, value: TokenBudget) {
     if (!values) return;
     const next = { ...values, [field]: value };
     saveCustom(next);
@@ -215,6 +217,7 @@ export function NewRunScreen() {
                   : (presetOf(options.depth)?.description ?? ""),
               values,
               effective: effectiveContext(profile, writing.words),
+              gapEffective: effectiveGapContext(profile),
               queriesPerRound:
                 (presetOf(options.depth) ?? depths[depths.length - 1])?.values.queries_per_round ??
                 3,

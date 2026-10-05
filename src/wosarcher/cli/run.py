@@ -71,7 +71,26 @@ def writing_overrides(**fields: str | int | None) -> list[str]:
     return [f"write.{name}={json.dumps(value)}" for name, value in fields.items() if value is not None]
 
 
-def research_overrides(**fields: int | None) -> list[str]:
+def token_budget(value: str | None) -> str | None:
+    """A positive integer or `auto`, for the token budget flags."""
+    if value is None or value == "auto" or (value.isdigit() and int(value) > 0):
+        return value
+    raise typer.BadParameter("must be a positive integer or 'auto'")
+
+
+ContextTokensOption = Annotated[
+    str | None,
+    typer.Option("--context-tokens", metavar="N|auto", callback=token_budget, help="Context token cap."),
+]
+GapContextTokensOption = Annotated[
+    str | None,
+    typer.Option(
+        "--gap-context-tokens", metavar="N|auto", callback=token_budget, help="Gap step context token budget."
+    ),
+]
+
+
+def research_overrides(**fields: int | str | None) -> list[str]:
     """Research flags as `--set` on their keys (`RESEARCH_KEYS`), appended after `--set` so they win."""
     return [f"{RESEARCH_KEYS[name]}={value}" for name, value in fields.items() if value is not None]
 
@@ -194,7 +213,8 @@ def run(
     passages_per_query: Annotated[
         int | None, typer.Option("--passages-per-query", min=1, help="Passages kept per query.")
     ] = None,
-    context_tokens: Annotated[int | None, typer.Option("--context-tokens", min=1, help="Context token cap.")] = None,
+    context_tokens: ContextTokensOption = None,
+    gap_context_tokens: GapContextTokensOption = None,
     rounds: Annotated[int | None, typer.Option("--rounds", min=1, max=8, help="Research rounds.")] = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
@@ -219,6 +239,7 @@ def run(
         max_pages=max_pages,
         passages_per_query=passages_per_query,
         context_tokens=context_tokens,
+        gap_context_tokens=gap_context_tokens,
         rounds=rounds,
     )
     overrides = [*(set_ or []), *flags, *research]
@@ -245,6 +266,7 @@ def fork(
     language: LanguageOption = None,
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
+    gap_context_tokens: GapContextTokensOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -260,7 +282,7 @@ def fork(
         citation_marker=citation_marker,
         reference_style=reference_style,
     )
-    new = [*(set_ or []), *flags]
+    new = [*(set_ or []), *flags, *research_overrides(gap_context_tokens=gap_context_tokens)]
     env = os.environ
     here = checked(lambda: resolve(profile, set_ or [], env))
     store = RunStore.from_settings(here)

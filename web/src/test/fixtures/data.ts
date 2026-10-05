@@ -118,7 +118,7 @@ export const profiles: ProfileInfo[] = [
     description: "Models take turns on one small GPU; slower, fits 8 GB.",
     context_window: 32768,
     prompt_reserve_tokens: 2000,
-    max_output_tokens: null,
+    max_output_tokens: 8192,
   },
   {
     name: "workstation",
@@ -127,7 +127,7 @@ export const profiles: ProfileInfo[] = [
     description: "One GPU fits all models; models stay loaded.",
     context_window: 32768,
     prompt_reserve_tokens: 2000,
-    max_output_tokens: null,
+    max_output_tokens: 8192,
   },
   {
     name: "cloud",
@@ -146,7 +146,6 @@ const research = (
   rpq: number,
   pages: number,
   ppq: number,
-  ctx: number,
   rounds = 1,
   perRound = 3,
 ) => ({
@@ -154,7 +153,8 @@ const research = (
   results_per_query: rpq,
   max_pages: pages,
   passages_per_query: ppq,
-  context_tokens: ctx,
+  context_tokens: "auto" as const,
+  gap_context_tokens: 4000,
   rounds,
   queries_per_round: perRound,
 });
@@ -163,22 +163,22 @@ export const depths: DepthInfo[] = [
   {
     name: "quick",
     description: "Fast overview: few searches, short report.",
-    values: { ...research(2, 5, 15, 6, 8000), words: 600 },
+    values: { ...research(3, 5, 15, 6), words: 600 },
   },
   {
     name: "standard",
     description: "Balanced: today's default.",
-    values: { ...research(3, 10, 40, 10, 16000), words: null },
+    values: { ...research(3, 10, 40, 10), words: null },
   },
   {
     name: "deep",
     description: "Several research rounds that follow up on gaps.",
-    values: { ...research(5, 10, 60, 10, 24000, 3, 3), words: 2000 },
+    values: { ...research(6, 10, 60, 10, 3, 3), words: 2000 },
   },
   {
     name: "exhaustive",
     description: "Many rounds and sources; slow, for thorough reports.",
-    values: { ...research(8, 10, 100, 8, 32000, 5, 4), words: 3000 },
+    values: { ...research(10, 10, 100, 8, 5, 4), words: 3000 },
   },
 ];
 

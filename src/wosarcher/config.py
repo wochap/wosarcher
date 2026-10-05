@@ -30,6 +30,7 @@ RESEARCH_KEYS = {
     "max_pages": "fetch.max_pages",
     "passages_per_query": "score.top_k",
     "context_tokens": "select.max_context_tokens",
+    "gap_context_tokens": "research.gap_context_tokens",
     "rounds": "research.rounds",
 }
 # The only keys a depth preset may set, besides its `description`.
@@ -118,8 +119,10 @@ class LLMConfig(Provider):
     max_tokens_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
     reasoning_tokens: int = Field(default=0, ge=0)
     max_continuations: int = Field(default=2, ge=0)
-    max_output_tokens: int | None = Field(default=None, gt=0)
-    """Caps the writer's output limit; None: no cap."""
+    max_output_tokens: int = Field(default=8192, gt=0)
+    """Caps the writer's output limit; a quarter of the default window."""
+    timeout: float = Field(default=300.0, gt=0)
+    """A small local model may take minutes on a long prompt before its first token."""
 
 
 class PlanConfig(Block):
@@ -144,7 +147,7 @@ class ChunkConfig(Block):
 class SelectConfig(Block):
     passthrough_chars: int = Field(default=8000, ge=0)
     max_chunks_per_source: int = Field(default=5, gt=0)
-    max_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = 16000
+    max_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = "auto"
     """`auto`: all the room the context window leaves."""
     file_share: float = Field(default=0.5, ge=0, le=1)
     prompt_reserve_tokens: int = Field(default=2000, ge=0)
@@ -155,8 +158,8 @@ class ResearchConfig(Block):
     """Research rounds; above 1, search through gap repeat."""
     queries_per_round: int = Field(default=3, gt=0)
     """Most follow-up queries the gap step keeps per round."""
-    gap_context_tokens: int = Field(default=4000, gt=0)
-    """Passage budget of the gap step's prompt."""
+    gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = 4000
+    """Passage budget of the gap step's prompt; `auto`: all the room the context window leaves."""
 
 
 class RunConfig(Block):

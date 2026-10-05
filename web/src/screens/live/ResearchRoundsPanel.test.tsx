@@ -21,13 +21,16 @@ describe("ResearchRoundsPanel", () => {
     expect(screen.getByRole("button", { name: "Help: Research rounds" })).toBeTruthy();
   });
 
-  it("collapses a round with more than three queries", () => {
+  it("lists the topic first in round 1 and counts it in the collapse", () => {
     const log = until(roundsLog("max"), (e) => e.type === "gap.ready");
     render(<ResearchRoundsPanel run={viewOf(log)} planned={3} />);
-    expect(round(1).textContent).not.toContain("q3");
-    const more = screen.getByRole("button", { name: "+3 more" });
-    fireEvent.click(more);
-    expect(round(1).textContent).toContain("q5");
+    const ids = () =>
+      [...round(1).querySelectorAll("ol li")].map((li) => li.firstChild?.textContent);
+    expect(ids()).toEqual(["q0", "q1"]);
+    expect(round(1).textContent).toContain("Topic line");
+    expect(screen.getByRole("button", { name: "Help: Topic line" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "+4 more" }));
+    expect(ids()).toEqual(["q0", "q1", "q2", "q3", "q4", "q5"]);
     expect(screen.getByRole("button", { name: "Show fewer" })).toBeTruthy();
   });
 

@@ -35,7 +35,44 @@ const buttons = () =>
     .filter((b) => !b.dataset.help)
     .map((b) => b.textContent);
 
+/** A run whose query has `n` characters, with a Markdown heading and a line break. */
+const asking = (n: number) => {
+  const query = `# Brief\n**bold** ${"x".repeat(n - 17)}`;
+  const start = ev(1, "run.started", {
+    query,
+    profile: "p",
+    parent_run_id: null,
+    version: 1,
+    until: null,
+  });
+  return { query, events: [{ ...start, run_id: RUN_ID }] };
+};
+
 describe("LiveHeader", () => {
+  it("clamps a long question and toggles the whole of it", () => {
+    const { query, events } = asking(4030);
+    header(events);
+    const shown = document.getElementById("run-q") as HTMLElement;
+    expect(shown.textContent).toBe(query);
+    const toggle = screen.getByRole("button", { name: /Show full question/ });
+    expect(toggle.textContent).toBe("Show full question· 4,030 characters");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.getAttribute("aria-controls")).toBe("run-q");
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe("Show less· 4,030 characters");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const full = document.getElementById("run-q") as HTMLElement;
+    expect(full.textContent).toBe(query);
+    expect(full.querySelector("h1, strong")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("shows no toggle for a short question", () => {
+    header(asking(120).events);
+    expect(screen.queryByRole("button", { name: /Show full question/ })).toBeNull();
+  });
+
   it("shows Connecting with Cancel while queued", () => {
     header(loading.data.events?.[RUN_ID] as RunEvent[]);
     expect(screen.getByText("Connecting")).toBeTruthy();

@@ -35,7 +35,9 @@ async def test_ranking_flow() -> None:
         FakeScorer("rerank", default=0.7),
         cfg=ScoreConfig(provider="rerank"),
     )
-    tokens = budget(context_window=8192, max_context_tokens=16000, prompt_reserve_tokens=2000, words=1200)
+    tokens = budget(
+        context_window=8192, max_context_tokens=16000, prompt_reserve_tokens=2000, output_tokens=2400, query_tokens=0
+    )
     context = select(
         queries[0].text,
         scored.scores,

@@ -7,6 +7,19 @@ from wosarcher.models import Hit, Query, SearchResult, Skipped, normalise_url
 from wosarcher.ports import Searcher
 from wosarcher.stages import noop
 
+MAX_SEARCH_CHARS = 200
+"""The longest query text sent to a search engine; also what counts as a short query."""
+
+
+def cut(text: str, limit: int = MAX_SEARCH_CHARS) -> str:
+    """`text` trimmed, cut at the last whitespace within `limit` (or at `limit` when there is none)."""
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    head = text[: limit + 1]
+    space = max(head.rfind(" "), head.rfind("\n"), head.rfind("\t"))
+    return (head[:space] if space > 0 else text[:limit]).strip()
+
 
 def merge_into(merged: dict[str, Hit], hits: Iterable[Hit]) -> list[Hit]:
     """Merge hits into `merged` (keyed by normalised URL); return the hits that were added or changed."""
@@ -47,7 +60,7 @@ async def search(
 
     async def one(query: Query) -> None:
         try:
-            hits = await searcher.search(query)
+            hits = await searcher.search(query.model_copy(update={"text": cut(query.text)}))
         except Exception as error:
             failures.append(Skipped(item=query.id, reason=str(error)))
             return

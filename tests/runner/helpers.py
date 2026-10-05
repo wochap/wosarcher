@@ -19,7 +19,7 @@ PAGES = {
     "https://b.test": "# Costs\nBattery recycling plant costs per tonne.",
     "https://c.test": "Recycling cost estimates for batteries.",
 }
-PLAN_REPLY = '{"queries": ["recycling cost"]}'
+PLAN_REPLY = '{"topic": "battery recycling", "queries": ["recycling cost"]}'
 REPORT_REPLY = "Battery recycling recovers lithium [1]."
 
 
@@ -57,8 +57,9 @@ def new_run(
     sources: Sources = "both",
     until: Stage | None = None,
     attachments: list[str] | None = None,
+    query: str = QUERY,
 ) -> str:
-    request = RunRequest(query=QUERY, sources=sources, until=until)
+    request = RunRequest(query=query, sources=sources, until=until)
     return store.create(request, "workstation", [], cfg, attachments or []).run_id
 
 

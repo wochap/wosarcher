@@ -8,7 +8,9 @@ scorer plus `score.fallback`; when every entry fails, the stage raises
 get passthrough scores.
 
 Each pair goes through three rules in order: the scorer's threshold, the
-per-query cap (`score.top_k`, not for passthrough), and the best pair per
+per-query cap (`score.top_k`; small-input passthrough keeps its first
+`top_k` in passthrough order, the `passthrough` fallback scorer is not
+capped), and the best pair per
 chunk across queries. A pair one rule drops records it in `dropped` and takes
 no part in the later rules.
 """
@@ -297,7 +299,8 @@ async def score(
     per_query: dict[str, list[Score]] = {}
     for query_id, (entry, group, vals) in used.items():
         own = scored_pairs(entry, calibrated, group, vals, cfg, scale)
-        per_query[query_id] = own if entry == "passthrough" else capped(own, cfg.top_k)
+        uncapped = entry == "passthrough" and not group.passthrough
+        per_query[query_id] = own if uncapped else capped(own, cfg.top_k)
     scores = best_pair_only([s for group in groups for s in per_query[group.query.id]], plan_index)
     reports = [
         report(group, used[group.query.id][0], [s for s in scores if s.query_id == group.query.id], cfg, scale)

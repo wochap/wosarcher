@@ -36,7 +36,7 @@ class Sizing:
     chars_per_token: float = 3.5
     token_margin: float = 1.1
     max_continuations: int = 2
-    max_output_tokens: int | None = None
+    max_output_tokens: int = 8192
 
 
 DEFAULT_SIZING = Sizing()

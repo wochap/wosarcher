@@ -315,6 +315,20 @@ def test_custom_research_values(client: TestClient, runs_dir: Path) -> None:
     assert summary(client, run_id)["depth"] == "custom"
 
 
+def test_auto_context_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, {"query": "q", "depth": "custom", "research": {"context_tokens": "auto"}})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["select"]["max_context_tokens"] == "auto"
+
+
+def test_gap_context_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
+    research = {"gap_context_tokens": "auto", "rounds": 3}
+    run_id = create(client, {"query": "q", "depth": "custom", "research": research})
+    finished(client, run_id)
+    settings = resolved(runs_dir, run_id)
+    assert (settings["research"]["gap_context_tokens"], settings["research"]["rounds"]) == ("auto", 3)
+
+
 def test_too_many_rounds_422(client: TestClient) -> None:
     fields = [("request", (None, json.dumps({"query": "q", "research": {"rounds": 9}}).encode()))]
     response = client.post("/api/runs", files=fields)
@@ -365,4 +379,4 @@ def test_rerun_keeps_depth(client: TestClient, runs_dir: Path) -> None:
     rerun = client.post(f"/api/runs/{original}/rerun").json()["run_id"]
     finished(client, rerun)
     assert summary(client, rerun)["depth"] == "deep"
-    assert resolved(runs_dir, rerun)["plan"]["max_sub_queries"] == 5
+    assert resolved(runs_dir, rerun)["plan"]["max_sub_queries"] == 6

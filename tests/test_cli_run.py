@@ -90,9 +90,28 @@ def test_depth_with_research_flag(world: World, tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--max-pages", "80"])
     assert result.exit_code == 0, result.output
     settings = world.built[0]
-    assert (settings.fetch.max_pages, settings.plan.max_sub_queries) == (80, 5)
+    assert (settings.fetch.max_pages, settings.plan.max_sub_queries) == (80, 6)
     record = only_run(tmp_path)
     assert (record.request.depth, record.overrides) == ("deep", ["fetch.max_pages=80"])
+
+
+def test_auto_context_flag(world: World) -> None:
+    args = ["run", "q", "--set", "select.max_context_tokens=12000", "--context-tokens", "auto"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    assert world.built[0].select.max_context_tokens == "auto"
+
+
+def test_gap_context_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--depth", "deep", "--gap-context-tokens", "auto"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].research.gap_context_tokens == "auto"
+    assert only_run(tmp_path).overrides == ["research.gap_context_tokens=auto"]
+
+
+def test_token_budget_flag_rejects_words(world: World) -> None:
+    result = runner.invoke(app, ["run", "q", "--context-tokens", "all"])
+    assert result.exit_code == 2
 
 
 def test_files_without_attach(world: World, tmp_path: Path) -> None:

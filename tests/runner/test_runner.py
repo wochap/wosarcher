@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.runner.helpers import PAGES, QUERY, Releases, adapters, kinds, new_run, settings
+from tests.runner.helpers import PAGES, PLAN_REPLY, QUERY, Releases, adapters, kinds, new_run, settings
 from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeManaged, FakeScorer, FakeSearcher, healthy
 from wosarcher.config import LLMConfig, PrefilterConfig, ScoreConfig, Settings
 from wosarcher.http import UsageLedger
@@ -57,7 +57,7 @@ async def test_full_run(tmp_path: Path) -> None:
     cfg = settings(tmp_path)
     store = store_of(cfg)
     (tmp_path / "notes.md").write_text("# Notes\nHydrometallurgy wins for battery recycling.\n")
-    planner = FakeLLM(['{"queries": ["recycling cost"]}'])
+    planner = FakeLLM([PLAN_REPLY])
     run_id = new_run(store, cfg, attachments=[str(tmp_path / "notes.md")])
     assert await run(cfg, run_id, adapters(planner=planner)) == "done"
     directory = store.run_dir(run_id)
@@ -86,6 +86,32 @@ async def test_initial_hits_reach_search_and_hit_events(tmp_path: Path) -> None:
     hits = {hit.url: hit.query_ids for hit in store.read_items(run_id, "hits.jsonl", Hit)}
     assert hits == {"https://a.test/x": ["q0", "q1"], "https://c.test": ["q1"]}
     assert "hit.found:plan" in kinds(store.read_events(run_id))
+
+
+async def test_long_brief_skips_the_initial_search(tmp_path: Path) -> None:
+    cfg = settings(tmp_path)
+    store = store_of(cfg)
+    brief = "battery recycling " * 100
+    searcher = FakeSearcher({"battery recycling": ["https://a.test/x"], "recycling cost": ["https://c.test"]})
+    planner = FakeLLM([PLAN_REPLY])
+    run_id = new_run(store, cfg, sources="web", until="search", query=brief)
+    assert await run(cfg, run_id, adapters(searcher=searcher, planner=planner)) == "done"
+    assert store.read_items(run_id, "initial.jsonl", Hit) == []
+    assert "https://" not in planner.calls[0][1].content
+    assert sorted(query.text for query in searcher.calls) == ["battery recycling", "recycling cost"]
+    assert "hit.found:plan" not in kinds(store.read_events(run_id))
+    hits = {hit.url: hit.query_ids for hit in store.read_items(run_id, "hits.jsonl", Hit)}
+    assert hits == {"https://a.test/x": ["q0"], "https://c.test": ["q1"]}
+
+
+async def test_query_at_the_limit_is_searched_first(tmp_path: Path) -> None:
+    cfg = settings(tmp_path)
+    store = store_of(cfg)
+    query = "x" * 200
+    searcher = FakeSearcher()
+    run_id = new_run(store, cfg, until="search", query=f"  {query}  ")
+    assert await run(cfg, run_id, adapters(searcher=searcher)) == "done"
+    assert [call.text for call in searcher.calls] == [query, "recycling cost"]
 
 
 async def test_failing_page_continues(tmp_path: Path) -> None:
@@ -343,7 +369,7 @@ async def test_costs(tmp_path: Path) -> None:
     cfg = settings(tmp_path)
     store = store_of(cfg)
     run_id = new_run(store, cfg)
-    assert await run(cfg, run_id, adapters(planner=Counting(['{"queries": ["recycling cost"]}'])), ledger) == "done"
+    assert await run(cfg, run_id, adapters(planner=Counting([PLAN_REPLY])), ledger) == "done"
     costs = json.loads((store.run_dir(run_id) / "costs.json").read_text())
     assert costs["stages"]["plan"]["input_tokens"] == 100
     assert costs["total"]["input_tokens"] == 100
@@ -389,7 +415,7 @@ async def test_cancel_writes_costs(tmp_path: Path) -> None:
     cfg = settings(tmp_path)
     store = store_of(cfg)
     run_id = new_run(store, cfg)
-    fakes = adapters(planner=Counting(['{"queries": ["recycling cost"]}']), fetcher=Stuck(PAGES))
+    fakes = adapters(planner=Counting([PLAN_REPLY]), fetcher=Stuck(PAGES))
     task = asyncio.create_task(Runner(store, cfg, fakes, ledger).run(run_id))
     await started.wait()
     task.cancel()

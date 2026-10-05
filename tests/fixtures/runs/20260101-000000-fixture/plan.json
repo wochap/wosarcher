@@ -2,15 +2,18 @@
   "queries": [
     {
       "id": "q0",
-      "text": "battery recycling"
+      "text": "battery recycling",
+      "round": 1
     },
     {
       "id": "q1",
-      "text": "lithium-ion battery recycling methods"
+      "text": "lithium-ion battery recycling methods",
+      "round": 1
     },
     {
       "id": "q2",
-      "text": "battery recycling economics"
+      "text": "battery recycling economics",
+      "round": 1
     }
   ],
   "warnings": []

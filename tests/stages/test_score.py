@@ -255,9 +255,18 @@ async def test_capped_in_best_query_kept_in_another() -> None:
 async def test_passthrough_is_not_capped() -> None:
     pages, chunks = setup([f"c{n}" for n in range(14)], ["q0"])
     qs = [Query(id="q0", text="x")]
-    candidates = every(qs, chunks, passthrough=True)
-    result = await score(candidates, qs, pages, chunks, None, cfg=ScoreConfig(provider="rerank", top_k=10))
+    result = await score(every(qs, chunks), qs, pages, chunks, None, cfg=ScoreConfig(provider="passthrough", top_k=10))
     assert sum(s.kept for s in result.scores) == 14
+
+
+async def test_many_small_chunks_are_capped() -> None:
+    pages, chunks = setup([f"c{n}" for n in range(11)], ["q0"])
+    qs = [Query(id="q0", text="x")]
+    candidates = every(qs, chunks, passthrough=True)
+    result = await score(candidates, qs, pages, chunks, None, cfg=ScoreConfig(provider="rerank", top_k=6))
+    assert [(s.chunk_id, s.kept, s.dropped) for s in result.scores] == [
+        (piece.chunk_id, n < 6, None if n < 6 else "query_cap") for n, piece in enumerate(chunks)
+    ]
 
 
 def test_chunk_kept_once_across_rounds() -> None:

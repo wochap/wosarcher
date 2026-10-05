@@ -109,27 +109,70 @@ describe("Depth", () => {
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     fireEvent.change(screen.getByLabelText("Max pages"), { target: { value: "80" } });
     expect((screen.getByLabelText("Custom") as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText("Sub-queries") as HTMLInputElement).value).toBe("5");
+    expect((screen.getByLabelText("Sub-queries") as HTMLInputElement).value).toBe("6");
     expect(screen.getByText("Your Custom values, saved in this browser.")).toBeTruthy();
     const request = await start(api);
     expect(request.depth).toBe("custom");
     expect(request.research).toEqual({
-      sub_queries: 5,
+      sub_queries: 6,
       results_per_query: 10,
       max_pages: 80,
       passages_per_query: 10,
-      context_tokens: 24000,
+      context_tokens: "auto",
+      gap_context_tokens: 4000,
       rounds: 3,
     });
     expect(request.writing).toEqual({ words: 2000 });
+  });
+
+  it("shows Auto context with its effective budget", async () => {
+    const api = fakeApi();
+    api.data.profiles[0] = { ...api.data.profiles[0], context_window: 131072 };
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("Deep"));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect((screen.getByLabelText("Context tokens") as HTMLInputElement).value).toBe("");
+    expect(screen.getByText("Auto · 125,072")).toBeTruthy();
+    expect(screen.getByText("~60 pages · 3 rounds · ~4 LLM calls")).toBeTruthy();
+    expect(screen.queryByText(/model window/)).toBeNull();
   });
 
   it("shows the context the model window allows", async () => {
     await openOptions();
     fireEvent.click(screen.getByLabelText("Exhaustive"));
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText("Context tokens"), { target: { value: "32000" } });
     expect(screen.getByText("32,000 → 24,768 (model window)")).toBeTruthy();
     expect(screen.getByText(/context 32k → 25k \(model window\)$/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Context tokens"), { target: { value: "" } });
+    expect(screen.getByText("Auto · 24,768")).toBeTruthy();
+    expect(screen.queryByText(/context 32k/)).toBeNull();
+  });
+
+  it("shows Auto gap context and sends it", async () => {
+    const api = fakeApi();
+    api.data.profiles[0] = { ...api.data.profiles[0], context_window: 1000000 };
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("Deep"));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    const gap = screen.getByLabelText("Gap context tokens") as HTMLInputElement;
+    expect(gap.value).toBe("4000");
+    fireEvent.change(gap, { target: { value: "" } });
+    expect((screen.getByLabelText("Custom") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Rounds") as HTMLInputElement).value).toBe("3");
+    expect(screen.getByText("Auto · 997,232")).toBeTruthy();
+    const request = await start(api);
+    expect(request.research?.gap_context_tokens).toBe("auto");
+    expect(Object.keys(request.research ?? {})).toHaveLength(7);
+  });
+
+  it("locks Gap context tokens at one round", async () => {
+    await openOptions();
+    fireEvent.click(screen.getByLabelText("Quick"));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    expect((screen.getByLabelText("Gap context tokens") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText("Used between rounds; needs 2+ rounds.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Help: Gap context tokens" })).toBeTruthy();
   });
 
   it("edits Rounds, and keeps files-only runs at one round", async () => {

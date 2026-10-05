@@ -70,6 +70,13 @@ def test_fixture_parses() -> None:
             pytest.fail(f"events.jsonl line {number} does not parse ({REGENERATE}): {error}")
 
 
+def test_fixture_plan_has_a_topic() -> None:
+    plan = Plan.model_validate_json((RUNS / FIXTURE_RUN / "plan.json").read_text(encoding="utf-8"))
+    assert plan.queries[0].id == "q0"
+    assert plan.queries[0].text == "battery recycling"
+    assert plan.warnings == []
+
+
 def test_fixture_has_no_machine_paths() -> None:
     for path in (RUNS / FIXTURE_RUN).rglob("*"):
         if path.is_file():

@@ -1,0 +1,11 @@
+.toggle {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 1px 4px;
+  gap: 4px;
+  margin-left: -4px;
+}
+
+.count {
+  color: var(--faint);
+}

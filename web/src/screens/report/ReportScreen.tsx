@@ -15,6 +15,7 @@ import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
+import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
@@ -38,6 +39,7 @@ export function ReportScreen({ runId }: { runId: string }) {
   const { detail, notFound, view, files, context, report } = useRunData(runId, own);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [rewriting, setRewriting] = useState(false);
+  const [queryOpen, setQueryOpen] = useState(false);
   const { cite, onCite, onLeave } = useCitation();
 
   useEffect(() => {
@@ -78,6 +80,7 @@ export function ReportScreen({ runId }: { runId: string }) {
   }
 
   const query = detail.query;
+  const long = isLongQuery(query);
   return (
     <div className={css.page}>
       <div className={css.inner}>
@@ -88,7 +91,20 @@ export function ReportScreen({ runId }: { runId: string }) {
             <span className={css.id}>{runId}</span>
             <span>{meta}</span>
           </div>
-          <h1 className={css.h1}>{query}</h1>
+          <h1
+            id={long ? "rep-q" : undefined}
+            className={`${css.h1} ${long ? (queryOpen ? css.h1Full : css.h1Clamped) : ""}`}
+          >
+            {query}
+          </h1>
+          {long && (
+            <QueryToggle
+              query={query}
+              open={queryOpen}
+              controls="rep-q"
+              onToggle={() => setQueryOpen(!queryOpen)}
+            />
+          )}
           <div className={css.actions}>
             {recipe === "report" && (
               <>

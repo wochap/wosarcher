@@ -23,7 +23,7 @@ async def test_collection_flow() -> None:
             "https://c.example": "Market size estimates.",
         }
     )
-    llm = FakeLLM(['{"queries": ["recycling cost"]}'])
+    llm = FakeLLM(['{"topic": "battery recycling", "queries": ["recycling cost"]}'])
 
     loaded = load([Attachment(name="notes.md", data=b"# Notes\n## Findings\nHydrometallurgy wins.\n")])
     initial = await search([Query(id="q0", text=QUERY)], searcher)

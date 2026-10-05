@@ -73,6 +73,19 @@
   text-wrap: pretty;
 }
 
+/* The whole query: plain text, line breaks kept, scrolling inside a tinted box. */
+.queryFull {
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  text-wrap: pretty;
+  max-height: min(40vh, 360px);
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
 [data-phone="true"] .query {
   font-size: 15px;
 }

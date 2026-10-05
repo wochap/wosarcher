@@ -164,7 +164,8 @@ def test_depths_standard_values(client: TestClient) -> None:
         "results_per_query": 10,
         "max_pages": 40,
         "passages_per_query": 10,
-        "context_tokens": 16000,
+        "context_tokens": "auto",
+        "gap_context_tokens": 4000,
         "rounds": 1,
         "queries_per_round": 3,
         "words": None,
@@ -177,4 +178,4 @@ def test_profile_limits(client: TestClient) -> None:
     found = {p["name"]: p for p in client.get("/api/profiles").json()}
     workstation = found["workstation"]
     assert workstation["context_window"] == 32768
-    assert (workstation["prompt_reserve_tokens"], workstation["max_output_tokens"]) == (2000, None)
+    assert (workstation["prompt_reserve_tokens"], workstation["max_output_tokens"]) == (2000, 8192)

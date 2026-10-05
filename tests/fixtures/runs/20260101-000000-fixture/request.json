@@ -1,13 +1,14 @@
 {
   "run_id": "20260101-000000-fixture",
-  "created_at": "2026-10-04T17:47:31.123927Z",
+  "created_at": "2026-10-05T14:59:43.263351Z",
   "request": {
     "query": "battery recycling",
     "sources": "both",
     "until": null,
     "attachments": [
       "notes.md"
-    ]
+    ],
+    "depth": null
   },
   "profile": "e2e",
   "overrides": [],
@@ -54,6 +55,7 @@
         "per_unit": null
       },
       "max_chars": 50000,
+      "max_pages": 40,
       "only_main_content": true,
       "page_timeout": 45.0
     },
@@ -115,7 +117,7 @@
       "batch_size": 16,
       "concurrency": null,
       "connect_timeout": 3.0,
-      "timeout": 60.0,
+      "timeout": 300.0,
       "retry_budget": 60.0,
       "prices": {
         "input_per_mtok": null,
@@ -126,7 +128,9 @@
       "chars_per_token": 3.5,
       "token_margin": 1.1,
       "max_tokens_field": "max_completion_tokens",
-      "reasoning_tokens": 0
+      "reasoning_tokens": 0,
+      "max_continuations": 2,
+      "max_output_tokens": 8192
     },
     "plan": {
       "max_sub_queries": 2
@@ -141,9 +145,14 @@
     "select": {
       "passthrough_chars": 0,
       "max_chunks_per_source": 5,
-      "max_context_tokens": 16000,
+      "max_context_tokens": "auto",
       "file_share": 0.5,
       "prompt_reserve_tokens": 2000
+    },
+    "research": {
+      "rounds": 1,
+      "queries_per_round": 3,
+      "gap_context_tokens": 4000
     },
     "run": {
       "gpu_policy": "shared",
@@ -158,6 +167,7 @@
         "chunk": 60,
         "prefilter": 600,
         "score": 900,
+        "gap": 180,
         "select": 60,
         "write": 1800
       },

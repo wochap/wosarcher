@@ -17,10 +17,9 @@ MIN_OUTPUT_TOKENS = 1024
 LABEL_TOKENS = 16
 
 
-def output_tokens(words: int, cap: int | None = None) -> int:
+def output_tokens(words: int, cap: int) -> int:
     """Output allowance for the report; also the write stage's `max_tokens`. `cap`: `llm.max_output_tokens`."""
-    tokens = max(MIN_OUTPUT_TOKENS, 2 * words)
-    return tokens if cap is None else min(tokens, cap)
+    return min(max(MIN_OUTPUT_TOKENS, 2 * words), cap)
 
 
 def budget(
@@ -28,17 +27,19 @@ def budget(
     context_window: int,
     max_context_tokens: int | None,
     prompt_reserve_tokens: int,
-    words: int,
-    max_output_tokens: int | None = None,
+    output_tokens: int,
+    query_tokens: int,
 ) -> int:
-    """`max_context_tokens` None (`auto`): all the room the window leaves."""
-    output = output_tokens(words, max_output_tokens)
-    room = context_window - prompt_reserve_tokens - output
+    """Context tokens left after the fixed prompt, the query text in the prompt, and the output.
+
+    `max_context_tokens` None (`auto`): all the room the window leaves.
+    """
+    room = context_window - prompt_reserve_tokens - query_tokens - output_tokens
     tokens = room if max_context_tokens is None else min(max_context_tokens, room)
     if tokens <= 0:
         raise ValueError(
             f"llm.context_window ({context_window}) is too small: it leaves {room} tokens for context after "
-            f"{prompt_reserve_tokens} prompt and {output} output tokens"
+            f"{prompt_reserve_tokens} prompt, {query_tokens} query, and {output_tokens} output tokens"
         )
     return tokens
 

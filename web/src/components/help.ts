@@ -43,6 +43,14 @@ export const HELP: Record<string, Help> = {
     title: "Context tokens",
     body: "Token budget for the passages the writer sees. The profile’s model window can lower it.",
   },
+  "d-gap-ctx": {
+    title: "Gap context tokens",
+    body: "Token budget for the passages the gap step reads between rounds to choose follow-up searches. Auto uses all the room the model window leaves.",
+  },
+  q0: {
+    title: "Topic line",
+    body: "A short topic the planner writes from your question. Passages are ranked against it as the first query, q0. Questions up to 200 characters are searched as written; longer ones are searched by this topic.",
+  },
   "w-words-def": {
     title: "Depth default",
     body: "Each depth sets a default length: Quick 600, Standard your Settings default, Deep 2,000, Exhaustive 3,000 words. Changing depth updates it until you edit it.",

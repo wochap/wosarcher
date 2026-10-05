@@ -19,7 +19,13 @@ export type RunCreated = G.RunCreated;
 export type ServerSettings = { writing: WritingOptions; sources: string };
 export type ProfileInfo = G.ProfileInfo;
 export type DepthInfo = G.DepthInfo;
-export type ResearchValues = { [K in keyof G.ResearchPatch]-?: number };
+/** A token budget: a number, or "auto" for all the room the model window leaves. */
+export type TokenBudget = number | "auto";
+export type ResearchValues = {
+  [K in keyof G.ResearchPatch]-?: K extends "context_tokens" | "gap_context_tokens"
+    ? TokenBudget
+    : number;
+};
 export type ProviderCheck = G.ProviderCheck;
 export type HealthReport = G.HealthReport;
 export type SessionInfo = G.SessionInfo & { method: "cookie" | "token" | "none" };

@@ -22,9 +22,12 @@
 }
 
 .n {
+  font-family: var(--mono);
+  font-size: 11px;
   color: var(--faint);
-  width: 12px;
+  width: 22px;
   flex: none;
+  padding-top: 1px;
 }
 
 .text {
@@ -39,4 +42,14 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+/* The "Topic line" label above q0's text. */
+.topic {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 16px;
 }

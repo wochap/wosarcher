@@ -120,6 +120,8 @@ export type RunView = {
   failure?: { stage: string; error: string };
   phases: Record<PhaseId, Phase>;
   subQueries: SubQuery[];
+  /** Hits per query ID that arrived before `plan.ready` listed the query (the initial search). */
+  earlyHits: Record<string, number>;
   /** Research rounds that started, from `plan.ready` on; round 1 holds the planner's queries. */
   rounds: RoundView[];
   /** From `research.done`; null until research ends (and for single-round runs). */
@@ -145,6 +147,7 @@ export function initialRunView(runId: string): RunView {
     status: "queued",
     phases,
     subQueries: [],
+    earlyHits: {},
     rounds: [],
     research: null,
     sources: {},
@@ -202,9 +205,18 @@ function withRound(state: RunView, round: number, patch: Partial<RoundView>): Ru
   };
 }
 
-const newRound = (round: number, queries: { id: string; text: string }[]): RoundView => ({
+const newRound = (
+  round: number,
+  queries: { id: string; text: string }[],
+  hits: Record<string, number> = {},
+): RoundView => ({
   round,
-  queries: queries.map((q) => ({ id: q.id, text: q.text, results: 0, searched: false })),
+  queries: queries.map((q) => ({
+    id: q.id,
+    text: q.text,
+    results: hits[q.id] ?? 0,
+    searched: false,
+  })),
   state: "queued",
   newPages: 0,
   knownPages: 0,
@@ -320,21 +332,32 @@ function apply(state: RunView, event: RunEvent): RunView {
     case "resource.released":
       return state;
     case "plan.ready": {
-      const subs = event.data.queries.filter((q) => q.id !== "q0");
+      const { queries } = event.data;
+      const hits = state.earlyHits;
       return {
         ...state,
-        subQueries: event.data.queries.map((q) => ({
+        subQueries: queries.map((q) => ({
           id: q.id,
           text: q.text,
-          results: 0,
+          results: hits[q.id] ?? 0,
           done: false,
         })),
-        rounds: [newRound(1, subs)],
+        earlyHits: {},
+        rounds: [newRound(1, queries, hits)],
         research: null,
       };
     }
     case "hit.found": {
       const { url, title, query_ids } = event.data;
+      const listed = new Set(state.subQueries.map((q) => q.id));
+      const earlyHits = { ...state.earlyHits };
+      for (const id of query_ids) if (!listed.has(id)) earlyHits[id] = (earlyHits[id] ?? 0) + 1;
+      const phase = isPhase(event.stage) ? state.phases[event.stage] : undefined;
+      const counted = phase
+        ? withPhase(state, event.stage, {
+            counters: { ...phase.counters, hits: (phase.counters.hits ?? 0) + 1 },
+          })
+        : state;
       const subQueries = state.subQueries.map((q) =>
         query_ids.includes(q.id) ? { ...q, results: q.results + 1 } : q,
       );
@@ -345,7 +368,16 @@ function apply(state: RunView, event: RunEvent): RunView {
         ),
       }));
       const known = state.sources[url];
-      return withSource({ ...state, subQueries, rounds }, url, known ? {} : { title, uri: url });
+      return withSource(
+        { ...counted, subQueries, rounds, earlyHits },
+        url,
+        known
+          ? {}
+          : {
+              title,
+              uri: url,
+            },
+      );
     }
     case "page.fetched": {
       const d = event.data;

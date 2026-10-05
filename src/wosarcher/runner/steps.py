@@ -4,6 +4,7 @@ Each step returns an `Outcome`; the runner turns it into `stage.done`.
 """
 
 import logging
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
@@ -109,6 +110,12 @@ class StepContext:
         else:
             self.store.append_jsonl(self.run_id, name, items)
 
+    def planned_rounds(self) -> int:
+        """`research.rounds`, or 1 for files-only runs and plans without a sub-query."""
+        if self.record.request.sources == "files" or len(self.plan().queries) < 2:
+            return 1
+        return self.settings.research.rounds
+
     def round_queries(self) -> list[Query]:
         return [query for query in self.plan().queries if query.round == self.round.number]
 
@@ -158,6 +165,13 @@ def failures(items: list[Skipped]) -> list[str]:
     return [f"{item.item}: {item.reason}" for item in items]
 
 
+def round_cap(left: int, later: int, queries_per_round: int, max_results: int) -> int:
+    """Pages this round may fetch: `left` minus a reserve for the `later` rounds, at least an even share."""
+    reserve = queries_per_round * max_results * later
+    even = math.ceil(left / (later + 1))
+    return min(max(left - reserve, even), left)
+
+
 def hit_found(ctx: StepContext, stage: Stage) -> Callable[[Hit], None]:
     def on_item(hit: Hit) -> None:
         ctx.log.emit("hit.found", stage, HitFoundData(url=hit.url, title=hit.title, query_ids=hit.query_ids))
@@ -182,12 +196,18 @@ async def load(ctx: StepContext) -> Outcome:
     return Outcome(len(result.pages), warnings=failures([*skipped, *result.skipped]))
 
 
+def searches_first(ctx: StepContext) -> bool:
+    """Whether the plan step searches the user's query before planning: web sources and a short query."""
+    request = ctx.record.request
+    return request.sources != "files" and len(request.query.strip()) <= searching.MAX_SEARCH_CHARS
+
+
 async def plan(ctx: StepContext) -> Outcome:
     request = ctx.record.request
     files = ctx.items("files.jsonl", Page)
     warnings: list[str] = []
     initial: list[Hit] = []
-    if request.sources != "files":
+    if searches_first(ctx):
         found = await searching.search(
             [Query(id="q0", text=request.query)], ctx.adapters.searcher, on_item=hit_found(ctx, "plan")
         )
@@ -227,9 +247,13 @@ class CountedSearcher:
 
 
 async def search(ctx: StepContext) -> Outcome:
-    """Round 1 searches the planner's sub-queries with the initial hits; later rounds their follow-ups."""
+    """Round 1 searches the sub-queries (and `q0` when no initial search ran) with the initial hits.
+
+    Later rounds search their follow-ups.
+    """
     initial = ctx.items("initial.jsonl", Hit) if ctx.first else []
-    queries = [query for query in ctx.round_queries() if query.id != "q0"]
+    searched_first = searches_first(ctx)
+    queries = [query for query in ctx.round_queries() if query.id != "q0" or not searched_first]
     searcher = CountedSearcher(ctx.adapters.searcher, ctx.log, len(queries))
     result = await searching.search(queries, searcher, initial=initial, on_item=hit_found(ctx, "search"))
     hits = [hit.model_copy(update={"round": ctx.round.number}) for hit in result.hits]
@@ -238,7 +262,7 @@ async def search(ctx: StepContext) -> Outcome:
 
 
 async def fetch(ctx: StepContext) -> Outcome:
-    """Fetch the round's hits whose URL no earlier round fetched or queued, within the pages left."""
+    """Fetch the round's hits whose URL no earlier round fetched or queued, within the round's cap."""
     state = ctx.round
     found = [hit for hit in ctx.items("hits.jsonl", Hit) if hit.round == state.number]
     hits = [hit for hit in found if normalise_url(hit.url) not in state.seen]
@@ -270,7 +294,9 @@ async def fetch(ctx: StepContext) -> Outcome:
 
     concurrency = ctx.settings.fetch.concurrency or DEFAULT_CONCURRENCY["firecrawl"]
     left = max(ctx.settings.fetch.max_pages - state.fetched, 0)
-    result = await fetching.fetch(hits, ctx.fetcher, concurrency=concurrency, max_pages=left, on_item=on_item)
+    later = max(ctx.planned_rounds() - state.number, 0)
+    cap = round_cap(left, later, ctx.settings.research.queries_per_round, ctx.settings.search.max_results)
+    result = await fetching.fetch(hits, ctx.fetcher, concurrency=concurrency, max_pages=cap, on_item=on_item)
     pages = [page.model_copy(update={"round": state.number}) for page in result.pages]
     ctx.save("pages.jsonl", pages)
     state.fetched += len(pages)
@@ -391,6 +417,26 @@ def selection_inputs(ctx: StepContext) -> tuple[list[Score], list[Page], list[Ch
     return ctx.items("scores.jsonl", Score), ctx.pages(), ctx.items("chunks.jsonl", Chunk), ctx.plan().queries
 
 
+def estimate(settings: Settings, text: str) -> int:
+    return selecting.estimate_tokens(
+        text, chars_per_token=settings.llm.chars_per_token, margin=settings.llm.token_margin
+    )
+
+
+def gap_budget(settings: Settings, query: str, queries: Sequence[Query]) -> int:
+    """`research.gap_context_tokens`, or for `auto` the room the window leaves after the gap prompt and output."""
+    tokens = settings.research.gap_context_tokens
+    if tokens != "auto":
+        return tokens
+    return selecting.budget(
+        context_window=settings.llm.context_window,
+        max_context_tokens=None,
+        prompt_reserve_tokens=settings.select.prompt_reserve_tokens,
+        output_tokens=gapping.MAX_TOKENS,
+        query_tokens=estimate(settings, query) + estimate(settings, "\n".join(item.text for item in queries)),
+    )
+
+
 async def gap(ctx: StepContext) -> Outcome:
     """Read the best passages so far and append the follow-up queries for the next round to the plan."""
     settings = ctx.settings
@@ -398,7 +444,7 @@ async def gap(ctx: StepContext) -> Outcome:
     selection = selecting.select(
         ctx.record.request.query,
         *selection_inputs(ctx),
-        budget_tokens=settings.research.gap_context_tokens,
+        budget_tokens=gap_budget(settings, ctx.record.request.query, plan.queries),
         max_per_source=settings.select.max_chunks_per_source,
         file_share=settings.select.file_share,
         chars_per_token=settings.llm.chars_per_token,
@@ -428,8 +474,8 @@ async def select(ctx: StepContext) -> Outcome:
         context_window=settings.llm.context_window,
         max_context_tokens=None if max_context == "auto" else max_context,
         prompt_reserve_tokens=settings.select.prompt_reserve_tokens,
-        words=settings.write.words,
-        max_output_tokens=settings.llm.max_output_tokens,
+        output_tokens=selecting.output_tokens(settings.write.words, settings.llm.max_output_tokens),
+        query_tokens=estimate(settings, ctx.record.request.query),
     )
     selection = selecting.select(
         ctx.record.request.query,

@@ -38,12 +38,21 @@ query ─► initial search ─► plan ─► search ─► fetch ────�
                                      └──────────────── follow-up queries (research rounds) ──────────────┘
 ```
 
-Load runs before plan so the planner sees attachment outlines.
+Load runs before plan so the planner sees attachment outlines. The initial
+search runs only for a query of at most 200 characters (see Initial
+search).
+
+The user's query has two roles. The planner, the gap step, and the writer
+read it whole, as the request. Search, fetch order, pairing, prefilter, and
+scoring use `q0`, the planner's topic line: one short query that states
+what the question is about. A one-line question and a 4,000-character
+brief therefore search and rank the same way, and no stage after `search`
+needs to know which one the user typed.
 
 | Stage | Input | Output | Resource |
 |---|---|---|---|
-| plan | query, initial search snippets, attachment outlines | sub-queries | LLM |
-| search | sub-queries | hits (URL, title, snippet, query IDs) | network |
+| plan | query, initial search snippets (short queries), attachment outlines | topic line `q0`, sub-queries | LLM |
+| search | sub-queries, and `q0` when no initial search ran | hits (URL, title, snippet, query IDs) | network |
 | fetch | hits | pages (markdown) | network |
 | load | attachment bytes | pages, outlines | CPU |
 | chunk | pages | chunks with heading path | CPU |
@@ -60,12 +69,20 @@ sub-query), search, fetch, chunk, prefilter, score, and gap run as a loop,
 one pass per round; select and write run once after it. Round 1 searches
 the planner's sub-queries. After every round but the last, the gap stage
 makes one LLM call: it reads the passages select picks from every round's
-kept scores within `research.gap_context_tokens` (4000) and the queries
-already run, and answers JSON with up to `research.queries_per_round`
+kept scores within the gap budget and the queries already run, and answers
+JSON with up to `research.queries_per_round`
 follow-up queries, a short note on what is missing, and an advisory `stop`
 flag. Follow-ups get the next `qN` IDs, carry their `round`, and are
 appended to `plan.json`; round k+1 searches them. With `rounds = 1` the gap
 stage is skipped (`stage.done` with `skipped`) and nothing else changes.
+
+The gap budget is `research.gap_context_tokens` (default 4000, a cheap call
+on a small local model). With `auto` it is the room `llm.context_window`
+leaves after `select.prompt_reserve_tokens`, the gap call's output limit
+(768 tokens), and the estimated tokens of the main query and the existing
+queries' text; a budget of 0 or less fails the gap step. A large-window
+deployment sets `auto` in its profile, with `--gap-context-tokens`, or in
+the API's `research.gap_context_tokens`.
 
 The loop and its bookkeeping (`RoundState`: round number, pages fetched so
 far, URLs seen, the scorer in use) live in the runner; the stages stay
@@ -73,8 +90,16 @@ pure. Each round:
 
 - searches only its own queries (round 1 merges the initial hits);
 - fetches only hits whose URL no earlier round fetched or queued (the rest
-  count as known pages), within the pages `fetch.max_pages` has left: the
-  cap counts across all rounds;
+  count as known pages), within its round cap. `fetch.max_pages` counts
+  across all rounds. With `left` pages left and `later` planned rounds
+  after this one, the round cap is the larger of `left` minus a reserve of
+  `research.queries_per_round` × `search.max_results` × `later` and the
+  even share `ceil(left / (later + 1))`, never above `left`. The reserve is
+  what follow-ups can use; the even share keeps round 1 from getting nothing
+  when the reserve is larger than the room (deep: 20 of 60 pages, then 20
+  of 40, then the last 20). The last round and single-round runs take
+  `left`. The cap depends only on the settings and the pages fetched so
+  far, so resume and fork compute it the same way;
 - chunks its new pages, deduplicated against earlier chunks;
 - prefilters and scores only pairs of its own queries with its new chunks,
   plus attached file chunks, so a page from an earlier round never pairs
@@ -118,6 +143,36 @@ query. Snippets are short and come from SearXNG, not from scraped pages, so
 fetched content never reaches the planner (the gap step reads passages; see
 Prompt injection).
 
+It runs only when web sources are on and the query is at most 200
+characters after trimming. Its hits carry `q0`, and the search stage does
+not search `q0` again in round 1. A longer query (a brief) is not searched
+before planning: search engines reject it or match a few of its words.
+`initial.jsonl` stays empty, the planner gets no snippets, and the search
+stage searches `q0` (the topic line) with the sub-queries. The rule depends
+only on the query's length, so the plan and search steps, a resume, and a
+fork all decide the same way.
+
+`MAX_SEARCH_CHARS = 200` in `stages/search.py` is the one limit: the
+initial search rule, the fallback topic, the gap step's follow-up length,
+and the search stage, which cuts every query text it sends to the searcher
+at the last whitespace within 200 characters (the plan keeps the full
+text). It is a constant, not a setting: it reflects what search engines
+accept.
+
+### Topic line
+
+The planner answers `{"topic": "...", "queries": [...]}` in one call: a
+topic line of at most 200 characters, which becomes the text of `q0`, and
+one sub-query per distinct topic of the question, up to
+`plan.max_sub_queries` (fewer for a narrow question). A sub-query that
+repeats the topic or the user's query (ignoring case) is dropped. A bare
+list still yields the sub-queries; an empty or longer topic counts as
+missing. When the planner does not run (sources `files`,
+`plan.max_sub_queries = 0`), gives no usable topic, or its answer cannot be
+read, `q0` is the fallback topic: the user's query, cut like a search
+query, or whole with sources `files` (nothing is searched; `q0` only
+scores the files). A missing or unreadable topic adds a warning.
+
 ### Dedupe
 
 - URLs are normalised (scheme, host case, trailing slash, tracking
@@ -128,7 +183,8 @@ Prompt injection).
 ### Fetch cap and order
 
 Fetch succeeds on at most `fetch.max_pages` pages (default 40, the most
-that default settings find: (1 + 3 sub-queries) × 10 results). Unique hits
+that default settings find: (1 + 3 sub-queries) × 10 results); a
+multi-round run splits it with the round cap (see Research rounds). Unique hits
 are queued round-robin over query IDs in query order (`q0` first), each
 query's hits by rank; a hit found by several queries is queued once, at its
 earliest turn. Up to `fetch.concurrency` workers take hits in queue order,
@@ -140,9 +196,12 @@ them as `unfetched`.
 ### Small-input passthrough
 
 When all pages for a query total less than `select.passthrough_chars`
-(default 8000), they skip prefilter and score: every pair is kept with
-`passthrough` scores, whatever scorer the run uses. Applies to web and
-files.
+(default 8000), they skip prefilter and score, whatever scorer the run
+uses. Their pairs are ordered by search rank, page order, and chunk
+position, and the first `score.top_k` are kept with `passthrough` scores;
+the rest are dropped with `query_cap`, so a small query cannot flood the
+context with unscored chunks. The `passthrough` fallback scorer is not
+capped. Applies to web and files.
 
 ### GPU use
 
@@ -212,9 +271,10 @@ Remote endpoints:
   is out of scope; put LiteLLM or llama-swap in front if needed.
 - **Timeouts and batches.** Connect timeout short (`connect_timeout`, 3 s) so
   a sleeping machine fails fast and the fallback chain takes over (BM25 for
-  prefilter and score). The read `timeout` defaults to 60 s; the local
-  profiles set `llm.timeout = 600` so prompt processing of a large context,
-  or a model load behind llama-swap, finishes before the first token.
+  prefilter and score). The read `timeout` defaults to 60 s, and to 300 s in
+  the `llm` block: a small local model on a consumer GPU can take minutes to
+  process a long prompt before its first token. The local profiles set
+  `llm.timeout = 600` so a model load behind llama-swap also fits.
   Larger batches amortise network latency.
 - **Retries.** HTTP 429, 502, 503, 504, and 529 are retried on the same URL
   with exponential backoff (0.5 s doubling, each wait at most 8 s) or the
@@ -338,12 +398,18 @@ in plan order; a passage that does not fit is skipped and the next is
 tried.
 
 The token budget is
-`min(select.max_context_tokens, llm.context_window - select.prompt_reserve_tokens - output)`,
-where `output = max(1024, 2 * words)`, lowered to `llm.max_output_tokens`
-when that is set, is also the write call's output limit, sent as
-`llm.max_tokens_field` (defaults 16000 and 2000). `select.max_context_tokens
-= "auto"` drops the cap: the budget is all the room the window leaves. A
-budget of zero or less is an error naming `llm.context_window`.
+`min(select.max_context_tokens, llm.context_window - select.prompt_reserve_tokens - query - output)`,
+where `output = min(max(1024, 2 * words), llm.max_output_tokens)` is also
+the write call's output limit, sent as `llm.max_tokens_field`, and `query`
+is the user's query estimated like a passage (`llm.chars_per_token`,
+`llm.token_margin`): the writer's prompt holds the full query on top of the
+fixed text `prompt_reserve_tokens` (2000) covers, and a 4,000-character
+brief is about 1,260 tokens. `select.max_context_tokens` defaults to
+`auto`, which drops the cap: the budget is all the room the window leaves.
+Passages are already bounded by queries × `score.top_k`, so a fixed cap
+only dropped scored passages as over budget. A profile or run can still set
+a number. A budget of zero or less is an error naming `llm.context_window`
+and the prompt, query, and output tokens it subtracted.
 
 File and web shares are soft and run in two phases: when both sides have
 passages, files first get `floor(select.file_share * budget)` (default
@@ -411,6 +477,11 @@ one more entry in that file. The write stage checks `tone` against that file
 and `reference_style` against the four known styles before calling the LLM;
 an unknown name fails with the list of known names.
 
+The report's output limit is `max(1024, 2 × words)`, capped at
+`llm.max_output_tokens` (default 8192), so every preset's target fits the
+default cap. The same number is the output allowance of the context budget
+(see Select).
+
 A report cut at the output limit (finish reason `length`) is continued, up
 to `llm.max_continuations` times (default 2; 0 turns it off). A
 continuation sends the first two messages, then the text so far as an
@@ -454,7 +525,11 @@ behind each claim.
 
 ### Prompt injection
 
-- Fetched content never reaches the planner.
+- Fetched content never reaches the planner. Its prompt template takes
+  only the query and `plan.max_sub_queries`; initial hit titles and
+  snippets (short queries only) and attachment outlines go in a separate,
+  delimited data message. The topic line it returns becomes a search query,
+  so it is held to the same 200-character limit as follow-ups.
 - The gap step does read scraped passages, and its output becomes search
   queries. Only the main query, the follow-up limit, and the date go
   through `prompts/gap.md`; the existing queries and the passages go in one
@@ -628,11 +703,12 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N] [--rounds N] [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--run-id ID] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
-  `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`, and
-  `research.rounds`, after the `--set` values. `--until` on a loop stage
+  `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
+  `research.gap_context_tokens`, and `research.rounds`, after the `--set`
+  values. The two token flags take a positive integer or `auto`. `--until` on a loop stage
   stops after that stage in round 1. The progress view shows a `gap` row
   only for multi-round runs, "round k/N" on running loop rows, and one
   final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
@@ -643,7 +719,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   terminal, progress goes to standard error; piped output is the report
   Markdown. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM, SIGINT),
   2 invalid arguments or configuration.
-- `wosarcher fork <id> --from <stage> [overrides] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
+- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
   copies `attachments/` and the artifacts before `<stage>` into a new run
   (version: the highest version in the parent's lineage plus one), logs a
   copied `stage.done` per earlier stage whose `copied_from` names the run
@@ -795,7 +871,8 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `running`. `RunCreate` has `query`, optional `sources`, `until`,
   `profile`, `depth` (a preset name or `custom`; unknown is 422 naming
   `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`, `rounds` at most 8), `writing`,
+  `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`
+  at most 8; the two token values may also be `auto`), `writing`,
   and `set`. Request
   precedence, each later layer winning: defaults, profile, environment,
   global settings, the depth preset, the request's `sources`, `research`,
@@ -871,14 +948,15 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   running one.
 - `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`,
   `description` (empty when the profile sets none), and the resolved
-  `context_window`, `prompt_reserve_tokens`, and `max_output_tokens` (null
-  when unset, or all null when the profile does not resolve), so the New
+  `context_window`, `prompt_reserve_tokens`, and `max_output_tokens` (all
+  null when the profile does not resolve), so the New
   run form can show the effective context budget.
 - `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
   `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
-  `context_tokens`, `rounds`, `queries_per_round`, the built-in default
-  where the preset sets none, and `words`, null when the preset leaves it to
+  `context_tokens`, `gap_context_tokens`, `rounds`, `queries_per_round`,
+  the built-in default where the preset sets none; the two token values
+  are a number or `auto`, and `words`, null when the preset leaves it to
   the global setting).
 - `GET /api/providers/health[?profile=P]`: sends no probe. It resolves the
   profile in the server process (400 `invalid_profile` on a configuration
@@ -1044,24 +1122,27 @@ Depth presets are a per-run axis, separate from profiles:
 `src/wosarcher/depths/{quick,standard,deep,exhaustive}.toml`, each with a
 one-line `description`. A preset may set only `plan.max_sub_queries`,
 `search.max_results`, `fetch.max_pages`, `score.top_k`,
-`select.max_context_tokens`, `research.rounds`,
-`research.queries_per_round`, and `write.words` (`DEPTH_KEYS`); any other
-key, such as `research.gap_context_tokens`, fails when it loads, naming the
-file and the key.
+`select.max_context_tokens`, `research.gap_context_tokens`,
+`research.rounds`, `research.queries_per_round`, and `write.words`
+(`DEPTH_KEYS`); any other key fails when it loads, naming the file and the
+key. No built-in preset sets either token budget, so every preset uses
+`auto` context and a 4000-token gap budget. The planner decides how many
+sub-queries a question needs, so a higher limit costs only when the
+question has that many topics.
 
 | key | quick | standard | deep | exhaustive |
 |---|---|---|---|---|
-| `plan.max_sub_queries` | 2 | - | 5 | 8 |
+| `plan.max_sub_queries` | 3 | - | 6 | 10 |
 | `search.max_results` | 5 | - | 10 | 10 |
 | `fetch.max_pages` | 15 | - | 60 | 100 |
 | `score.top_k` | 6 | - | 10 | 8 |
-| `select.max_context_tokens` | 8000 | - | 24000 | 32000 |
 | `write.words` | 600 | - | 2000 | 3000 |
 | `research.rounds` | - | - | 3 | 5 |
 | `research.queries_per_round` | - | - | 3 | 4 |
 
 The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
-(default 3), and `gap_context_tokens` (default 4000). The `gap` stage
+(default 3), and `gap_context_tokens` (default 4000, or `auto`; see
+Research rounds). The `gap` stage
 timeout defaults to 180 seconds.
 
 `standard` sets nothing, so it resolves like no depth. `custom` applies no
@@ -1081,8 +1162,8 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `reasoning_tokens` (default 0, added to every LLM request's limit, for
 reasoning models that count hidden reasoning tokens), and `max_continuations`
 (default 2, how often the writer continues a report cut at the output
-limit), and `max_output_tokens` (unset by default; caps the writer's output
-limit for providers with a lower output ceiling); the `fetch` block adds
+limit), and `max_output_tokens` (default 8192; caps the writer's output
+limit); the `fetch` block adds
 `max_pages` (default 40, see Fetch cap and order); the `score` block adds
 `rerank_scale` (`auto`, `probability`, `logit`).
 
@@ -1101,6 +1182,15 @@ Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
 `workstation` (shared), `cloud` (no local models, high concurrency;
 `llm.reasoning_tokens = 4096` for `gpt-5-mini`). The local profiles set
 `llm.timeout = 600`.
+
+The built-in defaults target the smallest setup wosarcher supports well: a
+local 32768-token model (a qwen3.5:9b class model behind llama-server or
+Ollama) and the `qwen3-embedding:4b` embedder at `num_ctx` 24576.
+`llm.context_window` is 32768, `llm.max_output_tokens` 8192 (a quarter of
+the window, so a long report cannot claim most of it; exhaustive's
+3000-word target asks for 6000), and `llm.timeout` 300 seconds. A larger
+model (a 1M-token DeepSeek, a 256k cloud model) sets its own window, output
+cap, and timeouts in its profile; the defaults never assume a big window.
 
 Secrets come from the environment or a secrets file and are redacted in
 `request.json` and in all server responses.

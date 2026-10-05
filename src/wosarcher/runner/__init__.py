@@ -130,7 +130,7 @@ class Runner:
                 current = stage
                 if looped and stage in LOOP_STAGES:
                     continue
-                if stage == "search" and self.planned_rounds(ctx) > 1:
+                if stage == "search" and ctx.planned_rounds() > 1:
                     looped = True
                     after: list[Stage] = [name for name in runnable if name not in LOOP_STAGES]
                     await self.research(ctx, until, after)
@@ -166,12 +166,6 @@ class Runner:
             until=until,
         )
 
-    def planned_rounds(self, ctx: steps.StepContext) -> int:
-        """`research.rounds`, or 1 for files-only runs and plans without a sub-query."""
-        if ctx.record.request.sources == "files" or len(ctx.plan().queries) < 2:
-            return 1
-        return self.settings.research.rounds
-
     def restart_loop(self, run_id: str) -> None:
         """Before the loop runs again: the plan back to its round-1 queries, the loop's artifacts emptied."""
         path = self.store.run_dir(run_id) / "plan.json"
@@ -186,7 +180,7 @@ class Runner:
 
     async def research(self, ctx: steps.StepContext, until: Stage | None, after: list[Stage]) -> None:
         """Run search through score once per round, with a gap step between rounds, until a stop rule holds."""
-        planned = self.planned_rounds(ctx)
+        planned = ctx.planned_rounds()
         state = ctx.round
         rounds: list[RoundRecord] = []
         reason: StopReason | None = None

@@ -1,7 +1,7 @@
 description = "Fast overview: few searches, short report."
 
 [plan]
-max_sub_queries = 2
+max_sub_queries = 3
 
 [search]
 max_results = 5
@@ -11,9 +11,6 @@ max_pages = 15
 
 [score]
 top_k = 6
-
-[select]
-max_context_tokens = 8000
 
 [write]
 words = 600

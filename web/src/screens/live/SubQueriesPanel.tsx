@@ -1,5 +1,6 @@
 // The planner's sub-queries with their search state and result counts.
 import { Check, CircleNotch, Clock, type Icon, Recycle, StopCircle } from "@phosphor-icons/react";
+import { HelpTip } from "../../components/HelpTip";
 import type { RunView, SubQuery } from "../../run/reducer";
 import panel from "./Panel.module.css";
 import css from "./SubQueriesPanel.module.css";
@@ -11,6 +12,29 @@ function state(run: RunView, q: SubQuery): { text: string; icon: Icon; spin?: bo
   if (run.phases.search.state === "running")
     return { text: "searching", icon: CircleNotch, spin: true };
   return { text: "queued", icon: Clock };
+}
+
+/** A query's text; `q0`, the planner's topic line, carries its label and help above the text. */
+export function QueryText({
+  id,
+  text,
+  className,
+}: {
+  id: string;
+  text: string;
+  className?: string;
+}) {
+  return (
+    <span className={className}>
+      {id === "q0" && (
+        <span className={css.topic}>
+          Topic line
+          <HelpTip help="q0" />
+        </span>
+      )}
+      {text}
+    </span>
+  );
 }
 
 export function SubQueriesPanel({ run, className }: { run: RunView; className?: string }) {
@@ -29,13 +53,13 @@ export function SubQueriesPanel({ run, className }: { run: RunView; className?: 
         </div>
       )}
       <ol className={css.list}>
-        {run.subQueries.map((q, i) => {
+        {run.subQueries.map((q) => {
           const s = state(run, q);
           const Glyph = s.icon;
           return (
             <li key={q.id} className={css.row}>
-              <span className={css.n}>{i + 1}</span>
-              <span className={css.text}>{q.text}</span>
+              <span className={css.n}>{q.id}</span>
+              <QueryText id={q.id} text={q.text} className={css.text} />
               <span className={css.state}>
                 <Glyph className={s.spin ? "spin" : undefined} aria-hidden="true" />
                 {s.text}

@@ -64,7 +64,10 @@ Sources = Literal["both", "web", "files"]
 
 
 class Query(Contract):
-    """`q0` is the main query; `q1`, `q2`, ... are sub-queries."""
+    """`q0` is the main query, whose text is the planner's topic line; `q1`, `q2`, ... are sub-queries.
+
+    The user's query stays on the run request; `q0` holds the short text that is searched and ranked against.
+    """
 
     id: str
     text: str
@@ -74,7 +77,7 @@ class Query(Contract):
 
 class Plan(Contract):
     queries: list[Query]
-    """`queries[0]` is the main query."""
+    """`queries[0]` is the main query `q0` (the topic line, or the fallback topic), then the sub-queries."""
     warnings: list[str] = []
 
 
@@ -550,7 +553,8 @@ class ResearchPatch(Contract):
     results_per_query: int | None = Field(default=None, gt=0)
     max_pages: int | None = Field(default=None, gt=0)
     passages_per_query: int | None = Field(default=None, gt=0)
-    context_tokens: int | None = Field(default=None, gt=0)
+    context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
+    gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
     rounds: int | None = Field(default=None, gt=0, le=8)
 
 
@@ -618,7 +622,8 @@ class DepthValues(Contract):
     results_per_query: int
     max_pages: int
     passages_per_query: int
-    context_tokens: int
+    context_tokens: int | Literal["auto"]
+    gap_context_tokens: int | Literal["auto"]
     rounds: int
     queries_per_round: int
     words: int | None = None

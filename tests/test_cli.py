@@ -68,7 +68,8 @@ def test_depth_show_quick() -> None:
     result = runner.invoke(app, ["depth", "show", "quick"])
     assert result.exit_code == 0
     lines = result.output.splitlines()
-    assert lines[0] == "plan.max_sub_queries = 2"
+    assert lines[0] == "plan.max_sub_queries = 3"
+    assert not any("max_context_tokens" in line for line in lines)
     assert lines[-1] == "write.words = 600"
 
 

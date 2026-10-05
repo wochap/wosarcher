@@ -13,6 +13,7 @@ from wosarcher.config import (
     store_profile,
     to_toml,
 )
+from wosarcher.stages.select import output_tokens
 
 
 @pytest.fixture
@@ -173,7 +174,7 @@ def test_ranking_defaults() -> None:
     assert (settings.prefilter.provider, settings.prefilter.top_k) == ("bm25", 50)
     assert (settings.score.min_score, settings.score.fallback) == (1.5, ["bm25", "passthrough"])
     select = settings.select
-    assert (select.passthrough_chars, select.max_chunks_per_source, select.max_context_tokens) == (8000, 5, 16000)
+    assert (select.passthrough_chars, select.max_chunks_per_source, select.max_context_tokens) == (8000, 5, "auto")
     assert (select.file_share, select.prompt_reserve_tokens) == (0.5, 2000)
     llm = settings.llm
     assert (llm.context_window, llm.chars_per_token, llm.token_margin) == (32768, 3.5, 1.1)
@@ -314,6 +315,40 @@ def test_invalid_context_value(env: dict[str, str]) -> None:
         resolve("bad", [], env)
 
 
+def test_fixed_context_cap(env: dict[str, str]) -> None:
+    user_profile(env, "capped", PROVIDERS + '[llm]\nprovider = "llm"\n[select]\nmax_context_tokens = 12000\n')
+    assert resolve("capped", [], env).select.max_context_tokens == 12000
+
+
+def test_output_cap_default(env: dict[str, str]) -> None:
+    settings = resolve(None, [], env, depth="exhaustive")
+    assert settings.llm.max_output_tokens == 8192
+    assert output_tokens(settings.write.words, settings.llm.max_output_tokens) == 6000
+
+
+def test_larger_model_sets_its_own_cap(env: dict[str, str]) -> None:
+    body = '[llm]\nprovider = "llm"\ncontext_window = 1048576\nmax_output_tokens = 131072\n'
+    user_profile(env, "big", PROVIDERS + body)
+    llm = resolve("big", [], env).llm
+    assert (llm.context_window, llm.max_output_tokens) == (1048576, 131072)
+
+
+def test_llm_timeout_default() -> None:
+    settings = Settings()
+    assert (settings.llm.timeout, settings.search.timeout) == (300, 60)
+
+
+def test_gap_context_default(env: dict[str, str]) -> None:
+    assert resolve(None, [], env).research.gap_context_tokens == 4000
+    assert resolve(None, ["research.gap_context_tokens=auto"], env).research.gap_context_tokens == "auto"
+
+
+def test_invalid_gap_context_value(env: dict[str, str]) -> None:
+    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "llm"\n[research]\ngap_context_tokens = "all"\n')
+    with pytest.raises(ConfigError, match=r"research\.gap_context_tokens"):
+        resolve("bad", [], env)
+
+
 def test_page_cap_default(env: dict[str, str]) -> None:
     assert resolve(None, [], env).fetch.max_pages == 40
 
@@ -324,7 +359,8 @@ def test_standard_equals_defaults(env: dict[str, str]) -> None:
 
 def test_deep_values(env: dict[str, str]) -> None:
     settings = resolve(None, [], env, depth="deep")
-    assert (settings.plan.max_sub_queries, settings.fetch.max_pages, settings.write.words) == (5, 60, 2000)
+    assert (settings.plan.max_sub_queries, settings.fetch.max_pages, settings.write.words) == (6, 60, 2000)
+    assert settings.select.max_context_tokens == "auto"
     assert (settings.research.rounds, settings.research.queries_per_round) == (3, 3)
 
 
@@ -346,12 +382,6 @@ def test_provider_key_rejected(tmp_path: Path) -> None:
     assert "llm.model" in str(error.value)
 
 
-def test_gap_context_rejected_in_preset(tmp_path: Path) -> None:
-    (tmp_path / "odd.toml").write_text("[research]\ngap_context_tokens = 1000\n")
-    with pytest.raises(ConfigError, match=r"research\.gap_context_tokens"):
-        load_depth("odd", tmp_path)
-
-
 def test_rounds_above_eight_rejected(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError, match=r"research\.rounds"):
         resolve(None, ["research.rounds=9"], env)
@@ -359,16 +389,16 @@ def test_rounds_above_eight_rejected(env: dict[str, str]) -> None:
 
 def test_preset_beats_environment(env: dict[str, str]) -> None:
     env["WOSARCHER_PLAN__MAX_SUB_QUERIES"] = "4"
-    assert resolve(None, [], env, depth="quick").plan.max_sub_queries == 2
+    assert resolve(None, [], env, depth="quick").plan.max_sub_queries == 3
 
 
 def test_flag_beats_preset(env: dict[str, str]) -> None:
     settings = resolve(None, ["write.words=800"], env, depth="deep")
-    assert (settings.write.words, settings.plan.max_sub_queries) == (800, 5)
+    assert (settings.write.words, settings.plan.max_sub_queries) == (800, 6)
 
 
 def test_preset_between_environment_and_overrides(env: dict[str, str]) -> None:
-    user_profile(env, "mid", PROVIDERS + '[llm]\nprovider = "llm"\n' + "[select]\nmax_context_tokens = 12000\n")
-    assert resolve("mid", [], env, depth="deep").select.max_context_tokens == 24000
-    overrides = ["select.max_context_tokens=20000"]
-    assert resolve("mid", overrides, env, depth="deep").select.max_context_tokens == 20000
+    user_profile(env, "mid", PROVIDERS + '[llm]\nprovider = "llm"\n' + "[plan]\nmax_sub_queries = 1\n")
+    assert resolve("mid", [], env, depth="deep").plan.max_sub_queries == 6
+    overrides = ["plan.max_sub_queries=2"]
+    assert resolve("mid", overrides, env, depth="deep").plan.max_sub_queries == 2

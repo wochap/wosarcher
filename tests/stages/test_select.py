@@ -1,7 +1,8 @@
 import pytest
 
+from wosarcher.config import Settings
 from wosarcher.models import Chunk, Page, Score
-from wosarcher.stages.select import budget, estimate_tokens, select
+from wosarcher.stages.select import budget, estimate_tokens, output_tokens, select
 
 from .ranking_data import chunks_of, file_page, queries, web_page
 
@@ -10,24 +11,53 @@ TEXT = "y" * 350
 COST = 126
 
 
-def test_budget_small_window() -> None:
-    assert budget(context_window=8192, max_context_tokens=16000, prompt_reserve_tokens=2000, words=1200) == 3792
+QUERY = "how do sodium-ion batteries compare"
+"""35 characters: 11 tokens at 3.5 characters per token and a 1.1 margin."""
 
 
-def test_budget_auto_context() -> None:
-    assert budget(context_window=1_000_000, max_context_tokens=None, prompt_reserve_tokens=2000, words=1200) == 995_600
-
-
-def test_budget_output_cap() -> None:
-    tokens = budget(
-        context_window=32768, max_context_tokens=None, prompt_reserve_tokens=2000, words=3000, max_output_tokens=4000
+def sized(
+    *, context_window: int, max_context_tokens: int | None, words: int, cap: int = 8192, query: str = QUERY
+) -> int:
+    return budget(
+        context_window=context_window,
+        max_context_tokens=max_context_tokens,
+        prompt_reserve_tokens=2000,
+        output_tokens=output_tokens(words, cap),
+        query_tokens=estimate_tokens(query, chars_per_token=3.5, margin=1.1),
     )
-    assert tokens == 26768
+
+
+def test_budget_small_window() -> None:
+    assert len(QUERY) == 35
+    assert sized(context_window=8192, max_context_tokens=16000, words=1200) == 3781
 
 
 def test_budget_window_too_small() -> None:
-    with pytest.raises(ValueError, match=r"llm\.context_window"):
-        budget(context_window=4000, max_context_tokens=16000, prompt_reserve_tokens=2000, words=1200)
+    with pytest.raises(ValueError, match=r"llm\.context_window.*2000 prompt, 11 query, and 2400 output"):
+        sized(context_window=4000, max_context_tokens=16000, words=1200)
+
+
+def test_budget_auto_context() -> None:
+    assert sized(context_window=1_000_000, max_context_tokens=None, words=1200) == 995_589
+
+
+def test_budget_output_cap() -> None:
+    assert sized(context_window=32768, max_context_tokens=None, words=3000, cap=4000) == 26757
+
+
+def test_budget_default_is_auto() -> None:
+    cfg = Settings()
+    assert cfg.select.max_context_tokens == "auto"
+    assert sized(context_window=131072, max_context_tokens=None, words=600) == 127861
+
+
+def test_budget_long_brief_on_a_small_local_model() -> None:
+    cfg = Settings()
+    brief = "x" * 4000
+    tokens = estimate_tokens(brief, chars_per_token=cfg.llm.chars_per_token, margin=cfg.llm.token_margin)
+    assert tokens == 1258
+    window, cap = cfg.llm.context_window, cfg.llm.max_output_tokens
+    assert sized(context_window=window, max_context_tokens=None, words=1200, cap=cap, query=brief) == 27110
 
 
 def test_estimate() -> None:

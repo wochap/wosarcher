@@ -1,7 +1,7 @@
 description = "Several research rounds that follow up on gaps."
 
 [plan]
-max_sub_queries = 5
+max_sub_queries = 6
 
 [search]
 max_results = 10
@@ -11,9 +11,6 @@ max_pages = 60
 
 [score]
 top_k = 10
-
-[select]
-max_context_tokens = 24000
 
 [write]
 words = 2000

@@ -20,6 +20,7 @@ import { HelpTip } from "../../components/HelpTip";
 import type { RoundQuery, RoundView, RunView, StopReason } from "../../run/reducer";
 import panel from "./Panel.module.css";
 import css from "./ResearchRoundsPanel.module.css";
+import { QueryText } from "./SubQueriesPanel";
 
 const COLLAPSE_ABOVE = 3;
 const COLLAPSED = 2;
@@ -114,7 +115,7 @@ function Round({ round, next }: { round: RoundView; next: RoundView | undefined 
           return (
             <li key={query.id} className={css.query}>
               <span className={css.id}>{query.id}</span>
-              <span className={css.text}>{query.text}</span>
+              <QueryText id={query.id} text={query.text} className={css.text} />
               <span className={css.queryState}>
                 <QueryGlyph className={q.spin ? "spin" : undefined} aria-hidden="true" />
                 {q.text}

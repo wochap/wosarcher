@@ -82,6 +82,34 @@ describe("ReportScreen", () => {
     expect(await screen.findByText(/ · 14 passages · 2 of 3 rounds$/)).toBeTruthy();
   });
 
+  it("clamps a long question title and toggles the whole of it", async () => {
+    const query = `# Brief\n${"x".repeat(4022)}`;
+    const others = finished.data.runs?.filter((r) => r.run_id !== RUN_ID) ?? [];
+    const long = summary({ query });
+    await openScenario({ ...finished, data: { ...finished.data, runs: [long, ...others] } });
+    const title = await screen.findByRole("heading", { level: 1, name: /^# Brief/ });
+    expect(title.id).toBe("rep-q");
+    const toggle = screen.getByRole("button", { name: /Show full question/ });
+    expect(toggle.textContent).toBe("Show full question· 4,030 characters");
+    expect(toggle.getAttribute("aria-controls")).toBe("rep-q");
+    fireEvent.click(toggle);
+    expect(toggle.textContent).toBe("Show less· 4,030 characters");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(title.textContent).toBe(query);
+  });
+
+  it("shows a short question title whole, with no toggle", async () => {
+    const query = "y".repeat(120);
+    const others = finished.data.runs?.filter((r) => r.run_id !== RUN_ID) ?? [];
+    await openScenario({
+      ...finished,
+      data: { ...finished.data, runs: [summary({ query }), ...others] },
+    });
+    const title = await screen.findByRole("heading", { level: 1, name: query });
+    expect(title.id).toBe("");
+    expect(screen.queryByRole("button", { name: /Show full question/ })).toBeNull();
+  });
+
   it("shows the finished report with its sources and selected passages", async () => {
     await openScenario(finished);
     expect(await screen.findByRole("heading", { level: 1, name: QUERY })).toBeTruthy();

@@ -28,6 +28,7 @@ from wosarcher.models import (
 )
 from wosarcher.ports import Adapters, Scorer
 from wosarcher.runner import Runner
+from wosarcher.runner.steps import gap_budget, round_cap
 from wosarcher.store import RunStore
 
 WORLD = {
@@ -137,14 +138,74 @@ async def test_no_new_sources(tmp_path: Path) -> None:
 
 
 async def test_page_limit(tmp_path: Path) -> None:
-    cfg = configured(tmp_path, fetch=FetchConfig(provider="firecrawl", max_pages=4))
+    cfg = configured(tmp_path, rounds=2, fetch=FetchConfig(provider="firecrawl", max_pages=4))
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
     assert await run(cfg, run_id, world(gap_reply("lithium price", "cobalt supply"))) == "done"
     record = research(store, run_id)
     assert (record.ran, record.reason) == (2, "page limit reached")
-    assert [r.new_pages for r in record.rounds] == [3, 1]
+    assert [r.new_pages for r in record.rounds] == [2, 2]
     assert len(store.read_items(run_id, "pages.jsonl", Page)) == 4
+
+
+@pytest.mark.parametrize(
+    ("left", "later", "per_round", "results", "cap"),
+    [
+        (5, 0, 3, 10, 5),  # cap across rounds: the last round takes what is left
+        (60, 2, 3, 10, 20),  # deep: the reserve leaves nothing, the even share is 20
+        (40, 1, 3, 10, 20),  # deep, round 2
+        (60, 1, 3, 5, 45),  # the reserve is smaller than the room
+        (15, 0, 3, 10, 15),  # a single round
+        (0, 2, 3, 10, 0),
+    ],
+)
+def test_round_cap(left: int, later: int, per_round: int, results: int, cap: int) -> None:
+    assert round_cap(left, later, per_round, results) == cap
+
+
+async def test_round_cap_leaves_room_for_the_gap_step(tmp_path: Path) -> None:
+    research_cfg = ResearchConfig(rounds=3, queries_per_round=1)
+    cfg = settings(tmp_path).model_copy(
+        update={"research": research_cfg, "fetch": FetchConfig(provider="firecrawl", max_pages=3)}
+    )
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price"), gap_reply("cobalt supply"))
+    assert await run(cfg, run_id, fakes) == "done"
+    record = research(store, run_id)
+    assert [r.new_pages for r in record.rounds] == [1, 1, 1]
+    assert len([e for e in store.read_events(run_id) if isinstance(e, GapReady)]) == 2
+
+
+def test_gap_budget_number(tmp_path: Path) -> None:
+    assert gap_budget(configured(tmp_path), "q", []) == 4000
+
+
+def test_auto_gap_budget(tmp_path: Path) -> None:
+    cfg = configured(tmp_path)
+    cfg = cfg.model_copy(
+        update={
+            "research": ResearchConfig(rounds=3, gap_context_tokens="auto"),
+            "llm": cfg.llm.model_copy(
+                update={"context_window": 1_000_000, "chars_per_token": 1.0, "token_margin": 1.0}
+            ),
+        }
+    )
+    queries = [Query(id="q0", text="b" * 299), Query(id="q1", text="c" * 200)]
+    # 1000 query characters plus 299 + 1 + 200 for the queries joined by a newline: 1500 tokens.
+    assert gap_budget(cfg, "a" * 1000, queries) == 1_000_000 - 2000 - 768 - 1500
+
+
+def test_gap_budget_below_zero_fails(tmp_path: Path) -> None:
+    cfg = configured(tmp_path)
+    cfg = cfg.model_copy(
+        update={
+            "research": ResearchConfig(rounds=3, gap_context_tokens="auto"),
+            "llm": cfg.llm.model_copy(update={"context_window": 2500}),
+        }
+    )
+    with pytest.raises(ValueError, match=r"llm\.context_window"):
+        gap_budget(cfg, "q", [])
 
 
 async def test_known_page_not_paired(tmp_path: Path) -> None:

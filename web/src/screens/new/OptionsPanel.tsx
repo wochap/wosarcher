@@ -2,7 +2,7 @@
 // start from the saved defaults (Length from the depth) and mark per-run overrides.
 import { ArrowCounterClockwise, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
-import type { ProfileInfo, ResearchValues, WritingOptions } from "../../api/types";
+import type { ProfileInfo, ResearchValues, TokenBudget, WritingOptions } from "../../api/types";
 import type { RunOptions } from "../../app/context";
 import { go } from "../../app/route";
 import { HelpTip } from "../../components/HelpTip";
@@ -33,10 +33,11 @@ export type DepthView = {
   description: string;
   values: ResearchValues;
   effective: number | null;
+  gapEffective: number | null;
   queriesPerRound: number;
   wordsSet: boolean;
   onPick: (depth: Depth) => void;
-  onEdit: (field: keyof ResearchValues, value: number) => void;
+  onEdit: (field: keyof ResearchValues, value: TokenBudget) => void;
 };
 
 type Props = {
@@ -89,6 +90,7 @@ export function OptionsPanel(props: Props) {
             description={depth.description}
             values={depth.values}
             effective={depth.effective}
+            gapEffective={depth.gapEffective}
             queriesPerRound={depth.queriesPerRound}
             filesOnly={options.sources === "files"}
             onPick={depth.onPick}

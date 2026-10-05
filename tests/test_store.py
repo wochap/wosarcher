@@ -337,7 +337,7 @@ def test_depth_recorded(store: RunStore) -> None:
     saved = json.loads((store.run_dir(run_id) / "request.json").read_text())
     assert saved["request"]["depth"] == "deep"
     assert saved["overrides"] == ["write.words=800"]
-    assert saved["settings"]["plan"]["max_sub_queries"] == 5
+    assert saved["settings"]["plan"]["max_sub_queries"] == 6
     assert store.list_runs()[0].depth == "deep"
 
 

@@ -162,3 +162,62 @@ def test_deep_run_two_rounds(runs: Path) -> None:
     assert cited_rounds == {1, 2}
     listed = json.loads(runner.invoke(app, ["runs", "--json"]).stdout)
     assert (listed[0]["rounds_planned"], listed[0]["rounds_ran"]) == (3, 2)
+
+
+BRIEF = (
+    "I am preparing a briefing for a regional council on battery recycling. Cover how lithium-ion batteries are "
+    "collected and sorted, which recycling methods exist (pyrometallurgy, hydrometallurgy, direct recycling) and "
+    "how their recovery rates compare, what the economics of a recycling plant look like per tonne, which "
+    "regulations and recycling efficiency targets apply in the coming years, and what safety hazards come up "
+    "during transport and storage. Close with recommendations for a mid-sized city."
+)
+
+
+def traced_router(calls: list[tuple[str, str]]) -> respx.MockRouter:
+    """The recorded world; every search query and LLM request body is appended to `calls` in order."""
+
+    def search(request: httpx.Request) -> httpx.Response:
+        calls.append(("search", request.url.params.get("q", "")))
+        return recorded.search(request)
+
+    def chat(request: httpx.Request) -> httpx.Response:
+        calls.append(("chat", request.content.decode()))
+        return recorded.chat(request)
+
+    router = respx.mock(assert_all_mocked=True, assert_all_called=False)
+    router.get("http://searxng.test/search").mock(side_effect=search)
+    router.post("http://firecrawl.test/v1/scrape").mock(side_effect=recorded.scrape)
+    router.post("http://llm.test/v1/chat/completions").mock(side_effect=chat)
+    return router
+
+
+def test_long_brief_searches_the_topic(runs: Path) -> None:
+    calls: list[tuple[str, str]] = []
+    with traced_router(calls):
+        result = runner.invoke(app, ["run", BRIEF, "--profile", "e2e", "--sources", "web", "--run-id", RUN_ID])
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    assert len(BRIEF) > 200
+    assert calls[0][0] == "chat"
+    assert (run_dir / "initial.jsonl").read_text() == ""
+    plan = Plan.model_validate_json((run_dir / "plan.json").read_text())
+    assert (plan.queries[0].id, plan.queries[0].text, plan.warnings) == ("q0", QUERY, [])
+    searched = [text for kind, text in calls if kind == "search"]
+    assert sorted(searched) == sorted(query.text for query in plan.queries)
+    assert all(len(text) <= 200 for text in searched)
+    bodies = [json.loads(body) for kind, body in calls if kind == "chat"]
+    writer = next(body for body in bodies if body.get("stream"))
+    assert any(BRIEF in message["content"] for message in writer["messages"])
+
+
+def test_short_query_searched_before_planning(runs: Path) -> None:
+    calls: list[tuple[str, str]] = []
+    with traced_router(calls):
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--sources", "web", "--run-id", RUN_ID])
+    assert result.exit_code == 0, result.output
+    assert calls[0] == ("search", QUERY)
+    planner = json.loads(calls[1][1])
+    assert calls[1][0] == "chat"
+    assert "Battery recycling - Wikipedia" in planner["messages"][1]["content"]
+    searched = [text for kind, text in calls if kind == "search"]
+    assert searched.count(QUERY) == 1

@@ -55,7 +55,8 @@ export type Sources = Source[]
 export type UsedTokens = number
 export type Description = string
 export type Name1 = string
-export type ContextTokens = number
+export type ContextTokens = (number | "auto")
+export type GapContextTokens = (number | "auto")
 export type MaxPages = number
 export type PassagesPerQuery = number
 export type QueriesPerRound = number
@@ -251,7 +252,8 @@ export type Seq8 = number
 export type Stage8 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts8 = string
 export type Type8 = "research.done"
-export type ContextTokens1 = (number | null)
+export type ContextTokens1 = (number | "auto" | null)
+export type GapContextTokens1 = (number | "auto" | null)
 export type MaxPages1 = (number | null)
 export type PassagesPerQuery1 = (number | null)
 export type ResultsPerQuery1 = (number | null)
@@ -629,6 +631,7 @@ values: DepthValues
  */
 export interface DepthValues {
 context_tokens: ContextTokens
+gap_context_tokens: GapContextTokens
 max_pages: MaxPages
 passages_per_query: PassagesPerQuery
 queries_per_round: QueriesPerRound
@@ -754,7 +757,9 @@ round: Round2
 stop: Stop
 }
 /**
- * `q0` is the main query; `q1`, `q2`, ... are sub-queries.
+ * `q0` is the main query, whose text is the planner's topic line; `q1`, `q2`, ... are sub-queries.
+ * 
+ * The user's query stays on the run request; `q0` holds the short text that is searched and ranked against.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "Query".
@@ -1117,6 +1122,7 @@ reason: Reason2
  */
 export interface ResearchPatch {
 context_tokens?: ContextTokens1
+gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 results_per_query?: ResultsPerQuery1
@@ -1271,6 +1277,7 @@ writing?: WritingPatch1
  */
 export interface ResearchPatch1 {
 context_tokens?: ContextTokens1
+gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 results_per_query?: ResultsPerQuery1

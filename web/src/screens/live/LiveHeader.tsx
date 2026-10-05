@@ -1,8 +1,11 @@
 // The Live run header: status tag, depth tag, rewrite tag, id, meta, query, device chip, and actions.
+
 import { ArrowClockwise, Article, Circle, GitBranch, Stop } from "@phosphor-icons/react";
+import { useState } from "react";
 import type { RunDetail, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
+import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import type { RunView } from "../../run/reducer";
 import { DeviceChip } from "./DeviceChip";
 import css from "./LiveHeader.module.css";
@@ -49,6 +52,10 @@ export function LiveHeader({
   ];
   if (files) meta.push(`${files} file${files > 1 ? "s" : ""}`);
   const parent = run.parentRunId ?? detail?.parent_run_id;
+  const query = run.query ?? detail?.query ?? "";
+  const long = isLongQuery(query);
+  const [open, setOpen] = useState(false);
+  const expanded = long && open;
   return (
     <header className={css.header}>
       <div className={css.main}>
@@ -67,7 +74,17 @@ export function LiveHeader({
           <span className={css.id}>{run.runId}</span>
           <span>{meta.join(" · ")}</span>
         </div>
-        <div className={css.query}>{run.query ?? detail?.query}</div>
+        <div id="run-q" className={expanded ? css.queryFull : css.query}>
+          {query}
+        </div>
+        {long && (
+          <QueryToggle
+            query={query}
+            open={expanded}
+            controls="run-q"
+            onToggle={() => setOpen(!open)}
+          />
+        )}
       </div>
       <div className={css.actions}>
         {active && !isPhone && <DeviceChip run={run} />}
