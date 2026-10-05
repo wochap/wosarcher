@@ -37,6 +37,7 @@ from wosarcher.models import (
     RunSummary,
     Sources,
     Stage,
+    search_language,
 )
 from wosarcher.runner import Runner
 from wosarcher.runner.events import Listener
@@ -112,6 +113,28 @@ def domain_overrides(allow: list[str] | None, block: list[str] | None) -> list[s
     """Domain flags as JSON-list overrides of `search.allow_domains` and `search.block_domains`."""
     lists = {"search.allow_domains": allow, "search.block_domains": block}
     return [f"{key}={json.dumps(value)}" for key, value in lists.items() if value]
+
+
+def language_option(value: str | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        return search_language(value)
+    except ValueError as error:
+        raise typer.BadParameter(str(error)) from None
+
+
+SearchLanguageOption = Annotated[
+    str | None,
+    typer.Option(
+        "--search-language", metavar="CODE", callback=language_option, help="Search language: all, auto, or a code."
+    ),
+]
+
+
+def language_overrides(language: str | None) -> list[str]:
+    """`--search-language` as a quoted `search.language` override."""
+    return [] if language is None else [f"search.language={json.dumps(language)}"]
 
 
 def checked(make: Callable[[], Settings]) -> Settings:
@@ -236,6 +259,10 @@ def run(
     context_tokens: ContextTokensOption = None,
     gap_context_tokens: GapContextTokensOption = None,
     rounds: Annotated[int | None, typer.Option("--rounds", min=1, max=8, help="Research rounds.")] = None,
+    queries_per_round: Annotated[
+        int | None, typer.Option("--queries-per-round", min=1, help="Follow-up queries per round at most.")
+    ] = None,
+    search_language: SearchLanguageOption = None,
     allow_domain: Annotated[
         list[str] | None,
         typer.Option("--allow-domain", metavar="DOMAIN", help="Only use search results from this domain (repeatable)."),
@@ -270,8 +297,10 @@ def run(
         context_tokens=context_tokens,
         gap_context_tokens=gap_context_tokens,
         rounds=rounds,
+        queries_per_round=queries_per_round,
     )
-    overrides = [*(set_ or []), *flags, *research, *domain_overrides(allow_domain, block_domain)]
+    domains = [*domain_overrides(allow_domain, block_domain), *language_overrides(search_language)]
+    overrides = [*(set_ or []), *flags, *research, *domains]
     env = os.environ
     settings = checked(lambda: resolve(profile, overrides, env, depth))
     store = RunStore.from_settings(settings)

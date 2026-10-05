@@ -109,14 +109,16 @@ queries' text; a budget of 0 or less fails the gap step. A large-window
 deployment sets `auto` in its profile, with `--gap-context-tokens`, or in
 the API's `research.gap_context_tokens`.
 
-The loop and its bookkeeping (`RoundState`: round number, pages fetched so
-far, URLs seen, the scorer in use) live in the runner; the stages stay
+The loop and its bookkeeping (`RoundState`: round number, counted pages
+fetched so far, URLs seen, the scorer in use) live in the runner; the stages stay
 pure. Each round:
 
 - searches only its own queries (round 1 merges the initial hits);
 - fetches only hits whose URL no earlier round fetched or queued (the rest
   count as known pages), within its round cap. `fetch.max_pages` counts
-  across all rounds. With `left` pages left and `later` planned rounds
+  counted pages across all rounds: a thin page (see Fetch cap and order)
+  does not reduce `left`, though it counts as a new page of its round, and
+  its exemption is bounded by the round cap. With `left` pages left and `later` planned rounds
   after this one, the round cap is the larger of `left` minus a reserve of
   `research.queries_per_round` × `search.max_results` × `later` and the
   even share `ceil(left / (later + 1))`, never above `left`. The reserve is
@@ -136,15 +138,16 @@ pure. Each round:
   rounds: the earliest round's pair wins.
 
 Research stops at the first of these, checked in this order, and records
-the reason: the gap call failed or its reply was unreadable (`gap step
-failed`, a `gap failed: <error>` warning, the run continues); the pages
-fetched reached `fetch.max_pages` (`page limit reached`); two rounds in a
-row after round 1 fetched no new page (`no new sources`; `RoundState`
-keeps the previous round's new pages); the last round ran (`max rounds`);
-the gap step kept no follow-up after its second call (`no follow-ups`). One
-empty round does not stop research: the gap step runs and is told about it.
-The page limit and no-new-sources checks run before the gap call, so no
-call is wasted. A gap timeout counts
+the reason: the last round ran (`max rounds`, even when that round also
+reached the page cap or fetched no new page); two rounds in a row after
+round 1 fetched no new page (`no new sources`; `RoundState` keeps the
+previous round's new pages); the counted pages reached `fetch.max_pages`
+(`page limit reached`); the gap step kept no follow-up after its second
+call (`no follow-ups`); the gap call failed or its reply was unreadable
+(`gap step failed`, a `gap failed: <error>` warning, the run continues).
+One empty round does not stop research: the gap step runs and is told
+about it. The first three checks run before the gap call
+(`stop_before_gap`), so no call is wasted. A gap timeout counts
 as a failed gap step; every other stage timeout applies per round and fails
 the run. Usage of a stage that runs in several rounds is summed in
 `costs.json`.
@@ -239,15 +242,23 @@ parent's hits, so a new domain list needs a fork from `plan` or a new run.
 
 ### Fetch cap and order
 
-Fetch succeeds on at most `fetch.max_pages` pages (default 40, the most
+Fetch keeps at most `fetch.max_pages` counted pages (default 40, the most
 that default settings find: (1 + 3 sub-queries) × 10 results); a
 multi-round run splits it with the round cap (see Research rounds). Unique hits
 are queued round-robin over query IDs in query order (`q0` first), each
 query's hits by rank; a hit found by several queries is queued once, at its
 earliest turn. Up to `fetch.concurrency` workers take hits in queue order,
-and a worker takes the next one only while pages fetched plus fetches in
+and a worker takes the next one only while counted pages plus fetches in
 flight are below the cap, so a failed or empty fetch frees its slot for the
-next hit. Hits never fetched are not failures: fetch's `stage.done` reports
+next hit. A thin page, whose text is shorter than `chunk.min_chars`
+(default 500; the `chars` of `page.fetched`), is kept, recorded, and
+chunked like any page but takes no slot, so the next hit is fetched in its
+place. At most as many thin pages as the cap are exempt per fetch call
+(the round cap in multi-round runs); later thin pages count. So a fetch
+keeps at most twice its cap, and `pages.jsonl` may hold more pages than
+`fetch.max_pages`. `chunk.min_chars = 0` makes no page thin. Attached files
+are never thin. Thinness is derived from the text length, so `Page` has no
+field for it. Hits never fetched are not failures: fetch's `stage.done` reports
 them as `unfetched`.
 
 ### Small-input passthrough
@@ -812,15 +823,18 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--run-id ID] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
   `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
-  `research.gap_context_tokens`, and `research.rounds`, after the `--set`
-  values. The repeatable `--allow-domain` and `--block-domain` values
+  `research.gap_context_tokens`, `research.rounds`, and
+  `research.queries_per_round`, after the `--set` values. The repeatable `--allow-domain` and `--block-domain` values
   together set `search.allow_domains` and `search.block_domains` (as JSON
   lists, after the research flags), replacing the configured list; a list
-  whose flag is not given is left alone. The two token flags take a positive integer or `auto`. `--until` on a loop stage
+  whose flag is not given is left alone. `--search-language` sets
+  `search.language` as a quoted string, next to the domain lists; a value
+  that breaks the search language rule (see Configuration) exits 2 naming
+  the flag. The two token flags take a positive integer or `auto`. `--until` on a loop stage
   stops after that stage in round 1. The progress view shows a `gap` row
   only for multi-round runs, "round k/N" on running loop rows, and one
   final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
@@ -915,7 +929,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `resource.waiting`, `resource.released` | `device`, `released_stage` |
 | `plan.ready` | `queries` |
 | `hit.found` | `url`, `title`, `query_ids` |
-| `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached`, `round` |
+| `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached`, `thin` (a thin page; always false for attached files and old runs), `round` |
 | `page.failed` | `url`, `reason` |
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
 | `round.done` | `round`, `query_ids`, `new_pages`, `known_pages`, `kept` |
@@ -994,16 +1008,18 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `profile`, `depth` (a preset name or `custom`; unknown is 422 naming
   `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
   `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`
-  at most 8; the two token values may also be `auto`), `writing`,
-  `domains` (`allow`, `block`, each optional; a given list replaces the
-  configured one for this run; an invalid entry is 422 naming
-  `domains.allow` or `domains.block` and the entry), and `set`. Request
+  at most 8, `queries_per_round`; the two token values may also be
+  `auto`), `writing`, `domains` (`allow`, `block`, each optional; a given
+  list replaces the configured one for this run; an invalid entry is 422
+  naming `domains.allow` or `domains.block` and the entry),
+  `search_language` (sets `search.language`; null keeps the configured
+  value; an invalid value is 422 naming `search_language`), and `set`. Request
   precedence, each later layer winning: defaults, profile, environment,
   global settings, the depth preset, the request's `sources`, `research`,
   `writing`, and `domains`, then its `set`. The server builds the writing
   flags from the global writing, then the preset's `write.words`, then the
   request's `writing`; passes `--depth`; and emits the research values,
-  then the domain lists, as `--set` after the writing flags and before the
+  then the domain lists and the search language, as `--set` after the writing flags and before the
   request's `set`. The global domain lists sit below the profile instead:
   at staging, a non-empty global list is passed as `--set` only when
   neither the run's profile nor the environment sets that list (the same
@@ -1300,6 +1316,18 @@ question has that many topics.
 | `research.rounds` | - | - | 3 | 5 |
 | `research.queries_per_round` | - | - | 3 | 4 |
 
+The typed research fields (`RESEARCH_KEYS`: CLI flags, `RunCreate.research`,
+the web's Advanced values) map one-to-one onto `DEPTH_KEYS` except
+`write.words`, so `research.queries_per_round` is one of them.
+
+`search.language` is empty (no `language` sent, SearXNG searches every
+language), `all`, `auto`, or a code matching
+`^[a-z]{2,3}(-[A-Za-z]{2,4}){0,2}$` such as `es`, `es-PE`, or `zh-Hans-CN`.
+One function, `models.search_language`, holds the rule for the config key,
+`RunCreate.search_language`, and `--search-language`; the web form repeats
+the pattern. It is a shape check: a well-formed unknown code reaches
+SearXNG, which searches as `all`.
+
 The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
 (default 3), and `gap_context_tokens` (default 4000, or `auto`; see
 Research rounds). The `gap` stage
@@ -1543,6 +1571,19 @@ These override the prototype where they differ:
   browser. The Search card's
   "<F> filtered by domain" line shows the sum of `filtered` from the plan
   and search `stage.done` events, not a share scaled by progress.
+- **Search language:** the New run "Search language" row keeps its value
+  in the in-memory New run draft next to the domain lists and clears with
+  the draft after Start. It sends the trimmed value as `search_language`
+  only when not empty, and checks it with a client copy of the server's
+  pattern; an invalid value disables Start.
+- **Source query IDs:** each web row of the Sources panel lists, under its
+  URL, the union of `query_ids` from every `hit.found` for that URL (a URL
+  can arrive several times with overlapping IDs), sorted `q2` before
+  `q10`. Each ID is focusable and has its query text as a native tooltip,
+  from the plan and the gap rounds. A `page.fetched` with `thin` shows the
+  state "thin".
+- **Follow-ups per round:** an Advanced depth value like the others, locked
+  while Rounds is 1; the estimate reads it from the values, not the preset.
 - **Recipes:** `report`, `answer`, and `context`, a UI name for `until`
   plus `writing.format`. `report` and `answer` run the full pipeline and
   always send `writing.format` equal to the recipe; `context` sends

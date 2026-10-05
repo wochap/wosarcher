@@ -400,6 +400,39 @@ def test_invalid_domain_422(client: TestClient, runs_dir: Path) -> None:
     assert not (runs_dir / ".queue").exists() or not any((runs_dir / ".queue").iterdir())
 
 
+def test_queries_per_round_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
+    research = {"rounds": 2, "queries_per_round": 6}
+    run_id = create(client, {"query": "q", "depth": "custom", "research": research})
+    finished(client, run_id)
+    settings = resolved(runs_dir, run_id)
+    assert (settings["research"]["rounds"], settings["research"]["queries_per_round"]) == (2, 6)
+
+
+def test_search_language_for_one_run_and_rerun(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, {"query": "q", "search_language": "es-PE"})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["search"]["language"] == "es-PE"
+    record = RunRecord.model_validate_json((runs_dir / run_id / "request.json").read_text())
+    assert 'search.language="es-PE"' in record.overrides
+    rerun = client.post(f"/api/runs/{run_id}/rerun").json()["run_id"]
+    finished(client, rerun)
+    assert resolved(runs_dir, rerun)["search"]["language"] == "es-PE"
+
+
+def test_script_and_region_language(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, {"query": "q", "search_language": "zh-Hans-CN"})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["search"]["language"] == "zh-Hans-CN"
+
+
+def test_invalid_search_language_422(client: TestClient, runs_dir: Path) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "search_language": "spanish"}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert response.status_code == 422
+    assert "search_language" in response.json()["detail"]
+    assert not (runs_dir / ".queue").exists() or not any((runs_dir / ".queue").iterdir())
+
+
 def test_global_domain_list_applies_and_reruns(client: TestClient, runs_dir: Path) -> None:
     client.put("/api/settings", json={"domains": {"block": ["pinterest.com"]}})
     run_id = create(client, {"query": "q"})

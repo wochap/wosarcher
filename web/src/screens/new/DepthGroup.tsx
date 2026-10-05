@@ -15,6 +15,7 @@ const FIELDS: [Field, string, number, number, number][] = [
   ["results_per_query", "Results per query", 1, 20, 1],
   ["max_pages", "Max pages", 5, 300, 5],
   ["rounds", "Rounds", 1, 8, 1],
+  ["queries_per_round", "Follow-ups per round", 1, 12, 1],
   ["passages_per_query", "Passages per query", 1, 40, 1],
   ["context_tokens", "Context tokens", 1000, 128000, 1000],
   ["gap_context_tokens", "Gap context tokens", 1000, 128000, 1000],
@@ -26,6 +27,7 @@ const HELP: Record<Field, string> = {
   results_per_query: "d-rpq",
   max_pages: "d-pages",
   rounds: "d-rounds",
+  queries_per_round: "d-qpr",
   passages_per_query: "d-ppq",
   context_tokens: "d-ctx",
   gap_context_tokens: "d-gap-ctx",
@@ -40,8 +42,6 @@ type Props = {
   effective: number | null;
   /** The gap step's context budget the profile's window leaves; null when unknown. */
   gapEffective: number | null;
-  /** Follow-up queries per round the estimate counts. */
-  queriesPerRound: number;
   /** Files-only runs use one round. */
   filesOnly: boolean;
   onPick: (depth: Depth) => void;
@@ -55,7 +55,6 @@ export function DepthGroup({
   values,
   effective,
   gapEffective,
-  queriesPerRound,
   filesOnly,
   onPick,
   onEdit,
@@ -71,7 +70,7 @@ export function DepthGroup({
   /** The note under a field: the lock reason, the Auto budget, or the clamp. */
   const noteOf = (field: Field): [string, boolean] => {
     if (field === "rounds" && filesOnly) return ["Files-only runs use 1 round.", true];
-    if (field === "gap_context_tokens" && rounds === 1)
+    if ((field === "gap_context_tokens" || field === "queries_per_round") && rounds === 1)
       return ["Used between rounds; needs 2+ rounds.", true];
     if (!BUDGETS[field]) return ["", false];
     const asked = values[field];
@@ -101,7 +100,7 @@ export function DepthGroup({
         <div className={css.depthText}>
           <span className={css.depthDesc}>{description}</span>
           <span aria-live="polite" className={css.estimate}>
-            {estimate(values, effective, queriesPerRound, rounds)}
+            {estimate(values, effective, rounds)}
           </span>
         </div>
         <button

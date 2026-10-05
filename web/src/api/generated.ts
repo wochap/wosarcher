@@ -86,6 +86,7 @@ export type Allow1 = (string[] | null)
 export type Block2 = (string[] | null)
 export type Dimension = number
 export type Model1 = string
+export type Counted = number
 export type Item = string
 export type Reason = string
 export type Failures = Skipped[]
@@ -101,6 +102,7 @@ export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter"
 export type Profile = (string | null)
 export type Set = string[]
 export type CitationMarker = (("numeric" | "superscript" | "author-year") | null)
+export type Format1 = (("report" | "answer") | null)
 export type Language = (string | null)
 export type ReferenceStyle = (string | null)
 export type Tone = (string | null)
@@ -179,6 +181,7 @@ export type Cached = boolean
 export type Chars = number
 export type Round4 = number
 export type SourceId4 = string
+export type Thin = boolean
 export type Title4 = string
 export type Url4 = string
 export type RunId3 = string
@@ -265,6 +268,7 @@ export type ContextTokens1 = (number | "auto" | null)
 export type GapContextTokens1 = (number | "auto" | null)
 export type MaxPages1 = (number | null)
 export type PassagesPerQuery1 = (number | null)
+export type QueriesPerRound1 = (number | null)
 export type ResultsPerQuery1 = (number | null)
 export type Rounds1 = (number | null)
 export type SubQueries1 = (number | null)
@@ -316,6 +320,7 @@ export type Units = number
 export type Depth = (string | null)
 export type Profile2 = (string | null)
 export type Query2 = string
+export type SearchLanguage = (string | null)
 export type Set1 = string[]
 export type Sources1 = (("both" | "web" | "files") | null)
 export type Until = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -355,7 +360,7 @@ export type StopReason = (("max rounds" | "no new sources" | "page limit reached
 export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
-export type Format1 = ("report" | "answer")
+export type Format2 = ("report" | "answer")
 export type Language1 = string
 export type ReferenceStyle1 = string
 export type Tone1 = string
@@ -718,6 +723,7 @@ model: Model1
  * via the `definition` "FetchResult".
  */
 export interface FetchResult {
+counted?: Counted
 failures?: Failures
 pages: Pages
 unfetched?: Unfetched
@@ -762,6 +768,7 @@ writing?: WritingPatch
  */
 export interface WritingPatch {
 citation_marker?: CitationMarker
+format?: Format1
 language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone
@@ -971,6 +978,7 @@ cached: Cached
 chars: Chars
 round?: Round4
 source_id: SourceId4
+thin?: Thin
 title: Title4
 url: Url4
 }
@@ -1163,6 +1171,7 @@ context_tokens?: ContextTokens1
 gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
+queries_per_round?: QueriesPerRound1
 results_per_query?: ResultsPerQuery1
 rounds?: Rounds1
 sub_queries?: SubQueries1
@@ -1307,6 +1316,7 @@ domains?: DomainPatch1
 profile?: Profile2
 query: Query2
 research?: ResearchPatch1
+search_language?: SearchLanguage
 set?: Set1
 sources?: Sources1
 until?: Until
@@ -1327,6 +1337,7 @@ context_tokens?: ContextTokens1
 gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
+queries_per_round?: QueriesPerRound1
 results_per_query?: ResultsPerQuery1
 rounds?: Rounds1
 sub_queries?: SubQueries1
@@ -1336,6 +1347,7 @@ sub_queries?: SubQueries1
  */
 export interface WritingPatch1 {
 citation_marker?: CitationMarker
+format?: Format1
 language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone
@@ -1415,7 +1427,7 @@ export interface Settings {
 }
 export interface WritingOptions {
 citation_marker?: CitationMarker1
-format?: Format1
+format?: Format2
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1560,7 +1572,7 @@ writing?: WritingOptions1
 }
 export interface WritingOptions1 {
 citation_marker?: CitationMarker1
-format?: Format1
+format?: Format2
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1619,7 +1631,7 @@ block?: Block1
 }
 export interface WritingOptions2 {
 citation_marker?: CitationMarker1
-format?: Format1
+format?: Format2
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1802,7 +1814,7 @@ name: Name5
  */
 export interface WritingOptions3 {
 citation_marker?: CitationMarker1
-format?: Format1
+format?: Format2
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1817,6 +1829,7 @@ words?: Words2
  */
 export interface WritingPatch2 {
 citation_marker?: CitationMarker
+format?: Format1
 language?: Language
 reference_style?: ReferenceStyle
 tone?: Tone

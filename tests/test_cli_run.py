@@ -145,6 +145,34 @@ def test_invalid_domain_flag(world: World, tmp_path: Path) -> None:
     assert not runs_dir(tmp_path).exists()
 
 
+def test_queries_per_round_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--depth", "deep", "--queries-per-round", "6"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].research.queries_per_round == 6
+    assert only_run(tmp_path).overrides == ["research.queries_per_round=6"]
+
+
+def test_search_language_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--until", "search", "--search-language", "es-PE"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].search.language == "es-PE"
+    assert only_run(tmp_path).overrides == ['search.language="es-PE"']
+
+
+def test_invalid_search_language(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--search-language", "spanish please"])
+    assert result.exit_code == 2
+    assert "--search-language" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
+def test_invalid_language_through_set(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--set", 'search.language="spanish"'])
+    assert result.exit_code == 2
+    assert "search.language" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
 def test_token_budget_flag_rejects_words(world: World) -> None:
     result = runner.invoke(app, ["run", "q", "--context-tokens", "all"])
     assert result.exit_code == 2

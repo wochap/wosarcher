@@ -8,7 +8,7 @@ import pytest
 
 from tests.runner.helpers import PAGES, PLAN_REPLY, QUERY, SEARCH, adapters, kinds, new_run, settings
 from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
-from wosarcher.config import FetchConfig, ResearchConfig, ScoreConfig, SelectConfig, Settings
+from wosarcher.config import ChunkConfig, FetchConfig, ResearchConfig, ScoreConfig, SelectConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     Candidate,
@@ -184,13 +184,14 @@ async def test_uncovered_recorded(tmp_path: Path) -> None:
     assert ready == [[], ["q2"]]
 
 
-async def test_page_limit(tmp_path: Path) -> None:
-    cfg = configured(tmp_path, rounds=2, fetch=FetchConfig(provider="firecrawl", max_pages=4))
+async def test_cap_reached_in_the_last_round(tmp_path: Path) -> None:
+    fetch = FetchConfig(provider="firecrawl", max_pages=4)
+    cfg = configured(tmp_path, rounds=2, fetch=fetch, chunk=ChunkConfig(min_chars=0))
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
     assert await run(cfg, run_id, world(gap_reply("lithium price", "cobalt supply"))) == "done"
     record = research(store, run_id)
-    assert (record.ran, record.reason) == (2, "page limit reached")
+    assert (record.ran, record.reason) == (2, "max rounds")
     assert [r.new_pages for r in record.rounds] == [2, 2]
     assert len(store.read_items(run_id, "pages.jsonl", Page)) == 4
 
@@ -213,7 +214,11 @@ def test_round_cap(left: int, later: int, per_round: int, results: int, cap: int
 async def test_round_cap_leaves_room_for_the_gap_step(tmp_path: Path) -> None:
     research_cfg = ResearchConfig(rounds=3, queries_per_round=1)
     cfg = settings(tmp_path).model_copy(
-        update={"research": research_cfg, "fetch": FetchConfig(provider="firecrawl", max_pages=3)}
+        update={
+            "research": research_cfg,
+            "fetch": FetchConfig(provider="firecrawl", max_pages=3),
+            "chunk": ChunkConfig(min_chars=0),
+        }
     )
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")

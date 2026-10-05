@@ -33,7 +33,12 @@ import {
 } from "../../run/depth";
 import { Attachments } from "./Attachments";
 import css from "./NewRunScreen.module.css";
-import { OptionsPanel, overriddenDomains, overriddenFields } from "./OptionsPanel";
+import {
+  isSearchLanguage,
+  OptionsPanel,
+  overriddenDomains,
+  overriddenFields,
+} from "./OptionsPanel";
 
 /** Why the server (or the entry check) refused the run; `field` names a domain row to fix. */
 type StartError = { message: string; field?: DomainKind; entry?: string };
@@ -74,6 +79,7 @@ export function runRequest(
   saved: WritingOptions,
   custom?: ResearchValues,
   domains: Partial<DomainLists> = {},
+  searchLanguage = "",
 ): RunCreate {
   const request: RunCreate = {
     query,
@@ -90,6 +96,7 @@ export function runRequest(
   }
   if (Object.keys(overrides).length) request.writing = overrides;
   if (Object.keys(domains).length) request.domains = domains;
+  if (searchLanguage.trim()) request.search_language = searchLanguage.trim();
   return request;
 }
 
@@ -141,6 +148,7 @@ export function NewRunScreen() {
   const defaults = saved && { ...saved, words: wordsOf(options.depth) ?? saved.words };
   const writing = defaults && { ...defaults, ...draft.writing };
   const blank = !draft.query.trim();
+  const languageInvalid = !isSearchLanguage(draft.searchLanguage.trim());
   const selected = profiles.find((p) => p.name === options.profile);
   const domainDefaults: DomainLists = {
     allow: selected?.allow_domains ?? settings?.domains.allow ?? [],
@@ -149,7 +157,7 @@ export function NewRunScreen() {
   const domains: DomainLists = { ...domainDefaults, ...draft.domains };
 
   async function start() {
-    if (blank || busy || !defaults || !writing) return;
+    if (blank || busy || languageInvalid || !defaults || !writing) return;
     const invalid = invalidDomain(domains);
     if (invalid) {
       setError(invalid);
@@ -168,6 +176,7 @@ export function NewRunScreen() {
           saved ?? defaults,
           values,
           overriddenDomains(domains, domainDefaults),
+          draft.searchLanguage,
         ),
         draft.files,
       );
@@ -277,7 +286,7 @@ export function NewRunScreen() {
             <button
               type="button"
               className={`btn btn-primary ${css.run}`}
-              disabled={blank || busy}
+              disabled={blank || busy || languageInvalid}
               onClick={() => void start()}
             >
               <Play aria-hidden="true" />
@@ -322,9 +331,6 @@ export function NewRunScreen() {
               values,
               effective: effectiveContext(profile, writing.words),
               gapEffective: effectiveGapContext(profile),
-              queriesPerRound:
-                (presetOf(options.depth) ?? depths[depths.length - 1])?.values.queries_per_round ??
-                3,
               wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
               onPick: pickDepth,
               onEdit: editResearch,
@@ -340,6 +346,8 @@ export function NewRunScreen() {
               invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
               onChange: setDomains,
             }}
+            searchLanguage={draft.searchLanguage}
+            onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
           />
         )}
       </div>

@@ -69,7 +69,7 @@ class RoundState:
 
     number: int = 1
     fetched: int = 0
-    """Pages fetched across all rounds."""
+    """Counted pages (exempt thin pages excluded) fetched across all rounds."""
     seen: set[str] = field(default_factory=set[str])
     """URLs fetched or queued in any round."""
     scorer: str | None = None
@@ -292,6 +292,7 @@ async def fetch(ctx: StepContext) -> Outcome:
     state.known_pages = len({normalise_url(hit.url) for hit in found}) - len({normalise_url(hit.url) for hit in hits})
     state.seen |= {normalise_url(hit.url) for hit in hits}
     total = len(searching.merge_hits([hits]))
+    min_chars = ctx.settings.chunk.min_chars
     done = failed = 0
 
     def on_item(item: Page | Skipped) -> None:
@@ -306,6 +307,7 @@ async def fetch(ctx: StepContext) -> Outcome:
                 title=source.title,
                 chars=len(item.text),
                 cached=cached,
+                thin=fetching.is_thin(item, min_chars),
                 round=state.number,
             )
             ctx.log.emit("page.fetched", "fetch", data)
@@ -319,10 +321,12 @@ async def fetch(ctx: StepContext) -> Outcome:
     left = max(ctx.settings.fetch.max_pages - state.fetched, 0)
     later = max(ctx.planned_rounds() - state.number, 0)
     cap = round_cap(left, later, ctx.settings.research.queries_per_round, ctx.settings.search.max_results)
-    result = await fetching.fetch(hits, ctx.fetcher, concurrency=concurrency, max_pages=cap, on_item=on_item)
+    result = await fetching.fetch(
+        hits, ctx.fetcher, concurrency=concurrency, max_pages=cap, min_chars=min_chars, on_item=on_item
+    )
     pages = [page.model_copy(update={"round": state.number}) for page in result.pages]
     ctx.save("pages.jsonl", pages)
-    state.fetched += len(pages)
+    state.fetched += result.counted
     state.new_pages = len(pages)
     return Outcome(len(pages), unfetched=result.unfetched)
 

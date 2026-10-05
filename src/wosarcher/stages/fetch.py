@@ -2,11 +2,13 @@
 
 The queue goes round-robin over query IDs in query order (`q0` first), each
 query's hits by rank; a hit found by several queries is queued once, at its
-earliest turn. A worker takes the next hit only while pages fetched plus
+earliest turn. A worker takes the next hit only while counted pages plus
 fetches in flight are below `max_pages`, so a failure frees its slot for the
-next hit. Hits left in the queue are counted in `unfetched`, not recorded as
-failures. The per-page character cap (`fetch.max_chars`) is the Fetcher's job;
-this stage never cuts text.
+next hit. A thin page (text shorter than `min_chars`) is kept but not
+counted, up to `max_pages` thin pages per call; later thin pages count. Hits
+left in the queue are counted in `unfetched`, not recorded as failures. The
+per-page character cap (`fetch.max_chars`) is the Fetcher's job; this stage
+never cuts text.
 """
 
 import asyncio
@@ -42,17 +44,22 @@ def fair_order(hits: Sequence[Hit]) -> list[Hit]:
     return list(queued.values())
 
 
+def is_thin(page: Page, min_chars: int) -> bool:
+    return len(page.text) < min_chars
+
+
 async def fetch(
     hits: Sequence[Hit],
     fetcher: Fetcher,
     *,
     concurrency: int,
     max_pages: int,
+    min_chars: int = 0,
     on_item: Callable[[Page | Skipped], None] = noop,
 ) -> FetchResult:
     queue = deque(enumerate(fair_order(hits)))
     outcomes: dict[int, Page | Skipped] = {}
-    fetched = in_flight = 0
+    counted = exempt = in_flight = 0
 
     async def one(hit: Hit) -> Page | Skipped:
         try:
@@ -64,8 +71,8 @@ async def fetch(
         return page.model_copy(update={"rank": hit.rank, "query_ids": list(hit.query_ids)})
 
     async def worker() -> None:
-        nonlocal fetched, in_flight
-        while queue and fetched + in_flight < max_pages:
+        nonlocal counted, exempt, in_flight
+        while queue and counted + in_flight < max_pages:
             index, hit = queue.popleft()
             in_flight += 1
             try:
@@ -73,7 +80,10 @@ async def fetch(
             finally:
                 in_flight -= 1
             if isinstance(outcome, Page):
-                fetched += 1
+                if is_thin(outcome, min_chars) and exempt < max_pages:
+                    exempt += 1
+                else:
+                    counted += 1
             outcomes[index] = outcome
             on_item(outcome)
 
@@ -83,4 +93,5 @@ async def fetch(
         pages=[item for item in ordered if isinstance(item, Page)],
         failures=[item for item in ordered if isinstance(item, Skipped)],
         unfetched=len(queue),
+        counted=counted,
     )

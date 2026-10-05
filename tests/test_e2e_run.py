@@ -307,3 +307,78 @@ def test_answer_format(runs: Path) -> None:
     assert record["settings"]["write"]["format"] == "answer"
     markdown = (runs / RUN_ID / "report.md").read_text()
     assert "\n## References\n" in markdown
+
+
+THIN_URL = "https://forms.example.org/busquedaform.html"
+LONG_REGULATION_PAGE = REGULATION_PAGE + "\n\nThe regulation also sets collection targets." * 12
+
+
+def tuning_router(languages: list[str | None], follow_ups: list[str]) -> respx.MockRouter:
+    """The recorded world with a thin page leading the topic search; every gap call asks two follow-ups."""
+    gap = {"queries": [FOLLOW_UP, SECOND_FOLLOW_UP], "note": "Regulation is missing.", "stop": False}
+
+    def search(request: httpx.Request) -> httpx.Response:
+        query = request.url.params.get("q", "")
+        languages.append(request.url.params.get("language"))
+        if query in (FOLLOW_UP, SECOND_FOLLOW_UP):
+            follow_ups.append(query)
+            result = {"url": REGULATION_URL, "title": "Battery regulation", "content": "Deadlines."}
+            return httpx.Response(200, json={"results": [result]})
+        results = json.loads(recorded.search(request).content)["results"]
+        if query == QUERY:
+            results = [{"url": THIN_URL, "title": "Search form", "content": "Form."}, *results]
+        return httpx.Response(200, json={"results": results})
+
+    def scrape(request: httpx.Request) -> httpx.Response:
+        url = json.loads(request.content)["url"]
+        if url == THIN_URL:
+            data = {"markdown": "Enable JavaScript to use this form.", "metadata": {"title": "Search form"}}
+            return httpx.Response(200, json={"success": True, "data": data})
+        if url == REGULATION_URL:
+            data = {"markdown": LONG_REGULATION_PAGE, "metadata": {"title": "Battery regulation", "statusCode": 200}}
+            return httpx.Response(200, json={"success": True, "data": data})
+        return recorded.scrape(request)
+
+    def chat(request: httpx.Request) -> httpx.Response:
+        if "You review web research" in json.loads(request.content)["messages"][0]["content"]:
+            return completion(json.dumps(gap))
+        return recorded.chat(request)
+
+    router = respx.mock(assert_all_mocked=True, assert_all_called=False)
+    router.get("http://searxng.test/search").mock(side_effect=search)
+    router.post("http://firecrawl.test/v1/scrape").mock(side_effect=scrape)
+    router.post("http://llm.test/v1/chat/completions").mock(side_effect=chat)
+    return router
+
+
+def test_thin_page_language_and_follow_ups(runs: Path) -> None:
+    languages: list[str | None] = []
+    follow_ups: list[str] = []
+    args = ["run", QUERY, "--profile", "e2e", "--sources", "web", "--rounds", "2", "--max-pages", "3"]
+    args += ["--queries-per-round", "1", "--search-language", "es", "--until", "select", "--run-id", RUN_ID]
+    with tuning_router(languages, follow_ups):
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    assert follow_ups == [FOLLOW_UP]
+    assert set(languages) == {"es"}
+    events = [parse_event(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    fetched = [event.data for event in events if event.type == "page.fetched"]
+    thin = {data.url: data.thin for data in fetched}
+    assert thin.pop(THIN_URL) is True
+    assert not any(thin.values())
+    assert len(thin) == 3
+    assert REGULATION_URL in thin
+    research = ResearchRecord.model_validate_json((run_dir / "research.json").read_text())
+    assert (research.planned, research.ran, research.reason) == (2, 2, "max rounds")
+    assert research.rounds[0].new_pages == 3
+
+
+def test_page_limit_before_the_last_round(runs: Path) -> None:
+    args = ["run", QUERY, "--profile", "e2e", "--sources", "web", "--rounds", "3", "--max-pages", "2"]
+    args += ["--queries-per-round", "1", "--results-per-query", "1", "--until", "select", "--run-id", RUN_ID]
+    with tuning_router([], []):
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    research = ResearchRecord.model_validate_json((runs / RUN_ID / "research.json").read_text())
+    assert (research.planned, research.ran, research.reason) == (3, 2, "page limit reached")

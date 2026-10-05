@@ -229,12 +229,14 @@ def attach_flags(path: Path) -> list[str]:
 
 
 def set_flags(staged: StagedRun) -> list[str]:
-    """Writing, then research, then domains, then the request's own `set`, each later one winning."""
+    """Writing, then research, then domains and language, then the request's own `set`, each later one winning."""
     writing = [f"write.{name}={toml_value(value)}" for name, value in staged.writing_flags.items()]
     research = [
         f"{RESEARCH_KEYS[name]}={value}" for name, value in staged.research.model_dump(exclude_none=True).items()
     ]
     domains = [f"{key}={toml_value(value)}" for key, value in staged.domain_flags.items()]
+    if staged.search_language is not None:
+        domains.append(f"search.language={toml_value(staged.search_language)}")
     return [flag for value in [*writing, *research, *domains, *staged.set] for flag in ("--set", value)]
 
 

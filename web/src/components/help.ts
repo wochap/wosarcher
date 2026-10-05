@@ -31,6 +31,14 @@ export const HELP: Record<string, Help> = {
     title: "Max pages",
     body: "Upper limit on pages fetched across all rounds. Research stops when it is reached.",
   },
+  "search-language": {
+    title: "Search language",
+    body: "Language SearXNG searches in. Use all, auto, or a language code: two or three lowercase letters, optionally followed by a script or region, such as es, es-PE, or zh-Hans-CN. Leave empty to search every language.",
+  },
+  "d-qpr": {
+    title: "Follow-ups per round",
+    body: "Most follow-up searches the gap step writes after each round but the last. Round 1 searches the sub-queries.",
+  },
   "d-rounds": {
     title: "Rounds",
     body: "Search, fetch and score passes. After each round a gap step decides what to search next, or stops early.",

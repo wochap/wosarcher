@@ -95,6 +95,14 @@
   color: var(--muted);
 }
 
+.faint {
+  color: var(--faint);
+}
+
+.danger {
+  color: var(--color-danger);
+}
+
 .writingHead {
   display: flex;
   align-items: center;

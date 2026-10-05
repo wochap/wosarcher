@@ -43,6 +43,13 @@ export function overriddenDomains(lists: DomainLists, defaults: DomainLists): Pa
   );
 }
 
+const LANGUAGE_PATTERN = /^[a-z]{2,3}(-[A-Za-z]{2,4}){0,2}$/;
+
+/** The server's search language rule: empty, `all`, `auto`, or a code such as `es-PE`. */
+export function isSearchLanguage(value: string): boolean {
+  return value === "" || value === "all" || value === "auto" || LANGUAGE_PATTERN.test(value);
+}
+
 /** The domain rows: lists, their defaults, and the entry each row marks invalid. */
 export type DomainView = {
   lists: DomainLists;
@@ -58,7 +65,6 @@ export type DepthView = {
   values: ResearchValues;
   effective: number | null;
   gapEffective: number | null;
-  queriesPerRound: number;
   wordsSet: boolean;
   onPick: (depth: Depth) => void;
   onEdit: (field: keyof ResearchValues, value: TokenBudget) => void;
@@ -76,6 +82,9 @@ type Props = {
   onWriting: <F extends WritingField>(field: F, value: WritingOptions[F]) => void;
   onResetWriting: () => void;
   domains: DomainView;
+  /** The search language as typed. */
+  searchLanguage: string;
+  onSearchLanguage: (value: string) => void;
 };
 
 export function OptionsPanel(props: Props) {
@@ -84,6 +93,7 @@ export function OptionsPanel(props: Props) {
   const overridden =
     writingOverridden + Object.keys(overriddenDomains(domains.lists, domains.defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
+  const languageValid = isSearchLanguage(props.searchLanguage.trim());
   const description = profiles.find((p) => p.name === options.profile)?.description;
   const label = DEPTH_LABELS[options.depth];
   const summary = [
@@ -119,7 +129,6 @@ export function OptionsPanel(props: Props) {
             values={depth.values}
             effective={depth.effective}
             gapEffective={depth.gapEffective}
-            queriesPerRound={depth.queriesPerRound}
             filesOnly={options.sources === "files"}
             onPick={depth.onPick}
             onEdit={depth.onEdit}
@@ -168,6 +177,23 @@ export function OptionsPanel(props: Props) {
             invalid={domains.invalid}
             onChange={domains.onChange}
           />
+          <Row label="Search language" help="search-language" htmlFor="opt-language">
+            <input
+              id="opt-language"
+              className={`input ${css.profile}`}
+              placeholder="Any language"
+              value={props.searchLanguage}
+              aria-invalid={!languageValid}
+              onChange={(e) => props.onSearchLanguage(e.target.value)}
+            />
+            {languageValid ? (
+              <div className={`${css.description} ${css.faint}`}>all, auto, es, es-PE…</div>
+            ) : (
+              <div className={`${css.description} ${css.danger}`}>
+                Use all, auto, or a code such as es or es-PE.
+              </div>
+            )}
+          </Row>
           <div className={css.writingHead}>
             <span className={css.group}>Writing</span>
             <span className={css.note}>Preselected from your defaults ·</span>

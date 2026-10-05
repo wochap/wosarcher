@@ -53,6 +53,17 @@ def domain_list(entries: list[str]) -> list[str]:
     return out
 
 
+LANGUAGE_PATTERN = re.compile(r"[a-z]{2,3}(-[A-Za-z]{2,4}){0,2}")
+"""A language code with an optional script and region, such as `es`, `es-PE`, or `zh-Hans-CN`."""
+
+
+def search_language(value: str) -> str:
+    """`value` when it is empty, `all`, `auto`, or a language code (`LANGUAGE_PATTERN`)."""
+    if value in ("", "all", "auto") or LANGUAGE_PATTERN.fullmatch(value):
+        return value
+    raise ValueError(f"'{value}' is not a search language; use all, auto, or a code such as es or es-PE")
+
+
 def host_matches(host: str, entries: list[str]) -> bool:
     """Whether `host` equals an entry or ends with `.` and the entry, ignoring case, port, and a trailing dot."""
     host = host.lower().rpartition("@")[2].split(":")[0].removesuffix(".")
@@ -177,6 +188,8 @@ class FetchResult(Contract):
     failures: list[Skipped] = []
     unfetched: int = 0
     """Queued hits never fetched because the page cap was reached."""
+    counted: int = 0
+    """Kept pages that count toward the cap: all but the exempt thin pages."""
 
 
 class LoadResult(Contract):
@@ -589,6 +602,7 @@ class ResearchPatch(Contract):
     context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
     gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
     rounds: int | None = Field(default=None, gt=0, le=8)
+    queries_per_round: int | None = Field(default=None, gt=0)
 
 
 class DomainPatch(Contract):
@@ -628,8 +642,15 @@ class RunCreate(Contract):
     research: ResearchPatch = ResearchPatch()
     writing: WritingPatch = WritingPatch()
     domains: DomainPatch = DomainPatch()
+    search_language: str | None = None
+    """Sets `search.language`; None keeps the configured value."""
     set: list[str] = []
     """`dotted.key=value` overrides, applied last."""
+
+    @field_validator("search_language")
+    @classmethod
+    def check_language(cls, value: str | None) -> str | None:
+        return None if value is None else search_language(value)
 
 
 class ForkCreate(Contract):
@@ -868,6 +889,7 @@ class PageFetchedData(Contract):
     title: str
     chars: int
     cached: bool
+    thin: bool = False
     round: int = 1
 
 

@@ -83,6 +83,28 @@ describe("NewRunScreen", () => {
     expect(request.writing).toEqual({ format: "answer" });
   });
 
+  it("sends Follow-ups per round and the trimmed search language", async () => {
+    const { api, question } = await open();
+    fireEvent.change(question, { target: { value: "q" } });
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    fireEvent.click(screen.getByLabelText("Deep"));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText("Follow-ups per round"), { target: { value: "6" } });
+    const language = screen.getByLabelText("Search language");
+    fireEvent.change(language, { target: { value: "spanish" } });
+    expect(screen.getByText("Use all, auto, or a code such as es or es-PE.")).toBeTruthy();
+    const run = screen.getByRole("button", { name: "Run research" }) as HTMLButtonElement;
+    expect(run.disabled).toBe(true);
+    fireEvent.change(language, { target: { value: " es-PE " } });
+    expect(run.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(run);
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.research?.queries_per_round).toBe(6);
+    expect(request.search_language).toBe("es-PE");
+  });
+
   it("preselects the Recipe from the default format", async () => {
     const api = fakeApi();
     api.data.settings.writing.format = "answer";

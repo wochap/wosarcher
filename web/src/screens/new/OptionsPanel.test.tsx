@@ -121,6 +121,7 @@ describe("Depth", () => {
       context_tokens: "auto",
       gap_context_tokens: 4000,
       rounds: 3,
+      queries_per_round: 3,
     });
     expect(request.writing).toEqual({ words: 2000, format: "report" });
   });
@@ -163,15 +164,16 @@ describe("Depth", () => {
     expect(screen.getByText("Auto · 997,232")).toBeTruthy();
     const request = await start(api);
     expect(request.research?.gap_context_tokens).toBe("auto");
-    expect(Object.keys(request.research ?? {})).toHaveLength(7);
+    expect(Object.keys(request.research ?? {})).toHaveLength(8);
   });
 
-  it("locks Gap context tokens at one round", async () => {
+  it("locks Gap context tokens and Follow-ups per round at one round", async () => {
     await openOptions();
     fireEvent.click(screen.getByLabelText("Quick"));
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     expect((screen.getByLabelText("Gap context tokens") as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByText("Used between rounds; needs 2+ rounds.")).toBeTruthy();
+    expect((screen.getByLabelText("Follow-ups per round") as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Help: Gap context tokens" })).toBeTruthy();
   });
 

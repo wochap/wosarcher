@@ -96,6 +96,10 @@ export type SourceView = {
   cached?: boolean;
   /** The research round that fetched it. */
   round: number;
+  /** IDs of the queries whose hits listed it, `q2` before `q10`. */
+  queryIds: string[];
+  /** Its text is shorter than `chunk.min_chars`, so it took no fetch slot. */
+  thin?: boolean;
 };
 
 export type ScoredQuery = {
@@ -183,8 +187,14 @@ function withSource(state: RunView, key: string, patch: Partial<SourceView>): Ru
     state: "found",
     kept: 0,
     round: 1,
+    queryIds: [],
   };
   return { ...state, sources: { ...state.sources, [key]: { ...current, ...patch } } };
+}
+
+/** The union of two query ID lists, each once, `q2` before `q10`. */
+function unionIds(a: string[], b: string[]): string[] {
+  return [...new Set([...a, ...b])].sort((x, y) => x.length - y.length || (x < y ? -1 : 1));
 }
 
 function stopRunning(state: RunView, to: PhaseState): RunView {
@@ -375,15 +385,11 @@ function apply(state: RunView, event: RunEvent): RunView {
         ),
       }));
       const known = state.sources[url];
+      const queryIds = unionIds(known?.queryIds ?? [], query_ids);
       return withSource(
         { ...counted, subQueries, rounds, earlyHits },
         url,
-        known
-          ? {}
-          : {
-              title,
-              uri: url,
-            },
+        known ? { queryIds } : { title, uri: url, queryIds },
       );
     }
     case "page.fetched": {
@@ -399,6 +405,7 @@ function apply(state: RunView, event: RunEvent): RunView {
         kind: event.stage === "load" ? "file" : "web",
         state: "fetched",
         reason: undefined,
+        thin: d.thin ?? false,
       });
     }
     case "page.failed":

@@ -40,10 +40,19 @@ export type Draft = {
   writing: Partial<WritingOptions>;
   /** Domain lists the user edited; an unedited list follows its default. */
   domains: Partial<DomainLists>;
+  /** The search language as typed; empty sends none. */
+  searchLanguage: string;
   /** The Custom depth's values and its default Length, once Custom was picked or edited. */
   custom?: { values: ResearchValues; words: number };
 };
-export const EMPTY_DRAFT: Draft = { query: "", files: [], options: {}, writing: {}, domains: {} };
+export const EMPTY_DRAFT: Draft = {
+  query: "",
+  files: [],
+  options: {},
+  writing: {},
+  domains: {},
+  searchLanguage: "",
+};
 
 export type LiveTab = "progress" | "sources" | "passages" | "report";
 

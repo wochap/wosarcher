@@ -24,7 +24,7 @@ export function depthLabel(depth: string | null | undefined): string {
 }
 
 export function researchOf(info: DepthInfo): ResearchValues {
-  const { words: _, queries_per_round: __, ...values } = info.values;
+  const { words: _, ...values } = info.values;
   return values;
 }
 
@@ -62,17 +62,16 @@ const fmtK = (n: number) => `${Math.round(n / 1000)}k`;
 
 /**
  * "~<P> pages · <R> rounds · ~<C> LLM calls", plus the context clamp when there is one. Each round
- * after the first searches up to `queriesPerRound` follow-ups and costs one gap call.
+ * after the first searches up to `queries_per_round` follow-ups and costs one gap call.
  */
 export function estimate(
   values: ResearchValues,
   effective: number | null,
-  queriesPerRound: number,
   rounds: number = values.rounds,
 ): string {
   const found =
     (values.sub_queries + 1) * values.results_per_query +
-    (rounds - 1) * queriesPerRound * values.results_per_query;
+    (rounds - 1) * values.queries_per_round * values.results_per_query;
   const pages = Math.min(values.max_pages, found);
   const calls = (values.sub_queries > 0 ? 1 : 0) + (rounds - 1) + 1;
   const line = `~${pages} pages · ${rounds} round${rounds === 1 ? "" : "s"} · ~${calls} LLM calls`;

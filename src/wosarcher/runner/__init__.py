@@ -230,12 +230,12 @@ class Runner:
         ctx.log.emit("research.done", "gap", done)
 
     def stop_before_gap(self, state: steps.RoundState, planned: int) -> StopReason | None:
-        if state.fetched >= self.settings.fetch.max_pages:
-            return "page limit reached"
-        if state.number > 2 and state.new_pages == 0 and state.previous_new_pages == 0:
-            return "no new sources"
         if state.number >= planned:
             return "max rounds"
+        if state.number > 2 and state.new_pages == 0 and state.previous_new_pages == 0:
+            return "no new sources"
+        if state.fetched >= self.settings.fetch.max_pages:
+            return "page limit reached"
         return None
 
     def cycle(self, stage: Stage, after: list[Stage]) -> list[Stage]:

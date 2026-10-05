@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_core import to_jsonable_python
 
-from wosarcher.models import Stage, WritingOptions, domain_list
+from wosarcher.models import Stage, WritingOptions, domain_list, search_language
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
@@ -32,9 +32,10 @@ RESEARCH_KEYS = {
     "context_tokens": "select.max_context_tokens",
     "gap_context_tokens": "research.gap_context_tokens",
     "rounds": "research.rounds",
+    "queries_per_round": "research.queries_per_round",
 }
 # The only keys a depth preset may set, besides its `description`.
-DEPTH_KEYS = (*RESEARCH_KEYS.values(), "research.queries_per_round", "write.words")
+DEPTH_KEYS = (*RESEARCH_KEYS.values(), "write.words")
 
 # Seconds each stage may take; `run.stage_timeouts` overrides single stages.
 DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
@@ -100,6 +101,11 @@ class SearchConfig(Provider):
     @classmethod
     def check_domains(cls, value: list[str]) -> list[str]:
         return domain_list(value)
+
+    @field_validator("language")
+    @classmethod
+    def check_language(cls, value: str) -> str:
+        return search_language(value)
 
 
 class FetchConfig(Provider):

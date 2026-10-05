@@ -27,6 +27,8 @@ type Row = {
   kept: number;
   /** "round <k>" for a page a later research round fetched. */
   roundTag?: string;
+  /** The queries that found it, each with its text when known. */
+  queries?: { id: string; text?: string }[];
 };
 
 const SKELETON = ["72%", "58%", "80%", "64%", "70%", "52%"];
@@ -42,7 +44,12 @@ function webRow(run: RunView, s: SourceView): Row {
   if (s.state === "failed")
     return { ...base, state: s.reason ?? "failed", tone: "danger", icon: XCircle };
   if (s.state === "fetched")
-    return { ...base, state: s.cached ? "cached" : "fetched", tone: "muted", icon: Check };
+    return {
+      ...base,
+      state: s.thin ? "thin" : s.cached ? "cached" : "fetched",
+      tone: "muted",
+      icon: Check,
+    };
   const cancelled = run.status === "cancelled";
   return {
     ...base,
@@ -50,6 +57,14 @@ function webRow(run: RunView, s: SourceView): Row {
     tone: "faint",
     icon: cancelled ? StopCircle : GlobeSimple,
   };
+}
+
+/** Query text by ID, from the sub-queries and the research rounds. */
+function queryTexts(run: RunView): Record<string, string> {
+  const texts: Record<string, string> = {};
+  for (const q of [...run.subQueries, ...run.rounds.flatMap((r) => r.queries)])
+    texts[q.id] = q.text;
+  return texts;
 }
 
 /** Kept passages per source id, from the context once selected, else from the scored events. */
@@ -76,6 +91,7 @@ export function SourcesPanel({ run, files, context, rounds = 1, className }: Pro
   const web = Object.values(run.sources).filter((s) => s.kind === "web");
   const selected = run.phases.select.state === "done" || run.phases.select.state === "reused";
   const kept = selected ? keptBySource(run, context) : {};
+  const texts = queryTexts(run);
   const rows: Row[] = [
     ...files.map((f) => ({
       key: f.uri,
@@ -91,6 +107,7 @@ export function SourcesPanel({ run, files, context, rounds = 1, className }: Pro
         ...webRow(run, s),
         kept: kept[s.sourceId] ?? 0,
         roundTag: rounds > 1 && s.round > 1 ? `round ${s.round}` : undefined,
+        queries: s.queryIds.map((id) => ({ id, text: texts[id] })),
       }))
       .reverse(),
   ];
@@ -135,6 +152,19 @@ export function SourcesPanel({ run, files, context, rounds = 1, className }: Pro
                   <span className={css.title}>{row.title}</span>
                 )}
                 <div className={css.url}>{row.url}</div>
+                {row.queries && row.queries.length > 0 && (
+                  <div className={css.url}>
+                    {row.queries.map((q, i) => (
+                      <span key={q.id}>
+                        {i > 0 && " · "}
+                        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the query text */}
+                        <span title={q.text} tabIndex={0}>
+                          {q.id}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className={css.state}>
                 <div data-tone={row.tone}>{row.state}</div>
