@@ -48,7 +48,7 @@ panel, collapsed by default. Its header SHALL show the summary "<Depth> ·
 <recipe> · <sources> · <profile> · <N> words · <Tone>", as in scenario
 `new-depth`. The panel SHALL start with the Depth group (Requirement:
 Depth control), then the Run group. The Run group SHALL offer:
-- Recipe (segmented, `report` then `context`);
+- Recipe (segmented, `report`, `answer`, then `context`);
 - Sources (segmented, `web`, `files`, `both`);
 - Profile: a select `min(260px, 100%)` wide listing the profiles from
   `GET /api/profiles` by name. A profile whose `source` is `user` is
@@ -59,7 +59,22 @@ Depth control), then the Run group. The Run group SHALL offer:
 
 Each Run label sits at the top of its row in the prototype's form grid.
 Recipe `context` SHALL start the run with `until` set to `select`, so no
-report is written.
+report is written. Recipes `report` and `answer` SHALL start the run with
+`writing.format` set to the recipe. The Recipe SHALL be preselected from
+the global default `writing.format` (web-shell "Run defaults"); when that
+default changes while the New run screen keeps the previous default as its
+Recipe, the Recipe SHALL follow the new default, and a Recipe the user
+picked otherwise SHALL stay. `format` is not a Writing group field and
+SHALL NOT show an "overridden" mark or count toward the header's overridden
+count.
+
+#### Scenario: Answer recipe
+- **WHEN** the user picks Recipe `answer` and starts a run
+- **THEN** the run request has `writing.format` = `answer` and no `until`
+
+#### Scenario: Recipe follows the default format
+- **WHEN** the global default format is `answer` and the user opens New run (scenario `new`)
+- **THEN** Recipe `answer` is selected
 
 #### Scenario: Context recipe
 - **WHEN** the user picks Recipe `context` and starts a run
@@ -714,14 +729,18 @@ tag, run id, meta `date · duration · recipe · N sources · N passages`, the
 query as H1, the actions Rewrite (followed by its help button), Copy
 markdown, Download .md, and Copy JSON (context), the line "Written with
 <Tone> · <N> words · <Language> · <citation marker label> · <reference
-style> [· custom instructions]", the report (headings, lists, citation
+style> [· custom instructions]" (for recipe `answer`, scenario
+`finished-answer`: "Answer, at most <N> words · <Tone> · <Language> ·
+<citation marker label> · <reference style> [· custom instructions]"), the report (headings, lists, citation
 chips), then the heading "References" (19px) followed by the reference
 style name (12px, muted) and the reference style help button, with the
 report's reference entries below it, and an aside with Sources (count
 fetched and failed, "N kept", the citation labels that use each source)
 and Selected passages (label, score, heading path, text, domain). A run
 with recipe `context` SHALL show the selected passages in place of the
-report and SHALL NOT offer Rewrite or Copy markdown or Download.
+report and SHALL NOT offer Rewrite or Copy markdown or Download. A run
+with recipe `answer` SHALL use the same layout, actions, and References as
+a report (scenario `finished-answer`).
 
 A query of 240 characters or fewer SHALL show as the full H1, with no
 clamp and no button (scenarios `finished` and `report-cut`). When the query
@@ -735,6 +754,10 @@ viewport and 480px that scrolls inside itself.
 #### Scenario: Finished report
 - **WHEN** the user opens a completed report run
 - **THEN** the report, the sources with kept counts, and the selected passages are shown
+
+#### Scenario: Finished answer
+- **WHEN** the user opens a completed run with `writing.format` = `answer` and words 400 (scenario `finished-answer`)
+- **THEN** the meta line names `answer`, the options line starts "Answer, at most 400 words ·", and the answer is shown with its citation chips, References, Rewrite, Copy markdown, and Download .md
 
 #### Scenario: Long question title
 - **WHEN** the user opens the report of a run whose query has 4,030 characters
@@ -841,7 +864,10 @@ copied").
 ### Requirement: Rewrite
 Rewrite on the Report screen (scenarios `finished` and `versions`) SHALL
 open the prototype's "Rewrite report" dialog, prefilled with the viewed
-version's writing options, marking each changed field "changed" with "was
+version's writing options. Above the writing fields the dialog SHALL show a
+Format field (segmented, `report` then `answer`, scenario `rewrite-format`)
+set to the viewed version's format, followed by its help button. The
+dialog SHALL mark each changed field "changed" with "was
 <value>" and Reset, explaining that sources and passages are reused, and
 showing "Creates v<N> linked to <id>", where N is the highest version in
 the viewed run's lineage plus one, the version the server gives the fork.
@@ -856,6 +882,10 @@ click SHALL close the dialog without a request.
 #### Scenario: Rewrite shorter
 - **WHEN** the user sets the length to 250 and confirms
 - **THEN** a fork from `write` with `words` 250 is created and shown live with Plan to Select marked reused
+
+#### Scenario: Rewrite as an answer
+- **WHEN** the user opens Rewrite on a report, picks Format `answer` and length 400, and confirms (scenario `rewrite-format`)
+- **THEN** Format shows "changed" with "was report" and Reset, and `POST /api/runs/{id}/fork` is sent with `from` = `write` and `writing` containing `format` = `answer` and `words` = 400
 
 #### Scenario: Rewrite an older version
 - **WHEN** the user views v1 of a lineage that has v1 and v2 and opens Rewrite
@@ -883,7 +913,7 @@ accessible label is "Help: <label>"):
 | Placement | Label | Title | Body | Example |
 |---|---|---|---|---|
 | New run, after "Attachments" | Attachments | Attachments | Markdown or text files to research alongside the web, or instead of it. | pdf-ingest output (.md) |
-| Options, after "Recipe" | Recipe | Recipe | Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper. | |
+| Options, after "Recipe" | Recipe | Recipe | Report writes a cited report. Answer replies to the question directly, with citations, in at most the chosen length. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper. | |
 | Options, after "Sources" | Sources | Sources | Web searches the internet. Files uses only your attachments. Both combines them; attachments get a share of the context budget. | |
 | Options, after "Profile" | Profile | Profile | A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server. | |
 | Options, after an "overridden" mark | Overridden | Overridden | This value differs from your default in Settings and applies to this run only. | |
@@ -1270,3 +1300,20 @@ Prefilter card detail).
 #### Scenario: Nothing filtered
 - **WHEN** no domain list is set
 - **THEN** the Search card has no detail line
+### Requirement: Run recipe
+Every run screen that names a run's recipe SHALL derive it from the run's
+`until` and resolved `writing.format`, with one shared rule: `context`
+when `until` is `select`, else `answer` when `writing.format` is
+`answer`, else `report`. The Live run header meta (scenario `live`), the
+Report screen meta (scenarios `finished` and `finished-answer`), Copy JSON
+(context) `options.recipe`, and the Run history Recipe column and filter
+(web-shell) SHALL use this rule. A run whose saved writing options have no
+`format` SHALL count as `report`.
+
+#### Scenario: Answer meta
+- **WHEN** a run has `until` null and `writing.format` = `answer`
+- **THEN** the Live run header meta reads `answer · <sources> · <profile>`
+
+#### Scenario: Context wins
+- **WHEN** a run has `until` = `select` and `writing.format` = `answer`
+- **THEN** its recipe is shown as `context`

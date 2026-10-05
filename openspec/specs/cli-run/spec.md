@@ -13,7 +13,7 @@ list runs, with readable progress on a terminal and stable JSON for scripts.
 files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
 `--depth NAME`, `--set KEY=VALUE` (repeatable), `--tone`,
 `--tone-instructions`, `--words`, `--language`, `--citation-marker`,
-`--reference-style`, `--sub-queries N`, `--results-per-query N`,
+`--reference-style`, `--format report|answer`, `--sub-queries N`, `--results-per-query N`,
 `--max-pages N`, `--passages-per-query N`, `--context-tokens N|auto`,
 `--gap-context-tokens N|auto`, `--rounds N`, `--allow-domain DOMAIN`
 (repeatable), `--block-domain DOMAIN` (repeatable), `--run-id ID`, and
@@ -74,6 +74,14 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 #### Scenario: Invalid domain flag
 - **WHEN** the user runs `wosarcher run "q" --allow-domain "https://gob.pe/x"`
 - **THEN** the command fails with exit status 2 before creating a run, with an error that names `search.allow_domains` and the entry
+
+#### Scenario: Answer format flag
+- **WHEN** the user runs `wosarcher run "q" --format answer`
+- **THEN** the run's resolved writing options have format `answer` and `request.json` records the `write.format` override
+
+#### Scenario: Unknown format
+- **WHEN** the user runs `wosarcher run "q" --format summary`
+- **THEN** the command exits with status 2 before creating a run, with an error naming `--format` and the values `report` and `answer`
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
@@ -148,6 +156,10 @@ saved settings, and the fork SHALL record `NAME` as its profile.
 #### Scenario: Retry with another profile
 - **WHEN** the user runs `wosarcher fork <id> --from score --profile cloud`
 - **THEN** the fork's score block comes from the `cloud` profile and its record names profile `cloud`
+
+#### Scenario: Rewrite as an answer
+- **WHEN** the user runs `wosarcher fork <id> --from write --format answer`
+- **THEN** only the write stage runs, with format `answer`, and the fork's `request.json` records the `write.format` override
 
 ### Requirement: Runs command
 `wosarcher runs` SHALL list runs newest first with ID, creation time,

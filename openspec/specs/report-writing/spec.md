@@ -66,10 +66,11 @@ is called, with an error that lists the known tones.
 - **THEN** the stage fails without an LLM call and the error lists the 11 known tones
 
 ### Requirement: Length and language
-The system message SHALL state the target length in words and the report
-language from the writing options. The LLM output limit SHALL be the
+The system message SHALL state the length in words and the language from
+the writing options: "about <N> words" for format `report`, "at most <N>
+words" for format `answer`. The LLM output limit SHALL be the
 larger of 1024 and twice the target word count, in tokens, lowered to
-`llm.max_output_tokens` when that is set.
+`llm.max_output_tokens` when that is set, for both formats.
 
 #### Scenario: Options in the prompt
 - **WHEN** the options are 600 words in German
@@ -78,6 +79,10 @@ larger of 1024 and twice the target word count, in tokens, lowered to
 #### Scenario: Provider output cap
 - **WHEN** the target is 3000 words and `llm.max_output_tokens = 4000`
 - **THEN** the LLM is called with an output limit of 4000 tokens and the system message still asks for about 3000 words
+
+#### Scenario: Answer length is a maximum
+- **WHEN** the options are format `answer`, 400 words in English
+- **THEN** the system message asks for at most 400 words in English and the LLM is called with an output limit of 1024 tokens
 
 ### Requirement: Streaming
 The report text SHALL be streamed: each piece of text from the LLM SHALL be
@@ -220,3 +225,26 @@ last call.
 #### Scenario: Normal end
 - **WHEN** the stream ends with finish reason `stop`
 - **THEN** the writer makes 1 call, `continuations` is 0, `truncated` is false, and there is no truncation warning
+### Requirement: Writing formats
+The write stage SHALL choose its prompt templates by the writing option
+`format`. Format `report` SHALL use the report templates. Format `answer`
+SHALL use the answer templates, which ask the writer to answer the
+question in the first paragraph, support the answer after it, use
+headings only to separate distinct parts, and cite every claim as `[n]`.
+Both formats SHALL send the passages in the same data block with the same
+preamble, and only the query and the writing options SHALL be substituted
+into either template. Citation checks, citation markers, the reference
+list, streaming, and report continuation SHALL behave the same for both
+formats, and `report.json` and `report.md` SHALL keep the same shape.
+
+#### Scenario: Answer templates
+- **WHEN** a run writes with format `answer`
+- **THEN** the system message is the answer template, it asks for the direct answer first, and the passages block is the same as for a report
+
+#### Scenario: Default is a report
+- **WHEN** a run writes with no `format` set
+- **THEN** the report templates are used
+
+#### Scenario: Answer keeps references
+- **WHEN** an answer cites passages 1 and 3 from two sources
+- **THEN** `report.md` ends with the reference list of those two sources, as for a report

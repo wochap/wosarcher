@@ -75,16 +75,17 @@ reason: `source_cap` or `budget`.
 
 ### Requirement: Writing options
 Writing options SHALL have the fields `tone`, `tone_instructions`, `words`,
-`language`, `citation_marker`, and `reference_style`, with defaults
-`objective`, empty, 1200, `english`, `numeric`, and `APA`. `words` SHALL be a
+`language`, `citation_marker`, `reference_style`, and `format`, with
+defaults `objective`, empty, 1200, `english`, `numeric`, `APA`, and
+`report`. `words` SHALL be a
 positive integer. `citation_marker` SHALL be one of `numeric`,
-`superscript`, or `author-year`. `tone` and `reference_style` SHALL accept
+`superscript`, or `author-year`. `format` SHALL be `report` or `answer`. `tone` and `reference_style` SHALL accept
 any name; whether the name exists is checked where tones and reference
 formats are loaded, not in the contract.
 
 #### Scenario: Defaults
 - **WHEN** writing options are created with no fields
-- **THEN** they have tone `objective`, words 1200, language `english`, citation marker `numeric`, and reference style `APA`
+- **THEN** they have tone `objective`, words 1200, language `english`, citation marker `numeric`, reference style `APA`, and format `report`
 
 #### Scenario: Invalid marker
 - **WHEN** writing options are created with `citation_marker = "footnote"`
@@ -93,6 +94,10 @@ formats are loaded, not in the contract.
 #### Scenario: Invalid length
 - **WHEN** writing options are created with `words = 0`
 - **THEN** validation fails and names `words`
+
+#### Scenario: Invalid format
+- **WHEN** writing options are created with `format = "summary"`
+- **THEN** validation fails and names `format` and the allowed values `report` and `answer`
 
 ### Requirement: Published JSON Schema
 `wosarcher schema` SHALL print one JSON Schema document that covers every contract

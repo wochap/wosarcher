@@ -389,7 +389,7 @@ SHALL answer 422 `invalid_attachment`.
 
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
-option fields), `sources`, and `domains` (`allow` and `block`, each a list
+option fields, including `format`), `sources`, and `domains` (`allow` and `block`, each a list
 of domain entries, empty by default). `PUT /api/settings` SHALL replace them after
 validation and persist them in `server-settings.json` in the wosarcher
 config directory, so they survive a restart. Built-in writing defaults
@@ -410,6 +410,14 @@ SHALL apply when the file does not exist.
 #### Scenario: Invalid domain default
 - **WHEN** a client puts settings with `domains.allow = ["https://gob.pe/"]`
 - **THEN** the response is 422 naming `domains.allow` and the entry, and the stored settings are unchanged
+
+#### Scenario: Default format
+- **WHEN** a client puts settings with `writing.format = "answer"`
+- **THEN** `GET /api/settings` returns `writing.format = "answer"`, and a run started without `writing.format` writes an answer
+
+#### Scenario: Settings saved before format existed
+- **WHEN** `server-settings.json` has no `format` in `writing`
+- **THEN** `GET /api/settings` returns `writing.format = "report"`
 
 ### Requirement: Profiles
 `GET /api/profiles` SHALL return every profile with:

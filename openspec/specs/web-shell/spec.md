@@ -497,10 +497,11 @@ toast "Token “<name>” revoked".
 - **THEN** no request is sent and the token is still listed
 
 ### Requirement: Run history
-The Run history screen of the prototype (no dedicated scenario; reached
+The Run history screen of the prototype (scenario `history`; reached
 with Alt+3) SHALL list runs from `GET /api/runs`, newest first, with the H1
 "Run history" and the run count, in a table with Query, Date, Recipe
-(`report`, or `context` for runs whose `until` is `select`), Status,
+(derived as web-run "Run recipe" defines: `report`, `answer`, or
+`context`), Status,
 Duration (`m:ss` from `duration_s`, "–" while it is null), Cost (`$` with
 three decimals from `cost`, "–" while it is null), and the row actions
 Open, Rerun, and Delete. A fork SHALL show under its query "↳ rewrite of
@@ -513,6 +514,10 @@ labelled "Queued"), failed, and cancelled; `interrupted` SHALL use the
 failed style with the label "Interrupted", and the Failed filter SHALL
 include it.
 
+#### Scenario: Answer row
+- **WHEN** `GET /api/runs` returns a finished run with `until` null and `writing.format` = `answer`
+- **THEN** its Recipe column reads `answer`
+
 #### Scenario: Rewrite row
 - **WHEN** a run is a fork of `r_7f3a` with tone and length changed
 - **THEN** its row shows "rewrite of r_7f3a" with the changed options
@@ -524,13 +529,17 @@ include it.
 ### Requirement: History search and filters
 The search field SHALL filter rows by a case-insensitive substring of the
 query, together with the Status filter (All, Completed, Failed, Cancelled)
-and the Recipe filter (Any recipe, report, context). When filters hide
+and the Recipe filter (Any recipe, report, answer, context). When filters hide
 every row, the screen SHALL show "No runs match" with a "Clear filters"
 button that resets all three.
 
 #### Scenario: No match
 - **WHEN** the user searches for a word no query contains
 - **THEN** "No runs match" and "Clear filters" are shown
+
+#### Scenario: Answer filter
+- **WHEN** the user picks the Recipe filter `answer`
+- **THEN** only runs whose recipe is `answer` are listed
 
 ### Requirement: History empty state
 When there are no runs, the Run history screen SHALL show the prototype's
@@ -644,18 +653,20 @@ accessible label is "Help: <label>"):
 | Provider card health strip, after the health text | Health | Health | Not checked yet, OK, slow (degraded), down, or skipped (built in, no endpoint). Checks run only when you click Check, so idle GPU servers are never woken by opening this page. |
 | After the "Writing defaults" heading | Writing defaults | Writing defaults | Used for every new run. Each run can override them in its options. |
 | After "API tokens" in the Security panel | API tokens | API tokens | For scripts and agents on other machines. A token is shown once, when you create it. |
-| History table header, after "Recipe" | Recipe | Recipe | Report wrote a cited report; context returned selected passages only. |
+| History table header, after "Recipe" | Recipe | Recipe | Report wrote a cited report; answer wrote a direct cited answer; context returned selected passages only. |
 | History table header, after "Cost" | Cost | Cost | Total for search and hosted APIs across all stages. $0 for local models. |
 | History rewrite note, after the writing changes | Rewrite marker | Rewrite | A new version written from an earlier run's passages. It opens next to its parent as linked versions. |
 
 Every writing field label (Settings, New run, Rewrite dialog) SHALL be
-followed by a help button with these entries:
+followed by a help button with these entries (Format appears only in the
+Settings "Run defaults" section and the Rewrite dialog):
 
 | Label | Title | Body | Example |
 |---|---|---|---|
 | Tone | Tone | The writing style of the report. Each option in the list says what it emphasizes. | |
 | Custom instructions | Custom instructions | Extra guidance added on top of the tone. Set a default here, or change it for one run. | Focus on costs; avoid jargon. |
-| Length (words) | Length (words) | Target length of the report. The writer aims for it; it is not an exact count. | |
+| Format | Format | Report writes a structured report. Answer replies to the question directly, in at most the chosen length. | |
+| Length (words) | Length (words) | Target length of the report. The writer aims for it; it is not an exact count. For an answer it is the maximum. | |
 | Language | Language | The language the report is written in. Sources can be in any language. | |
 | Citation marker | Citation marker | How citations look in the text. | [1] · ¹ · (Leviathan et al., 2023) |
 | Reference style | Reference style | Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE. | |
@@ -706,10 +717,13 @@ in the prototype's Run history screen, taken from the run's summary in
 The Settings screen (scenario `settings`) SHALL show a "Run defaults"
 section above "Writing defaults": the heading "Run defaults" followed by
 its help button and the muted 12px text "Preselected on every new run ·
-saved automatically", then the rows Allow domains and Block domains with
+saved automatically", then the row Format (segmented, `report` then
+`answer`, with its help button and the muted 12px hint "Preselects the
+Recipe on New run. Context is chosen per run." under the control), then the
+rows Allow domains and Block domains with
 the chips input, hint, and help buttons of the New run domain rows (web-run
 "Domain rows" and "Domain help"), without overridden marks. The rows SHALL
-load from `GET /api/settings` (`domains`). Each change SHALL be saved with
+load from `GET /api/settings` (`writing.format` and `domains`). Each change SHALL be saved with
 `PUT /api/settings` without a save button, and the "Saved" mark with a
 check SHALL show for 1.5 seconds after the server accepts it; a rejected
 value SHALL show the server's error under the row and restore the previous
@@ -718,13 +732,15 @@ section SHALL show the note "The <names> profiles set their own domain
 lists; runs on those profiles use them instead.", with the profile names
 joined by " and ". The section's help button SHALL read, verbatim: title
 "Run defaults", body "Preselected on every new run. A profile can set its
-own domain lists; runs on that profile use those instead." The prototype's
-Format row in this section belongs to another change and SHALL NOT be shown
-yet.
+own domain lists; runs on that profile use those instead."
 
 #### Scenario: Autosave a block list
 - **WHEN** the user adds `pinterest.com` to Block domains in Settings
 - **THEN** `PUT /api/settings` is sent with `domains.block` = `["pinterest.com"]` and "Saved" appears
+
+#### Scenario: Autosave the default format
+- **WHEN** the user picks `answer` in the Format row (scenario `settings`)
+- **THEN** `PUT /api/settings` is sent with `writing.format` = `answer`, "Saved" appears, and the next New run preselects Recipe `answer`
 
 #### Scenario: Profiles with their own lists
 - **WHEN** `GET /api/profiles` returns `low-vram` with `block_domains = ["pinterest.com", "quora.com"]` and `nixos` with `block_domains = ["facebook.com"]`, and every other profile with null lists

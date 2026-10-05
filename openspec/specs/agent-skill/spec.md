@@ -23,15 +23,20 @@ The skill SHALL document, each with a command example:
 
 - getting cited context with `wosarcher run "<query>" --until select --json`, as the recommended default for agents;
 - getting a full report with `wosarcher run "<query>" --json`;
+- getting a short cited answer with `wosarcher run "<query>" --format answer --json`;
 - attaching files with `--attach` and choosing sources with `--sources files|web|both`;
 - choosing a profile with `--profile`, listing profiles with `wosarcher profile list`, and overriding fields with `--set`;
-- writing options `--tone`, `--tone-instructions`, `--words`, `--language`, `--citation-marker`, and `--reference-style`;
+- writing options `--tone`, `--tone-instructions`, `--words`, `--language`, `--citation-marker`, `--reference-style`, and `--format`;
 - rewriting a finished run with `wosarcher fork <run_id> --from write`;
 - listing runs with `wosarcher runs --json` and checking providers with `wosarcher doctor`.
 
 #### Scenario: Cited context first
 - **WHEN** an agent reads the skill
 - **THEN** the first command example is `wosarcher run "<query>" --until select --json`
+
+#### Scenario: Answer example
+- **WHEN** an agent reads the skill
+- **THEN** it finds `wosarcher run "<query>" --format answer --json` described as the way to get a short cited answer
 
 ### Requirement: Output description
 The skill SHALL describe the JSON document printed by `--json` (run ID,
