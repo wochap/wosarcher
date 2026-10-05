@@ -62,8 +62,13 @@ def passage_entry(passage: Passage, title: str) -> str:
     return f"{escape(label)}\n{escape(passage.text)}\n"
 
 
+TEMPLATES = {"report": ("write", "write_task"), "answer": ("answer", "answer_task")}
+"""System and task template per writing format."""
+
+
 def messages(context: Context, options: WritingOptions, tone_description: str) -> list[Message]:
-    system = load("write").substitute(
+    system_template, task_template = TEMPLATES[options.format]
+    system = load(system_template).substitute(
         query=context.query,
         tone=options.tone.lower(),
         tone_description=tone_description,
@@ -74,7 +79,7 @@ def messages(context: Context, options: WritingOptions, tone_description: str) -
     titles = {source.source_id: source.title for source in context.sources}
     entries = "\n".join(passage_entry(passage, titles.get(passage.source_id, "")) for passage in context.passages)
     preamble = load("passages").template.strip()
-    task = load("write_task").substitute(query=context.query, words=options.words, language=options.language)
+    task = load(task_template).substitute(query=context.query, words=options.words, language=options.language)
     return [
         Message(role="system", content=system),
         Message(role="user", content=f"{preamble}\n\n<passages>\n{entries}</passages>\n\n{task}"),

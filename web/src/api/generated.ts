@@ -355,6 +355,7 @@ export type StopReason = (("max rounds" | "no new sources" | "page limit reached
 export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
+export type Format1 = ("report" | "answer")
 export type Language1 = string
 export type ReferenceStyle1 = string
 export type Tone1 = string
@@ -1414,6 +1415,7 @@ export interface Settings {
 }
 export interface WritingOptions {
 citation_marker?: CitationMarker1
+format?: Format1
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1558,6 +1560,7 @@ writing?: WritingOptions1
 }
 export interface WritingOptions1 {
 citation_marker?: CitationMarker1
+format?: Format1
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1616,6 +1619,7 @@ block?: Block1
 }
 export interface WritingOptions2 {
 citation_marker?: CitationMarker1
+format?: Format1
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1
@@ -1798,6 +1802,7 @@ name: Name5
  */
 export interface WritingOptions3 {
 citation_marker?: CitationMarker1
+format?: Format1
 language?: Language1
 reference_style?: ReferenceStyle1
 tone?: Tone1

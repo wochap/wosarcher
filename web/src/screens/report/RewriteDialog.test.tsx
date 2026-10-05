@@ -34,6 +34,25 @@ describe("RewriteDialog", () => {
     expect(window.location.hash).toBe("#/live/r_new1");
   });
 
+  it("rewrites a report as an answer", async () => {
+    const { api } = await openDialog();
+    const format = screen.getByRole("radiogroup", { name: "Format" });
+    expect(format.textContent).toBe("reportanswer");
+    expect(screen.getByRole("button", { name: "Help: Format" })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("answer"));
+    expect(screen.getByText("was report")).toBeTruthy();
+    const words = screen.getByLabelText("Length (words)");
+    fireEvent.change(words, { target: { value: "400" } });
+    fireEvent.blur(words);
+    expect(screen.getAllByText("changed")).toHaveLength(2);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Rewrite from write stage" }));
+    });
+    expect(callsTo(api, "forkRun")).toEqual([
+      [RUN_ID, { from: "write", writing: { format: "answer", words: 400 } }],
+    ]);
+  });
+
   it("closes without a request on Escape, Cancel, close, and backdrop", async () => {
     const { api } = await openDialog();
     fireEvent.keyDown(window, { key: "Escape" });

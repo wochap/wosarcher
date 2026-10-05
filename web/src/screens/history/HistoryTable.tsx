@@ -5,10 +5,9 @@ import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime, minSec } from "../../format";
-import { wDiff } from "../../run/format";
+import { recipeOf, wDiff } from "../../run/format";
 import css from "./HistoryTable.module.css";
 
-export const recipeOf = (run: RunSummary) => (run.until === "select" ? "context" : "report");
 export const durationOf = (run: RunSummary) =>
   run.duration_s == null ? "–" : minSec(run.duration_s);
 export const costOf = (run: RunSummary) => (run.cost == null ? "–" : `$${run.cost.toFixed(3)}`);
@@ -69,7 +68,7 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
                   )}
                 </td>
                 <td className={css.date}>{dateTime(run.created)}</td>
-                <td>{recipeOf(run)}</td>
+                <td>{recipeOf(run.until, run.writing.format)}</td>
                 <td>
                   <div className={css.tags}>
                     <StatusTag status={run.status} />

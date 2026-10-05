@@ -137,6 +137,34 @@ describe("deviceLabel", () => {
   });
 });
 
+describe("LiveHeader recipe", () => {
+  it("names an answer run's recipe in the meta", () => {
+    const detail = {
+      ...summary({ writing: { ...summary().writing, format: "answer" } }),
+      last_seq: 0,
+    };
+    header(
+      upTo(all, (e) => e.type === "passages.scored"),
+      false,
+      detail,
+    );
+    expect(screen.getByText("answer · both · low-vram · 2 files")).toBeTruthy();
+  });
+
+  it("shows context when the run stops at select, whatever its format", () => {
+    const detail = {
+      ...summary({ until: "select", writing: { ...summary().writing, format: "answer" } }),
+      last_seq: 0,
+    };
+    header(
+      upTo(all, (e) => e.type === "passages.scored"),
+      false,
+      detail,
+    );
+    expect(screen.getByText("context · both · low-vram · 2 files")).toBeTruthy();
+  });
+});
+
 describe("LiveHeader depth tag", () => {
   it("shows the depth after the status, Standard when the run has none", () => {
     header(all, false, { ...summary({ depth: "quick" }), last_seq: 0 });

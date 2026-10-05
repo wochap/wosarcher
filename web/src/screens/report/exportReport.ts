@@ -1,7 +1,7 @@
 // The Report screen's exports: the markdown file and the context as JSON.
 import type { Context } from "../../api/generated";
 import type { RunDetail } from "../../api/types";
-import { recipeOf } from "../live/model";
+import { recipeOf } from "../../run/format";
 
 /** `# <query>`, a blank line, and the report. */
 export const markdownFile = (query: string, report: string) => `# ${query}\n\n${report}`;
@@ -21,7 +21,7 @@ export function contextJson(detail: RunDetail, context: Context) {
     parent: detail.parent_run_id ?? null,
     query: detail.query,
     options: {
-      recipe: recipeOf(detail.until),
+      recipe: recipeOf(detail.until, detail.writing.format),
       sources: detail.sources ?? "both",
       profile: detail.profile,
       writing: detail.writing,

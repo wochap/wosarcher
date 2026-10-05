@@ -57,7 +57,7 @@ export const HELP: Record<string, Help> = {
   },
   recipe: {
     title: "Recipe",
-    body: "Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
+    body: "Report writes a cited report. Answer replies to the question directly, with citations, in at most the chosen length. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
   },
   sources: {
     title: "Sources",
@@ -81,9 +81,13 @@ export const HELP: Record<string, Help> = {
     body: "Extra guidance added on top of the tone. Set a default here, or change it for one run.",
     example: "Focus on costs; avoid jargon.",
   },
+  "w-format": {
+    title: "Format",
+    body: "Report writes a structured report. Answer replies to the question directly, in at most the chosen length.",
+  },
   "w-words": {
     title: "Length (words)",
-    body: "Target length of the report. The writer aims for it; it is not an exact count.",
+    body: "Target length of the report. The writer aims for it; it is not an exact count. For an answer it is the maximum.",
   },
   "w-lang": {
     title: "Language",
@@ -237,7 +241,7 @@ export const HELP: Record<string, Help> = {
   },
   "h-recipe": {
     title: "Recipe",
-    body: "Report wrote a cited report; context returned selected passages only.",
+    body: "Report wrote a cited report; answer wrote a direct cited answer; context returned selected passages only.",
   },
   "h-version": {
     title: "Rewrite",

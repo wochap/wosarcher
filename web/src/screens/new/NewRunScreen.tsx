@@ -61,7 +61,8 @@ function startError(error: unknown): StartError {
 }
 
 /**
- * The request for the form: the context recipe stops after select; writing holds overrides of
+ * The request for the form: the context recipe stops after select, and the report and answer
+ * recipes send their `writing.format`; writing also holds overrides of
  * the depth-aware `defaults`. Custom sends its six values, and Length whenever it differs from
  * the saved default, since no preset sets it on the server.
  */
@@ -80,8 +81,9 @@ export function runRequest(
     profile: options.profile,
     depth: options.depth,
   };
-  if (options.recipe === "context") request.until = "select";
   const overrides = overriddenFields(writing, defaults);
+  if (options.recipe === "context") request.until = "select";
+  else overrides.format = options.recipe;
   if (options.depth === "custom") {
     if (custom) request.research = custom;
     if (writing.words !== saved.words) overrides.words = writing.words;
@@ -117,8 +119,9 @@ export function NewRunScreen() {
   }, [api]);
 
   const active = profiles.find((p) => p.active)?.name ?? profiles[0]?.name ?? "";
+  const defaultRecipe = settings?.writing.format ?? "report";
   const options: RunOptions = {
-    recipe: "report",
+    recipe: defaultRecipe,
     sources: (settings?.sources as RunOptions["sources"] | undefined) ?? "both",
     profile: active,
     depth: "standard",
@@ -215,6 +218,15 @@ export function NewRunScreen() {
       },
       options: { ...d.options, depth: "custom" },
     }));
+  }
+
+  /** A Recipe equal to the default format is no override, so it follows later default changes. */
+  function setOption<K extends keyof RunOptions>(key: K, value: RunOptions[K]) {
+    setDraft((d) => {
+      const { [key]: _, ...rest } = d.options;
+      const same = key === "recipe" && value === defaultRecipe;
+      return { ...d, options: same ? rest : { ...rest, [key]: value } };
+    });
   }
 
   /** A value equal to its default is no override, so later default changes reach it. */
@@ -317,9 +329,7 @@ export function NewRunScreen() {
               onPick: pickDepth,
               onEdit: editResearch,
             }}
-            onOption={(key, value) =>
-              setDraft((d) => ({ ...d, options: { ...d.options, [key]: value } }))
-            }
+            onOption={setOption}
             writing={writing}
             defaults={defaults}
             onWriting={setWriting}

@@ -63,6 +63,7 @@ export function RewriteDialog({ run, sources, passages, nextVersion, onClose }: 
         mark="changed"
         baseLabel="was "
         compact
+        withFormat
         onChange={<F extends WritingField>(field: F, v: WritingOptions[F]) =>
           setValue((w) => ({ ...w, [field]: v }))
         }

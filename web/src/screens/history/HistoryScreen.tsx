@@ -7,11 +7,12 @@ import { SEARCH_ID } from "../../app/keys";
 import { go } from "../../app/route";
 import page from "../../components/Page.module.css";
 import { Seg } from "../../components/Seg";
+import { type Recipe, recipeOf } from "../../run/format";
 import css from "./HistoryScreen.module.css";
-import { HistoryTable, recipeOf } from "./HistoryTable";
+import { HistoryTable } from "./HistoryTable";
 
 type StatusFilter = "all" | "completed" | "failed" | "cancelled";
-type RecipeFilter = "any" | "report" | "context";
+type RecipeFilter = "any" | Recipe;
 
 const STATUS_MATCH: Record<StatusFilter, (r: RunSummary) => boolean> = {
   all: () => true,
@@ -42,7 +43,7 @@ export function HistoryScreen() {
     (r) =>
       (!needle || r.query.toLowerCase().includes(needle)) &&
       STATUS_MATCH[status](r) &&
-      (recipe === "any" || recipeOf(r) === recipe),
+      (recipe === "any" || recipeOf(r.until, r.writing.format) === recipe),
   );
 
   async function rerun(run: RunSummary) {
@@ -94,6 +95,7 @@ export function HistoryScreen() {
             options={[
               { value: "any", label: "Any recipe" },
               { value: "report", label: "report" },
+              { value: "answer", label: "answer" },
               { value: "context", label: "context" },
             ]}
           />

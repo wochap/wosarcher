@@ -162,6 +162,13 @@ def test_writing_option_defaults() -> None:
     options = WritingOptions()
     assert (options.tone, options.tone_instructions, options.words) == ("objective", "", 1200)
     assert (options.language, options.citation_marker, options.reference_style) == ("english", "numeric", "APA")
+    assert options.format == "report"
+
+
+def test_unknown_format() -> None:
+    with pytest.raises(ValidationError, match="format") as error:
+        WritingOptions.model_validate({"format": "summary"})
+    assert "'report' or 'answer'" in str(error.value)
 
 
 def test_words_must_be_positive() -> None:

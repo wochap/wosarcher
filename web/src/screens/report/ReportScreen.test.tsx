@@ -145,6 +145,19 @@ describe("ReportScreen", () => {
     expect(screen.getByText(/^Written with .* · MLA$/)).toBeTruthy();
   });
 
+  it("shows a finished answer with its options line, actions, and References", async () => {
+    const run = summary({ writing: { ...summary().writing, format: "answer", words: 400 } });
+    await openScenario({ ...finished, data: { ...finished.data, runs: [run] } });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    expect(screen.getByText(/· answer ·/)).toBeTruthy();
+    expect(screen.getByText(/^Answer, at most 400 words · Analytical · English · /)).toBeTruthy();
+    expect(screen.queryByText(/^Written with/)).toBeNull();
+    for (const name of [/^Rewrite$/, /Copy markdown/, /Download/]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    expect(screen.getByRole("heading", { name: /^References/ })).toBeTruthy();
+  });
+
   it("shows the selected passages instead of a report for the context recipe", async () => {
     const api = fakeApi(finished.data);
     api.data.runs[0] = summary({ until: "select" });

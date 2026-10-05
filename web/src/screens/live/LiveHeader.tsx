@@ -6,10 +6,10 @@ import type { RunDetail, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
+import { recipeOf } from "../../run/format";
 import type { RunView } from "../../run/reducer";
 import { DeviceChip } from "./DeviceChip";
 import css from "./LiveHeader.module.css";
-import { recipeOf } from "./model";
 
 const LABELS: Record<RunStatus, string> = {
   queued: "Connecting",
@@ -46,7 +46,7 @@ export function LiveHeader({
   const active = status === "queued" || status === "running";
   const ended = status === "failed" || status === "cancelled" || status === "interrupted";
   const meta = [
-    recipeOf(run.until ?? detail?.until),
+    recipeOf(run.until ?? detail?.until, detail?.writing.format),
     detail?.sources ?? "both",
     run.profile ?? detail?.profile ?? "",
   ];

@@ -19,6 +19,21 @@ def test_settings_persist_across_apps(make_app: MakeApp) -> None:
         assert second.get("/api/settings").json()["writing"]["words"] == 800
 
 
+def test_default_format(client: TestClient, config_dir: Path) -> None:
+    assert client.get("/api/settings").json()["writing"]["format"] == "report"
+    body = client.get("/api/settings").json()
+    body["writing"]["format"] = "answer"
+    assert client.put("/api/settings", json=body).status_code == 200
+    assert client.get("/api/settings").json()["writing"]["format"] == "answer"
+
+
+def test_settings_without_format(client: TestClient, config_dir: Path) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "server-settings.json").write_text(json.dumps({"writing": {"words": 800}}))
+    writing = client.get("/api/settings").json()["writing"]
+    assert (writing["words"], writing["format"]) == (800, "report")
+
+
 def test_invalid_settings_unchanged(client: TestClient, config_dir: Path) -> None:
     body = client.get("/api/settings").json()
     body["writing"]["citation_marker"] = "footnote"

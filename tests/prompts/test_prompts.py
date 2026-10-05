@@ -51,6 +51,9 @@ def test_write_prompts_substitute() -> None:
     load("write").substitute(values, tone="critical", tone_description="d", tone_instructions="i")
     load("passages").substitute()
     load("write_task").substitute(values)
+    answer = load("answer").substitute(values, tone="critical", tone_description="d", tone_instructions="i")
+    assert "at most 600 words" in answer
+    assert "at most 600 words" in load("answer_task").substitute(values)
 
 
 def test_gap_prompts_substitute() -> None:

@@ -131,6 +131,7 @@ export function OptionsPanel(props: Props) {
               value={options.recipe}
               options={[
                 { value: "report", label: "report" },
+                { value: "answer", label: "answer" },
                 { value: "context", label: "context" },
               ]}
               onChange={(v) => onOption("recipe", v)}

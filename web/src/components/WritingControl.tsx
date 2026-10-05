@@ -40,6 +40,19 @@ export function Control({
           )}
         </select>
       );
+    case "format":
+      return (
+        <Seg
+          label="Format"
+          name={`${idPrefix}-format`}
+          value={value.format}
+          options={[
+            { value: "report", label: "report" },
+            { value: "answer", label: "answer" },
+          ]}
+          onChange={(v) => onChange("format", v)}
+        />
+      );
     case "citation_marker":
       return (
         <Seg

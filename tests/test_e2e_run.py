@@ -275,3 +275,35 @@ def test_allow_domain_fetches_only_allowed_hosts(runs: Path) -> None:
     assert filtered["search"] > 0
     assert filtered["fetch"] == 0
     assert 2 in pages
+
+
+def writer_messages(calls: list[tuple[str, str]]) -> list[dict[str, str]]:
+    bodies = [json.loads(body) for kind, body in calls if kind == "chat"]
+    return next(body for body in bodies if body.get("stream"))["messages"]
+
+
+def test_answer_format(runs: Path) -> None:
+    report_calls: list[tuple[str, str]] = []
+    with traced_router(report_calls):
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--words", "600", "--run-id", "r-report"])
+    assert result.exit_code == 0, result.output
+    answer_calls: list[tuple[str, str]] = []
+    with traced_router(answer_calls):
+        result = runner.invoke(
+            app, ["run", QUERY, "--profile", "e2e", "--words", "600", "--format", "answer", "--run-id", RUN_ID]
+        )
+    assert result.exit_code == 0, result.output
+    report, answer = writer_messages(report_calls), writer_messages(answer_calls)
+    assert "about 600 words" in report[0]["content"]
+    assert "at most 600 words" in answer[0]["content"]
+    assert "first paragraph" in answer[0]["content"]
+
+    def passages(content: str) -> str:
+        return content[content.index("<passages>") : content.index("</passages>")]
+
+    assert passages(answer[1]["content"]) == passages(report[1]["content"])
+    record = json.loads((runs / RUN_ID / "request.json").read_text())
+    assert record["overrides"] == ["write.words=600", 'write.format="answer"']
+    assert record["settings"]["write"]["format"] == "answer"
+    markdown = (runs / RUN_ID / "report.md").read_text()
+    assert "\n## References\n" in markdown

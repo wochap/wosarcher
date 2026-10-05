@@ -19,12 +19,11 @@ import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
-import { fmtElapsed, wDiff, wSummary } from "../../run/format";
+import { aSummary, fmtElapsed, recipeOf, wDiff, wSummary } from "../../run/format";
 import { lineage } from "../../run/lineage";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { useRun } from "../../run/useRun";
 import { useRunData } from "../../run/useRunData";
-import { recipeOf } from "../live/model";
 import { NotFound } from "../live/NotFound";
 import { contextJson, download, markdownFile } from "./exportReport";
 import { ReportAside, SelectedPassages } from "./ReportAside";
@@ -50,7 +49,7 @@ export function ReportScreen({ runId }: { runId: string }) {
   if (!detail) return null;
   const versions = lineage(runs, runId);
   const parent = runs.find((r) => r.run_id === detail.parent_run_id);
-  const recipe = recipeOf(detail.until);
+  const recipe = recipeOf(detail.until, detail.writing.format);
   const marker = detail.writing.citation_marker;
   const web = Object.values(view?.sources ?? {}).filter((s) => s.kind === "web");
   const sourceCount = web.filter((s) => s.state !== "failed").length + files.length;
@@ -106,7 +105,7 @@ export function ReportScreen({ runId }: { runId: string }) {
             />
           )}
           <div className={css.actions}>
-            {recipe === "report" && (
+            {recipe !== "context" && (
               <>
                 <span className={`${css.withHelp} ${css.rewrite}`}>
                   <button
@@ -174,7 +173,9 @@ export function ReportScreen({ runId }: { runId: string }) {
             ) : (
               <>
                 <div className={css.optsLine}>
-                  Written with {wSummary(detail.writing)}
+                  {recipe === "answer"
+                    ? aSummary(detail.writing)
+                    : `Written with ${wSummary(detail.writing)}`}
                   {detail.writing.tone_instructions ? " · custom instructions" : ""}
                 </div>
                 {report && <ContinuationNote report={report} />}

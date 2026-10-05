@@ -44,6 +44,21 @@ describe("HistoryScreen", () => {
     expect(rowOf("Interrupted").textContent).toContain("Embedding models");
   });
 
+  it("shows an answer run's recipe and filters by it", async () => {
+    const api = fakeApi();
+    const run = api.data.runs.find((r) =>
+      r.query.startsWith("Rust async"),
+    ) as (typeof api.data.runs)[0];
+    run.writing = { ...run.writing, format: "answer" };
+    await open(api);
+    expect(
+      rowOf("Rust async cancellation safety patterns with tokio::select!").textContent,
+    ).toContain("answer");
+    fireEvent.click(screen.getByLabelText("answer"));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].textContent).toContain("Rust async");
+  });
+
   it("shows a fork's parent and changed writing options", async () => {
     await open();
     const fork = screen.getByText("r_7f3a").closest("div") as HTMLElement;

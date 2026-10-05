@@ -55,6 +55,19 @@ WordsOption = Annotated[int | None, typer.Option("--words", help="Target report 
 LanguageOption = Annotated[str | None, typer.Option("--language", help="Report language.")]
 MarkerOption = Annotated[str | None, typer.Option("--citation-marker", help="numeric, superscript, or author-year.")]
 StyleOption = Annotated[str | None, typer.Option("--reference-style", help="APA, MLA, Chicago, or IEEE.")]
+FORMATS = ("report", "answer")
+
+
+def format_option(value: str | None) -> str | None:
+    if value is None or value in FORMATS:
+        return value
+    raise typer.BadParameter(f"must be one of: {', '.join(FORMATS)}")
+
+
+FormatOption = Annotated[
+    str | None,
+    typer.Option("--format", metavar="report|answer", callback=format_option, help="Write a report or an answer."),
+]
 DepthOption = Annotated[str | None, typer.Option("--depth", help="Depth preset; see `wosarcher depth list`.")]
 
 
@@ -211,6 +224,7 @@ def run(
     language: LanguageOption = None,
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
+    format_: FormatOption = None,
     sub_queries: Annotated[int | None, typer.Option("--sub-queries", min=0, help="Sub-queries to plan.")] = None,
     results_per_query: Annotated[
         int | None, typer.Option("--results-per-query", min=1, help="Search results per query.")
@@ -246,6 +260,7 @@ def run(
         language=language,
         citation_marker=citation_marker,
         reference_style=reference_style,
+        format=format_,
     )
     research = research_overrides(
         sub_queries=sub_queries,
@@ -280,6 +295,7 @@ def fork(
     language: LanguageOption = None,
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
+    format_: FormatOption = None,
     gap_context_tokens: GapContextTokensOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
@@ -295,6 +311,7 @@ def fork(
         language=language,
         citation_marker=citation_marker,
         reference_style=reference_style,
+        format=format_,
     )
     new = [*(set_ or []), *flags, *research_overrides(gap_context_tokens=gap_context_tokens)]
     env = os.environ

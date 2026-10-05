@@ -80,6 +80,21 @@ def test_writing_flags(world: World, tmp_path: Path) -> None:
     assert "## References" in result.stdout
 
 
+def test_format_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "battery recycling", "--format", "answer"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].write.format == "answer"
+    assert only_run(tmp_path).overrides == ['write.format="answer"']
+
+
+def test_unknown_format(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--format", "summary"])
+    assert result.exit_code == 2
+    assert "--format" in result.output
+    assert "report, answer" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
 def test_rounds_flag(world: World) -> None:
     result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--rounds", "2"])
     assert result.exit_code == 0, result.output
@@ -247,6 +262,21 @@ def test_fork_rewrite_only(world: World, tmp_path: Path) -> None:
     assert (fakes.planner.calls, fakes.searcher.calls) == ([], [])
     assert len(fakes.writer.calls) == 1
     assert world.built[-1].write.tone == "critical"
+
+
+def test_fork_as_answer(world: World, tmp_path: Path) -> None:
+    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
+    parent = only_run(tmp_path)
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--format", "answer"])
+    assert result.exit_code == 0, result.output
+    store = RunStore(runs_dir(tmp_path), tmp_path)
+    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
+    assert store.read_record(fork.run_id).overrides == ['write.format="answer"']
+    fakes = world.fakes[-1]
+    assert isinstance(fakes.planner, FakeLLM)
+    assert isinstance(fakes.writer, FakeLLM)
+    assert (fakes.planner.calls, len(fakes.writer.calls)) == ([], 1)
+    assert world.built[-1].write.format == "answer"
 
 
 def test_fork_with_profile(world: World, tmp_path: Path) -> None:

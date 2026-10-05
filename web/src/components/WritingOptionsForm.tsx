@@ -1,5 +1,6 @@
 // The six writing fields in the prototype's form grid. Used by Settings (defaults), New run
-// (marks "overridden" against the defaults), and the Rewrite dialog (marks "changed").
+// (marks "overridden" against the defaults), and the Rewrite dialog (marks "changed"), which
+// adds Format first; elsewhere the format is the Recipe or the Settings "Run defaults" row.
 import type { WritingOptions } from "../api/types";
 import { HelpTip } from "./HelpTip";
 import { Tag } from "./Tag";
@@ -10,6 +11,7 @@ import css from "./WritingOptionsForm.module.css";
 export type WritingField = keyof WritingOptions;
 
 const LABELS: Record<WritingField, string> = {
+  format: "Format",
   tone: "Tone",
   tone_instructions: "Custom instructions",
   words: "Length (words)",
@@ -17,8 +19,9 @@ const LABELS: Record<WritingField, string> = {
   citation_marker: "Citation marker",
   reference_style: "Reference style",
 };
-const FIELDS = Object.keys(LABELS) as WritingField[];
+const FIELDS = (Object.keys(LABELS) as WritingField[]).filter((f) => f !== "format");
 const HELP_KEYS: Record<WritingField, string> = {
+  format: "w-format",
   tone: "w-tone",
   tone_instructions: "w-custom",
   words: "w-words",
@@ -39,6 +42,7 @@ export function describeValue(field: WritingField, value: WritingOptions[Writing
     return `“${text.length > SHORT ? `${text.slice(0, SHORT)}…` : text}”`;
   }
   if (field === "words") return `${value} words`;
+  if (field === "format") return String(value);
   return capitalize(String(value));
 }
 
@@ -55,17 +59,20 @@ export type Props = {
   wordsBaseText?: string;
   /** Shown after Length's unit while it is not changed ("set by Deep"). */
   wordsHint?: string;
+  /** Adds the Format field before the others (Rewrite dialog). */
+  withFormat?: boolean;
 };
 
 export function WritingOptionsForm(props: Props) {
   const { value, base, mark, baseLabel = "default: ", idPrefix, compact, errors = {} } = props;
-  const { wordsBaseText, wordsHint } = props;
+  const { wordsBaseText, wordsHint, withFormat } = props;
   return (
     <div className={compact ? css.compact : undefined}>
-      {FIELDS.map((field) => {
+      {(withFormat ? (["format", ...FIELDS] as WritingField[]) : FIELDS).map((field) => {
         const changed = !!base && String(value[field]) !== String(base[field]);
         const id = `${idPrefix}-${field}`;
-        const segmented = field === "citation_marker" || field === "reference_style";
+        const segmented =
+          field === "format" || field === "citation_marker" || field === "reference_style";
         const Label = segmented ? "span" : "label";
         const depthBase = field === "words" && wordsBaseText;
         return (

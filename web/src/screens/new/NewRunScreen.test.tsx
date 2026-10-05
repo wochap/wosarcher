@@ -40,6 +40,7 @@ describe("NewRunScreen", () => {
       sources: "both",
       profile: "low-vram",
       depth: "standard",
+      writing: { format: "report" },
     });
     expect(files).toEqual([]);
     expect(window.location.hash).toBe("#/live/r_new1");
@@ -63,6 +64,31 @@ describe("NewRunScreen", () => {
     expect(request.until).toBe("select");
     expect(request.writing).toEqual({ words: 600 });
     expect(files).toEqual([notes]);
+  });
+
+  it("sends the answer recipe as writing.format with no until", async () => {
+    const { api, question } = await open();
+    fireEvent.change(question, { target: { value: "q" } });
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    fireEvent.click(screen.getByLabelText("answer"));
+    expect(screen.getByRole("button", { name: /Options/ }).textContent).toContain(
+      "Standard · answer · both",
+    );
+    expect(screen.queryByText(/overridden/)).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run research" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.until).toBeUndefined();
+    expect(request.writing).toEqual({ format: "answer" });
+  });
+
+  it("preselects the Recipe from the default format", async () => {
+    const api = fakeApi();
+    api.data.settings.writing.format = "answer";
+    await open(api);
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    expect((screen.getByLabelText("answer") as HTMLInputElement).checked).toBe(true);
   });
 
   it("keeps the draft across screens", async () => {

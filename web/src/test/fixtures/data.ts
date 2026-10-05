@@ -19,6 +19,7 @@ export const writing: WritingOptions = {
   language: "english",
   citation_marker: "numeric",
   reference_style: "APA",
+  format: "report",
 };
 
 export const settings: ServerSettings = {

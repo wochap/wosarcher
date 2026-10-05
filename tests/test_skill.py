@@ -136,8 +136,8 @@ def test_command_lines_sample() -> None:
 
 
 def test_check_command_sample() -> None:
-    [flag] = check_command(["wosarcher", "run", "q", "--format", "json"])
-    assert "--format" in flag
+    [flag] = check_command(["wosarcher", "run", "q", "--style", "json"])
+    assert "--style" in flag
     assert "'run'" in flag
     [command] = check_command(["wosarcher", "replay", "x"])
     assert "replay" in command

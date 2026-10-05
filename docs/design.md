@@ -550,10 +550,20 @@ global settings (see Server) between the profile and the request.
 |---|---|---|
 | `tone` | `objective` | objective, formal, analytical, persuasive, informative, explanatory, descriptive, critical, comparative, speculative, reflective, or a custom entry in `prompts/tones.toml`; case-insensitive |
 | `tone_instructions` | empty | free text added to the tone, for one-off styles |
-| `words` | 1200 | target length; a depth preset sets its own default (Quick 600, Deep 2000, Exhaustive 3000; Standard keeps this one) |
+| `words` | 1200 | target length ("about N words") of a report, maximum ("at most N words") of an answer; a depth preset sets its own default (Quick 600, Deep 2000, Exhaustive 3000; Standard keeps this one) |
 | `language` | english | report language |
 | `citation_marker` | numeric | numeric (`[1]`), superscript, author-year: how citations appear in the text |
 | `reference_style` | APA | APA, MLA, Chicago, IEEE (case-insensitive): how the reference list is formatted |
+| `format` | report | report, answer: which prompt templates the writer uses |
+
+`format` picks the write stage's template pair: `prompts/write.md` and
+`write_task.md` for a report (structured with headings), `prompts/answer.md`
+and `answer_task.md` for an answer (the direct answer in the first
+paragraph, then the supporting detail, headings only for distinct parts).
+Both get the same passages block and substitutions; citation checks,
+markers, the reference list, continuation, the output limit, and the
+select budget are the same for both, and `report.json` and `report.md`
+keep their shape.
 
 Tones are data, not code: `prompts/tones.toml` maps each name to its
 description (the gpt-researcher list is the starting set). A custom tone is
@@ -584,7 +594,7 @@ N×", or the cut note and an end marker before References.
 
 Writing options affect only the write stage, so changing them on a finished
 run is cheap: `wosarcher fork <id> --from write --tone critical` reuses all context
-and only rewrites the report.
+and only rewrites the report; `--format answer` rewrites it as an answer.
 
 ### Citations
 
@@ -1353,7 +1363,8 @@ to a machine is a config edit on that machine.
 The skill documents the CLI and the JSON schema of `context.json` and the
 report. Agents usually want cited context: `wosarcher run "q" --until select
 --json` returns passages with sources and scores. A full report is the
-default `wosarcher run`.
+default `wosarcher run`; `wosarcher run "q" --format answer --json` gives a
+short cited answer.
 
 The skill is `skill/SKILL.md`. Install it by copying or linking `skill/`
 into an agent's skills directory as `wosarcher/`. `tests/test_skill.py`
@@ -1491,9 +1502,20 @@ These override the prototype where they differ:
   `domains.allow` or `domains.block` only for an overridden row. Entries
   are checked with the server's rule before sending. The Settings "Run
   defaults" section saves the global lists on the server, not in the
-  browser; its prototype Format row is not built. The Search card's
+  browser. The Search card's
   "<F> filtered by domain" line shows the sum of `filtered` from the plan
   and search `stage.done` events, not a share scaled by progress.
+- **Recipes:** `report`, `answer`, and `context`, a UI name for `until`
+  plus `writing.format`. `report` and `answer` run the full pipeline and
+  always send `writing.format` equal to the recipe; `context` sends
+  `until = "select"` and no format. One rule, `recipeOf(until, format)` in
+  `run/format.ts`, names a run's recipe everywhere (Live and Report meta,
+  Copy JSON, Run history): `context` when `until` is `select`, else
+  `answer` when the format is `answer`, else `report`. The New run Recipe
+  starts from the global default `writing.format`, set by the Settings "Run
+  defaults" Format row, and follows it until the user picks another
+  recipe. The Rewrite dialog has a Format field, so a run can be rewritten
+  as the other format.
 - **Start errors:** every start failure shows the error box ("Couldn’t
   start the run" and the server's detail); "Fix in Options" appears only
   when the detail names `domains.allow` or `domains.block`.

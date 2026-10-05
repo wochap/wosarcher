@@ -7,9 +7,6 @@ export const INTERRUPTED = "The run stopped without a final event.";
 
 export const stageLabel = (stage: string) => capitalize(stage);
 
-export const recipeOf = (until: string | null | undefined) =>
-  until === "select" ? "context" : "report";
-
 /** What unloads while a stage waits for the device: "scorer", "embeddings model". */
 const MODELS: Record<string, string> = {
   plan: "planner LLM",

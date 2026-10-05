@@ -82,6 +82,7 @@ class WritingOptions(Contract):
     language: str = "english"
     citation_marker: Literal["numeric", "superscript", "author-year"] = "numeric"
     reference_style: str = "APA"
+    format: Literal["report", "answer"] = "report"
 
 
 Sources = Literal["both", "web", "files"]

@@ -42,10 +42,10 @@ describe("OptionsPanel", () => {
     ]);
   });
 
-  it("lists report before context", async () => {
+  it("lists report, answer, then context", async () => {
     await openOptions();
     const recipe = screen.getByRole("radiogroup", { name: "Recipe" });
-    expect(recipe.textContent).toBe("reportcontext");
+    expect(recipe.textContent).toBe("reportanswercontext");
   });
 
   it("shows the selected profile's description", async () => {
@@ -100,7 +100,7 @@ describe("Depth", () => {
     const request = await start(api);
     expect(request.depth).toBe("deep");
     expect(request.research).toBeUndefined();
-    expect(request.writing).toBeUndefined();
+    expect(request.writing).toEqual({ format: "report" });
   });
 
   it("switches to Custom when an Advanced value is edited", async () => {
@@ -122,7 +122,7 @@ describe("Depth", () => {
       gap_context_tokens: 4000,
       rounds: 3,
     });
-    expect(request.writing).toEqual({ words: 2000 });
+    expect(request.writing).toEqual({ words: 2000, format: "report" });
   });
 
   it("shows Auto context with its effective budget", async () => {

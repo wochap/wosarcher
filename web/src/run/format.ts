@@ -32,6 +32,17 @@ export function wSummary(w: WritingOptions): string {
   ].join(" · ");
 }
 
+/** The Report options line of an answer: "Answer, at most 400 words · Objective · English · …". */
+export function aSummary(w: WritingOptions): string {
+  return [
+    `Answer, at most ${w.words} words`,
+    describeValue("tone", w.tone),
+    describeValue("language", w.language),
+    describeValue("citation_marker", w.citation_marker),
+    w.reference_style,
+  ].join(" · ");
+}
+
 /** The writing options in which `next` differs from `base`: "Concise · 300 words". */
 export function wDiff(base: WritingOptions, next: WritingOptions): string {
   const fields = Object.keys(next) as WritingField[];
@@ -39,4 +50,15 @@ export function wDiff(base: WritingOptions, next: WritingOptions): string {
     .filter((f) => String(base[f]) !== String(next[f]))
     .map((f) => (f === "tone_instructions" ? "custom instructions" : describeValue(f, next[f])))
     .join(" · ");
+}
+
+export type Recipe = "report" | "answer" | "context";
+
+/** A run's recipe: `context` when it stops at select, else its writing format. */
+export function recipeOf(
+  until: string | null | undefined,
+  format: string | null | undefined,
+): Recipe {
+  if (until === "select") return "context";
+  return format === "answer" ? "answer" : "report";
 }

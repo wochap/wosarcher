@@ -5,6 +5,7 @@ import type { SocketFactory } from "../api/events";
 import type { DomainLists, ResearchValues, WritingOptions } from "../api/types";
 import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
+import type { Recipe } from "../run/format";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -24,7 +25,7 @@ export type OverlayKind = "help" | "alertdialog" | "dialog" | "tooltip";
 export type ToastOptions = { undo?: () => void };
 
 export type RunOptions = {
-  recipe: "report" | "context";
+  recipe: Recipe;
   sources: "web" | "files" | "both";
   profile: string;
   depth: Depth;

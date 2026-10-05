@@ -4,7 +4,7 @@ import { HELP, helpFor } from "./help";
 describe("help texts", () => {
   it("copies the prototype's texts", () => {
     expect(HELP.recipe.body).toBe(
-      "Report writes a cited report. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
+      "Report writes a cited report. Answer replies to the question directly, with citations, in at most the chosen length. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
     );
     expect(HELP["ph-select"].body).toBe(
       "Picks the best passages that fit the writer's context budget.",

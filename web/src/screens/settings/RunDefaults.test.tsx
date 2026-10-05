@@ -19,6 +19,27 @@ describe("RunDefaults", () => {
     expect(screen.getByText("Saved")).toBeTruthy();
   });
 
+  it("autosaves the default format, and New run preselects it", async () => {
+    const api = fakeApi();
+    renderApp({ hash: "#/settings", api });
+    const format = await screen.findByRole("radiogroup", { name: "Format" });
+    expect(format.textContent).toBe("reportanswer");
+    expect(
+      screen.getByText("Preselects the Recipe on New run. Context is chosen per run."),
+    ).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("answer"));
+    });
+    const puts = callsTo(api, "putSettings") as [ServerSettings][];
+    expect(puts.at(-1)?.[0].writing.format).toBe("answer");
+    expect(screen.getByText("Saved")).toBeTruthy();
+    await act(async () => {
+      window.location.hash = "#/new";
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
+    expect((screen.getByLabelText("answer") as HTMLInputElement).checked).toBe(true);
+  });
+
   it("names the profiles that set their own lists", async () => {
     const api = fakeApi();
     api.data.profiles[0].block_domains = ["pinterest.com", "quora.com"];

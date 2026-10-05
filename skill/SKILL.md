@@ -27,6 +27,13 @@ wosarcher run "<query>" --json
 
 `report.markdown` holds the cited report with a `## References` section.
 
+```sh
+wosarcher run "<query>" --format answer --json
+```
+
+For a short cited answer: the direct answer first, then the supporting
+detail, in at most `--words` words, with the same `## References` section.
+
 ## 3. Local files
 
 ```sh
@@ -67,7 +74,8 @@ wosarcher run "<query>" --tone critical --tone-instructions "Focus on cost." --j
 
 Tones include `objective`, `formal`, `analytical`, `critical`, and
 `comparative`. Markers: `numeric`, `superscript`, `author-year`. Styles:
-`APA`, `MLA`, `Chicago`, `IEEE`.
+`APA`, `MLA`, `Chicago`, `IEEE`. `--format` is `report` (default) or
+`answer`; for an answer, `--words` is a maximum.
 
 ## 6. Rewrite a finished run
 
