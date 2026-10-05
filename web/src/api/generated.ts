@@ -106,8 +106,9 @@ export type Id = string
 export type Round1 = number
 export type Text4 = string
 export type Queries = Query1[]
+export type Retried = boolean
 export type Round2 = number
-export type Stop = boolean
+export type Uncovered = string[]
 export type RunId = string
 export type Seq = number
 export type Stage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -115,7 +116,8 @@ export type Ts = string
 export type Type = "gap.ready"
 export type Note2 = string
 export type Queries1 = Query1[]
-export type Stop1 = boolean
+export type Retried1 = boolean
+export type Uncovered1 = string[]
 export type Blocks = string[]
 export type CheckedAt = (string | null)
 export type Detail1 = string
@@ -246,7 +248,7 @@ export type Type7 = "report.snapshot"
 export type Note3 = string
 export type Planned = number
 export type Ran = number
-export type Reason2 = ("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed")
+export type Reason2 = ("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed")
 export type RunId8 = string
 export type Seq8 = number
 export type Stage8 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -262,13 +264,14 @@ export type SubQueries1 = (number | null)
 export type Note4 = string
 export type Planned1 = number
 export type Ran1 = number
-export type Reason3 = ("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed")
+export type Reason3 = ("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed")
 export type Kept3 = number
 export type KnownPages = number
 export type NewPages = number
 export type Note5 = string
 export type QueryIds3 = string[]
 export type Round6 = number
+export type Uncovered2 = string[]
 export type Rounds2 = RoundRecord[]
 export type Device2 = string
 export type ReleasedStage = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write")
@@ -341,7 +344,7 @@ export type RoundsRan = (number | null)
 export type RunId15 = string
 export type Sources3 = ("both" | "web" | "files")
 export type Status3 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
-export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed") | null)
+export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
@@ -403,7 +406,7 @@ export type RoundsRan1 = (number | null)
 export type RunId22 = string
 export type Sources4 = ("both" | "web" | "files")
 export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
-export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "model judged coverage sufficient" | "gap step failed") | null)
+export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version3 = number
 export type Failed = Skipped[]
@@ -753,8 +756,9 @@ type?: Type
 export interface GapReadyData {
 note: Note1
 queries: Queries
+retried: Retried
 round: Round2
-stop: Stop
+uncovered: Uncovered
 }
 /**
  * `q0` is the main query, whose text is the planner's topic line; `q1`, `q2`, ... are sub-queries.
@@ -770,7 +774,7 @@ round?: Round1
 text: Text4
 }
 /**
- * The gap step's reply after a round: validated follow-ups, a note, and the advisory stop flag.
+ * The gap step's reply after a round: validated follow-ups, a note, and the coverage table's gaps.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "GapResult".
@@ -778,7 +782,8 @@ text: Text4
 export interface GapResult {
 note?: Note2
 queries: Queries1
-stop?: Stop1
+retried?: Retried1
+uncovered?: Uncovered1
 }
 /**
  * Body of `POST /api/providers/health/check`; no blocks means every block.
@@ -1153,6 +1158,7 @@ new_pages?: NewPages
 note?: Note5
 query_ids: QueryIds3
 round: Round6
+uncovered?: Uncovered2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema

@@ -131,10 +131,10 @@ describe("PhaseTimeline rounds", () => {
   });
 
   it("ends with the rounds each card ran", () => {
-    render(<PhaseTimeline run={viewOf(roundsLog("coverage"))} rounds={3} />);
+    render(<PhaseTimeline run={viewOf(roundsLog("nofollow"))} rounds={3} />);
     expect(card("Score").textContent).toContain("2 rounds");
     expect(card("Gap").textContent).toContain("2 of 3 rounds");
-    expect(card("Gap").textContent).toContain("model judged coverage sufficient");
+    expect(card("Gap").textContent).toContain("no follow-ups");
   });
 
   it("has no Gap card in a single-round run", () => {

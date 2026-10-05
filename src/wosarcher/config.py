@@ -45,7 +45,7 @@ DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
     "chunk": 60,
     "prefilter": 600,
     "score": 900,
-    "gap": 180,
+    "gap": 360,
     "select": 60,
     "write": 1800,
 }

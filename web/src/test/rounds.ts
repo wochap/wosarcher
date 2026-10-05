@@ -1,8 +1,9 @@
 // A multi-round run's event log for tests: three planned rounds, cut at any point.
 import type { RunEvent } from "../api/types";
+import type { StopReason } from "../run/reducer";
 import { ev, stageDone } from "./events";
 
-type Ending = "coverage" | "nonew" | "max";
+type Ending = "nofollow" | "nonew" | "max";
 
 const LOOP = ["search", "fetch", "chunk", "prefilter", "score"] as const;
 const PLANNER = ["a", "b", "c", "d", "e"].map((text, i) => ({ id: `q${i + 1}`, text }));
@@ -35,8 +36,9 @@ function round(seq: number, k: number, ids: string[], pages: number, known: numb
   return out;
 }
 
-/** The whole log; `ending` picks how research stops. */
-export function roundsLog(ending: Ending = "coverage"): RunEvent[] {
+/** The whole log; `ending` picks how research stops. `nonew` plans four rounds, the others three. */
+export function roundsLog(ending: Ending = "nofollow"): RunEvent[] {
+  const planned = ending === "nonew" ? 4 : 3;
   const log: RunEvent[] = [
     ev(1, "run.started", {
       query: "q",
@@ -51,11 +53,14 @@ export function roundsLog(ending: Ending = "coverage"): RunEvent[] {
   ];
   const next = () => (log.at(-1)?.seq ?? 0) + 1;
   type Follow = { id: string; text: string; round?: number };
-  const gap = (k: number, queries: Follow[], stop: boolean, note: string) => {
+  const gap = (k: number, queries: Follow[], uncovered: string[], note: string) => {
+    const retried = !queries.length;
     log.push(ev(next(), "stage.started", { device: null, provider: "llm", round: k }, "gap"));
-    log.push(ev(next(), "gap.ready", { round: k, queries, note, stop }, "gap"));
+    log.push(ev(next(), "gap.ready", { round: k, queries, note, uncovered, retried }, "gap"));
     log.push(stageDone(next(), "gap", { round: k, count: queries.length }));
   };
+  const done = (ran: number, reason: StopReason, note: string) =>
+    log.push(ev(next(), "research.done", { planned, ran, reason, note }, "gap"));
   log.push(
     ...round(
       next(),
@@ -69,27 +74,24 @@ export function roundsLog(ending: Ending = "coverage"): RunEvent[] {
     { id: "q6", text: "f", round: 2 },
     { id: "q7", text: "g", round: 2 },
   ];
-  gap(1, second, false, "Missing: benchmarks.");
+  gap(1, second, ["q4", "q5"], "Missing: benchmarks.");
+  const third = [{ id: "q8", text: "h", round: 3 }];
   if (ending === "nonew") {
     log.push(...round(next(), 2, ["q6", "q7"], 0, 9));
-    const reason = "no new sources";
-    const note = "Follow-up searches returned only pages fetched in earlier rounds.";
-    log.push(ev(next(), "research.done", { planned: 3, ran: 2, reason, note }, "gap"));
+    gap(2, third, ["q6", "q7"], "Missing: vendor data.");
+    log.push(...round(next(), 3, ["q8"], 0, 3));
+    done(3, "no new sources", "Follow-up searches returned only pages fetched in earlier rounds.");
     return log;
   }
   log.push(...round(next(), 2, ["q6", "q7"], 6, 0));
-  if (ending === "coverage") {
-    gap(2, [], true, "Every sub-query has primary sources.");
-    const reason = "model judged coverage sufficient";
-    const note = "Every sub-query has primary sources.";
-    log.push(ev(next(), "research.done", { planned: 3, ran: 2, reason, note }, "gap"));
+  if (ending === "nofollow") {
+    gap(2, [], ["q6", "q7"], "Missing: latency.");
+    done(2, "no follow-ups", "The gap step wrote no usable follow-up query.");
     return log;
   }
-  gap(2, [{ id: "q8", text: "h", round: 3 }], false, "Missing: latency.");
+  gap(2, third, [], "Missing: latency.");
   log.push(...round(next(), 3, ["q8"], 4, 0));
-  log.push(
-    ev(next(), "research.done", { planned: 3, ran: 3, reason: "max rounds", note: "" }, "gap"),
-  );
+  done(3, "max rounds", "");
   return log;
 }
 

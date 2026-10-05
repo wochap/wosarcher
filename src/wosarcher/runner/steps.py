@@ -74,6 +74,8 @@ class RoundState:
     scorer: str | None = None
     """The scorer that last ran; later rounds start with it."""
     new_pages: int = 0
+    previous_new_pages: int = 0
+    """The previous round's `new_pages`; `no new sources` needs two empty rounds in a row."""
     known_pages: int = 0
     kept: int = 0
     gap: GapResult | None = None
@@ -81,6 +83,7 @@ class RoundState:
 
     def next(self) -> None:
         self.number += 1
+        self.previous_new_pages = self.new_pages
         self.new_pages = self.known_pages = self.kept = 0
         self.gap = self.gap_error = None
 
@@ -441,9 +444,14 @@ async def gap(ctx: StepContext) -> Outcome:
     """Read the best passages so far and append the follow-up queries for the next round to the plan."""
     settings = ctx.settings
     plan = ctx.plan()
+    inputs = selection_inputs(ctx)
+    state = ctx.round
+    known = (
+        [query for query in ctx.round_queries() if query.id != "q0"] if state.number > 1 and not state.new_pages else []
+    )
     selection = selecting.select(
         ctx.record.request.query,
-        *selection_inputs(ctx),
+        *inputs,
         budget_tokens=gap_budget(settings, ctx.record.request.query, plan.queries),
         max_per_source=settings.select.max_chunks_per_source,
         file_share=settings.select.file_share,
@@ -455,14 +463,23 @@ async def gap(ctx: StepContext) -> Outcome:
         plan.queries,
         selection.context,
         ctx.adapters.planner,
+        scores=inputs[0],
+        score_cfg=settings.score,
+        known=known,
         limit=settings.research.queries_per_round,
         today=date.today().isoformat(),
     )
-    ctx.round.gap = result
+    state.gap = result
     ctx.store.write_artifact(
         ctx.run_id, "plan.json", plan.model_copy(update={"queries": [*plan.queries, *result.queries]})
     )
-    data = GapReadyData(round=ctx.round.number, queries=result.queries, note=result.note, stop=result.stop)
+    data = GapReadyData(
+        round=state.number,
+        queries=result.queries,
+        note=result.note,
+        uncovered=result.uncovered,
+        retried=result.retried,
+    )
     ctx.log.emit("gap.ready", "gap", data)
     return Outcome(len(result.queries))
 

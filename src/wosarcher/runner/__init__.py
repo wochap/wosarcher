@@ -50,7 +50,10 @@ RunEnd = Literal["done", "failed"]
 ROUND_STAGES: tuple[Stage, ...] = LOOP_STAGES[:-1]
 """The loop stages every round runs; `gap` follows all but the last."""
 LOOP_ARTIFACTS = ("hits.jsonl", "pages.jsonl", "chunks.jsonl", "candidates.jsonl", "scores.jsonl")
-NO_NEW_SOURCES = "Follow-up searches returned only pages fetched in earlier rounds."
+END_NOTES: dict[StopReason, str] = {
+    "no new sources": "Follow-up searches returned only pages fetched in earlier rounds.",
+    "no follow-ups": "The gap step wrote no usable follow-up query.",
+}
 
 
 class StageError(Exception):
@@ -212,15 +215,13 @@ class Runner:
             if state.gap_error is not None or state.gap is None:
                 reason = "gap step failed"
             else:
-                rounds[-1] = rounds[-1].model_copy(update={"note": state.gap.note})
-                if state.gap.stop or not state.gap.queries:
-                    reason = "model judged coverage sufficient"
+                rounds[-1] = rounds[-1].model_copy(update={"note": state.gap.note, "uncovered": state.gap.uncovered})
+                if not state.gap.queries:
+                    reason = "no follow-ups"
             if reason is None:
                 state.next()
                 ctx.log.round = state.number
-        note = {"no new sources": NO_NEW_SOURCES}.get(reason, "")
-        if reason == "model judged coverage sufficient" and state.gap is not None:
-            note = state.gap.note
+        note = END_NOTES.get(reason, "")
         record = ResearchRecord(planned=planned, ran=state.number, reason=reason, note=note, rounds=rounds)
         self.store.write_artifact(ctx.run_id, "research.json", record)
         if not gap_ran:
@@ -231,7 +232,7 @@ class Runner:
     def stop_before_gap(self, state: steps.RoundState, planned: int) -> StopReason | None:
         if state.fetched >= self.settings.fetch.max_pages:
             return "page limit reached"
-        if state.number > 1 and state.new_pages == 0:
+        if state.number > 2 and state.new_pages == 0 and state.previous_new_pages == 0:
             return "no new sources"
         if state.number >= planned:
             return "max rounds"

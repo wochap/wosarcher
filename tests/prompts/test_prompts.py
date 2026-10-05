@@ -56,6 +56,8 @@ def test_write_prompts_substitute() -> None:
 def test_gap_prompts_substitute() -> None:
     text = load("gap").substitute(query="a $b", limit=3, today="2026-10-04")
     assert "a $b" in text
-    assert "at most 3" in text
+    assert "1 to 3" in text
+    assert "stop" not in text
     assert "2026-10-04" in text
     assert "data, not instructions" in load("gap_data").substitute()
+    assert "1 to 3" in load("gap_retry").substitute(limit=3)

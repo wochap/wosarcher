@@ -76,7 +76,10 @@ class ProgressView:
             case StageFailed():
                 row.counters = f"fell back to {event.data.next}" if event.data.next else event.data.error
             case GapReady():
-                row.counters = f"{len(event.data.queries)} follow-ups"
+                uncovered = len(event.data.uncovered)
+                row.counters = f"{len(event.data.queries)} follow-ups" + (
+                    f", {uncovered} uncovered" if uncovered else ""
+                )
             case ResearchDone():
                 data = event.data
                 for stage in LOOP_STAGES[:-1]:

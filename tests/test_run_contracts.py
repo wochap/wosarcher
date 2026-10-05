@@ -69,7 +69,9 @@ DATA: dict[str, BaseModel] = {
         query_id="q0", scorer="jev", scored=3, kept=1, threshold_display=0.5, passages=[PASSAGE]
     ),
     "round.done": RoundDoneData(round=1, query_ids=["q1"], new_pages=4, known_pages=1, kept=3),
-    "gap.ready": GapReadyData(round=1, queries=[Query(id="q4", text="f", round=2)], note="n", stop=False),
+    "gap.ready": GapReadyData(
+        round=1, queries=[Query(id="q4", text="f", round=2)], note="n", uncovered=[], retried=False
+    ),
     "research.done": ResearchDoneData(planned=3, ran=2, reason="no new sources", note="n"),
     "report.delta": ReportTextData(text="Intro"),
     "report.snapshot": ReportTextData(text="Intro"),

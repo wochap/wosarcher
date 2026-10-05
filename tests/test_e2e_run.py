@@ -96,6 +96,7 @@ def test_quick_depth(runs: Path) -> None:
 
 
 FOLLOW_UP = "battery recycling regulation deadlines"
+SECOND_FOLLOW_UP = "battery recycling targets 2031"
 REGULATION_URL = "https://regulations.example.org/battery-rules"
 REGULATION_PAGE = (
     "# Battery regulation\n\nThe battery recycling regulation sets deadlines: recycling efficiency targets for "
@@ -109,14 +110,14 @@ def completion(content: str) -> httpx.Response:
 
 
 def deep_router() -> respx.MockRouter:
-    """The recorded world plus one follow-up search and page; the gap step continues once, then stops."""
+    """The recorded world plus two follow-up searches that find one new page; a gap `stop` does not end research."""
     gaps: list[dict[str, object]] = [
         {"queries": [FOLLOW_UP], "note": "Regulation is missing.", "stop": False},
-        {"queries": [], "note": "Methods, economics, and regulation are covered.", "stop": True},
+        {"queries": [SECOND_FOLLOW_UP], "note": "Methods, economics, and regulation are covered.", "stop": True},
     ]
 
     def search(request: httpx.Request) -> httpx.Response:
-        if request.url.params.get("q") == FOLLOW_UP:
+        if request.url.params.get("q") in (FOLLOW_UP, SECOND_FOLLOW_UP):
             result = {"url": REGULATION_URL, "title": "Battery regulation", "content": "Deadlines."}
             return httpx.Response(200, json={"results": [result]})
         return recorded.search(request)
@@ -146,14 +147,18 @@ def deep_router() -> respx.MockRouter:
     return router
 
 
-def test_deep_run_two_rounds(runs: Path) -> None:
+def test_deep_run_three_rounds(runs: Path) -> None:
     with deep_router():
         result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--depth", "deep", "--run-id", RUN_ID])
     assert result.exit_code == 0, result.output
     run_dir = runs / RUN_ID
     research = ResearchRecord.model_validate_json((run_dir / "research.json").read_text())
-    assert (research.planned, research.ran, research.reason) == (3, 2, "model judged coverage sufficient")
-    assert research.note == "Methods, economics, and regulation are covered."
+    assert (research.planned, research.ran, research.reason) == (3, 3, "max rounds")
+    assert [entry.new_pages for entry in research.rounds][1:] == [1, 0]
+    assert research.rounds[1].note == "Methods, economics, and regulation are covered."
+    events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    uncovered = [event["data"]["uncovered"] for event in events if event["type"] == "gap.ready"]
+    assert [entry.uncovered for entry in research.rounds] == [*uncovered, []]
     plan = Plan.model_validate_json((run_dir / "plan.json").read_text())
     rounds = {query.id: query.round for query in plan.queries}
     context = Context.model_validate_json((run_dir / "context.json").read_text())
@@ -161,7 +166,7 @@ def test_deep_run_two_rounds(runs: Path) -> None:
     cited_rounds = {rounds[passage.query_id] for passage in context.passages if passage.n in cited}
     assert cited_rounds == {1, 2}
     listed = json.loads(runner.invoke(app, ["runs", "--json"]).stdout)
-    assert (listed[0]["rounds_planned"], listed[0]["rounds_ran"]) == (3, 2)
+    assert (listed[0]["rounds_planned"], listed[0]["rounds_ran"]) == (3, 3)
 
 
 BRIEF = (

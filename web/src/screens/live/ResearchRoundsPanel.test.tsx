@@ -14,10 +14,10 @@ describe("ResearchRoundsPanel", () => {
     expect(screen.getByText("round 2/3")).toBeTruthy();
     expect(round(1).textContent).toContain("16 new pages · 32 kept");
     expect(round(1).textContent).toContain("Missing: benchmarks.");
-    expect(round(1).textContent).toContain("Gap: 2 follow-up queries for round 2");
+    expect(round(1).textContent).toContain("Gap: 2 follow-up queries for round 2 · 2 uncovered");
     expect(round(2).textContent).toContain("6 new pages · fetching");
     expect(round(2).textContent).toContain("gap follow-ups");
-    expect(screen.getByText("Up to 1 more round if the gap step finds gaps")).toBeTruthy();
+    expect(screen.getByText("1 more round to go")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Help: Research rounds" })).toBeTruthy();
   });
 
@@ -35,19 +35,30 @@ describe("ResearchRoundsPanel", () => {
   });
 
   it("explains a stop for no new sources", () => {
-    render(<ResearchRoundsPanel run={viewOf(roundsLog("nonew"))} planned={3} />);
+    render(<ResearchRoundsPanel run={viewOf(roundsLog("nonew"))} planned={4} />);
     expect(round(2).textContent).toContain("0 new pages · 9 already fetched");
-    expect(screen.getByText("Stopped after round 2 of 3 · no new sources")).toBeTruthy();
+    expect(round(2).textContent).toContain("Gap: 1 follow-up query for round 3 · 2 uncovered");
+    expect(round(3).textContent).toContain("0 new pages · 3 already fetched");
+    expect(screen.getByText("Stopped after round 3 of 4 · no new sources")).toBeTruthy();
     expect(
       screen.getByText("Follow-up searches returned only pages fetched in earlier rounds."),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Help: Why research stopped" })).toBeTruthy();
-    expect(screen.getByText("2 of 3 rounds")).toBeTruthy();
+    expect(screen.getByText("3 of 4 rounds")).toBeTruthy();
+  });
+
+  it("explains a stop for no follow-ups", () => {
+    render(<ResearchRoundsPanel run={viewOf(roundsLog("nofollow"))} planned={3} />);
+    expect(round(2).textContent).toContain("Gap: no usable follow-up query · 2 uncovered");
+    expect(screen.getByText("Stopped after round 2 of 3 · no follow-ups")).toBeTruthy();
+    expect(screen.getByText("The gap step wrote no usable follow-up query.")).toBeTruthy();
   });
 
   it("ends with every round run and no end note", () => {
     render(<ResearchRoundsPanel run={viewOf(roundsLog("max"))} planned={3} />);
     expect(screen.getByText("All 3 rounds ran · max rounds")).toBeTruthy();
+    expect(round(2).textContent).toContain("Gap: 1 follow-up query for round 3");
+    expect(round(2).textContent).not.toContain("uncovered");
     expect(screen.queryByText(/more round/)).toBeNull();
   });
 

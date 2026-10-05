@@ -1,12 +1,12 @@
 // Inline help texts, verbatim from the prototype's HELP constant and keyed like it.
 import {
   ArrowDown,
-  CheckCircle,
   Files,
   Funnel,
   Gauge,
   type Icon,
   MinusCircle,
+  PencilSlash,
   Prohibit,
   Quotes,
   Stack,
@@ -128,7 +128,7 @@ export const HELP: Record<string, Help> = {
   "ph-score": { title: "Score", body: "Rates how useful each passage is for its question." },
   "ph-gap": {
     title: "Gap",
-    body: "Between rounds, reads the best passages so far and writes follow-up queries for what is missing, or stops research early.",
+    body: "Between rounds, reads the best passages so far and writes follow-up queries for what is missing.",
   },
   rounds: {
     title: "Research rounds",
@@ -145,9 +145,9 @@ export const HELP: Record<string, Help> = {
       },
       { icon: Files, term: "page limit reached", text: "Max pages was used up." },
       {
-        icon: CheckCircle,
-        term: "model judged coverage sufficient",
-        text: "The gap step found nothing important missing.",
+        icon: PencilSlash,
+        term: "no follow-ups",
+        text: "The gap step wrote no usable follow-up query, even when asked twice.",
       },
       { icon: Stack, term: "max rounds", text: "Every planned round ran." },
       {

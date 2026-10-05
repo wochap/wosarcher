@@ -358,17 +358,18 @@ STAGES: tuple[Stage, ...] = (
 LOOP_STAGES: tuple[Stage, ...] = ("search", "fetch", "chunk", "prefilter", "score", "gap")
 """The stages that repeat once per research round."""
 
-StopReason = Literal[
-    "max rounds", "no new sources", "page limit reached", "model judged coverage sufficient", "gap step failed"
-]
+StopReason = Literal["max rounds", "no new sources", "page limit reached", "no follow-ups", "gap step failed"]
 
 
 class GapResult(Contract):
-    """The gap step's reply after a round: validated follow-ups, a note, and the advisory stop flag."""
+    """The gap step's reply after a round: validated follow-ups, a note, and the coverage table's gaps."""
 
     queries: list[Query]
     note: str = ""
-    stop: bool = False
+    retried: bool = False
+    """True when the first reply kept no follow-up and the step asked again."""
+    uncovered: list[str] = []
+    """IDs of the queries the coverage table marked `uncovered`."""
 
 
 class RoundRecord(Contract):
@@ -380,6 +381,8 @@ class RoundRecord(Contract):
     kept: int = 0
     note: str = ""
     """The gap note written after this round; empty for the last round."""
+    uncovered: list[str] = []
+    """Query IDs the coverage table marked `uncovered` after this round; empty for the last round."""
 
 
 class ResearchRecord(Contract):
@@ -844,7 +847,8 @@ class GapReadyData(Contract):
     """The round the gap step followed."""
     queries: list[Query]
     note: str
-    stop: bool
+    uncovered: list[str]
+    retried: bool
 
 
 class ResearchDoneData(Contract):

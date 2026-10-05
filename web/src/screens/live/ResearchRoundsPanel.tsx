@@ -3,13 +3,13 @@
 import {
   ArrowBendDownRight,
   Check,
-  CheckCircle,
   CircleDashed,
   CircleNotch,
   Clock,
   Files,
   type Icon,
   MinusCircle,
+  PencilSlash,
   Prohibit,
   Stack,
   StopCircle,
@@ -36,7 +36,7 @@ const DOING: Record<string, string> = {
 const STOP_ICONS: Record<StopReason, Icon> = {
   "no new sources": Prohibit,
   "page limit reached": Files,
-  "model judged coverage sufficient": CheckCircle,
+  "no follow-ups": PencilSlash,
   "max rounds": Stack,
   "gap step failed": Warning,
 };
@@ -76,11 +76,15 @@ function gapLine(round: RoundView, next: RoundView | undefined): Look | null {
       spin: true,
       tone: "accent",
     };
-  if (typeof round.gap === "number" && round.gap > 0 && next)
+  if (typeof round.gap !== "number") return null;
+  const uncovered = round.uncovered.length ? ` · ${round.uncovered.length} uncovered` : "";
+  if (round.gap > 0 && next)
     return {
-      text: `Gap: ${round.gap} follow-up queries for round ${round.round + 1}`,
+      text: `Gap: ${round.gap} follow-up ${round.gap === 1 ? "query" : "queries"} for round ${round.round + 1}${uncovered}`,
       icon: ArrowBendDownRight,
     };
+  if (round.gap === 0)
+    return { text: `Gap: no usable follow-up query${uncovered}`, icon: PencilSlash };
   return null;
 }
 
@@ -202,14 +206,14 @@ export function ResearchRoundsPanel({ run, planned, className }: Props) {
               <HelpTip help="r-stop" />
             </div>
             {research.reason !== "max rounds" && research.note && (
-              <div className={css.note}>{research.note}</div>
+              <div className={css.stopNote}>{research.note}</div>
             )}
           </li>
         )}
         {!research && run.status === "running" && latest > 0 && remaining > 0 && (
           <li className={css.next}>
-            <CircleDashed className={css.stopIcon} aria-hidden="true" />
-            Up to {remaining} more round{remaining > 1 ? "s" : ""} if the gap step finds gaps
+            <CircleDashed aria-hidden="true" />
+            {remaining} more round{remaining > 1 ? "s" : ""} to go
           </li>
         )}
       </ol>

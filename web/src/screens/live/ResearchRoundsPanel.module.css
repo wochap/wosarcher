@@ -164,3 +164,15 @@
   font-size: 12px;
   color: var(--faint);
 }
+
+.next svg {
+  font-size: 14px;
+  flex: none;
+}
+
+.stopNote {
+  font-size: 12px;
+  color: var(--muted);
+  padding-left: 21px;
+  text-wrap: pretty;
+}

@@ -272,6 +272,7 @@ describe("research rounds", () => {
     ]);
     expect(state.rounds[0].note).toBe("Missing: benchmarks.");
     expect(state.rounds[0].gap).toBe(2);
+    expect(state.rounds[0].uncovered).toEqual(["q4", "q5"]);
     expect(state.rounds[1].queries.map((q) => [q.id, q.results, q.searched])).toEqual([
       ["q6", 1, true],
       ["q7", 1, true],
@@ -285,7 +286,15 @@ describe("research rounds", () => {
   it("records a round with no new sources", () => {
     const state = fold(roundsLog("nonew"));
     expect(state.rounds[1]).toMatchObject({ state: "done", newPages: 0, knownPages: 9 });
-    expect(state.research?.reason).toBe("no new sources");
+    expect(state.rounds[2]).toMatchObject({ state: "done", newPages: 0, knownPages: 3 });
+    expect(state.research).toMatchObject({ planned: 4, ran: 3, reason: "no new sources" });
+  });
+
+  it("ends without a next round when the gap step wrote no follow-up", () => {
+    const state = fold(roundsLog("nofollow"));
+    expect(state.rounds.map((r) => r.round)).toEqual([1, 2]);
+    expect(state.rounds[1]).toMatchObject({ gap: 0, uncovered: ["q6", "q7"] });
+    expect(state.research?.reason).toBe("no follow-ups");
   });
 
   it("tracks the running round and cancels it", () => {

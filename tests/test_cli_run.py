@@ -201,11 +201,13 @@ def test_multi_round_progress() -> None:
     view = ProgressView(Console(file=out, force_terminal=False, width=200), rounds=3)
     view.update(round_event("stage.started", "fetch", StageStartedData(device=None, provider="firecrawl", round=2)))
     assert view.rows["fetch"].state == "running · round 2/3"
-    view.update(round_event("gap.ready", "gap", GapReadyData(round=1, queries=[], note="", stop=False)))
-    assert view.rows["gap"].counters == "0 follow-ups"
-    done = ResearchDoneData(planned=3, ran=2, reason="no new sources", note="")
+    view.update(
+        round_event("gap.ready", "gap", GapReadyData(round=1, queries=[], note="", uncovered=["q4"], retried=True))
+    )
+    assert view.rows["gap"].counters == "0 follow-ups, 1 uncovered"
+    done = ResearchDoneData(planned=3, ran=1, reason="no follow-ups", note="")
     view.update(round_event("research.done", "gap", done))
-    assert "research: 2 of 3 rounds · no new sources" in out.getvalue()
+    assert "research: 1 of 3 rounds · no follow-ups" in out.getvalue()
     assert "gap" not in ProgressView(Console(file=io.StringIO())).rows
 
 

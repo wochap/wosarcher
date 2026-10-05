@@ -58,7 +58,7 @@ needs to know which one the user typed.
 | chunk | pages | chunks with heading path | CPU |
 | prefilter | chunks, queries | top-K (query, chunk) pairs | GPU or API |
 | score | pairs | scores | GPU or API |
-| gap | best passages so far, queries | follow-up queries, note, stop flag | LLM |
+| gap | coverage table, best passages so far | follow-up queries, note, uncovered query IDs | LLM |
 | select | scores | context within a token budget | CPU |
 | write | context, query, writing options | report with citations | LLM |
 
@@ -67,12 +67,37 @@ needs to know which one the user typed.
 With `research.rounds` above 1 (and web sources with at least one
 sub-query), search, fetch, chunk, prefilter, score, and gap run as a loop,
 one pass per round; select and write run once after it. Round 1 searches
-the planner's sub-queries. After every round but the last, the gap stage
-makes one LLM call: it reads the passages select picks from every round's
-kept scores within the gap budget and the queries already run, and answers
-JSON with up to `research.queries_per_round`
-follow-up queries, a short note on what is missing, and an advisory `stop`
-flag. Follow-ups get the next `qN` IDs, carry their `round`, and are
+the planner's sub-queries. `research.rounds` is the number of rounds to
+run, not a maximum: no model ends research because coverage looks good.
+After every round but the last, the gap stage (`stages/gap.py`) asks the
+planner LLM for follow-ups. Its data block holds, in order:
+
+- the coverage table, built by code from `scores.jsonl` and the plan with
+  no other call: a header naming each scorer that ran (`jev`: "absolute
+  0–1 scale, kept from <threshold display>"; `rerank`, `bm25`: "relative
+  scale; every query keeps its best pair, so judge by best"), then one
+  line per query in plan order, `<ID> · <status> · best <display or —> ·
+  kept <n> — <text>`. A query is `covered` when it has a kept pair with a
+  display score or a pair dropped as `other_query`, `unscored` when its
+  only kept pairs are passthrough, and `uncovered` otherwise. The status
+  reuses the score stage's kept and dropped decisions, so each scorer's
+  own rule applies; with a relative scorer any query that found a
+  candidate is `covered`, and `best` shows how weak it is;
+- when round k fetched no new page, "Round <k> found only pages fetched in
+  earlier rounds:" with round k's query IDs and texts;
+- the passages select picks from every round's kept scores within the gap
+  budget.
+
+The system prompt (`prompts/gap.md`) asks for 1 to
+`research.queries_per_round` queries, `uncovered` ones first, new angles
+for queries that found only known pages. The reply is JSON
+`{"queries", "note"}`; other fields are ignored. Follow-ups that are empty,
+over 200 characters, hold a URL, or repeat an earlier query are dropped.
+When none survives, the stage asks once more: the same two messages, the
+first reply as `assistant`, and `prompts/gap_retry.md` with the dropped
+queries and their reasons (`empty`, `too long`, `URL`, `duplicate`) in a
+data block. The result records `retried` and the `uncovered` query IDs.
+Kept follow-ups get the next `qN` IDs, carry their `round`, and are
 appended to `plan.json`; round k+1 searches them. With `rounds = 1` the gap
 stage is skipped (`stage.done` with `skipped`) and nothing else changes.
 
@@ -113,11 +138,13 @@ pure. Each round:
 Research stops at the first of these, checked in this order, and records
 the reason: the gap call failed or its reply was unreadable (`gap step
 failed`, a `gap failed: <error>` warning, the run continues); the pages
-fetched reached `fetch.max_pages` (`page limit reached`); a round after the
-first fetched no new page (`no new sources`); the last round ran (`max
-rounds`); the gap step set `stop` or no follow-up survived its checks
-(`model judged coverage sufficient`). The page limit and no-new-sources
-checks run before the gap call, so no call is wasted. A gap timeout counts
+fetched reached `fetch.max_pages` (`page limit reached`); two rounds in a
+row after round 1 fetched no new page (`no new sources`; `RoundState`
+keeps the previous round's new pages); the last round ran (`max rounds`);
+the gap step kept no follow-up after its second call (`no follow-ups`). One
+empty round does not stop research: the gap step runs and is told about it.
+The page limit and no-new-sources checks run before the gap call, so no
+call is wasted. A gap timeout counts
 as a failed gap step; every other stage timeout applies per round and fails
 the run. Usage of a stage that runs in several rounds is summed in
 `costs.json`.
@@ -532,9 +559,11 @@ behind each claim.
   so it is held to the same 200-character limit as follow-ups.
 - The gap step does read scraped passages, and its output becomes search
   queries. Only the main query, the follow-up limit, and the date go
-  through `prompts/gap.md`; the existing queries and the passages go in one
+  through `prompts/gap.md`; the coverage table and the passages go in one
   user message after the `prompts/gap_data.md` preamble, in a delimited
-  `<data>` block whose closing text is escaped. Follow-ups are validated:
+  `<data>` block whose closing text is escaped. The retry message takes
+  only the limit through `prompts/gap_retry.md`; the rejected queries, which
+  are model output, go in its own `<data>` block. Follow-ups are validated:
   empty ones, ones over 200 characters, ones with a URL (`https?://` or
   `www.`), and duplicates of any query (ignoring case and surrounding
   whitespace) are dropped, and at most `research.queries_per_round` are
@@ -690,10 +719,11 @@ Directories starting with `.` (the server's `.queue/`) are not runs.
 
 Queries, hits, pages, and scores carry the `round` they first appeared in
 (1 for single-round runs and files). `research.json` holds `planned`,
-`ran`, `reason`, `note` (the end note: the gap note for `model judged
-coverage sufficient`, a fixed sentence for `no new sources`, else empty),
-and one entry per round with `round`, `query_ids`, `new_pages`,
-`known_pages`, `kept`, and the gap `note` written after it.
+`ran`, `reason`, `note` (the end note: a fixed sentence for `no new
+sources` and `no follow-ups`, else empty), and one entry per round with
+`round`, `query_ids`, `new_pages`, `known_pages`, `kept`, and the gap
+`note` and `uncovered` query IDs written after it (empty for the last
+round).
 
 A stage is finished when its `stage.done` event is in `events.jsonl`; a
 half-written artifact without that event is ignored. Artifacts are written
@@ -799,7 +829,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `page.failed` | `url`, `reason` |
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
 | `round.done` | `round`, `query_ids`, `new_pages`, `known_pages`, `kept` |
-| `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `stop` |
+| `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `uncovered` (query IDs), `retried` |
 | `research.done` | `planned`, `ran`, `reason`, `note` |
 | `report.delta`, `report.snapshot` | `text` |
 
@@ -1143,7 +1173,8 @@ question has that many topics.
 The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
 (default 3), and `gap_context_tokens` (default 4000, or `auto`; see
 Research rounds). The `gap` stage
-timeout defaults to 180 seconds.
+timeout defaults to 360 seconds, room for a gap step that asks its model
+twice.
 
 `standard` sets nothing, so it resolves like no depth. `custom` applies no
 preset; it only labels a run whose research values the user set. An unknown
@@ -1406,8 +1437,10 @@ These override the prototype where they differ:
   rounds, and "n rounds" at the end. The Research rounds panel
   (`screens/live/ResearchRoundsPanel`) replaces Sub-queries: per round its
   queries (collapsed to 2 above 3), new and kept pages or "0 new pages · m
-  already fetched", the gap note and follow-up line, then why research
-  stopped with the `r-stop` help. The reducer folds `plan.ready`,
+  already fetched", the gap note and follow-up line ("Gap: n follow-up
+  queries for round k+1" or "Gap: no usable follow-up query", plus " · u
+  uncovered"), "m more rounds to go" while rounds remain, then why
+  research stopped with the `r-stop` help. The reducer folds `plan.ready`,
   `hit.found`, `page.fetched`, `round.done`, `gap.ready`, and
   `research.done` into `rounds` and `research`. Sources fetched in a later
   round show "round k"; the Report meta line ends with "ran of planned

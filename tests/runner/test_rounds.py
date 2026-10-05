@@ -36,12 +36,13 @@ WORLD = {
     "lithium price": ["https://d.test"],
     "cobalt supply": ["https://e.test"],
     "again": ["https://a.test/x"],
+    "again elsewhere": ["https://b.test"],
 }
 PAGES_ALL = {**PAGES, "https://d.test": "Lithium price per tonne in 2026.", "https://e.test": "Cobalt supply chains."}
 
 
-def gap_reply(*queries: str, stop: bool = False, note: str = "More on prices.") -> str:
-    return json.dumps({"queries": list(queries), "note": note, "stop": stop})
+def gap_reply(*queries: str, note: str = "More on prices.") -> str:
+    return json.dumps({"queries": list(queries), "note": note})
 
 
 def configured(tmp_path: Path, rounds: int = 3, **update: object) -> Settings:
@@ -90,7 +91,7 @@ async def test_three_rounds(tmp_path: Path) -> None:
     loop = ["search", "fetch", "chunk", "prefilter", "score"]
     assert started == ["plan", *loop, "gap", *loop, "gap", *loop, "select", "write"]
     assert [event.data.round for event in events if isinstance(event, RoundDone)] == [1, 2, 3]
-    assert [event.data.stop for event in events if isinstance(event, GapReady)] == [False, False]
+    assert [event.data.retried for event in events if isinstance(event, GapReady)] == [False, False]
     done = [event for event in events if isinstance(event, ResearchDone)]
     assert [(d.data.planned, d.data.ran, d.data.reason) for d in done] == [(3, 3, "max rounds")]
     plan = store.read_artifact(run_id, "plan.json", Plan)
@@ -110,31 +111,77 @@ async def test_three_rounds(tmp_path: Path) -> None:
     assert store.summary(store.read_record(run_id)).rounds_ran == 3
 
 
-async def test_coverage_sufficient(tmp_path: Path) -> None:
+async def test_good_coverage_does_not_stop(tmp_path: Path) -> None:
     cfg = configured(tmp_path)
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
     note = "Every sub-query has primary sources."
-    assert await run(cfg, run_id, world(gap_reply(stop=True, note=note))) == "done"
+    covered = json.dumps({"queries": ["lithium price"], "note": note, "stop": True})
+    assert await run(cfg, run_id, world(covered, gap_reply("cobalt supply"))) == "done"
     record = research(store, run_id)
-    assert (record.ran, record.reason, record.note) == (1, "model judged coverage sufficient", note)
+    assert (record.ran, record.reason, record.note) == (3, "max rounds", "")
+    assert record.rounds[0].note == note
+
+
+async def test_one_empty_round_continues(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=4)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("again"), gap_reply("lithium price"), gap_reply("cobalt supply"))
+    assert await run(cfg, run_id, fakes) == "done"
+    record = research(store, run_id)
+    assert (record.ran, record.reason) == (4, "max rounds")
+    assert [r.new_pages for r in record.rounds] == [3, 0, 1, 1]
+    calls = planner_of(fakes).calls
+    assert "Round 2 found only pages fetched in earlier rounds:\n- q2 again" in calls[2][1].content
+    assert "found only pages" not in calls[1][1].content
+
+
+async def test_no_new_sources(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=4)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("again"), gap_reply("again elsewhere"), gap_reply("lithium price"))
+    assert await run(cfg, run_id, fakes) == "done"
+    record = research(store, run_id)
+    assert (record.planned, record.ran, record.reason) == (4, 3, "no new sources")
+    assert [r.new_pages for r in record.rounds] == [3, 0, 0]
+    assert (record.rounds[1].known_pages, record.rounds[2].known_pages) == (1, 1)
+    assert record.note == "Follow-up searches returned only pages fetched in earlier rounds."
+    assert len(planner_of(fakes).calls) == 3
+    summary = store.summary(store.read_record(run_id))
+    assert (summary.rounds_planned, summary.rounds_ran, summary.stop_reason) == (4, 3, "no new sources")
+
+
+async def test_no_follow_ups(tmp_path: Path) -> None:
+    cfg = configured(tmp_path)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("recycling cost"), gap_reply("Recycling Cost "))
+    assert await run(cfg, run_id, fakes) == "done"
+    record = research(store, run_id)
+    assert (record.ran, record.reason) == (1, "no follow-ups")
+    assert record.note == "The gap step wrote no usable follow-up query."
+    retry = planner_of(fakes).calls[2]
+    assert [message.role for message in retry] == ["system", "user", "assistant", "user"]
+    assert '"recycling cost": duplicate' in retry[3].content
+    ready = [e for e in store.read_events(run_id) if isinstance(e, GapReady)]
+    assert [(e.data.queries, e.data.retried) for e in ready] == [([], True)]
     names = kinds(store.read_events(run_id))
     assert names.index("research.done:gap") < names.index("stage.started:select")
 
 
-async def test_no_new_sources(tmp_path: Path) -> None:
+async def test_uncovered_recorded(tmp_path: Path) -> None:
     cfg = configured(tmp_path)
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
-    fakes = world(gap_reply("again"), gap_reply("lithium price"))
+    fakes = world(gap_reply("nothing found here"), gap_reply("lithium price"))
     assert await run(cfg, run_id, fakes) == "done"
     record = research(store, run_id)
-    assert (record.planned, record.ran, record.reason) == (3, 2, "no new sources")
-    assert (record.rounds[1].new_pages, record.rounds[1].known_pages) == (0, 1)
-    assert record.note == "Follow-up searches returned only pages fetched in earlier rounds."
-    assert len(planner_of(fakes).calls) == 2
-    summary = store.summary(store.read_record(run_id))
-    assert (summary.rounds_planned, summary.rounds_ran, summary.stop_reason) == (3, 2, "no new sources")
+    assert [r.uncovered for r in record.rounds] == [[], ["q2"], []]
+    assert "q2 · uncovered · best — · kept 0 — nothing found here" in planner_of(fakes).calls[2][1].content
+    ready = [e.data.uncovered for e in store.read_events(run_id) if isinstance(e, GapReady)]
+    assert ready == [[], ["q2"]]
 
 
 async def test_page_limit(tmp_path: Path) -> None:
@@ -300,10 +347,10 @@ async def test_interrupted_in_round_two(tmp_path: Path) -> None:
     with pytest.raises(asyncio.CancelledError):
         await run(cfg, run_id, first)
     assert "search" not in store.finished_stages(run_id)
-    planner = FakeLLM([gap_reply("lithium price"), gap_reply(stop=True)])
+    planner = FakeLLM([gap_reply("lithium price"), gap_reply()])
     fakes = adapters(searcher=FakeSearcher(WORLD), fetcher=FakeFetcher(PAGES_ALL), planner=planner)
     assert await run(cfg, run_id, fakes) == "done"
-    assert "Queries already run" in planner.calls[0][1].content
+    assert "Coverage:" in planner.calls[0][1].content
     record = research(store, run_id)
     assert (record.ran, [r.query_ids for r in record.rounds]) == (2, [["q1"], ["q2"]])
     assert [query.id for query in store.read_artifact(run_id, "plan.json", Plan).queries] == ["q0", "q1", "q2"]
@@ -317,7 +364,7 @@ async def test_fork_from_score_reruns_loop(tmp_path: Path) -> None:
     child = store.fork(parent, "score", [], cfg).run_id
     assert set(store.finished_stages(child)) == {"load", "plan"}
     assert [query.id for query in store.read_artifact(child, "plan.json", Plan).queries] == ["q0", "q1"]
-    planner = FakeLLM([gap_reply(stop=True)])
+    planner = FakeLLM([gap_reply()])
     fakes = adapters(searcher=FakeSearcher(WORLD), fetcher=FakeFetcher(PAGES_ALL), planner=planner)
     assert await run(cfg, child, fakes) == "done"
     assert research(store, child).ran == 1

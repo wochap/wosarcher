@@ -338,6 +338,10 @@ def test_llm_timeout_default() -> None:
     assert (settings.llm.timeout, settings.search.timeout) == (300, 60)
 
 
+def test_gap_timeout_default(env: dict[str, str]) -> None:
+    assert resolve(None, [], env).run.stage_timeouts["gap"] == 360
+
+
 def test_gap_context_default(env: dict[str, str]) -> None:
     assert resolve(None, [], env).research.gap_context_tokens == 4000
     assert resolve(None, ["research.gap_context_tokens=auto"], env).research.gap_context_tokens == "auto"

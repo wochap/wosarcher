@@ -76,6 +76,8 @@ export type RoundView = {
   note: string;
   /** The gap step after this round: running, or the follow-up count it wrote. */
   gap?: "running" | number;
+  /** Query IDs the gap step's coverage table marked `uncovered`. */
+  uncovered: string[];
 };
 
 export type ResearchView = { planned: number; ran: number; reason: StopReason; note: string };
@@ -222,6 +224,7 @@ const newRound = (
   knownPages: 0,
   kept: 0,
   note: "",
+  uncovered: [],
 });
 
 const isLoop = (stage: string | null | undefined): stage is PhaseId =>
@@ -425,8 +428,12 @@ function apply(state: RunView, event: RunEvent): RunView {
     }
     case "gap.ready": {
       const d = event.data;
-      const next = withRound(state, d.round, { gap: d.queries.length, note: d.note });
-      if (d.stop || !d.queries.length) return next;
+      const next = withRound(state, d.round, {
+        gap: d.queries.length,
+        note: d.note,
+        uncovered: d.uncovered,
+      });
+      if (!d.queries.length) return next;
       const following = newRound(d.round + 1, d.queries);
       return { ...next, rounds: [...next.rounds, following] };
     }
