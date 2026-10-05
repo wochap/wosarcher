@@ -133,6 +133,8 @@ export type RunView = {
   passages: ScoredQuery[];
   /** Sub-query IDs that skipped prefilter ranking (small-input passthrough). */
   passthrough: string[];
+  /** Search hits the domain filter dropped, summed over the plan and search stages of every round. */
+  filtered: number;
   report: string;
   tokensIn: number;
   tokensOut: number;
@@ -155,6 +157,7 @@ export function initialRunView(runId: string): RunView {
     sources: {},
     passages: [],
     passthrough: [],
+    filtered: 0,
     report: "",
     tokensIn: 0,
     tokensOut: 0,
@@ -309,6 +312,7 @@ function apply(state: RunView, event: RunEvent): RunView {
         next = { ...next, passthrough: [...earlier, ...(d.passthrough ?? [])] };
       }
       if (event.stage === "search" || event.stage === "plan") {
+        next = { ...next, filtered: next.filtered + (d.filtered ?? 0) };
         next = { ...next, subQueries: next.subQueries.map((q) => ({ ...q, done: true })) };
       }
       if (event.stage === "search") {

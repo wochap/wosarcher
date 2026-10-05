@@ -18,7 +18,7 @@ describe("httpApi", () => {
   it("turns a JSON error into ApiError with field errors", async () => {
     stubFetch(422, { error: "invalid_request", detail: "writing.words: Input should be > 0" });
     const error = await httpApi(() => {})
-      .putSettings({ sources: "both", writing: {} as never })
+      .putSettings({ sources: "both", writing: {} as never, domains: { allow: [], block: [] } })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(422);

@@ -15,6 +15,7 @@ from wosarcher.config import (
     depth_values,
     list_depths,
     list_profiles,
+    own_settings,
     profile_description,
     read_depth,
     resolve,
@@ -62,12 +63,15 @@ def profile_info(name: str, source: str, active: str) -> ProfileInfo:
         settings = resolve(name, [], os.environ)
     except ConfigError:
         return info
-    limits = {
+    own = own_settings(name, os.environ)
+    values = {
         "context_window": settings.llm.context_window,
         "prompt_reserve_tokens": settings.select.prompt_reserve_tokens,
         "max_output_tokens": settings.llm.max_output_tokens,
+        "allow_domains": settings.search.allow_domains if "search.allow_domains" in own else None,
+        "block_domains": settings.search.block_domains if "search.block_domains" in own else None,
     }
-    return info.model_copy(update=limits)
+    return info.model_copy(update=values)
 
 
 @router.get("/profiles")

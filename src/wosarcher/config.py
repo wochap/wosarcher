@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_core import to_jsonable_python
 
-from wosarcher.models import Stage, WritingOptions
+from wosarcher.models import Stage, WritingOptions, domain_list
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
@@ -90,6 +90,16 @@ class SearchConfig(Provider):
     max_results: int = Field(default=10, ge=1)
     language: str = ""
     time_range: Literal["", "day", "week", "month", "year"] = ""
+    allow_domains: list[str] = []
+    """Empty allows every domain."""
+    block_domains: list[str] = []
+    filter_pages: int = Field(default=3, ge=1)
+    """Result pages a query may read while a domain list is set."""
+
+    @field_validator("allow_domains", "block_domains")
+    @classmethod
+    def check_domains(cls, value: list[str]) -> list[str]:
+        return domain_list(value)
 
 
 class FetchConfig(Provider):
@@ -389,6 +399,13 @@ def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str], d
     if depth is not None and depth != CUSTOM_DEPTH:
         layers.append(depth_layer(*load_depth(depth)))
     return validate([*layers, override_layer(overrides)])
+
+
+def own_settings(profile: str, env: Mapping[str, str]) -> dict[str, Any]:
+    """What the profile and the environment set, as flat dotted keys, before validation."""
+    path, data = load_profile(profile, env)
+    tree = deep_merge(profile_layer(path, data)[0], env_layer(env)[0])
+    return depth_values(tree)
 
 
 # Depth presets

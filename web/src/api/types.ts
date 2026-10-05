@@ -16,7 +16,9 @@ export type RunDetail = Omit<G.RunDetail, "status" | "writing"> & {
 export type RunCreate = G.RunCreate;
 export type ForkCreate = G.ForkCreate;
 export type RunCreated = G.RunCreated;
-export type ServerSettings = { writing: WritingOptions; sources: string };
+/** Domain lists: entries are bare domains, matched with their subdomains. */
+export type DomainLists = { allow: string[]; block: string[] };
+export type ServerSettings = { writing: WritingOptions; sources: string; domains: DomainLists };
 export type ProfileInfo = G.ProfileInfo;
 export type DepthInfo = G.DepthInfo;
 /** A token budget: a number, or "auto" for all the room the model window leaves. */

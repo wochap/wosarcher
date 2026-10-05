@@ -95,6 +95,12 @@ def research_overrides(**fields: int | str | None) -> list[str]:
     return [f"{RESEARCH_KEYS[name]}={value}" for name, value in fields.items() if value is not None]
 
 
+def domain_overrides(allow: list[str] | None, block: list[str] | None) -> list[str]:
+    """Domain flags as JSON-list overrides of `search.allow_domains` and `search.block_domains`."""
+    lists = {"search.allow_domains": allow, "search.block_domains": block}
+    return [f"{key}={json.dumps(value)}" for key, value in lists.items() if value]
+
+
 def checked(make: Callable[[], Settings]) -> Settings:
     try:
         settings = make()
@@ -216,6 +222,14 @@ def run(
     context_tokens: ContextTokensOption = None,
     gap_context_tokens: GapContextTokensOption = None,
     rounds: Annotated[int | None, typer.Option("--rounds", min=1, max=8, help="Research rounds.")] = None,
+    allow_domain: Annotated[
+        list[str] | None,
+        typer.Option("--allow-domain", metavar="DOMAIN", help="Only use search results from this domain (repeatable)."),
+    ] = None,
+    block_domain: Annotated[
+        list[str] | None,
+        typer.Option("--block-domain", metavar="DOMAIN", help="Drop search results from this domain (repeatable)."),
+    ] = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -242,7 +256,7 @@ def run(
         gap_context_tokens=gap_context_tokens,
         rounds=rounds,
     )
-    overrides = [*(set_ or []), *flags, *research]
+    overrides = [*(set_ or []), *flags, *research, *domain_overrides(allow_domain, block_domain)]
     env = os.environ
     settings = checked(lambda: resolve(profile, overrides, env, depth))
     store = RunStore.from_settings(settings)

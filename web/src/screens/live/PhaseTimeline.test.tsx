@@ -119,6 +119,23 @@ describe("PhaseTimeline", () => {
   });
 });
 
+describe("PhaseTimeline domain filter", () => {
+  const begin = all[0];
+  it("shows the hits filtered by domain on the Search card", () => {
+    const plan = stageDone(2, "plan", { filtered: 3 });
+    const search = stageDone(3, "search", { filtered: 9 });
+    render(<PhaseTimeline run={viewOf([begin, plan, search])} />);
+    const line = screen.getByText("12 filtered by domain");
+    expect(card("Search").contains(line)).toBe(true);
+    expect(line.getAttribute("title")).toBe("12 filtered by domain");
+  });
+
+  it("shows no filtered line when nothing was filtered", () => {
+    render(<PhaseTimeline run={viewOf([begin, stageDone(2, "search", {})])} />);
+    expect(card("Search").textContent).not.toContain("filtered by domain");
+  });
+});
+
 describe("PhaseTimeline rounds", () => {
   it("shows the round on loop cards and the Gap card in a multi-round run", () => {
     render(<PhaseTimeline run={viewOf(roundTwoFetching())} rounds={3} />);

@@ -226,3 +226,52 @@ def test_short_query_searched_before_planning(runs: Path) -> None:
     assert "Battery recycling - Wikipedia" in planner["messages"][1]["content"]
     searched = [text for kind, text in calls if kind == "search"]
     assert searched.count(QUERY) == 1
+
+
+GOB_PAGE = (
+    "# Recycling rules\n\nThe ministry sets battery recycling targets for every region and publishes them yearly."
+)
+
+
+def domain_router(pages: list[int]) -> respx.MockRouter:
+    """The recorded world, each first result page led by a `gob.pe` host; later pages are empty."""
+
+    def search(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params.get("pageno", "1"))
+        pages.append(page)
+        if page > 1:
+            return httpx.Response(200, json={"results": []})
+        recorded_results = json.loads(recorded.search(request).content)["results"]
+        slug = re.sub(r"\W+", "-", request.url.params.get("q", "")).strip("-").lower()
+        own = {"url": f"https://www.gob.pe/{slug}", "title": "Gob.pe", "content": "Official rules."}
+        return httpx.Response(200, json={"results": [own, *recorded_results]})
+
+    def scrape(request: httpx.Request) -> httpx.Response:
+        if "gob.pe" in json.loads(request.content)["url"]:
+            data = {"markdown": GOB_PAGE, "metadata": {"title": "Gob.pe", "statusCode": 200}}
+            return httpx.Response(200, json={"success": True, "data": data})
+        return recorded.scrape(request)
+
+    router = respx.mock(assert_all_mocked=True, assert_all_called=False)
+    router.get("http://searxng.test/search").mock(side_effect=search)
+    router.post("http://firecrawl.test/v1/scrape").mock(side_effect=scrape)
+    router.post("http://llm.test/v1/chat/completions").mock(side_effect=recorded.chat)
+    return router
+
+
+def test_allow_domain_fetches_only_allowed_hosts(runs: Path) -> None:
+    pages: list[int] = []
+    args = ["run", QUERY, "--profile", "e2e", "--sources", "web", "--allow-domain", "gob.pe", "--run-id", RUN_ID]
+    with domain_router(pages):
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    events = [parse_event(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    fetched = [event.data.url for event in events if event.type == "page.fetched"]
+    assert fetched
+    assert all(httpx.URL(url).host.endswith("gob.pe") for url in fetched)
+    filtered = {event.stage: event.data.filtered for event in events if event.type == "stage.done"}
+    assert filtered["plan"] > 0
+    assert filtered["search"] > 0
+    assert filtered["fetch"] == 0
+    assert 2 in pages

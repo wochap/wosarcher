@@ -1,8 +1,10 @@
 // New run: the question, attachments, and options; starts the run and opens it on Live run.
-import { Play } from "@phosphor-icons/react";
+import { Play, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
+import { ApiError } from "../../api/client";
 import type {
   DepthInfo,
+  DomainLists,
   ProfileInfo,
   ResearchValues,
   RunCreate,
@@ -12,6 +14,13 @@ import type {
 } from "../../api/types";
 import { EMPTY_DRAFT, type RunOptions, useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
+import {
+  DOMAIN_KINDS,
+  type DomainKind,
+  domainInputId,
+  isDomain,
+  sameList,
+} from "../../components/DomainRows";
 import type { WritingField } from "../../components/WritingOptionsForm";
 import {
   CUSTOM_DESCRIPTION,
@@ -24,7 +33,32 @@ import {
 } from "../../run/depth";
 import { Attachments } from "./Attachments";
 import css from "./NewRunScreen.module.css";
-import { OptionsPanel, overriddenFields } from "./OptionsPanel";
+import { OptionsPanel, overriddenDomains, overriddenFields } from "./OptionsPanel";
+
+/** Why the server (or the entry check) refused the run; `field` names a domain row to fix. */
+type StartError = { message: string; field?: DomainKind; entry?: string };
+
+/** The first entry that is not a domain, as the server would reject it. */
+export function invalidDomain(lists: DomainLists): StartError | null {
+  for (const field of DOMAIN_KINDS) {
+    const entry = lists[field].find((e) => !isDomain(e));
+    if (entry !== undefined) {
+      const message = `domains.${field}: '${entry}' is not a domain; use the domain only, without a scheme, path, or port`;
+      return { message, field, entry };
+    }
+  }
+  return null;
+}
+
+/** The start error for a failed request; a rejected domain list names its row and entry. */
+function startError(error: unknown): StartError {
+  const message = (error as Error).message;
+  if (!(error instanceof ApiError)) return { message };
+  const field = DOMAIN_KINDS.find((k) => `domains.${k}` in error.fields);
+  if (!field) return { message };
+  const entry = /'([^']*)'/.exec(error.fields[`domains.${field}`])?.[1];
+  return { message, field, entry };
+}
 
 /**
  * The request for the form: the context recipe stops after select; writing holds overrides of
@@ -38,6 +72,7 @@ export function runRequest(
   defaults: WritingOptions,
   saved: WritingOptions,
   custom?: ResearchValues,
+  domains: Partial<DomainLists> = {},
 ): RunCreate {
   const request: RunCreate = {
     query,
@@ -52,6 +87,7 @@ export function runRequest(
     if (writing.words !== saved.words) overrides.words = writing.words;
   }
   if (Object.keys(overrides).length) request.writing = overrides;
+  if (Object.keys(domains).length) request.domains = domains;
   return request;
 }
 
@@ -61,9 +97,17 @@ export function NewRunScreen() {
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [depths, setDepths] = useState<DepthInfo[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<StartError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [focusField, setFocusField] = useState<DomainKind | null>(null);
   const question = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!focusField || !optionsOpen) return;
+    document.getElementById(domainInputId("nd", focusField))?.focus();
+    setFocusField(null);
+  }, [focusField, optionsOpen]);
 
   useEffect(() => {
     question.current?.focus();
@@ -94,23 +138,53 @@ export function NewRunScreen() {
   const defaults = saved && { ...saved, words: wordsOf(options.depth) ?? saved.words };
   const writing = defaults && { ...defaults, ...draft.writing };
   const blank = !draft.query.trim();
+  const selected = profiles.find((p) => p.name === options.profile);
+  const domainDefaults: DomainLists = {
+    allow: selected?.allow_domains ?? settings?.domains.allow ?? [],
+    block: selected?.block_domains ?? settings?.domains.block ?? [],
+  };
+  const domains: DomainLists = { ...domainDefaults, ...draft.domains };
 
   async function start() {
     if (blank || busy || !defaults || !writing) return;
+    const invalid = invalidDomain(domains);
+    if (invalid) {
+      setError(invalid);
+      setOptionsOpen(true);
+      return;
+    }
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       const created = await api.createRun(
-        runRequest(draft.query.trim(), options, writing, defaults, saved ?? defaults, values),
+        runRequest(
+          draft.query.trim(),
+          options,
+          writing,
+          defaults,
+          saved ?? defaults,
+          values,
+          overriddenDomains(domains, domainDefaults),
+        ),
         draft.files,
       );
       setDraft(() => EMPTY_DRAFT);
       follow(created.run_id);
       go({ screen: "live", runId: created.run_id });
     } catch (e) {
-      setError((e as Error).message);
+      setError(startError(e));
       setBusy(false);
     }
+  }
+
+  /** A list equal to its default is no override, so it follows later default changes. */
+  function setDomains(kind: DomainKind, list: string[] | null) {
+    setDraft((d) => {
+      const { [kind]: _, ...rest } = d.domains;
+      const same = list === null || sameList(list, domainDefaults[kind]);
+      return { ...d, domains: same ? rest : { ...rest, [kind]: list } };
+    });
+    if (error?.field === kind) setError(null);
   }
 
   /** Switches the depth; Length keeps an edit unless it equals the new depth's default. */
@@ -200,13 +274,31 @@ export function NewRunScreen() {
           </div>
           {error && (
             <div role="alert" className={css.error}>
-              {error}
+              <WarningCircle aria-hidden="true" className={css.errorIcon} />
+              <div className={css.errorText}>
+                <div className={css.errorTitle}>Couldn’t start the run</div>
+                <div className={css.errorMessage}>{error.message}</div>
+                {error.field && (
+                  <button
+                    type="button"
+                    className={`btn btn-ghost ${css.fix}`}
+                    onClick={() => {
+                      setOptionsOpen(true);
+                      setFocusField(error.field ?? null);
+                    }}
+                  >
+                    Fix in Options
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
         <Attachments files={draft.files} onChange={(files) => setDraft((d) => ({ ...d, files }))} />
         {defaults && writing && values && (
           <OptionsPanel
+            open={optionsOpen}
+            onOpen={setOptionsOpen}
             options={options}
             profiles={profileList}
             depth={{
@@ -232,6 +324,12 @@ export function NewRunScreen() {
             defaults={defaults}
             onWriting={setWriting}
             onResetWriting={() => setDraft((d) => ({ ...d, writing: {} }))}
+            domains={{
+              lists: domains,
+              defaults: domainDefaults,
+              invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
+              onChange: setDomains,
+            }}
           />
         )}
       </div>

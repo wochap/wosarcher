@@ -271,6 +271,11 @@ export function prefilterDetail(run: RunView, topK?: number): string {
   return `top ${topK}/sub-query${passed}`;
 }
 
+/** The Search card's domain filter line; empty when nothing was filtered. */
+export function filteredDetail(run: RunView): string {
+  return run.filtered > 0 ? `${run.filtered} filtered by domain` : "";
+}
+
 type Props = {
   run: RunView;
   /** The run's `prefilter.top_k`, from its request settings. */
@@ -291,6 +296,7 @@ export function PhaseTimeline({ run, topK, rounds = 1 }: Props) {
         const tag = methodTag(id, run, topK);
         const detail =
           roundDetail(id, run, rounds) || (id === "prefilter" ? prefilterDetail(run, topK) : "");
+        const filtered = id === "search" ? filteredDetail(run) : "";
         return (
           <li key={id} className={css.card} data-state={card.state}>
             <div className={css.head}>
@@ -314,6 +320,11 @@ export function PhaseTimeline({ run, topK, rounds = 1 }: Props) {
             )}
             <div className={css.text}>{card.text}</div>
             {detail && <div className={css.detail}>{detail}</div>}
+            {filtered && (
+              <div className={css.detail} title={filtered}>
+                {filtered}
+              </div>
+            )}
             <div className={css.track}>
               <div className={css.bar} style={{ width: `${card.pct}%` }} />
             </div>

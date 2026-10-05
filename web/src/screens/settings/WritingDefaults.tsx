@@ -1,6 +1,6 @@
 // Settings: the server's writing defaults, saved on every change (PUT /api/settings).
 import { Check } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import type { ServerSettings, WritingOptions } from "../../api/types";
 import { useApi } from "../../app/context";
@@ -11,17 +11,19 @@ import css from "./WritingDefaults.module.css";
 
 export const SAVED_MS = 1500;
 
-export function WritingDefaults() {
+/** The settings Settings loaded, shared by its sections so each saves the others' latest values. */
+export type SettingsProps = {
+  settings: ServerSettings | null;
+  setSettings: Dispatch<SetStateAction<ServerSettings | null>>;
+};
+
+export function WritingDefaults({ settings, setSettings }: SettingsProps) {
   const api = useApi();
-  const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [errors, setErrors] = useState<Partial<Record<WritingField, string>>>({});
   const [saved, setSaved] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    api.getSettings().then(setSettings, () => {});
-    return () => clearTimeout(timer.current);
-  }, [api]);
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   if (!settings) return null;
   const current = settings;

@@ -86,6 +86,7 @@ uv run wosarcher doctor                          # check every configured provid
 uv run wosarcher run "What limits solid-state battery production?"
 uv run wosarcher run "..." --until select --json # cited passages only, as JSON
 uv run wosarcher run "..." --attach notes.md --sources both
+uv run wosarcher run "..." --allow-domain gob.pe --block-domain facebook.com  # domain filter
 uv run wosarcher runs                            # list runs
 uv run wosarcher fork <run-id> --from write --tone critical  # rewrite only
 ```

@@ -380,3 +380,53 @@ def test_rerun_keeps_depth(client: TestClient, runs_dir: Path) -> None:
     finished(client, rerun)
     assert summary(client, rerun)["depth"] == "deep"
     assert resolved(runs_dir, rerun)["plan"]["max_sub_queries"] == 6
+
+
+def test_domain_lists_for_one_run(client: TestClient, runs_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_SEARCH__ALLOW_DOMAINS", '["infobae.com"]')
+    client.put("/api/settings", json={"domains": {"block": ["pinterest.com"]}})
+    run_id = create(client, {"query": "q", "domains": {"allow": ["gob.pe"], "block": []}})
+    finished(client, run_id)
+    search = resolved(runs_dir, run_id)["search"]
+    assert (search["allow_domains"], search["block_domains"]) == (["gob.pe"], [])
+
+
+def test_invalid_domain_422(client: TestClient, runs_dir: Path) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "domains": {"allow": ["gob.pe/tramites"]}}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert response.status_code == 422
+    assert "domains.allow" in response.json()["detail"]
+    assert "gob.pe/tramites" in response.json()["detail"]
+    assert not (runs_dir / ".queue").exists() or not any((runs_dir / ".queue").iterdir())
+
+
+def test_global_domain_list_applies_and_reruns(client: TestClient, runs_dir: Path) -> None:
+    client.put("/api/settings", json={"domains": {"block": ["pinterest.com"]}})
+    run_id = create(client, {"query": "q"})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["search"]["block_domains"] == ["pinterest.com"]
+    client.put("/api/settings", json={"domains": {"block": []}})
+    rerun = client.post(f"/api/runs/{run_id}/rerun").json()["run_id"]
+    finished(client, rerun)
+    assert resolved(runs_dir, rerun)["search"]["block_domains"] == ["pinterest.com"]
+
+
+def test_profile_list_wins_over_the_global_list(
+    client: TestClient, runs_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The global list is not passed on, so the run resolves the environment's (or profile's) own list."""
+    monkeypatch.setenv("WOSARCHER_SEARCH__BLOCK_DOMAINS", '["facebook.com"]')
+    client.put("/api/settings", json={"domains": {"block": ["pinterest.com"], "allow": ["gob.pe"]}})
+    run_id = create(client, {"query": "q"})
+    finished(client, run_id)
+    args = argv(runs_dir, run_id)
+    flags = [args[n + 1] for n, flag in enumerate(args) if flag == "--set"]
+    assert 'search.allow_domains=["gob.pe"]' in flags
+    assert not any(flag.startswith("search.block_domains") for flag in flags)
+
+
+def test_request_list_wins(client: TestClient, runs_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_SEARCH__BLOCK_DOMAINS", '["facebook.com"]')
+    run_id = create(client, {"query": "q", "domains": {"block": []}})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["search"]["block_domains"] == []

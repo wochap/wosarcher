@@ -1,9 +1,10 @@
-"""Search: run the Searcher for every query and merge hits by normalised URL."""
+"""Search: run the Searcher for every query, drop hits by domain, and merge hits by normalised URL."""
 
 import asyncio
 from collections.abc import Callable, Iterable, Sequence
+from urllib.parse import urlsplit
 
-from wosarcher.models import Hit, Query, SearchResult, Skipped, normalise_url
+from wosarcher.models import Hit, Query, SearchResult, Skipped, host_matches, normalise_url
 from wosarcher.ports import Searcher
 from wosarcher.stages import noop
 
@@ -47,27 +48,57 @@ def merge_hits(lists: Iterable[Sequence[Hit]]) -> list[Hit]:
     return list(merged.values())
 
 
+def allowed(url: str, allow: Sequence[str], block: Sequence[str]) -> bool:
+    """Whether the URL's host passes the domain lists: not blocked, and allowed when the allow list is not empty."""
+    host = urlsplit(url.strip()).netloc
+    if host_matches(host, list(block)):
+        return False
+    return not allow or host_matches(host, list(allow))
+
+
 async def search(
     queries: Sequence[Query],
     searcher: Searcher,
     *,
     initial: Sequence[Hit] = (),
+    max_results: int = 10,
+    allow: Sequence[str] = (),
+    block: Sequence[str] = (),
+    filter_pages: int = 3,
     on_item: Callable[[Hit], None] = noop,
 ) -> SearchResult:
+    """Each query keeps at most `max_results` hits that pass the domain lists, ranked among the kept hits.
+
+    While a list is set, a query short of hits reads further pages, up to `filter_pages`.
+    """
     merged: dict[str, Hit] = {}
     merge_into(merged, initial)
     failures: list[Skipped] = []
+    dropped: set[str] = set()
+    filtering = bool(allow or block)
 
     async def one(query: Query) -> None:
+        sent = query.model_copy(update={"text": cut(query.text)})
+        kept: dict[str, Hit] = {}
+        page = 1
         try:
-            hits = await searcher.search(query.model_copy(update={"text": cut(query.text)}))
+            while True:
+                found = await searcher.search(sent, page)
+                for hit in found:
+                    key = normalise_url(hit.url)
+                    if not allowed(hit.url, allow, block):
+                        dropped.add(key)
+                    elif key not in kept and len(kept) < max_results:
+                        kept[key] = hit.model_copy(update={"rank": len(kept) + 1})
+                if not filtering or not found or len(kept) >= max_results or page >= filter_pages:
+                    break
+                page += 1
         except Exception as error:
             failures.append(Skipped(item=query.id, reason=str(error)))
-            return
-        for hit in merge_into(merged, hits):
+        for hit in merge_into(merged, kept.values()):
             on_item(hit)
 
     await asyncio.gather(*(one(query) for query in queries))
     order = {query.id: n for n, query in enumerate(queries)}
     failures.sort(key=lambda failure: order[failure.item])
-    return SearchResult(hits=list(merged.values()), failures=failures)
+    return SearchResult(hits=list(merged.values()), failures=failures, filtered=len(dropped))

@@ -16,8 +16,9 @@ class SearxngSearcher:
         self.ledger = ledger
         self.stage = stage
 
-    async def search(self, query: Query) -> list[Hit]:
-        params: dict[str, Any] = {"q": query.text, "format": "json", "pageno": 1}
+    async def search(self, query: Query, page: int = 1) -> list[Hit]:
+        """Every kept result of one page; the search stage applies `search.max_results`."""
+        params: dict[str, Any] = {"q": query.text, "format": "json", "pageno": page}
         if self.cfg.language:
             params["language"] = self.cfg.language
         if self.cfg.time_range:
@@ -50,8 +51,6 @@ class SearxngSearcher:
                     query_ids=[query.id],
                 )
             )
-            if len(hits) == self.cfg.max_results:
-                break
         return hits
 
     async def probe(self) -> ProviderHealth:

@@ -49,7 +49,14 @@ async def test_no_results(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
 @respx.mock
 async def test_result_cap(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     respx.get(f"{BASE}/search").respond(200, json=results(*(f"https://a.com/{i}" for i in range(20))))
-    assert len(await searcher(http, ledger, max_results=5).search(Q1)) == 5
+    assert len(await searcher(http, ledger, max_results=5).search(Q1)) == 20
+
+
+@respx.mock
+async def test_requested_page(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    route = respx.get(f"{BASE}/search").respond(200, json={"results": []})
+    await searcher(http, ledger).search(Q1, page=2)
+    assert route.calls.last.request.url.params["pageno"] == "2"
 
 
 @respx.mock

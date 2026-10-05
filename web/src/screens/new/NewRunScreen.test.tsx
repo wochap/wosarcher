@@ -81,14 +81,66 @@ describe("NewRunScreen", () => {
 
   it("keeps the inputs and shows the server's message when the start is rejected", async () => {
     const api = fakeApi();
+    const detail =
+      'profile "gpu-box" does not exist. Known profiles: low-vram, workstation, cloud.';
     api.createRun = async () => {
-      throw new ApiError(422, "invalid_request", "query: too long");
+      throw new ApiError(422, "invalid_request", detail);
     };
     const { question } = await open(api);
     fireEvent.change(question, { target: { value: "too long" } });
     await ctrlEnter(question);
-    expect(screen.getByRole("alert").textContent).toBe("query: too long");
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Couldn’t start the run");
+    expect(alert.textContent).toContain(detail);
+    expect(screen.queryByRole("button", { name: "Fix in Options" })).toBeNull();
     expect(question.value).toBe("too long");
     expect(window.location.hash).toBe("#/new");
+  });
+
+  it("offers Fix in Options for a rejected domain entry", async () => {
+    const api = fakeApi();
+    const detail =
+      "domains.allow: Value error, 'gob.pe/tramites' is not a domain; use the domain only, without a scheme, path, or port";
+    api.createRun = async () => {
+      throw new ApiError(422, "invalid_request", detail, {
+        "domains.allow": detail.slice("domains.allow: ".length),
+      });
+    };
+    const { question } = await open(api);
+    fireEvent.change(question, { target: { value: "q" } });
+    await ctrlEnter(question);
+    expect(screen.getByRole("alert").textContent).toContain(detail);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Fix in Options" }));
+    });
+    expect(document.activeElement).toBe(screen.getByLabelText("Allow domains"));
+  });
+
+  it("catches an invalid entry before sending", async () => {
+    const { api, question } = await open();
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    const allow = screen.getByLabelText("Allow domains");
+    fireEvent.change(allow, { target: { value: "gob.pe/tramites" } });
+    fireEvent.blur(allow);
+    fireEvent.change(question, { target: { value: "q" } });
+    await ctrlEnter(question);
+    expect(callsTo(api, "createRun")).toHaveLength(0);
+    expect(
+      screen.getByText("Not a domain: gob.pe/tramites. Use the domain only, without a path."),
+    ).toBeTruthy();
+    expect(allow.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toContain("Couldn’t start the run");
+    expect(screen.getByRole("button", { name: "Fix in Options" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove gob.pe/tramites" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("follows the global Allow default", async () => {
+    const api = fakeApi();
+    api.data.settings.domains.allow = ["gob.pe"];
+    await open(api);
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    expect(screen.getByRole("button", { name: "Remove gob.pe" })).toBeTruthy();
+    expect(screen.queryByText("overridden")).toBeNull();
   });
 });

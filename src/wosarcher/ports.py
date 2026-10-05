@@ -8,7 +8,9 @@ from wosarcher.models import Chunk, Completion, EmbedderInfo, Hit, Message, Page
 
 
 class Searcher(Protocol):
-    async def search(self, query: Query) -> list[Hit]: ...
+    async def search(self, query: Query, page: int = 1) -> list[Hit]:
+        """Every hit of one result page, ranked from 1 within the page."""
+        ...
 
 
 class Fetcher(Protocol):

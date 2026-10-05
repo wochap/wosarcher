@@ -1,5 +1,6 @@
 """Data contracts that flow between stages, and their stable identities."""
 
+import re
 from datetime import datetime
 from hashlib import sha256
 from typing import Annotated, Any, Literal
@@ -12,6 +13,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     TypeAdapter,
+    field_validator,
     model_serializer,
 )
 
@@ -33,6 +35,28 @@ def normalise_url(url: str) -> str:
         if not key.lower().startswith("utm_") and key.lower() not in TRACKING_PARAMETERS
     )
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), urlencode(query), ""))
+
+
+DOMAIN_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+")
+"""Lowercase letters, digits, and hyphens in two or more dot-separated labels, no leading hyphen."""
+
+
+def domain_list(entries: list[str]) -> list[str]:
+    """Domain entries lowercased, without a leading `*.` or `.` or a trailing dot, each once in first order."""
+    out: list[str] = []
+    for raw in entries:
+        entry = raw.lower().removeprefix("*.").removeprefix(".").removesuffix(".")
+        if not DOMAIN_PATTERN.fullmatch(entry):
+            raise ValueError(f"'{raw}' is not a domain; use the domain only, without a scheme, path, or port")
+        if entry not in out:
+            out.append(entry)
+    return out
+
+
+def host_matches(host: str, entries: list[str]) -> bool:
+    """Whether `host` equals an entry or ends with `.` and the entry, ignoring case, port, and a trailing dot."""
+    host = host.lower().rpartition("@")[2].split(":")[0].removesuffix(".")
+    return any(host == entry or host.endswith("." + entry) for entry in entries)
 
 
 def short_hash(text: str) -> str:
@@ -142,6 +166,8 @@ class Skipped(Contract):
 class SearchResult(Contract):
     hits: list[Hit]
     failures: list[Skipped] = []
+    filtered: int = 0
+    """Distinct normalised URLs the domain filter dropped."""
 
 
 class FetchResult(Contract):
@@ -562,6 +588,30 @@ class ResearchPatch(Contract):
     rounds: int | None = Field(default=None, gt=0, le=8)
 
 
+class DomainPatch(Contract):
+    """Domain lists for one run; a given list replaces the configured one."""
+
+    allow: list[str] | None = None
+    block: list[str] | None = None
+
+    @field_validator("allow", "block")
+    @classmethod
+    def check_entries(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else domain_list(value)
+
+
+class DomainDefaults(Contract):
+    """Global domain lists (`ServerSettings.domains`)."""
+
+    allow: list[str] = []
+    block: list[str] = []
+
+    @field_validator("allow", "block")
+    @classmethod
+    def check_entries(cls, value: list[str]) -> list[str]:
+        return domain_list(value)
+
+
 class RunCreate(Contract):
     """The `request` field of `POST /api/runs`."""
 
@@ -574,6 +624,7 @@ class RunCreate(Contract):
     """A depth preset name or `custom`; None applies no preset."""
     research: ResearchPatch = ResearchPatch()
     writing: WritingPatch = WritingPatch()
+    domains: DomainPatch = DomainPatch()
     set: list[str] = []
     """`dotted.key=value` overrides, applied last."""
 
@@ -608,6 +659,7 @@ class ServerSettings(Contract):
 
     writing: WritingOptions = WritingOptions()
     sources: Sources = "both"
+    domains: DomainDefaults = DomainDefaults()
 
 
 class ProfileInfo(Contract):
@@ -619,6 +671,9 @@ class ProfileInfo(Contract):
     """None (with `prompt_reserve_tokens`) when the profile does not resolve."""
     prompt_reserve_tokens: int | None = None
     max_output_tokens: int | None = None
+    allow_domains: list[str] | None = None
+    """The list the profile (or the environment) sets; None when it sets none."""
+    block_domains: list[str] | None = None
 
 
 class DepthValues(Contract):
@@ -778,6 +833,8 @@ class StageDoneData(Contract):
     """Sub-query IDs whose pairs skipped ranking; set by prefilter only."""
     unfetched: int = 0
     """Queued hits left unfetched at the page cap; set by fetch only."""
+    filtered: int = 0
+    """Hits the domain filter dropped; set by plan and search only."""
     round: int = 1
 
 

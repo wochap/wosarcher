@@ -35,6 +35,7 @@ from wosarcher.models import (
     ReportTextData,
     RunRecord,
     Score,
+    SearchResult,
     Skipped,
     Stage,
     StageFailedData,
@@ -153,6 +154,24 @@ class Outcome:
     warnings: list[str] = field(default_factory=list[str])
     passthrough: list[str] = field(default_factory=list[str])
     unfetched: int = 0
+    filtered: int = 0
+
+
+async def run_search(
+    ctx: "StepContext", queries: Sequence[Query], searcher: Searcher, stage: Stage, initial: Sequence[Hit] = ()
+) -> SearchResult:
+    """The search stage with the run's result cap and domain lists."""
+    cfg = ctx.settings.search
+    return await searching.search(
+        queries,
+        searcher,
+        initial=initial,
+        max_results=cfg.max_results,
+        allow=cfg.allow_domains,
+        block=cfg.block_domains,
+        filter_pages=cfg.filter_pages,
+        on_item=hit_found(ctx, stage),
+    )
 
 
 def short_reason(text: str) -> str:
@@ -210,11 +229,10 @@ async def plan(ctx: StepContext) -> Outcome:
     files = ctx.items("files.jsonl", Page)
     warnings: list[str] = []
     initial: list[Hit] = []
+    filtered = 0
     if searches_first(ctx):
-        found = await searching.search(
-            [Query(id="q0", text=request.query)], ctx.adapters.searcher, on_item=hit_found(ctx, "plan")
-        )
-        initial, warnings = found.hits, failures(found.failures)
+        found = await run_search(ctx, [Query(id="q0", text=request.query)], ctx.adapters.searcher, "plan")
+        initial, warnings, filtered = found.hits, failures(found.failures), found.filtered
     ctx.store.write_artifact(ctx.run_id, "initial.jsonl", initial)
     planned = await planning.plan(
         request.query,
@@ -226,11 +244,11 @@ async def plan(ctx: StepContext) -> Outcome:
     )
     ctx.store.write_artifact(ctx.run_id, "plan.json", planned)
     ctx.log.emit("plan.ready", "plan", PlanReadyData(queries=planned.queries))
-    return Outcome(len(planned.queries), warnings=[*warnings, *planned.warnings])
+    return Outcome(len(planned.queries), warnings=[*warnings, *planned.warnings], filtered=filtered)
 
 
 class CountedSearcher:
-    """Reports `stage.progress` after each query's search."""
+    """Reports `stage.progress` after each query's search; later pages of a query are not counted again."""
 
     def __init__(self, searcher: Searcher, log: EventLog, total: int) -> None:
         self.searcher = searcher
@@ -238,9 +256,11 @@ class CountedSearcher:
         self.total = total
         self.done = self.failed = 0
 
-    async def search(self, query: Query) -> list[Hit]:
+    async def search(self, query: Query, page: int = 1) -> list[Hit]:
+        if page > 1:
+            return await self.searcher.search(query, page)
         try:
-            return await self.searcher.search(query)
+            return await self.searcher.search(query, page)
         except Exception:
             self.failed += 1
             raise
@@ -258,10 +278,10 @@ async def search(ctx: StepContext) -> Outcome:
     searched_first = searches_first(ctx)
     queries = [query for query in ctx.round_queries() if query.id != "q0" or not searched_first]
     searcher = CountedSearcher(ctx.adapters.searcher, ctx.log, len(queries))
-    result = await searching.search(queries, searcher, initial=initial, on_item=hit_found(ctx, "search"))
+    result = await run_search(ctx, queries, searcher, "search", initial)
     hits = [hit.model_copy(update={"round": ctx.round.number}) for hit in result.hits]
     ctx.save("hits.jsonl", hits)
-    return Outcome(len(hits), warnings=failures(result.failures))
+    return Outcome(len(hits), warnings=failures(result.failures), filtered=result.filtered)
 
 
 async def fetch(ctx: StepContext) -> Outcome:

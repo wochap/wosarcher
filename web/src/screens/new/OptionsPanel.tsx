@@ -1,10 +1,17 @@
 // The collapsible Options panel of New run: depth, run options, and the writing options, which
 // start from the saved defaults (Length from the depth) and mark per-run overrides.
 import { ArrowCounterClockwise, CaretDown, CaretRight } from "@phosphor-icons/react";
-import { type ReactNode, useState } from "react";
-import type { ProfileInfo, ResearchValues, TokenBudget, WritingOptions } from "../../api/types";
+import type { ReactNode } from "react";
+import type {
+  DomainLists,
+  ProfileInfo,
+  ResearchValues,
+  TokenBudget,
+  WritingOptions,
+} from "../../api/types";
 import type { RunOptions } from "../../app/context";
 import { go } from "../../app/route";
+import { type DomainKind, DomainRows, sameList } from "../../components/DomainRows";
 import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
 import {
@@ -27,6 +34,23 @@ export function overriddenFields(
   );
 }
 
+/** The domain lists that differ from their defaults. */
+export function overriddenDomains(lists: DomainLists, defaults: DomainLists): Partial<DomainLists> {
+  return Object.fromEntries(
+    (["allow", "block"] as const)
+      .filter((k) => !sameList(lists[k], defaults[k]))
+      .map((k) => [k, lists[k]]),
+  );
+}
+
+/** The domain rows: lists, their defaults, and the entry each row marks invalid. */
+export type DomainView = {
+  lists: DomainLists;
+  defaults: DomainLists;
+  invalid: Partial<Record<DomainKind, string>>;
+  onChange: (kind: DomainKind, list: string[] | null) => void;
+};
+
 /** What the Depth row shows; `wordsSet` is false when the depth leaves Length to Settings. */
 export type DepthView = {
   depths: Depth[];
@@ -41,6 +65,8 @@ export type DepthView = {
 };
 
 type Props = {
+  open: boolean;
+  onOpen: (open: boolean) => void;
   options: RunOptions;
   profiles: ProfileInfo[];
   depth: DepthView;
@@ -49,12 +75,14 @@ type Props = {
   defaults: WritingOptions;
   onWriting: <F extends WritingField>(field: F, value: WritingOptions[F]) => void;
   onResetWriting: () => void;
+  domains: DomainView;
 };
 
 export function OptionsPanel(props: Props) {
-  const { options, profiles, onOption, writing, defaults, depth } = props;
-  const [open, setOpen] = useState(false);
-  const overridden = Object.keys(overriddenFields(writing, defaults)).length;
+  const { open, onOpen, options, profiles, onOption, writing, defaults, depth, domains } = props;
+  const writingOverridden = Object.keys(overriddenFields(writing, defaults)).length;
+  const overridden =
+    writingOverridden + Object.keys(overriddenDomains(domains.lists, domains.defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
   const description = profiles.find((p) => p.name === options.profile)?.description;
   const label = DEPTH_LABELS[options.depth];
@@ -72,7 +100,7 @@ export function OptionsPanel(props: Props) {
         type="button"
         className={css.toggle}
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => onOpen(!open)}
       >
         <Caret className={css.caret} aria-hidden="true" />
         <span className={css.title}>Options</span>
@@ -132,6 +160,13 @@ export function OptionsPanel(props: Props) {
             </select>
             {description && <div className={css.description}>{description}</div>}
           </Row>
+          <DomainRows
+            idPrefix="nd"
+            lists={domains.lists}
+            bases={domains.defaults}
+            invalid={domains.invalid}
+            onChange={domains.onChange}
+          />
           <div className={css.writingHead}>
             <span className={css.group}>Writing</span>
             <span className={css.note}>Preselected from your defaults ·</span>
@@ -142,7 +177,7 @@ export function OptionsPanel(props: Props) {
             >
               edit defaults
             </button>
-            {overridden > 0 && (
+            {writingOverridden > 0 && (
               <button
                 type="button"
                 className={`btn btn-ghost ${css.link} ${css.resetAll}`}

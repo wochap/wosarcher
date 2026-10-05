@@ -278,6 +278,7 @@ class Runner:
             warnings=[*self.warnings, *outcome.warnings],
             passthrough=outcome.passthrough,
             unfetched=outcome.unfetched,
+            filtered=outcome.filtered,
             round=number,
         )
         self.warnings = []

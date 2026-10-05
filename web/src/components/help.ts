@@ -209,6 +209,24 @@ export const HELP: Record<string, Help> = {
     title: "GPU policy",
     body: "Shared keeps all models loaded. Exclusive unloads a model before the next one on the same GPU loads; it needs unload support.",
   },
+  rdefaults: {
+    title: "Run defaults",
+    body: "Preselected on every new run. A profile can set its own domain lists; runs on that profile use those instead.",
+  },
+  "d-allow": {
+    title: "Allow domains",
+    body: "Only search results from these domains and their subdomains are used. Empty allows every domain. Your files are never filtered.",
+    example: "gob.pe, sunat.gob.pe",
+  },
+  "d-block": {
+    title: "Block domains",
+    body: "Search results from these domains and their subdomains are dropped, even when they are also allowed.",
+    example: "facebook.com",
+  },
+  "d-over": {
+    title: "Overridden",
+    body: "This list differs from the selected profile’s list and applies to this run only.",
+  },
   wdefaults: {
     title: "Writing defaults",
     body: "Used for every new run. Each run can override them in its options.",

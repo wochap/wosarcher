@@ -179,3 +179,25 @@ def test_profile_limits(client: TestClient) -> None:
     workstation = found["workstation"]
     assert workstation["context_window"] == 32768
     assert (workstation["prompt_reserve_tokens"], workstation["max_output_tokens"]) == (2000, 8192)
+
+
+def test_domain_defaults_normalised(client: TestClient) -> None:
+    assert client.put("/api/settings", json={"domains": {"block": ["*.Pinterest.com"]}}).status_code == 200
+    assert client.get("/api/settings").json()["domains"] == {"allow": [], "block": ["pinterest.com"]}
+
+
+def test_invalid_domain_default(client: TestClient, config_dir: Path) -> None:
+    response = client.put("/api/settings", json={"domains": {"allow": ["https://gob.pe/"]}})
+    assert response.status_code == 422
+    assert "domains.allow" in response.json()["detail"]
+    assert "https://gob.pe/" in response.json()["detail"]
+    assert not (config_dir / "server-settings.json").exists()
+
+
+def test_profile_domain_lists(client: TestClient, tmp_path: Path) -> None:
+    profiles = tmp_path / "config" / "wosarcher" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "nixos.toml").write_text('[search]\nprovider = "searxng"\nblock_domains = ["facebook.com"]\n')
+    found = {p["name"]: p for p in client.get("/api/profiles").json()}
+    assert (found["nixos"]["block_domains"], found["nixos"]["allow_domains"]) == (["facebook.com"], None)
+    assert found["workstation"]["block_domains"] is None

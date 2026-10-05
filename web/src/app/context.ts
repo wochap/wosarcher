@@ -2,7 +2,7 @@
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
 import type { SocketFactory } from "../api/events";
-import type { ResearchValues, WritingOptions } from "../api/types";
+import type { DomainLists, ResearchValues, WritingOptions } from "../api/types";
 import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
 import type { LiveRun } from "../run/useRun";
@@ -36,10 +36,12 @@ export type Draft = {
   files: File[];
   options: Partial<RunOptions>;
   writing: Partial<WritingOptions>;
+  /** Domain lists the user edited; an unedited list follows its default. */
+  domains: Partial<DomainLists>;
   /** The Custom depth's values and its default Length, once Custom was picked or edited. */
   custom?: { values: ResearchValues; words: number };
 };
-export const EMPTY_DRAFT: Draft = { query: "", files: [], options: {}, writing: {} };
+export const EMPTY_DRAFT: Draft = { query: "", files: [], options: {}, writing: {}, domains: {} };
 
 export type LiveTab = "progress" | "sources" | "passages" | "report";
 

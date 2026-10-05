@@ -419,3 +419,28 @@ def test_preset_between_environment_and_overrides(env: dict[str, str]) -> None:
     assert resolve("mid", [], env, depth="deep").plan.max_sub_queries == 6
     overrides = ["plan.max_sub_queries=2"]
     assert resolve("mid", overrides, env, depth="deep").plan.max_sub_queries == 2
+
+
+def test_domain_entries_normalised(env: dict[str, str]) -> None:
+    user_profile(env, "p", '[search]\nprovider = "searxng"\nallow_domains = ["*.GOB.pe", "gob.pe", "sbs.gob.pe"]\n')
+    assert resolve("p", [], env).search.allow_domains == ["gob.pe", "sbs.gob.pe"]
+
+
+def test_domain_url_rejected(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve(None, ['search.block_domains=["https://facebook.com/"]'], env)
+    assert "search.block_domains" in str(error.value)
+    assert "https://facebook.com/" in str(error.value)
+
+
+def test_domain_defaults(env: dict[str, str]) -> None:
+    search = resolve(None, [], env).search
+    assert search.allow_domains == []
+    assert search.block_domains == []
+    assert search.filter_pages == 3
+
+
+def test_preset_cannot_set_domains(tmp_path: Path) -> None:
+    (tmp_path / "narrow.toml").write_text('[search]\nallow_domains = ["gob.pe"]\n')
+    with pytest.raises(ConfigError, match=r"search\.allow_domains"):
+        load_depth("narrow", tmp_path)

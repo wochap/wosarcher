@@ -21,7 +21,11 @@ export const writing: WritingOptions = {
   reference_style: "APA",
 };
 
-export const settings: ServerSettings = { writing, sources: "both" };
+export const settings: ServerSettings = {
+  writing,
+  sources: "both",
+  domains: { allow: [], block: [] },
+};
 
 function run(
   run_id: string,

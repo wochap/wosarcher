@@ -8,7 +8,7 @@ import pytest
 
 from tests.runner.helpers import PAGES, PLAN_REPLY, QUERY, Releases, adapters, kinds, new_run, settings
 from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeManaged, FakeScorer, FakeSearcher, healthy
-from wosarcher.config import LLMConfig, PrefilterConfig, ScoreConfig, Settings
+from wosarcher.config import LLMConfig, PrefilterConfig, ScoreConfig, SearchConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     Chunk,
@@ -102,6 +102,18 @@ async def test_long_brief_skips_the_initial_search(tmp_path: Path) -> None:
     assert "hit.found:plan" not in kinds(store.read_events(run_id))
     hits = {hit.url: hit.query_ids for hit in store.read_items(run_id, "hits.jsonl", Hit)}
     assert hits == {"https://a.test/x": ["q0"], "https://c.test": ["q1"]}
+
+
+async def test_domain_filter_counted(tmp_path: Path) -> None:
+    search = SearchConfig(provider="searxng", allow_domains=["a.test"], filter_pages=1)
+    cfg = settings(tmp_path).model_copy(update={"search": search})
+    store = store_of(cfg)
+    run_id = new_run(store, cfg, until="fetch")
+    assert await run(cfg, run_id) == "done"
+    assert [hit.url for hit in store.read_items(run_id, "initial.jsonl", Hit)] == ["https://a.test/x"]
+    assert [hit.url for hit in store.read_items(run_id, "hits.jsonl", Hit)] == ["https://a.test/x"]
+    filtered = {stage: done_of(store, run_id, stage).data.filtered for stage in ("plan", "search", "fetch")}
+    assert filtered == {"plan": 1, "search": 1, "fetch": 0}
 
 
 async def test_query_at_the_limit_is_searched_first(tmp_path: Path) -> None:

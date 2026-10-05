@@ -6,6 +6,7 @@ survives a restart with no other state.
 
 import json
 import shutil
+from collections.abc import Collection
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -48,6 +49,8 @@ class StagedRun(RunCreate):
     """The writing options the run will use (for its summary)."""
     writing_flags: dict[str, object] = Field(default_factory=dict[str, object])
     """Emitted as `--set write.<field>=...` before `set`."""
+    domain_flags: dict[str, list[str]] = Field(default_factory=dict[str, list[str]])
+    """`search.allow_domains` and `search.block_domains` overrides, emitted after research and before `set`."""
     parent: str | None = None
     from_stage: Stage | None = None
     version: int = 1
@@ -80,6 +83,22 @@ def preset_words(depth: str | None) -> WritingPatch:
     return WritingPatch(words=depth_values(data).get("write.words"))
 
 
+DOMAIN_KEYS = {"allow": "search.allow_domains", "block": "search.block_domains"}
+
+
+def domain_lists(request: RunCreate, defaults: ServerSettings, own: Collection[str]) -> dict[str, list[str]]:
+    """The request's lists; else a non-empty global list whose key the profile and environment leave unset."""
+    lists: dict[str, list[str]] = {}
+    for field, key in DOMAIN_KEYS.items():
+        given: list[str] | None = getattr(request.domains, field)
+        default: list[str] = getattr(defaults.domains, field)
+        if given is not None:
+            lists[key] = given
+        elif default and key not in own:
+            lists[key] = default
+    return lists
+
+
 def base_name(name: str) -> str:
     """The last path part of an uploaded file name, with Windows separators too."""
     name = name.replace("\\", "/").rsplit("/", 1)[-1]
@@ -102,9 +121,17 @@ def write(runs_dir: Path, staged: StagedRun, uploads: list[Attachment]) -> Stage
 
 
 def stage_run(
-    runs_dir: Path, request: RunCreate, uploads: list[Attachment], defaults: ServerSettings, profile: str
+    runs_dir: Path,
+    request: RunCreate,
+    uploads: list[Attachment],
+    defaults: ServerSettings,
+    profile: str,
+    own: Collection[str] = (),
 ) -> StagedRun:
-    """A new run: global settings, then the depth preset's words, below the request's sources and writing."""
+    """A new run: global settings, then the depth preset's words, below the request's sources and writing.
+
+    `own`: what the run's profile and the environment set; a global domain list yields to it.
+    """
     if (request.sources or defaults.sources) == "files" and not uploads:
         raise StagingError(NO_ATTACHMENT)
     writing = merged(merged(defaults.writing, preset_words(request.depth)), request.writing)
@@ -117,6 +144,7 @@ def stage_run(
         resolved_profile=request.profile or profile,
         writing_options=writing,
         writing_flags=writing.model_dump(),
+        domain_flags=domain_lists(request, defaults, own),
     )
     return write(runs_dir, staged, uploads)
 
@@ -201,12 +229,13 @@ def attach_flags(path: Path) -> list[str]:
 
 
 def set_flags(staged: StagedRun) -> list[str]:
-    """Writing, then research, then the request's own `set`, each later one winning."""
+    """Writing, then research, then domains, then the request's own `set`, each later one winning."""
     writing = [f"write.{name}={toml_value(value)}" for name, value in staged.writing_flags.items()]
     research = [
         f"{RESEARCH_KEYS[name]}={value}" for name, value in staged.research.model_dump(exclude_none=True).items()
     ]
-    return [flag for value in [*writing, *research, *staged.set] for flag in ("--set", value)]
+    domains = [f"{key}={toml_value(value)}" for key, value in staged.domain_flags.items()]
+    return [flag for value in [*writing, *research, *domains, *staged.set] for flag in ("--set", value)]
 
 
 def depth_flags(staged: StagedRun) -> list[str]:

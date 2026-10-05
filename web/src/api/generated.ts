@@ -80,6 +80,10 @@ export type Status = ("ok" | "failed" | "built-in")
 export type Unload = ("yes" | "no" | "n/a")
 export type Providers = ProviderHealth[]
 export type Warnings = string[]
+export type Allow = string[]
+export type Block1 = string[]
+export type Allow1 = (string[] | null)
+export type Block2 = (string[] | null)
 export type Dimension = number
 export type Model1 = string
 export type Item = string
@@ -205,6 +209,8 @@ export type Candidates = Candidate[]
 export type Method = ("embeddings" | "bm25" | "none")
 export type Warnings3 = string[]
 export type Active = boolean
+export type AllowDomains = (string[] | null)
+export type BlockDomains = (string[] | null)
 export type ContextWindow1 = (number | null)
 export type Description1 = string
 export type MaxOutputTokens = (number | null)
@@ -415,6 +421,7 @@ export type Queries4 = QueryScores[]
 export type Scorer4 = string
 export type Scores = Score[]
 export type Failures1 = Skipped[]
+export type Filtered = number
 export type Hits = Hit[]
 export type ChunkId5 = string
 export type QueryId7 = string
@@ -440,6 +447,7 @@ export type Threshold = (number | null)
 export type Truncated2 = boolean
 export type CopiedFrom = (string | null)
 export type Count = number
+export type Filtered1 = number
 export type Passthrough1 = string[]
 export type Provider2 = (string | null)
 export type Round8 = number
@@ -673,6 +681,26 @@ provider: Provider
 release?: Release
 status: Status
 unload?: Unload
+}
+/**
+ * Global domain lists (`ServerSettings.domains`).
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "DomainDefaults".
+ */
+export interface DomainDefaults {
+allow?: Allow
+block?: Block1
+}
+/**
+ * Domain lists for one run; a given list replaces the configured one.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "DomainPatch".
+ */
+export interface DomainPatch {
+allow?: Allow1
+block?: Block2
 }
 /**
  * The embedding model identity used in cache keys.
@@ -1011,6 +1039,8 @@ warnings?: Warnings3
  */
 export interface ProfileInfo {
 active: Active
+allow_domains?: AllowDomains
+block_domains?: BlockDomains
 context_window?: ContextWindow1
 description?: Description1
 max_output_tokens?: MaxOutputTokens
@@ -1272,6 +1302,7 @@ export interface Stages {
  */
 export interface RunCreate {
 depth?: Depth
+domains?: DomainPatch1
 profile?: Profile2
 query: Query2
 research?: ResearchPatch1
@@ -1279,6 +1310,13 @@ set?: Set1
 sources?: Sources1
 until?: Until
 writing?: WritingPatch1
+}
+/**
+ * Domain lists for one run; a given list replaces the configured one.
+ */
+export interface DomainPatch1 {
+allow?: Allow1
+block?: Block2
 }
 /**
  * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
@@ -1542,6 +1580,7 @@ scores: Scores
  */
 export interface SearchResult {
 failures?: Failures1
+filtered?: Filtered
 hits: Hits
 }
 /**
@@ -1564,8 +1603,16 @@ tokens_needed?: TokensNeeded1
  * via the `definition` "ServerSettings".
  */
 export interface ServerSettings {
+domains?: DomainDefaults1
 sources?: Sources5
 writing?: WritingOptions2
+}
+/**
+ * Global domain lists (`ServerSettings.domains`).
+ */
+export interface DomainDefaults1 {
+allow?: Allow
+block?: Block1
 }
 export interface WritingOptions2 {
 citation_marker?: CitationMarker1
@@ -1634,6 +1681,7 @@ type?: Type17
 export interface StageDoneData {
 copied_from?: CopiedFrom
 count: Count
+filtered?: Filtered1
 passthrough?: Passthrough1
 provider?: Provider2
 round?: Round8

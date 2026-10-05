@@ -114,6 +114,16 @@ describe("runReducer", () => {
     expect(state.passthrough).toEqual(["q4", "q5"]);
   });
 
+  it("sums the hits filtered by domain over plan and search", () => {
+    const state = fold([
+      started,
+      stageDone(2, "plan", { filtered: 3 }),
+      stageDone(3, "search", { filtered: 9 }),
+      stageDone(4, "fetch", {}),
+    ]);
+    expect(state.filtered).toBe(12);
+  });
+
   it("is not a fallback when the same method ran without its model", () => {
     const state = fold([
       started,

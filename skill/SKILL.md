@@ -47,6 +47,16 @@ wosarcher run "<query>" --set select.max_context_tokens=8000 --until select --js
 A profile picks providers (search, fetch, embeddings, rerank, LLM).
 `--set KEY=VALUE` overrides one configuration field; repeat it for more.
 
+```sh
+wosarcher run "<query>" --allow-domain gob.pe --allow-domain sbs.gob.pe --until select --json
+wosarcher run "<query>" --block-domain pinterest.com --json
+```
+
+`--allow-domain` keeps only search results from that domain and its
+subdomains; `--block-domain` drops them. Repeat each flag for more
+domains; the given list replaces the profile's list for this run. Entries
+are bare domains (`gob.pe`), never URLs. Attachments are never filtered.
+
 ## 5. Writing options
 
 ```sh

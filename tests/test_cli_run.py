@@ -109,6 +109,27 @@ def test_gap_context_flag(world: World, tmp_path: Path) -> None:
     assert only_run(tmp_path).overrides == ["research.gap_context_tokens=auto"]
 
 
+def test_domain_flags(world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_SEARCH__ALLOW_DOMAINS", '["gob.pe"]')
+    args = ["run", "q", "--until", "search", "--allow-domain", "sunat.gob.pe", "--allow-domain", "sbs.gob.pe"]
+    result = runner.invoke(app, [*args, "--block-domain", "facebook.com"])
+    assert result.exit_code == 0, result.output
+    search = world.built[0].search
+    assert (search.allow_domains, search.block_domains) == (["sunat.gob.pe", "sbs.gob.pe"], ["facebook.com"])
+    assert only_run(tmp_path).overrides == [
+        'search.allow_domains=["sunat.gob.pe", "sbs.gob.pe"]',
+        'search.block_domains=["facebook.com"]',
+    ]
+
+
+def test_invalid_domain_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--allow-domain", "https://gob.pe/x"])
+    assert result.exit_code == 2
+    assert "search.allow_domains" in result.output
+    assert "https://gob.pe/x" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
 def test_token_budget_flag_rejects_words(world: World) -> None:
     result = runner.invoke(app, ["run", "q", "--context-tokens", "all"])
     assert result.exit_code == 2

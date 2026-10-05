@@ -179,6 +179,10 @@ stage searches `q0` (the topic line) with the sub-queries. The rule depends
 only on the query's length, so the plan and search steps, a resume, and a
 fork all decide the same way.
 
+The initial search goes through the search stage, so the domain filter
+(see Domain filter) applies to it: `initial.jsonl` holds only allowed
+hosts, and the planner sees only their snippets.
+
 `MAX_SEARCH_CHARS = 200` in `stages/search.py` is the one limit: the
 initial search rule, the fallback topic, the gap step's follow-up length,
 and the search stage, which cuts every query text it sends to the searcher
@@ -199,6 +203,32 @@ missing. When the planner does not run (sources `files`,
 read, `q0` is the fallback topic: the user's query, cut like a search
 query, or whole with sources `files` (nothing is searched; `q0` only
 scores the files). A missing or unreadable topic adds a warning.
+
+### Domain filter
+
+`search.allow_domains` and `search.block_domains` are lists of host
+suffixes: `gob.pe` matches `gob.pe`, `www.gob.pe`, and `cej.pj.gob.pe`, not
+`notgob.pe`. Hosts are compared without case, port, or a trailing dot. An
+empty allow list allows every domain; a blocked host is dropped even when
+it is also allowed. Entries are stored lowercase without a leading `*.` or
+`.` or a trailing dot, kept once in first order; an entry that is not a
+bare domain (scheme, path, port, white space, no `.`) fails validation
+with the field and the entry named. One function (`models.domain_list`)
+validates the settings, run requests, and the server's global lists.
+
+The search stage filters each query's hits before they are merged, counted
+against `search.max_results`, or reported as `hit.found`; the plan step's
+initial search and every sub-query and follow-up go through it. Each query
+keeps at most `search.max_results` kept hits, ranked 1 for the first kept
+hit. While a list is set, a query short of hits reads the next SearXNG
+result page, until it has enough hits, a page comes back empty, or
+`search.filter_pages` (3) pages were read; without a list only page 1 is
+read. A failure on a later page keeps the earlier hits and records the
+query's failure. The stage reports the number of distinct normalised URLs
+it dropped as `filtered` (see Events).
+
+Attachments are never filtered. A fork from `fetch` or later keeps the
+parent's hits, so a new domain list needs a fork from `plan` or a new run.
 
 ### Dedupe
 
@@ -620,8 +650,15 @@ behind each claim.
 One adapter per wire format, not per vendor: `base_url` and `api_key` select
 the provider. Every adapter has a fake for tests.
 
-Provider settings that matter: `search.max_results` (10), `search.language`,
-`search.time_range` (`day`, `week`, `month`, `year`); `fetch.only_main_content`,
+The SearXNG adapter reads one result page per call (`Searcher.search(query,
+page=1)` sends `pageno=page`) and returns every result of that page that
+has a URL, deduped by normalised URL; the search stage applies
+`search.max_results` and the domain filter.
+
+Provider settings that matter: `search.max_results` (10, applied by the
+search stage), `search.language`, `search.time_range` (`day`, `week`,
+`month`, `year`), `search.allow_domains` and `search.block_domains` (empty),
+`search.filter_pages` (3); `fetch.only_main_content`,
 `fetch.page_timeout` (45 s, must be below `fetch.timeout`; PDFs are slow),
 `fetch.max_chars` (50000). An unset `concurrency` takes the adapter default
 above; the planner and writer share one LLM client and its limit.
@@ -760,12 +797,15 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--run-id ID] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
   `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
   `research.gap_context_tokens`, and `research.rounds`, after the `--set`
-  values. The two token flags take a positive integer or `auto`. `--until` on a loop stage
+  values. The repeatable `--allow-domain` and `--block-domain` values
+  together set `search.allow_domains` and `search.block_domains` (as JSON
+  lists, after the research flags), replacing the configured list; a list
+  whose flag is not given is left alone. The two token flags take a positive integer or `auto`. `--until` on a loop stage
   stops after that stage in round 1. The progress view shows a `gap` row
   only for multi-round runs, "round k/N" on running loop rows, and one
   final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
@@ -847,7 +887,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `run.cancelled` | `stage` |
 | `stage.started` | `device`, `provider`, `round` |
 | `stage.progress` | `done`, `total`, `failed`, `round` (at most every 250 ms, plus a final one) |
-| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`, that round's), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough`, `unfetched`, `round` |
+| `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`, that round's), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough`, `unfetched`, `filtered`, `round` |
 | `stage.failed` | `error`, `next` (empty when none) |
 | `resource.waiting`, `resource.released` | `device`, `released_stage` |
 | `plan.ready` | `queries` |
@@ -869,7 +909,9 @@ the configured block; on `stage.done` it names what actually ran, in the
 same form. Prefilter reports `embeddings:<model>` when embeddings ran as
 configured, and `bm25` or `none` otherwise. `passthrough` lists, in plan
 order, the sub-queries whose pairs skipped ranking (small-input
-passthrough); only prefilter sets it.
+passthrough); only prefilter sets it. `filtered` counts the distinct hits
+the domain filter dropped: plan counts its initial search, search its own
+queries, and every other stage reports 0.
 
 `seq` is assigned by the store's append, so the log has no gaps.
 `run.queued`, `report.delta`, and `report.snapshot` are live only and never
@@ -930,13 +972,20 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
   `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`
   at most 8; the two token values may also be `auto`), `writing`,
-  and `set`. Request
+  `domains` (`allow`, `block`, each optional; a given list replaces the
+  configured one for this run; an invalid entry is 422 naming
+  `domains.allow` or `domains.block` and the entry), and `set`. Request
   precedence, each later layer winning: defaults, profile, environment,
   global settings, the depth preset, the request's `sources`, `research`,
-  and `writing`, then its `set`. The server builds the writing flags from
-  the global writing, then the preset's `write.words`, then the request's
-  `writing`; passes `--depth`; and emits the research values as `--set`
-  after the writing flags and before the request's `set`.
+  `writing`, and `domains`, then its `set`. The server builds the writing
+  flags from the global writing, then the preset's `write.words`, then the
+  request's `writing`; passes `--depth`; and emits the research values,
+  then the domain lists, as `--set` after the writing flags and before the
+  request's `set`. The global domain lists sit below the profile instead:
+  at staging, a non-empty global list is passed as `--set` only when
+  neither the run's profile nor the environment sets that list (the same
+  resolution `GET /api/profiles` uses), so a profile's own list wins. The
+  decision is recorded with the run's overrides, so a rerun repeats it.
 - `GET /api/runs`, `GET /api/runs/{id}`: `RunSummary` (status `queued`,
   `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
   `until`; `depth`, null for older runs; resolved writing options; `duration_s`; `cost`;
@@ -996,7 +1045,9 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   treated as ended; a run that ended without a run directory gets its
   terminal event (`seq` 0) and 1000.
 - `GET /api/settings` and `PUT /api/settings`: global defaults
-  (`ServerSettings`: all writing options and `sources`), stored in
+  (`ServerSettings`: all writing options, `sources`, and `domains` with
+  `allow` and `block`, empty by default and validated like
+  `search.allow_domains`), stored in
   `<config dir>/server-settings.json`. They apply only to runs started by
   the server, as `--set write.*` values after the profile and before the
   request's `writing` and `set` (request wins). CLI runs use the profile.
@@ -1007,7 +1058,10 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `description` (empty when the profile sets none), and the resolved
   `context_window`, `prompt_reserve_tokens`, and `max_output_tokens` (all
   null when the profile does not resolve), so the New
-  run form can show the effective context budget.
+  run form can show the effective context budget; `allow_domains` and
+  `block_domains`, the list the profile (or the environment) sets, or null
+  when it sets none, so a client can tell a profile's list from the global
+  default.
 - `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
   `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
@@ -1169,7 +1223,9 @@ Settings: `auth.password_hash`, `auth.session_days`, `auth.allowed_origins`.
 
 Precedence: built-in defaults < profile < environment < server global
 settings (server runs only) < depth preset < CLI flags or request fields.
-The profile name itself is read from the CLI or environment first, then the
+The server's global domain lists are the exception: they apply only when
+the profile and environment set no list of their own (see Server). The
+profile name itself is read from the CLI or environment first, then the
 profile loads. `config.resolve(profile, overrides, env, depth)` does the
 whole resolution in one function and validates once; errors name the source
 of the bad value (profile file, environment variable, depth preset file, or
@@ -1182,7 +1238,7 @@ one-line `description`. A preset may set only `plan.max_sub_queries`,
 `select.max_context_tokens`, `research.gap_context_tokens`,
 `research.rounds`, `research.queries_per_round`, and `write.words`
 (`DEPTH_KEYS`); any other key fails when it loads, naming the file and the
-key. No built-in preset sets either token budget, so every preset uses
+key, so a preset cannot set the domain lists. No built-in preset sets either token budget, so every preset uses
 `auto` context and a 4000-token gap budget. The planner decides how many
 sub-queries a question needs, so a higher limit costs only when the
 question has that many topics.
@@ -1429,6 +1485,18 @@ These override the prototype where they differ:
   browser opens one event stream per distinct `copied_from` and shows that
   run's sub-queries, sources (marked "cached"), and passages for the
   reused phases.
+- **Domain lists:** the New run "Allow domains" and "Block domains" rows
+  start from the selected profile's list (`GET /api/profiles`), else the
+  global run default (`GET /api/settings` `domains`), and send
+  `domains.allow` or `domains.block` only for an overridden row. Entries
+  are checked with the server's rule before sending. The Settings "Run
+  defaults" section saves the global lists on the server, not in the
+  browser; its prototype Format row is not built. The Search card's
+  "<F> filtered by domain" line shows the sum of `filtered` from the plan
+  and search `stage.done` events, not a share scaled by progress.
+- **Start errors:** every start failure shows the error box ("Couldn’t
+  start the run" and the server's detail); "Fix in Options" appears only
+  when the detail names `domains.allow` or `domains.block`.
 - **Citation options:** two settings, `citation_marker` and
   `reference_style` (see Writing options).
 - **Tones:** the 11 tones in Writing options. Default length 1200 words.

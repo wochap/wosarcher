@@ -43,16 +43,31 @@ class FakeManaged:
 
 
 class FakeSearcher(FakeManaged):
-    def __init__(self, hits: Mapping[str, list[str]] | None = None) -> None:
-        super().__init__(healthy("search", "fake"))
-        self.hits = dict(hits or {})
-        self.calls: list[Query] = []
+    """`hits`: page 1 per query text; `pages`: every page per query text; `failing`: (text, page) pairs that raise."""
 
-    async def search(self, query: Query) -> list[Hit]:
-        self.calls.append(query)
+    def __init__(
+        self,
+        hits: Mapping[str, list[str]] | None = None,
+        *,
+        pages: Mapping[str, list[list[str]]] | None = None,
+        failing: set[tuple[str, int]] | None = None,
+    ) -> None:
+        super().__init__(healthy("search", "fake"))
+        self.pages = {text: [urls] for text, urls in (hits or {}).items()} | dict(pages or {})
+        self.failing = set(failing or ())
+        self.calls: list[Query] = []
+        self.requests: list[tuple[str, int]] = []
+
+    async def search(self, query: Query, page: int = 1) -> list[Hit]:
+        if page == 1:
+            self.calls.append(query)
+        self.requests.append((query.text, page))
+        if (query.text, page) in self.failing:
+            raise RuntimeError(f"fake: page {page} of {query.text} failed")
+        found = self.pages.get(query.text, [])
+        urls = found[page - 1] if page <= len(found) else []
         return [
-            Hit(url=url, title=url, snippet="", rank=rank, query_ids=[query.id])
-            for rank, url in enumerate(self.hits.get(query.text, []), start=1)
+            Hit(url=url, title=url, snippet="", rank=rank, query_ids=[query.id]) for rank, url in enumerate(urls, 1)
         ]
 
 

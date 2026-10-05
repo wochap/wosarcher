@@ -211,4 +211,60 @@ describe("Depth", () => {
     fireEvent.click(screen.getByLabelText("Custom"));
     expect((screen.getByLabelText("Sub-queries") as HTMLInputElement).value).toBe("6");
   });
+
+  it("starts the domain rows from the profile's lists, else the global defaults", async () => {
+    const api = fakeApi();
+    api.data.profiles[0].allow_domains = ["gob.pe", "sbs.gob.pe"];
+    api.data.profiles[0].block_domains = null;
+    api.data.settings.domains.block = ["facebook.com"];
+    await openOptions(api);
+    expect(screen.getByRole("button", { name: "Remove gob.pe" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove sbs.gob.pe" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove facebook.com" })).toBeTruthy();
+    expect(header()).not.toContain("overridden");
+    expect((await start(api)).domains).toBeUndefined();
+  });
+
+  it("sends an overridden Allow list for one run", async () => {
+    const api = await openOptions();
+    const allow = screen.getByLabelText("Allow domains");
+    fireEvent.change(allow, { target: { value: "gob.pe pj.gob.pe" } });
+    fireEvent.blur(allow);
+    expect(screen.getByText("default: none")).toBeTruthy();
+    expect(header()).toContain("1 overridden");
+    expect((await start(api)).domains).toEqual({ allow: ["gob.pe", "pj.gob.pe"] });
+  });
+
+  it("sends an empty list when a default list is cleared", async () => {
+    const api = fakeApi();
+    api.data.settings.domains.block = ["facebook.com"];
+    await openOptions(api);
+    fireEvent.click(screen.getByRole("button", { name: "Remove facebook.com" }));
+    expect(screen.getByText("default: facebook.com")).toBeTruthy();
+    expect(screen.getByText("overridden")).toBeTruthy();
+    expect((await start(api)).domains).toEqual({ block: [] });
+  });
+
+  it("follows the selected profile's lists while the rows are not edited", async () => {
+    const api = fakeApi();
+    api.data.profiles[1].block_domains = ["quora.com"];
+    api.data.settings.domains.allow = ["gob.pe"];
+    await openOptions(api);
+    expect(screen.queryByRole("button", { name: "Remove quora.com" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    expect(screen.getByRole("button", { name: "Remove quora.com" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remove gob.pe" })).toBeTruthy();
+    expect(screen.queryByText("overridden")).toBeNull();
+  });
+
+  it("ends the Run group with the domain rows", async () => {
+    await openOptions();
+    const labels = ["Recipe", "Sources", "Profile", "Allow domains", "Block domains"];
+    const found = labels.map((label) => screen.getAllByText(label)[0]);
+    for (let n = 1; n < found.length; n++) {
+      expect(
+        found[n - 1].compareDocumentPosition(found[n]) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
 });
