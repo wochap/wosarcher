@@ -91,8 +91,8 @@ prefix `WOSARCHER_` and `__` as the nesting separator (for example
 - **THEN** the resolved `score.provider` is `bm25`
 
 #### Scenario: Unset values fall back to defaults
-- **WHEN** neither the profile, the environment, nor an override sets `chunk.size`
-- **THEN** the resolved `chunk.size` is the built-in default 1000
+- **WHEN** neither the profile, the environment, nor an override sets `chunk.size_chars`
+- **THEN** the resolved `chunk.size_chars` is the built-in default 1800
 
 #### Scenario: Preset between environment and overrides
 - **WHEN** the profile sets `select.max_context_tokens = 12000`, the run uses depth `deep`, and the command adds `--set select.max_context_tokens=20000`
@@ -152,9 +152,20 @@ Fields a provider does not use SHALL be ignored by it, not rejected.
 Configuration SHALL be validated when it is resolved. An invalid value SHALL
 stop the command before any provider is called, with an error that names
 the source (profile file, environment variable, or override) and the field.
+`chunk.overlap` and `chunk.min_chars` SHALL each be below
+`chunk.size_chars`. An unknown key, such as the removed `chunk.size`,
+SHALL fail like any other invalid value.
 
 #### Scenario: Invalid type in profile
-- **WHEN** a profile file sets `chunk.size = "large"`
+- **WHEN** a profile file sets `chunk.size_chars = "large"`
+- **THEN** the command fails and the error names the profile file and `chunk.size_chars`
+
+#### Scenario: Floor above size
+- **WHEN** an override sets `chunk.min_chars=2000` while `chunk.size_chars` is 1800
+- **THEN** the command fails and the error names `chunk.min_chars`
+
+#### Scenario: Old key
+- **WHEN** a profile file sets `chunk.size = 1000`
 - **THEN** the command fails and the error names the profile file and `chunk.size`
 
 ### Requirement: Secret redaction

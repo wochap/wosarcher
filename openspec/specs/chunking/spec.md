@@ -9,22 +9,34 @@ exact place each passage came from.
 ## Requirements
 
 ### Requirement: Split by headings, then by size
-Pages SHALL be split at markdown headings into sections. A section longer
-than `chunk.size` characters (default 1000) SHALL be split into chunks of
-at most `chunk.size` characters, where each chunk after the first repeats
-the last `chunk.overlap` characters (default 100) of the previous one.
-Splits SHALL fall on a paragraph, line, or word boundary when one exists
-in the second half of the window. Sections with no text after stripping
-SHALL produce no chunk. Headings inside fenced code blocks SHALL NOT split
-a section.
+Pages SHALL be split at markdown headings into sections. Short sections
+SHALL then be merged (Requirement: Merge short sections). A merged group
+longer than `chunk.size_chars` characters (default 1800) SHALL be split
+into chunks of at most `chunk.size_chars` characters, where each chunk
+after the first repeats the last `chunk.overlap` characters (default 150)
+of the previous one. Splits SHALL fall on a paragraph, line, or word
+boundary when one exists in the second half of the window. When a split
+would leave a last chunk shorter than `chunk.min_chars` (default 500), the
+previous split SHALL move earlier so the last chunk has at least
+`chunk.min_chars` characters. Sections with no text after stripping SHALL
+produce no chunk of their own. Headings inside fenced code blocks SHALL
+NOT split a section.
+
+#### Scenario: Two short sections
+- **WHEN** a page has the headings "A" and "B", each with 200 characters of text, and `chunk.min_chars = 500`
+- **THEN** it produces one chunk holding both sections
 
 #### Scenario: Two sections
-- **WHEN** a page has the headings "A" and "B", each with 200 characters of text
+- **WHEN** a page has the headings "A" and "B", each with 1000 characters of text, `chunk.size_chars = 1800`, and `chunk.min_chars = 500`
 - **THEN** it produces two chunks, one per section
 
 #### Scenario: Long section
-- **WHEN** a section has 2500 characters of text with `chunk.size = 1000` and `chunk.overlap = 100`
-- **THEN** it produces three chunks of at most 1000 characters each, and each later chunk starts with text from the end of the previous one
+- **WHEN** a section has 4000 characters of text with `chunk.size_chars = 1800`, `chunk.overlap = 150`, and `chunk.min_chars = 500`
+- **THEN** it produces three chunks of at most 1800 characters each, and each later chunk starts with text from the end of the previous one
+
+#### Scenario: No short last chunk
+- **WHEN** a section has 1900 characters of text with `chunk.size_chars = 1800`, `chunk.overlap = 150`, and `chunk.min_chars = 500`
+- **THEN** it produces two chunks and the second has at least 500 characters
 
 #### Scenario: Heading in code
 - **WHEN** a fenced code block contains a line starting with `# `
@@ -33,11 +45,19 @@ a section.
 ### Requirement: Heading path
 Each chunk SHALL carry its heading path: the text of every heading above
 it, from the top level down. Text before the first heading SHALL have an
-empty heading path. Heading text SHALL NOT be repeated in the chunk text.
+empty heading path. Heading text in the heading path SHALL NOT be repeated
+in the chunk text. A chunk made of merged sections SHALL carry the
+headings the merged sections share (their common parent, possibly empty),
+and every heading below that parent SHALL appear in the chunk text as a
+plain line, once, where it occurs in the page.
 
 #### Scenario: Nested headings
-- **WHEN** text sits under "## Results" and then "### Latency"
+- **WHEN** text sits under "## Results" and then "### Latency", and the section is not merged
 - **THEN** its chunk has the heading path `["Results", "Latency"]`
+
+#### Scenario: Merged siblings
+- **WHEN** "## Requisitos" has two short subsections "### Presencial" and "### Virtual" that are merged into one chunk
+- **THEN** the chunk has the heading path `["Requisitos"]`, and its text contains the lines "Presencial" and "Virtual" before their sections' text
 
 ### Requirement: Chunk identity and order
 Each chunk SHALL carry its source ID, its position (0, 1, 2, … in page
@@ -81,3 +101,72 @@ ends trimmed. The result SHALL report how many chunks were removed.
 #### Scenario: Same paragraph on two pages
 - **WHEN** two pages contain the same paragraph with different spacing and punctuation
 - **THEN** only the chunk from the first page is kept and the duplicate count is 1
+
+### Requirement: Merge short sections
+Sections SHALL be merged in page order: a section whose stripped text is
+shorter than `chunk.min_chars` SHALL be joined with the sections after it
+until the group reaches `chunk.min_chars` characters, as long as the
+group stays within `chunk.size_chars`. A short last group SHALL join the
+group before it when the result stays within `chunk.size_chars`. A section
+with a heading and no text SHALL join the next section, so its heading
+reaches the chunk. `chunk.min_chars = 0` SHALL turn merging and the
+last-chunk floor off. Merging SHALL never drop text: a page shorter than
+`chunk.min_chars` SHALL produce one chunk. pdf-ingest page and block IDs
+SHALL follow the merged text (Requirement: pdf-ingest anchors).
+
+#### Scenario: Short page stays
+- **WHEN** a web page has one section of 90 characters and `chunk.min_chars = 500`
+- **THEN** it produces one chunk of that text
+
+#### Scenario: Merge stops at the size limit
+- **WHEN** a 300-character section is followed by a 1700-character section, with `chunk.size_chars = 1800` and `chunk.min_chars = 500`
+- **THEN** the sections are not merged, because together they exceed 1800 characters
+
+#### Scenario: Short tail joins the previous group
+- **WHEN** a page ends with a 120-character section after a 900-character section, with `chunk.size_chars = 1800` and `chunk.min_chars = 500`
+- **THEN** the last chunk holds both sections
+
+#### Scenario: Merging off
+- **WHEN** `chunk.min_chars = 0` and a page has the headings "A" and "B", each with 200 characters of text
+- **THEN** it produces two chunks, one per section
+
+### Requirement: Boilerplate removal
+Before merging, each section of a web page SHALL be dropped as
+boilerplate when its text is mostly links (it has at least two links or
+bare URLs, and link text and bare URLs make up at least half of its
+characters) or when it has at most 12 words, no
+sentence punctuation (`.`, `?`, `!`, `;`, `:`) outside URLs, and is not a
+list (every line a list item). Sections with
+a heading and no text are not boilerplate. When every section of a page
+is boilerplate, its longest section SHALL be kept, so every page with text
+keeps at least one chunk. File pages (attachments) SHALL never lose a
+section as boilerplate. The chunk result SHALL report how many sections
+were dropped as boilerplate, next to the near-duplicate count.
+
+#### Scenario: Skip link
+- **WHEN** a web page starts with a section whose text is "Saltar a contenido principal", followed by a paragraph of real text
+- **THEN** no chunk contains "Saltar a contenido principal" and the boilerplate count is 1
+
+#### Scenario: Link list
+- **WHEN** a web page section is a list of six markdown links with no other text
+- **THEN** that section produces no chunk
+
+#### Scenario: Bare URL
+- **WHEN** a web page section is "Pasar al contenido principal" followed by a bare `https://` URL
+- **THEN** that section produces no chunk
+
+#### Scenario: Short sentence kept
+- **WHEN** a web page section is "Código municipal y clave virtual."
+- **THEN** the section is not boilerplate
+
+#### Scenario: Short list kept
+- **WHEN** a web page section under "Requisitos" is the single linked list item "* [Casilla electrónica judicial](https://www.gob.pe/…)"
+- **THEN** the section is not boilerplate
+
+#### Scenario: Attachment untouched
+- **WHEN** an attached file has a section "Saltar a contenido principal"
+- **THEN** its text is kept
+
+#### Scenario: Navigation-only page
+- **WHEN** every section of a web page is boilerplate
+- **THEN** the page produces one chunk, from its longest section
