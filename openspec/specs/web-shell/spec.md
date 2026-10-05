@@ -701,3 +701,35 @@ in the prototype's Run history screen, taken from the run's summary in
 #### Scenario: Older run
 - **WHEN** a run's summary has `depth = null`
 - **THEN** its row shows "Standard"
+
+### Requirement: Run defaults
+The Settings screen (scenario `settings`) SHALL show a "Run defaults"
+section above "Writing defaults": the heading "Run defaults" followed by
+its help button and the muted 12px text "Preselected on every new run ·
+saved automatically", then the rows Allow domains and Block domains with
+the chips input, hint, and help buttons of the New run domain rows (web-run
+"Domain rows" and "Domain help"), without overridden marks. The rows SHALL
+load from `GET /api/settings` (`domains`). Each change SHALL be saved with
+`PUT /api/settings` without a save button, and the "Saved" mark with a
+check SHALL show for 1.5 seconds after the server accepts it; a rejected
+value SHALL show the server's error under the row and restore the previous
+list. When any profile from `GET /api/profiles` sets its own list, the
+section SHALL show the note "The <names> profiles set their own domain
+lists; runs on those profiles use them instead.", with the profile names
+joined by " and ". The section's help button SHALL read, verbatim: title
+"Run defaults", body "Preselected on every new run. A profile can set its
+own domain lists; runs on that profile use those instead." The prototype's
+Format row in this section belongs to another change and SHALL NOT be shown
+yet.
+
+#### Scenario: Autosave a block list
+- **WHEN** the user adds `pinterest.com` to Block domains in Settings
+- **THEN** `PUT /api/settings` is sent with `domains.block` = `["pinterest.com"]` and "Saved" appears
+
+#### Scenario: Profiles with their own lists
+- **WHEN** `GET /api/profiles` returns `low-vram` with `block_domains = ["pinterest.com", "quora.com"]` and `nixos` with `block_domains = ["facebook.com"]`, and every other profile with null lists
+- **THEN** the section shows "The low-vram and nixos profiles set their own domain lists; runs on those profiles use them instead."
+
+#### Scenario: New run follows the default
+- **WHEN** the selected profile sets no Allow list, the New run Allow row is not edited, and the user sets the global Allow default to `gob.pe`
+- **THEN** the New run Allow row shows gob.pe without an "overridden" mark

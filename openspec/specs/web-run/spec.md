@@ -54,7 +54,8 @@ Depth control), then the Run group. The Run group SHALL offer:
   `GET /api/profiles` by name. A profile whose `source` is `user` is
   followed by "  (user profile)", and the active one is preselected. The
   selected profile's `description` is shown under the select (12px, muted,
-  4px above) when it is not empty.
+  4px above) when it is not empty;
+- Allow domains and Block domains (Requirement: Domain rows).
 
 Each Run label sits at the top of its row in the prototype's form grid.
 Recipe `context` SHALL start the run with `until` set to `select`, so no
@@ -75,6 +76,10 @@ report is written.
 #### Scenario: Summary
 - **WHEN** the depth is Deep, recipe `report`, sources `both`, profile `workstation`, tone objective, and words 2000
 - **THEN** the collapsed header reads "Deep · report · both · workstation · 2000 words · Objective"
+
+#### Scenario: Domain rows in the Run group
+- **WHEN** the user opens the Options panel (scenario `new-domains`)
+- **THEN** the Run group shows Recipe, Sources, Profile, Allow domains, and Block domains, in that order
 
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
@@ -122,11 +127,27 @@ Starting a run SHALL send `POST /api/runs` with the question, the run options,
 the overridden writing fields, and the attachments, then show the new run
 on the Live run screen and make it the followed run. When the server
 rejects the request, the New run screen SHALL keep every input and show the
-server's message.
+error box of the prototype scenarios `new-error` and `new-domain-error`,
+8px below the Run research button, with `role="alert"`: the danger-tinted
+box with the warning-circle icon, the title "Couldn’t start the run", and
+the server's message below it in the mono font (11.5px, muted, wrapping
+anywhere). When the error names a New run field (a domain list), the box
+SHALL also show the ghost button "Fix in Options", which opens the Options
+panel and focuses that field; otherwise the button SHALL NOT be shown.
+Editing the named field SHALL clear the box. The box SHALL use the
+Nocturne variables only.
 
 #### Scenario: Started
 - **WHEN** the server accepts the run and returns its id
 - **THEN** the Live run screen shows that run with status Connecting
+
+#### Scenario: Rejected without a field
+- **WHEN** the server answers 422 with the detail "profile "gpu-box" does not exist. Known profiles: low-vram, workstation, cloud." (scenario `new-error`)
+- **THEN** the question and options are kept, the box shows "Couldn’t start the run" and the message, and no "Fix in Options" button is shown
+
+#### Scenario: Rejected domain entry
+- **WHEN** the server rejects `domains.allow` because of the entry `gob.pe/tramites` (scenario `new-domain-error`)
+- **THEN** the box shows the message and "Fix in Options"; pressing it opens the Options panel and focuses Allow domains
 
 ### Requirement: Live run header
 The Live run screen (scenario `live`) SHALL show a header with the status
@@ -1154,3 +1175,98 @@ The Report screen meta line of a multi-round run SHALL end with " · <ran> of
 #### Scenario: Deep report
 - **WHEN** a deep run's summary has `rounds_planned` 3 and `rounds_ran` 2
 - **THEN** the meta line ends with "· 2 of 3 rounds"
+
+### Requirement: Domain rows
+The Run group of the Options panel (scenarios `new-domains` and
+`new-domain-error`) SHALL end with the rows "Allow domains" and "Block
+domains", each label followed by its help button (Requirement: Domain
+help), in the prototype's form grid. Each row SHALL hold a chips input:
+- every entry shows as a chip with a remove button labelled
+  "Remove <entry>";
+- typing or pasting a comma, a space, or a new line, pressing Enter, or
+  leaving the input adds the typed text as entries, lowercased, with a
+  trailing dot removed, skipping entries already in the list;
+- Backspace in an empty input removes the last chip;
+- with no chip, the placeholder is "any domain" for Allow and "none" for
+  Block;
+- under Allow domains the hint "Suffix match: gob.pe also matches
+  www.gob.pe." (12px, muted).
+
+Each row SHALL start from its default list: the selected profile's own list
+when the profile sets one (`allow_domains` or `block_domains` from `GET
+/api/profiles` not null), else the global run default (`GET
+/api/settings`). A row SHALL follow its default when the profile or the
+default changes, unless the user edited it. A row whose entries differ from
+its default SHALL show the "overridden" mark with its help button,
+"default: <list>" (entries joined by ", ", or "default: none"), and a Reset
+button, as the writing overrides do, and SHALL count in the panel header's
+"N overridden". "Reset all to defaults" SHALL stay limited to the writing
+fields. The run request SHALL carry `domains.allow` or `domains.block` only
+for an overridden row, as the list of its entries; an overridden row with
+no entries SHALL send an empty list.
+
+Before sending, the New run screen SHALL check each entry with the server's
+rule (lowercase letters, digits, and hyphens in two or more dot-separated
+labels, no leading hyphen). An invalid entry SHALL stop the start, open the
+Options panel, and show the start error box (Requirement: Start a run) with
+the field named. The invalid chip SHALL turn danger-colored with a dashed
+border, the row's input SHALL be marked invalid, and the note "Not a
+domain: <entry>. Use the domain only, without a path." SHALL show under the
+row. A server rejection of a domain list SHALL mark the chip the server
+names the same way.
+
+#### Scenario: Profile defaults
+- **WHEN** the selected profile has `allow_domains = ["gob.pe", "sbs.gob.pe"]` and `block_domains = null`, and the global Block default is `["facebook.com"]`
+- **THEN** Allow domains shows the chips gob.pe and sbs.gob.pe, Block domains shows facebook.com, neither is overridden, and the run request has no `domains`
+
+#### Scenario: Override for one run
+- **WHEN** the defaults allow no domain and the user types "gob.pe pj.gob.pe" in Allow domains and starts the run
+- **THEN** Allow domains showed "overridden" and "default: none", the header counted 1 overridden, and the request has `domains.allow` = `["gob.pe", "pj.gob.pe"]` and no `domains.block`
+
+#### Scenario: Clear a default list
+- **WHEN** the Block default is `["facebook.com"]` and the user removes its chip
+- **THEN** the row shows "overridden" and "default: facebook.com", and the request has `domains.block` = `[]`
+
+#### Scenario: Backspace removes the last chip
+- **WHEN** Allow domains has gob.pe and sunat.gob.pe and the user presses Backspace in the empty input
+- **THEN** only gob.pe remains
+
+#### Scenario: Invalid entry caught before sending
+- **WHEN** Allow domains holds `gob.pe/tramites` and the user presses Run research (scenario `new-domain-error`)
+- **THEN** no request is sent, the chip turns danger-colored, the note "Not a domain: gob.pe/tramites. Use the domain only, without a path." shows under the row, and the start error box shows "Fix in Options"
+
+#### Scenario: Profile change
+- **WHEN** neither row is edited and the user selects another profile
+- **THEN** both rows show that profile's lists, or the global defaults for lists it does not set
+
+### Requirement: Domain help
+The Options panel and the Settings "Run defaults" section SHALL place help
+buttons (web-shell "Inline help") after "Allow domains" and "Block
+domains", with these titles, bodies, and examples verbatim (the accessible
+label is "Help: <label>"):
+
+| Placement | Label | Title | Body | Example |
+|---|---|---|---|---|
+| after "Allow domains" | Allow domains | Allow domains | Only search results from these domains and their subdomains are used. Empty allows every domain. Your files are never filtered. | gob.pe, sunat.gob.pe |
+| after "Block domains" | Block domains | Block domains | Search results from these domains and their subdomains are dropped, even when they are also allowed. | facebook.com |
+
+#### Scenario: Allow help
+- **WHEN** the user focuses the help button after "Allow domains"
+- **THEN** the tooltip reads "Allow domains" and "Only search results from these domains and their subdomains are used. Empty allows every domain. Your files are never filtered."
+
+### Requirement: Search card filtered count
+When the run's plan and search stages together report a `filtered` count
+F > 0 (summed over every round), the Search phase card (scenario
+`live-domains`) SHALL show a second muted 11px line under its progress
+text, clipped with "…", reading "<F> filtered by domain", with the full
+text as its hover title. With F = 0 the card SHALL have no such line. The
+line SHALL use the style of the Prefilter card detail line (Requirement:
+Prefilter card detail).
+
+#### Scenario: Filtered hits
+- **WHEN** the plan stage reports `filtered` 3 and the search stage reports `filtered` 9
+- **THEN** the Search card's detail line reads "12 filtered by domain"
+
+#### Scenario: Nothing filtered
+- **WHEN** no domain list is set
+- **THEN** the Search card has no detail line

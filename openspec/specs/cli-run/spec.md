@@ -15,7 +15,9 @@ files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
 `--tone-instructions`, `--words`, `--language`, `--citation-marker`,
 `--reference-style`, `--sub-queries N`, `--results-per-query N`,
 `--max-pages N`, `--passages-per-query N`, `--context-tokens N|auto`,
-`--gap-context-tokens N|auto`, `--rounds N`, `--run-id ID`, and `--json`. Each writing flag SHALL act as
+`--gap-context-tokens N|auto`, `--rounds N`, `--allow-domain DOMAIN`
+(repeatable), `--block-domain DOMAIN` (repeatable), `--run-id ID`, and
+`--json`. Each writing flag SHALL act as
 `--set write.<field>=<value>`. Each research flag SHALL act as `--set` on
 its key:
 - `--sub-queries`: `plan.max_sub_queries`
@@ -28,8 +30,13 @@ its key:
   integer or `auto`)
 - `--rounds`: `research.rounds`
 
-Writing and research flags SHALL take precedence over `--set` for the same
-field. The depth preset SHALL apply below all of them (depth-presets
+The `--allow-domain` values together SHALL set `search.allow_domains`, and
+the `--block-domain` values `search.block_domains`, replacing the
+configured list for that run; a list whose flag is not given is left
+unchanged.
+
+Writing, research, and domain flags SHALL take precedence over `--set` for
+the same field. The depth preset SHALL apply below all of them (depth-presets
 "Preset expansion").
 
 #### Scenario: Writing flag
@@ -59,6 +66,14 @@ field. The depth preset SHALL apply below all of them (depth-presets
 #### Scenario: Gap context flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --gap-context-tokens auto`
 - **THEN** the resolved `research.gap_context_tokens` is `auto` and `request.json` records that override
+
+#### Scenario: Domain flags
+- **WHEN** the profile sets `search.allow_domains = ["gob.pe"]` and the user runs `wosarcher run "q" --allow-domain sunat.gob.pe --allow-domain sbs.gob.pe --block-domain facebook.com`
+- **THEN** the resolved `search.allow_domains` is `["sunat.gob.pe", "sbs.gob.pe"]`, `search.block_domains` is `["facebook.com"]`, and `request.json` records both overrides
+
+#### Scenario: Invalid domain flag
+- **WHEN** the user runs `wosarcher run "q" --allow-domain "https://gob.pe/x"`
+- **THEN** the command fails with exit status 2 before creating a run, with an error that names `search.allow_domains` and the entry
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,

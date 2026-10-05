@@ -9,12 +9,14 @@ URL that allows JSON output), returning ranked hits for the fetch stage.
 
 ### Requirement: SearXNG JSON search
 The search adapter SHALL send `GET <base_url>/search` with the query text,
-`format=json`, and `pageno=1`, and SHALL turn each result that has a URL
-into a hit with the result's URL, title, snippet (the result's `content`),
-its rank (1 for the first kept result), and the ID of the query that found
-it. Results without a URL SHALL be skipped. When two results normalise to
-the same URL, only the first SHALL be kept. A response with no results
-SHALL give an empty list, not an error.
+`format=json`, and `pageno` set to the requested page (1 when none is
+requested), and SHALL turn each result that has a URL into a hit with the
+result's URL, title, snippet (the result's `content`), its rank (1 for the
+first kept result of the page), and the ID of the query that found it.
+Results without a URL SHALL be skipped. When two results normalise to the
+same URL, only the first SHALL be kept. The adapter SHALL return every kept
+result of the page; the search stage applies the result cap. A response
+with no results SHALL give an empty list, not an error.
 
 #### Scenario: Results become hits
 - **WHEN** SearXNG answers with three results for query `q1`
@@ -28,8 +30,11 @@ SHALL give an empty list, not an error.
 - **WHEN** SearXNG answers with an empty `results` list
 - **THEN** the adapter returns an empty list
 
+#### Scenario: Requested page
+- **WHEN** the search stage asks for page 2 of `q1`
+- **THEN** the request carries `pageno=2`
+
 ### Requirement: Search settings
-The adapter SHALL return at most `search.max_results` hits (default 10).
 When `search.language` is set it SHALL be sent as `language`; when
 `search.time_range` is set (`day`, `week`, `month`, or `year`) it SHALL be
 sent as `time_range`. Unset values SHALL NOT be sent. Any other
@@ -37,7 +42,7 @@ sent as `time_range`. Unset values SHALL NOT be sent. Any other
 
 #### Scenario: Result cap
 - **WHEN** `search.max_results = 5` and SearXNG returns 20 results
-- **THEN** 5 hits are returned
+- **THEN** the adapter returns 20 hits, and the search stage keeps 5 (source-collection "Search over queries")
 
 #### Scenario: Language and time range sent
 - **WHEN** `search.language = "de"` and `search.time_range = "month"`

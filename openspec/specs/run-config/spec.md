@@ -231,3 +231,29 @@ window leaves. `fetch.max_pages` SHALL be a positive integer, default 40.
 #### Scenario: Page cap default
 - **WHEN** no source sets `fetch.max_pages`
 - **THEN** the resolved value is 40
+
+### Requirement: Domain lists
+The `search` block SHALL accept `allow_domains` and `block_domains`, each a
+list of domain entries (default empty), and `filter_pages`, a positive
+integer (default 3). Each entry SHALL be stored lowercase, with a leading
+`*.` or `.` removed, so `*.GOB.pe`, `.gob.pe`, and `gob.pe` are the same
+entry. An entry that is empty, contains a scheme, path, port, or
+whitespace, or has no `.` SHALL fail validation with an error that names
+the field and the entry. Duplicate entries SHALL be kept once, in first
+order. A depth preset SHALL NOT set these keys.
+
+#### Scenario: Entries normalised
+- **WHEN** a profile sets `search.allow_domains = ["*.GOB.pe", "gob.pe", "sbs.gob.pe"]`
+- **THEN** the resolved value is `["gob.pe", "sbs.gob.pe"]`
+
+#### Scenario: URL rejected
+- **WHEN** an override sets `search.block_domains=["https://facebook.com/"]`
+- **THEN** resolving fails with an error that names `search.block_domains` and the entry
+
+#### Scenario: Defaults
+- **WHEN** no source sets the domain keys
+- **THEN** both lists are empty and `search.filter_pages` is 3
+
+#### Scenario: Preset cannot set domains
+- **WHEN** a depth preset file sets `search.allow_domains`
+- **THEN** loading the preset fails with an error that names the key

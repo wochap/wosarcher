@@ -61,9 +61,14 @@ SHALL have `query` (required, non-empty), and these optional fields:
   `context_tokens` and `gap_context_tokens` may also be the string `auto`,
   and `rounds` is at most 8.
 - `writing` (any subset of the writing option fields)
+- `domains`: `allow` and `block`, each optional, each a list of domain
+  entries (run-config "Domain lists") that replaces the configured list
+  for this run
 - `set` (a list of `dotted.key=value` overrides)
 
-An unknown `depth` SHALL be rejected with 422 that names `depth`. The
+An unknown `depth` SHALL be rejected with 422 that names `depth`. An
+invalid domain entry SHALL be rejected with 422 that names `domains.allow`
+or `domains.block` and the entry. The
 response SHALL be 201 with the new `run_id` and its status (`queued` or
 `running`). Attachment file names SHALL be reduced to their base name; two
 attachments with the same base name SHALL be rejected with 422. A request
@@ -106,14 +111,30 @@ with 422 `invalid_attachment` before anything is staged.
 - **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"gap_context_tokens": "auto", "rounds": 3}}`
 - **THEN** the run resolves `research.gap_context_tokens` to `auto` and `research.rounds` to 3
 
+#### Scenario: Domain lists for one run
+- **WHEN** a client posts `request = {"query": "q", "domains": {"allow": ["gob.pe"], "block": []}}`
+- **THEN** the run resolves `search.allow_domains` to `["gob.pe"]` and `search.block_domains` to `[]`, whatever the profile and the global settings set
+
+#### Scenario: Invalid domain
+- **WHEN** a client posts `request = {"query": "q", "domains": {"allow": ["gob.pe/tramites"]}}`
+- **THEN** the response is 422, the detail names `domains.allow` and `gob.pe/tramites`, and no run is queued
+
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
 (defaults, profile, environment). It SHALL then apply, each later layer
 winning:
 1. the global settings;
 2. the request's depth preset;
-3. the request's `sources`, `research`, and `writing` fields;
+3. the request's `sources`, `research`, `writing`, and `domains` fields;
 4. the request's `set` overrides.
+
+The global domain lists are the exception: a global `domains.allow` or
+`domains.block` SHALL apply only when, at the time the run is created,
+neither the run's profile nor the environment sets that list
+(`search.allow_domains` or `search.block_domains`), so a profile's own list
+wins over the global one. A global list that applies SHALL be recorded
+with the run's overrides, so a rerun repeats it. The request's `domains`
+sit in layer 3 and win over both.
 
 The profile SHALL be read when the run process starts, so profile edits
 apply without restarting the server.
@@ -137,6 +158,18 @@ apply without restarting the server.
 #### Scenario: Standard keeps the global default
 - **WHEN** the global settings have words 1500 and a run request has `"depth": "standard"`
 - **THEN** the run's resolved words is 1500
+
+#### Scenario: Global domain list applies
+- **WHEN** the global settings block `pinterest.com`, the profile sets no block list, and a run request has no `domains`
+- **THEN** the run's resolved `search.block_domains` is `["pinterest.com"]`
+
+#### Scenario: Profile list wins over the global list
+- **WHEN** the global settings block `pinterest.com`, the profile sets `search.block_domains = ["facebook.com"]`, and a run request has no `domains`
+- **THEN** the run's resolved `search.block_domains` is `["facebook.com"]`
+
+#### Scenario: Request list wins
+- **WHEN** the profile sets `search.block_domains = ["facebook.com"]` and a run request has `"domains": {"block": []}`
+- **THEN** the run's resolved `search.block_domains` is `[]`
 
 ### Requirement: List and show runs
 `GET /api/runs` SHALL list every run in the runs directory, every queued
@@ -356,7 +389,8 @@ SHALL answer 422 `invalid_attachment`.
 
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
-option fields) and `sources`. `PUT /api/settings` SHALL replace them after
+option fields), `sources`, and `domains` (`allow` and `block`, each a list
+of domain entries, empty by default). `PUT /api/settings` SHALL replace them after
 validation and persist them in `server-settings.json` in the wosarcher
 config directory, so they survive a restart. Built-in writing defaults
 SHALL apply when the file does not exist.
@@ -369,6 +403,14 @@ SHALL apply when the file does not exist.
 - **WHEN** a client puts settings with `citation_marker = "footnote"`
 - **THEN** the response is 422 and the stored settings are unchanged
 
+#### Scenario: Domain defaults normalised
+- **WHEN** a client puts settings with `domains.block = ["*.Pinterest.com"]`
+- **THEN** `GET /api/settings` returns `domains.block = ["pinterest.com"]`
+
+#### Scenario: Invalid domain default
+- **WHEN** a client puts settings with `domains.allow = ["https://gob.pe/"]`
+- **THEN** the response is 422 naming `domains.allow` and the entry, and the stored settings are unchanged
+
 ### Requirement: Profiles
 `GET /api/profiles` SHALL return every profile with:
 - its `name`;
@@ -376,7 +418,10 @@ SHALL apply when the file does not exist.
 - whether it is `active`;
 - its `description` (empty when the profile sets none);
 - its resolved `context_window`, `prompt_reserve_tokens`, and
-  `max_output_tokens`, so a client can show the effective context budget.
+  `max_output_tokens`, so a client can show the effective context budget;
+- `allow_domains` and `block_domains`: the list the profile (or the
+  environment) sets, or null when it sets none, so a client can tell a
+  profile's own list from the global default.
 
 #### Scenario: Active profile marked
 - **WHEN** the stored default profile is `cloud`
@@ -389,6 +434,10 @@ SHALL apply when the file does not exist.
 #### Scenario: Limits
 - **WHEN** the `workstation` profile resolves `llm.context_window = 32768`
 - **THEN** its entry has `context_window = 32768`, `prompt_reserve_tokens = 2000`, and `max_output_tokens = 8192`
+
+#### Scenario: Domain lists
+- **WHEN** the user profile `nixos` sets `search.block_domains = ["facebook.com"]` and no allow list
+- **THEN** its entry has `block_domains = ["facebook.com"]` and `allow_domains = null`
 
 ### Requirement: Provider health
 `GET /api/providers/health` SHALL return, without sending any probe, the

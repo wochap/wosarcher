@@ -29,7 +29,7 @@ The system SHALL define exactly these event types and data:
 | `run.cancelled` | stage |
 | `stage.started` | device, provider, round |
 | `stage.progress` | done, total, failed, round |
-| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings, passthrough sub-query IDs, hits not fetched, round |
+| `stage.done` | count, seconds, usage and cost, provider that ran, skipped, copied from, warnings, passthrough sub-query IDs, hits not fetched, hits filtered by domain, round |
 | `stage.failed` | error, next fallback (empty when none) |
 | `resource.waiting` | device, released stage |
 | `resource.released` | device, released stage |
@@ -64,7 +64,10 @@ SHALL name what actually ran in the same form. For the prefilter stage it is
 otherwise. The `passthrough` list of `stage.done` SHALL hold the IDs of the
 sub-queries whose pairs skipped ranking (small-input passthrough), in plan
 order. Only the prefilter stage SHALL set it; it is empty for every other
-stage.
+stage. The `filtered` count of `stage.done` SHALL be the number of distinct
+hits the domain filter dropped in that stage: the plan stage counts its
+initial search, the search stage its own queries, and every other stage
+reports 0.
 
 #### Scenario: Unknown type rejected
 - **WHEN** an event with type `stage.paused` is parsed
@@ -93,6 +96,10 @@ stage.
 #### Scenario: Gap retry in events
 - **WHEN** the gap step after round 1 gets no usable follow-up, asks again, and keeps two follow-ups
 - **THEN** `gap.ready` for round 1 carries the two follow-ups and `retried` true
+
+#### Scenario: Filtered hits counted
+- **WHEN** `search.allow_domains = ["gob.pe"]` and the search stage drops 7 distinct hits from other domains
+- **THEN** `stage.done` for search carries `filtered` = 7, and `stage.done` for fetch carries `filtered` = 0
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

@@ -13,11 +13,14 @@ The search stage SHALL search every given query, with requests running
 concurrently. The text sent to the searcher SHALL be at most 200
 characters: a longer query text SHALL be cut at the last whitespace within
 that limit (or at 200 characters when there is none), with surrounding
-whitespace trimmed. Each hit SHALL record its URL, title, snippet, its best
-(lowest) search rank, and the IDs of every query that found it. A failed
-search for one query SHALL be recorded with the query ID and the reason,
-and the other queries SHALL still be searched. Each new or updated hit
-SHALL be reported to the stage's item callback.
+whitespace trimmed. Each query SHALL keep at most `search.max_results` hits
+(default 10) after domain filtering, in the order the search provider
+returned them, ranked 1 for the first kept hit. Each hit SHALL record its
+URL, title, snippet, its best (lowest) search rank, and the IDs of every
+query that found it. A failed search for one query SHALL be recorded with
+the query ID and the reason, and the other queries SHALL still be searched.
+Each new or updated hit SHALL be reported to the stage's item callback. The
+plan step's initial search of a short query SHALL follow the same rules.
 
 #### Scenario: Two queries find one page
 - **WHEN** `q1` and `q2` both return `https://a.example/x`
@@ -30,6 +33,10 @@ SHALL be reported to the stage's item callback.
 #### Scenario: Long query text
 - **WHEN** a query's text is 1500 characters of words separated by spaces
 - **THEN** the searcher receives at most its first 200 characters, ending at a word boundary, and the query keeps its full text in the plan
+
+#### Scenario: Result cap
+- **WHEN** `search.max_results = 5` and the search provider returns 20 results for `q1`
+- **THEN** `q1` has 5 hits, ranked 1 to 5 in the provider's order
 
 ### Requirement: URL dedupe
 Hits SHALL be merged by normalised URL (core-contracts URL normalisation),
@@ -135,3 +142,73 @@ failures. The stage SHALL report how many there were.
 #### Scenario: Under the cap
 - **WHEN** 10 unique hits are found and `fetch.max_pages = 40`
 - **THEN** all 10 are fetched
+
+### Requirement: Domain filter
+The search stage SHALL drop every hit whose host is blocked, and, when the
+run's allow list is not empty, every hit whose host is not allowed. The
+run's lists are `search.allow_domains` and `search.block_domains` after
+global settings and run overrides (http-api "Run request precedence"). A
+host matches a domain entry when it equals the entry or ends with `.`
+followed by the entry, compared without case, port, or a trailing dot. A
+host that matches the block list SHALL be dropped even when it also matches
+the allow list. Hits SHALL be filtered before they are merged, counted
+against `search.max_results`, or reported to the item callback. The stage
+SHALL report how many distinct normalised URLs it dropped. Attachments
+SHALL never be filtered.
+
+#### Scenario: Allowed suffix
+- **WHEN** `search.allow_domains = ["gob.pe"]` and a query finds `https://www.gob.pe/a`, `https://cej.pj.gob.pe/b`, `https://notgob.pe/c`, and `https://infobae.com/d`
+- **THEN** the hits are `https://www.gob.pe/a` and `https://cej.pj.gob.pe/b`, and 2 hits are reported as filtered
+
+#### Scenario: Block wins
+- **WHEN** `search.allow_domains = ["gob.pe"]`, `search.block_domains = ["facilito.gob.pe"]`, and a query finds `https://facilito.gob.pe/x` and `https://www.gob.pe/y`
+- **THEN** only `https://www.gob.pe/y` is kept
+
+#### Scenario: Block list only
+- **WHEN** `search.allow_domains = []`, `search.block_domains = ["facebook.com"]`, and a query finds `https://m.facebook.com/p` and `https://a.example/x`
+- **THEN** only `https://a.example/x` is kept
+
+#### Scenario: No filter
+- **WHEN** both lists are empty
+- **THEN** no hit is dropped and 0 hits are reported as filtered
+
+#### Scenario: Same URL dropped twice
+- **WHEN** `search.block_domains = ["x.com"]` and `q1` and `q2` both find `https://x.com/a`
+- **THEN** 1 hit is reported as filtered
+
+#### Scenario: Initial search filtered
+- **WHEN** the query is "SINOE casilla electrónica" (a short query, so the plan step searches it first) and `search.allow_domains = ["gob.pe"]`
+- **THEN** `initial.jsonl` holds only `gob.pe` hosts, the planner sees only their snippets, and the plan stage reports the dropped count
+
+#### Scenario: Attachments untouched
+- **WHEN** `search.allow_domains = ["gob.pe"]` and the run has the attachment `notes.md`
+- **THEN** `notes.md` is loaded, chunked, and scored as without a filter
+
+### Requirement: Extra result pages while filtering
+While either domain list is not empty, the search stage SHALL read the
+next result page of a query when that query has fewer than
+`search.max_results` kept hits, the last page returned at least one
+result, and fewer than `search.filter_pages` pages (default 3) were read.
+Without a domain filter, the stage SHALL read only the first page. A
+failure on a later page SHALL keep the hits of the earlier pages and SHALL
+be recorded as that query's failure.
+
+#### Scenario: Second page fills the query
+- **WHEN** `search.allow_domains = ["gob.pe"]`, `search.max_results = 5`, page 1 of `q1` has 2 allowed hits, and page 2 has 4 allowed hits
+- **THEN** `q1` has 5 hits and page 3 is not read
+
+#### Scenario: Page limit
+- **WHEN** `search.filter_pages = 2` and pages 1 and 2 of `q1` have no allowed hit
+- **THEN** `q1` has no hits and page 3 is not read
+
+#### Scenario: Empty page stops
+- **WHEN** a filter is set and page 2 of `q1` returns no results
+- **THEN** page 3 is not read
+
+#### Scenario: No filter reads one page
+- **WHEN** both domain lists are empty and page 1 of `q1` returns 3 results with `search.max_results = 10`
+- **THEN** `q1` has 3 hits and page 2 is not read
+
+#### Scenario: Later page fails
+- **WHEN** a filter is set, page 1 of `q1` has 2 allowed hits, and page 2 raises an error
+- **THEN** `q1` keeps its 2 hits and the result has one failure naming `q1`
