@@ -576,6 +576,7 @@ class WritingPatch(Contract):
     language: str | None = None
     citation_marker: Literal["numeric", "superscript", "author-year"] | None = None
     reference_style: str | None = None
+    format: Literal["report", "answer"] | None = None
 
 
 class ResearchPatch(Contract):
