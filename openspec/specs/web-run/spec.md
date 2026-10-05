@@ -1054,7 +1054,7 @@ with no depth SHALL show "Standard".
 ### Requirement: Research rounds panel
 On a multi-round run, the Live run screen SHALL show the "Research rounds"
 panel in place of the Sub-queries panel (scenarios `rounds-live`,
-`rounds-done`, `rounds-nonew`, `rounds-max`). It is built from `plan.ready`,
+`rounds-done`, `rounds-nonew`, `rounds-max`, `rounds-nofollow`). It is built from `plan.ready`,
 `hit.found`, `round.done`, `gap.ready`, and `research.done` events.
 
 The panel header shows "Research rounds", its help button (prototype entry
@@ -1082,38 +1082,60 @@ Each round that has started shows:
   one of round 1's queries. With more than 3 queries, only 2 are shown, plus a
   "+<n> more" button that toggles to "Show fewer". A running round is
   expanded.
-- A gap line: "Gap: reading the best passages so far…" while the gap step
-  runs, and "Gap: <n> follow-up queries for round <k+1>" after it.
+- A gap line: "Gap: reading the best passages so far…" with a spinner
+  while the gap step runs; after it, "Gap: <n> follow-up queries for round
+  <k+1>" with the bend-arrow icon, or "Gap: no usable follow-up query" with
+  the pencil-slash icon when the gap step wrote none (scenario
+  `rounds-nofollow`). A finished gap line is followed by " · <u> uncovered"
+  in the same muted color when the coverage table marked u > 0 queries
+  `uncovered` (`gap.ready` uncovered query IDs).
 
 When research is done, a final line shows:
 - "All <N> rounds ran · max rounds", or "Stopped after round <ran> of <N> ·
   <reason>";
 - the reason's icon (prohibit for no new sources, files for page limit
-  reached, check-circle for coverage sufficient, stack for max rounds,
+  reached, pencil-slash for no follow-ups, stack for max rounds,
   warning for gap step failed);
-- the "Why research stopped" help button (prototype entry `r-stop`, with a
-  row for `gap step failed`: "The gap step's model call failed; the report
-  uses the rounds that ran.");
+- the "Why research stopped" help button (prototype entry `r-stop`), with
+  one row per stop reason, each with its icon: no new sources ("Follow-up
+  searches returned only pages already fetched."), page limit reached
+  ("Max pages was used up."), `no follow-ups` ("The gap step wrote no
+  usable follow-up query, even when asked twice."), max rounds ("Every
+  planned round ran."), and `gap step failed` ("The gap step's model call
+  failed; the report uses the rounds that ran."); it has no row for
+  coverage, because coverage never stops research;
 - the end note under it.
 
-While research runs and rounds remain, a dashed line shows "Up to <m> more
-round(s) if the gap step finds gaps". Before any round starts, the panel
-shows "Planning round 1 queries…".
+While research runs and rounds remain, a dashed line shows "1 more round
+to go" or "<m> more rounds to go" (scenario `rounds-live`). Before any round starts, the panel shows "Planning round 1
+queries…".
+
+The panel's help texts (`rounds`, `r-stop`) and the Gap phase card help
+(`ph-gap`) SHALL be verbatim from the prototype's entries; none of them
+says the gap step can end research early.
 
 #### Scenario: Live round
 - **WHEN** a three-round run is fetching in round 2 (scenario `rounds-live`)
-- **THEN** round 1 shows its pages and kept count and its gap note, round 2 shows a spinner with "fetching", and the line "Up to 1 more round if the gap step finds gaps" is shown
+- **THEN** round 1 shows its pages and kept count, its gap note, and its gap line ending " · <u> uncovered", round 2 shows a spinner with "fetching", and the dashed line "1 more round to go" is shown
 
 #### Scenario: Topic in round 1
 - **WHEN** round 1 has `q0` and five planner sub-queries
 - **THEN** round 1 lists `q0` first, with the "Topic line" label and its help button above its text, shows two queries plus "+4 more", and "+4 more" reveals `q2` to `q5`
 
 #### Scenario: No new sources
-- **WHEN** research stopped after round 2 with `no new sources` (scenario `rounds-nonew`)
-- **THEN** round 2 shows "0 new pages · <m> already fetched" and the final line reads "Stopped after round 2 of 3 · no new sources" with the end note "Follow-up searches returned only pages fetched in earlier rounds."
+- **WHEN** research stopped after round 3 of 4 because rounds 2 and 3 fetched no new page (scenario `rounds-nonew`)
+- **THEN** rounds 2 and 3 show "0 new pages · <m> already fetched", round 2 shows its gap line, and the final line reads "Stopped after round 3 of 4 · no new sources" with the end note "Follow-up searches returned only pages fetched in earlier rounds."
+
+#### Scenario: No follow-ups
+- **WHEN** research stopped after round 2 of 3 with `no follow-ups` (scenario `rounds-nofollow`)
+- **THEN** round 2's gap line reads "Gap: no usable follow-up query · 2 uncovered" with the pencil-slash icon, and the final line reads "Stopped after round 2 of 3 · no follow-ups" with the pencil-slash icon and the end note "The gap step wrote no usable follow-up query."
+
+#### Scenario: Uncovered on the gap line
+- **WHEN** `gap.ready` after round 1 has three follow-ups and uncovered query IDs `q4` and `q6` (scenario `rounds-live`)
+- **THEN** round 1's gap line reads "Gap: 3 follow-up queries for round 2 · 2 uncovered"
 
 #### Scenario: Max rounds
-- **WHEN** all three rounds ran (scenario `rounds-max`)
+- **WHEN** all three rounds ran (scenarios `rounds-done` and `rounds-max`)
 - **THEN** the final line reads "All 3 rounds ran · max rounds" with no end note
 
 ### Requirement: Source round tags

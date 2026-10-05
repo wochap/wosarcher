@@ -24,12 +24,20 @@ web sources (`web` or `both`), the stages `search`, `fetch`, `chunk`,
 - Round k > 1 searches the follow-up queries that the gap step wrote after
   round k-1.
 
+`rounds` is the number of rounds to run, not a maximum: research SHALL run
+every round unless a stop rule other than `max rounds` holds
+(Requirement: Stop rules). No model decides that coverage is good enough.
+
 The gap step SHALL NOT run after the last round. A run whose sources are
 `files`, or whose plan has no sub-query, SHALL run one round.
 
 #### Scenario: Three rounds
 - **WHEN** `research.rounds = 3` and the gap step writes follow-ups after rounds 1 and 2
 - **THEN** search through score run three times, gap runs twice, then select and write run once
+
+#### Scenario: Good coverage does not stop research
+- **WHEN** `research.rounds = 3` and every query is covered after round 1
+- **THEN** the gap step still writes follow-ups and rounds 2 and 3 run
 
 #### Scenario: One round
 - **WHEN** `research.rounds = 1`
@@ -48,15 +56,21 @@ The gap step SHALL NOT run after the last round. A run whose sources are
 - **THEN** loading fails with an error naming the field
 
 ### Requirement: Gap step
-After round k (k < `research.rounds`), the gap stage SHALL make one LLM call
-and then return. It SHALL send:
+After round k (k < `research.rounds`), the gap stage SHALL make one LLM
+call, and a second one only as described below. The first call SHALL send:
 - a system message from `prompts/gap.md`, with only the main query, the
   maximum number of follow-ups, and the date substituted;
 - one user message with a data preamble and a delimited data block. The
-  block holds the existing queries and the passages that select picks from
-  every round's kept scores with the gap budget. Passage text SHALL never
-  go through a template, and text that would close the block SHALL be
-  neutralised.
+  block holds, in order: the coverage table (Requirement: Coverage table);
+  when round k fetched no new page, the line "Round <k> found only pages
+  fetched in earlier rounds:" followed by round k's query IDs and texts;
+  and the passages that select picks from every round's kept scores with
+  the gap budget. Passage text SHALL never go through a template, and text
+  that would close the block SHALL be neutralised.
+
+The system prompt SHALL tell the model to write follow-ups for `uncovered`
+queries first, then for other gaps, to try new angles for queries that
+found only known pages, and to always write at least one query.
 
 The gap budget SHALL be `research.gap_context_tokens` when it is a number.
 When it is `auto`, the gap budget SHALL be the room `llm.context_window`
@@ -66,9 +80,9 @@ queries' text (estimated with `llm.chars_per_token` and
 `llm.token_margin`). A gap budget of 0 or less SHALL count as a failed gap
 step.
 
-The reply SHALL be JSON with `queries` (strings), `note` (one or two
-sentences on what is missing or why coverage is enough), and `stop`
-(boolean). An unreadable reply SHALL count as a failed gap step.
+The reply SHALL be JSON with `queries` (strings) and `note` (one or two
+sentences on what is still missing). Any other field, including `stop`,
+SHALL be ignored. An unreadable reply SHALL count as a failed gap step.
 
 The gap step SHALL drop a follow-up query when it is empty, longer than 200
 characters, or contains a URL. It SHALL also drop one that duplicates an
@@ -76,6 +90,16 @@ existing query or an earlier follow-up, ignoring case and surrounding
 whitespace. It SHALL keep at most `research.queries_per_round`. Kept
 follow-ups get the next query IDs after the last existing one, carry
 `round` = k+1, and are appended to `plan.json`.
+
+When the first reply keeps no follow-up, the gap step SHALL make one more
+call: the same two messages, the first reply as an `assistant` message, and
+a `user` message from `prompts/gap_retry.md` (only the maximum number of
+follow-ups substituted) followed by a delimited data block listing each
+dropped query with its reason (`empty`, `too long`, `URL`, or `duplicate`).
+The second reply SHALL be read and checked the same way. The step's result
+SHALL record that it retried. When the second reply keeps no follow-up
+either, research stops with `no follow-ups`; an unreadable second reply
+counts as a failed gap step.
 
 #### Scenario: Follow-ups numbered
 - **WHEN** the plan has `q0` to `q5` and the gap step after round 1 returns "a", "A ", "https://x.example/y", and "b"
@@ -93,6 +117,22 @@ follow-ups get the next query IDs after the last existing one, carry
 - **WHEN** `research.gap_context_tokens = "auto"`, `llm.context_window = 1000000`, `select.prompt_reserve_tokens = 2000`, and the main query and existing queries are estimated at 1,500 tokens
 - **THEN** the passages in the gap call are estimated at no more than 995,732 tokens
 
+#### Scenario: Stop field ignored
+- **WHEN** the gap reply is `{"queries": ["a"], "note": "n", "stop": true}`
+- **THEN** follow-up "a" is kept and the next round runs
+
+#### Scenario: Retry after only duplicates
+- **WHEN** the first gap reply after round 1 holds only "b" and "B", and `q3` is "b"
+- **THEN** a second call is made whose last user message lists "b" and "B" as `duplicate`, and its follow-ups are kept as usual
+
+#### Scenario: Retry fails too
+- **WHEN** neither gap reply after round 2 keeps a follow-up
+- **THEN** research stops after round 2 with `no follow-ups`
+
+#### Scenario: Known pages named
+- **WHEN** round 2 searched `q6` and `q7` and fetched no new page
+- **THEN** the gap call after round 2 names `q6` and `q7` under "Round 2 found only pages fetched in earlier rounds:"
+
 ### Requirement: Stop rules
 Research SHALL stop, and select SHALL follow, at the first of these. Each
 has a stop reason:
@@ -100,24 +140,30 @@ has a stop reason:
 | Condition | Stop reason |
 |---|---|
 | the last round ran | `max rounds` |
-| a round after round 1 fetched no new page because all its hits were already fetched or queued | `no new sources` |
+| two rounds in a row after round 1 fetched no new page because all their hits were already fetched or queued | `no new sources` |
 | the pages fetched across all rounds reached `fetch.max_pages` | `page limit reached` |
-| the gap step returned `stop` true, or no follow-up survived the checks | `model judged coverage sufficient` |
-| the gap call failed or its reply was unreadable | `gap step failed` |
+| the gap step kept no follow-up after its second call | `no follow-ups` |
+| a gap call failed, timed out, or its reply was unreadable | `gap step failed` |
 
-The gap step's `note` SHALL be the run's end note when the reason is
-`model judged coverage sufficient`. For `no new sources` the end note SHALL
-read "Follow-up searches returned only pages fetched in earlier rounds." A
-failed gap step SHALL add the warning `gap failed: <error>` and SHALL NOT
-fail the run.
+A single round after round 1 that fetched no new page SHALL NOT stop
+research: the gap step runs and is told which queries found only known
+pages. For `no new sources` the end note SHALL read "Follow-up searches
+returned only pages fetched in earlier rounds." For `no follow-ups` the end
+note SHALL read "The gap step wrote no usable follow-up query." A failed
+gap step SHALL add the warning `gap failed: <error>` and SHALL NOT fail the
+run.
 
 #### Scenario: Coverage sufficient
-- **WHEN** `research.rounds = 3` and the gap step after round 1 returns `stop` true with the note "Every sub-query has primary sources."
-- **THEN** select runs after round 1, the stop reason is `model judged coverage sufficient`, and the end note is that note
+- **WHEN** `research.rounds = 3` and the gap step after round 1 writes the note "Every sub-query has primary sources." with two follow-ups
+- **THEN** research does not stop: round 2 searches the two follow-ups, and the note is round 1's gap note, not an end note
+
+#### Scenario: One empty round continues
+- **WHEN** `research.rounds = 4` and round 2's follow-ups find only URLs that round 1 already fetched
+- **THEN** round 2 reports 0 new pages, the gap step runs after round 2, and round 3 runs
 
 #### Scenario: No new sources
-- **WHEN** round 2's follow-ups find only URLs that round 1 already fetched
-- **THEN** round 2 reports 0 new pages, research stops with `no new sources`, and no gap step runs after round 2
+- **WHEN** `research.rounds = 4` and rounds 2 and 3 both fetch no new page
+- **THEN** research stops after round 3 with `no new sources`, no gap step runs after round 3, and the end note is "Follow-up searches returned only pages fetched in earlier rounds."
 
 #### Scenario: Page limit
 - **WHEN** `fetch.max_pages = 20` and rounds 1 and 2 fetch 12 and 8 pages
@@ -135,12 +181,18 @@ every round. A multi-round run SHALL write `research.json` with:
 - `planned` (the configured rounds), `ran`, `reason`, and `note`;
 - one entry per round, with `round`, the query IDs searched,
   `new_pages`, `known_pages` (hits already fetched in earlier rounds),
-  `kept` (passages kept that round), and the gap `note` written after it
-  (empty for the last round).
+  `kept` (passages kept that round), the gap `note` written after it
+  (empty for the last round), and `uncovered`, the IDs of the queries the
+  coverage table marked `uncovered` when the gap step ran after it (empty
+  for the last round).
 
 #### Scenario: Research record
-- **WHEN** a deep run stops after round 2 with `no new sources`
-- **THEN** `research.json` has `planned` 3, `ran` 2, `reason` "no new sources", and two round entries, the second with `new_pages` 0
+- **WHEN** a four-round run stops after round 3 with `no new sources`
+- **THEN** `research.json` has `planned` 4, `ran` 3, `reason` "no new sources", and three round entries, the second and third with `new_pages` 0
+
+#### Scenario: Uncovered recorded
+- **WHEN** the coverage table after round 1 marks `q4` and `q6` uncovered
+- **THEN** round 1's entry in `research.json` has `uncovered` = `["q4", "q6"]`
 
 ### Requirement: Fetch and pairing across rounds
 The fetch page cap (`fetch.max_pages`) SHALL count pages across all rounds.
@@ -219,3 +271,47 @@ round.
 #### Scenario: Rewrite
 - **WHEN** a finished three-round run is forked from `write`
 - **THEN** the fork reuses `context.json`, `plan.json` with every round's queries, and `research.json`
+
+### Requirement: Coverage table
+The gap step SHALL build a coverage table from `scores.jsonl` and the plan,
+with no other call, one line per query in plan order (`q0` first, every
+round so far):
+
+`<ID> · <status> · best <display or —> · kept <n> — <query text>`
+
+- `kept` is the number of the query's pairs that are kept.
+- `best` is the highest display score among the query's pairs, with two
+  decimals, or `—` when the query has no pair or only pairs without a
+  display score.
+- The status is:
+  - `covered` when the query has a kept pair with a display score, or a
+    pair dropped because its chunk was kept for another query
+    (`other_query`);
+  - `unscored` when its only kept pairs have no display score (small-input
+    passthrough);
+  - `uncovered` otherwise: no pair, or every pair dropped by the threshold.
+
+The table SHALL start with one line naming the scorers that produced the
+scores, and for each whether its scores are calibrated (`jev`: "absolute
+0–1 scale, kept from <threshold display>") or relative (`rerank`, `bm25`:
+"relative scale; every query keeps its best pair, so judge by best").
+
+#### Scenario: Jev uncovered query
+- **WHEN** the scorer is `jev` with `score.min_score = 1.5` and every pair of `q4` scored below 1.5
+- **THEN** the table has "q4 · uncovered · best 0.43 · kept 0 — <q4 text>" when its best value was 1.3
+
+#### Scenario: Covered elsewhere
+- **WHEN** `q2`'s only kept pair was dropped as `other_query` because `q1` kept the same chunk
+- **THEN** `q2` is `covered` with "kept 0"
+
+#### Scenario: No hits
+- **WHEN** `q5` found no search result
+- **THEN** the table has "q5 · uncovered · best — · kept 0 — <q5 text>"
+
+#### Scenario: Passthrough query
+- **WHEN** `q3`'s pages were small and its chunks were kept by passthrough
+- **THEN** `q3` is `unscored`
+
+#### Scenario: Relative scorer
+- **WHEN** the scorer is `rerank`
+- **THEN** the table's first line says the rerank scale is relative and to judge by best

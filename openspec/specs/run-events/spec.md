@@ -39,7 +39,7 @@ The system SHALL define exactly these event types and data:
 | `page.failed` | URL, reason |
 | `passages.scored` | query ID, scorer, pair count, kept count, display threshold, kept passages |
 | `round.done` | round, query IDs, new pages, known pages, kept passages |
-| `gap.ready` | round it followed, follow-up queries (ID, text), note, stop |
+| `gap.ready` | round it followed, follow-up queries (ID, text), note, uncovered query IDs, retried |
 | `research.done` | planned rounds, rounds ran, stop reason, end note |
 | `report.delta` | text |
 | `report.snapshot` | text |
@@ -87,8 +87,12 @@ stage.
 - **THEN** `stage.done` for prefilter carries `passthrough` = `["q4", "q5"]`
 
 #### Scenario: Round events
-- **WHEN** a three-round run stops after round 2 because the gap step judged coverage sufficient
-- **THEN** the log has `round.done` for rounds 1 and 2, `gap.ready` after round 1 (with `stop` false) and after round 2 (with `stop` true), and one `research.done` with 3 planned, 2 ran, and reason `model judged coverage sufficient`
+- **WHEN** a three-round run runs all its rounds
+- **THEN** the log has `round.done` for rounds 1, 2, and 3, `gap.ready` after rounds 1 and 2 (each with its uncovered query IDs and `retried`), and one `research.done` with 3 planned, 3 ran, and reason `max rounds`
+
+#### Scenario: Gap retry in events
+- **WHEN** the gap step after round 1 gets no usable follow-up, asks again, and keeps two follow-ups
+- **THEN** `gap.ready` for round 1 carries the two follow-ups and `retried` true
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

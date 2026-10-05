@@ -133,7 +133,7 @@ no chunks; an empty context from `select`; no report text from `write`.
 
 ### Requirement: Stage timeouts
 Each stage SHALL have a timeout from `run.stage_timeouts` (the `gap`
-default is 180 seconds). In a multi-round run the timeout SHALL apply to
+default is 360 seconds, room for a gap step that asks its model twice). In a multi-round run the timeout SHALL apply to
 each round's run of a stage separately. A stage that exceeds it SHALL be
 cancelled and SHALL fail the run, except `gap`: a gap timeout SHALL stop
 research as a failed gap step (research-rounds "Stop rules").
@@ -145,6 +145,10 @@ research as a failed gap step (research-rounds "Stop rules").
 #### Scenario: Timeout per round
 - **WHEN** `run.stage_timeouts.fetch = 600` and each of three rounds fetches for 400 seconds
 - **THEN** no fetch timeout occurs
+
+#### Scenario: Gap timeout default
+- **WHEN** no source sets `run.stage_timeouts.gap`
+- **THEN** the resolved gap timeout is 360 seconds
 
 ### Requirement: Stop early
 A run started with `--until <stage>` SHALL stop after that stage has
