@@ -5,6 +5,10 @@
 Each (run, variant) pair becomes one line of `<out>/results.jsonl`; pairs
 already there are skipped unless `--force` is given. Forks run one at a
 time so model variants do not compete and timings stay comparable.
+
+A fork that ends `done` is still recorded as `failed` when its events show
+that it did not rank with the configured scorer or prefilter: the score
+stage fell back, or the prefilter ran another method.
 """
 
 import argparse
@@ -20,7 +24,7 @@ from typing import Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from wosarcher.config import ConfigError, resolve
-from wosarcher.models import RunOutput
+from wosarcher.models import RunOutput, RunRecord, StageDone, StageFailed, parse_event
 from wosarcher.store import RunStore
 
 VARIANTS = Path(__file__).parent / "variants.toml"
@@ -85,14 +89,36 @@ def fork(
     except ValidationError:
         error = done.stderr.strip()[-ERROR_CHARS:] or f"exit status {done.returncode}"
         return ForkResult(parent_run_id=run_id, variant=variant.name, run_id=None, status="failed", error=error)
+    status, error = output.status, output.error
+    if status == "done":
+        error = fallback_error(Path(output.run_dir))
+        status = "failed" if error else "done"
     return ForkResult(
         parent_run_id=run_id,
         variant=variant.name,
         run_id=output.run_id,
-        status=output.status,
-        error=output.error,
+        status=status,
+        error=error,
         run_dir=output.run_dir,
     )
+
+
+def fallback_error(run_dir: Path) -> str | None:
+    """Why a finished fork did not measure the configured ranking, or None when it did."""
+    settings = RunRecord.model_validate_json((run_dir / "request.json").read_text(encoding="utf-8")).settings
+    lines = (run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    events = [parse_event(line) for line in lines if line.strip()]
+    ran = [e for e in events if isinstance(e, StageDone) and not e.data.skipped and not e.data.copied_from]
+    failed = [e for e in events if isinstance(e, StageFailed) and e.stage == "score"]
+    if failed:
+        scorer = next((e.data.provider for e in reversed(ran) if e.stage == "score"), None) or failed[-1].data.next
+        return f"score ran {scorer} instead of {settings['score']['provider']}: {failed[0].data.error}"
+    configured = settings["prefilter"]["provider"]
+    for event in ran:
+        method = (event.data.provider or "").split(":")[0]
+        if event.stage == "prefilter" and method and method != configured:
+            return f"prefilter ran {method} instead of {configured}"
+    return None
 
 
 def read_results(path: Path) -> list[ForkResult]:

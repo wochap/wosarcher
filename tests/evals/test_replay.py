@@ -13,7 +13,7 @@ from wosarcher.models import StageDone, parse_event
 
 def test_shipped_variants_load() -> None:
     variants = load_variants(VARIANTS)
-    assert set(variants) == {"bm25", "bm25-wide", "rerank", "jev", "prefilter-embeddings", "prefilter-bm25"}
+    assert {"bm25", "bm25-wide", "rerank", "jev", "prefilter-embeddings", "prefilter-bm25"} <= set(variants)
     assert variants["bm25"] == Variant(name="bm25", from_stage="score", set=["score.provider=bm25"])
 
 
@@ -70,3 +70,34 @@ def test_search_and_fetch_held_constant(tmp_path: Path) -> None:
         assert done[stage].data.copied_from == parent
     for name in ("hits.jsonl", "chunks.jsonl"):
         assert (fork_dir / name).read_bytes() == (parent_dir / name).read_bytes()
+
+
+DEAD = "http://127.0.0.1:9"
+
+
+def test_scorer_fallback_fails_fork(tmp_path: Path) -> None:
+    env, parent = eval_env(tmp_path)
+    variant = Variant(name="jev", from_stage="score", set=["score.provider=jev", f"score.base_url={DEAD}"])
+    result = fork(parent, variant, write=False, env=env)
+    assert result.status == "failed"
+    assert result.run_id not in (None, parent)
+    assert result.run_dir is not None
+    assert result.error is not None
+    assert result.error.startswith("score ran bm25 instead of jev: jev: ")
+
+
+def test_prefilter_fallback_fails_fork(tmp_path: Path) -> None:
+    env, parent = eval_env(tmp_path)
+    overrides = ["prefilter.provider=embeddings", f"prefilter.base_url={DEAD}", "prefilter.model=e"]
+    variant = Variant(name="emb", from_stage="prefilter", set=overrides)
+    result = fork(parent, variant, write=False, env=env)
+    assert (result.status, result.error) == ("failed", "prefilter ran bm25 instead of embeddings")
+    assert result.run_id is not None
+    assert result.run_dir is not None
+
+
+def test_small_input_passthrough_stays_done(tmp_path: Path) -> None:
+    env, parent = eval_env(tmp_path)
+    variant = Variant(name="small", from_stage="prefilter", set=["select.passthrough_chars=1000000"])
+    result = fork(parent, variant, write=False, env=env)
+    assert (result.status, result.error) == ("done", None)

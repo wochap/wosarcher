@@ -2,8 +2,10 @@
 
 The configured scorer runs first; when any call fails, every score from it is
 discarded and the stage starts again with the next entry of `score.fallback`,
-so one run never mixes score scales. `passthrough` never fails. Small-input
-candidates always get passthrough scores.
+so one run never mixes score scales. The chain is exactly the configured
+scorer plus `score.fallback`; when every entry fails, the stage raises
+`ScoreChainError`. `passthrough` never fails. Small-input candidates always
+get passthrough scores.
 
 Each pair goes through three rules in order: the scorer's threshold, the
 per-query cap (`score.top_k`, not for passthrough), and the best pair per
@@ -27,6 +29,10 @@ JEV_MAX = 3.0
 BM25_MAX_RESULTS = 25
 
 type Scale = Literal["probability", "logit"]
+
+
+class ScoreChainError(RuntimeError):
+    """Every scorer of the chain failed."""
 
 
 def noop(_: QueryScores) -> None:
@@ -265,11 +271,9 @@ async def score(
     ranked = [group for group in groups if not group.passthrough]
 
     chain = [cfg.provider, *[entry for entry in cfg.fallback if entry != cfg.provider]]
-    if "passthrough" not in chain:
-        chain.append("passthrough")
     failed: list[Skipped] = []
     name = chain[0]
-    values: list[list[float]] = []
+    values: list[list[float]] | None = None
     for name in chain:
         if name == "passthrough":
             ranked = [Group(g.query, passthrough_order(g, page_of, page_index), False) for g in ranked]
@@ -279,6 +283,9 @@ async def score(
             failed.append(Skipped(item=name, reason=str(error) or type(error).__name__))
             continue
         break
+    if values is None:
+        reasons = "; ".join(f"{skipped.item}: {skipped.reason}" for skipped in failed)
+        raise ScoreChainError(f"every scorer failed: {reasons}")
 
     calibrated = scorer is not None and scorer.name == name and scorer.calibrated
     scale: Scale = stage_scale(cfg, values) if name == "rerank" else "probability"

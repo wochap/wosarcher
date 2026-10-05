@@ -5,7 +5,8 @@ import pytest
 from wosarcher.adapters.fakes import FakeScorer
 from wosarcher.config import ScoreConfig
 from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, Score, ScoreResult
-from wosarcher.stages.score import _display, _keep_calibrated, _keep_relative, keep_once, score
+from wosarcher.stages import score as scoring
+from wosarcher.stages.score import ScoreChainError, _display, _keep_calibrated, _keep_relative, keep_once, score
 
 from .ranking_data import chunks_of, file_page, queries, web_page
 
@@ -134,6 +135,27 @@ async def test_everything_fails_ends_with_passthrough() -> None:
     assert [f.item for f in result.failed] == ["rerank"]
     assert all(s.kept for s in result.scores)
     assert len(result.scores) == 12
+
+
+async def test_no_fallback_fails_stage() -> None:
+    pages, chunks = setup(["query one"], ["q0", "q1"])
+    qs = queries(2)
+    cfg = ScoreConfig(provider="rerank", fallback=[])
+    with pytest.raises(ScoreChainError, match="rerank: reranker unreachable"):
+        await score(every(qs, chunks), qs, pages, chunks, FailsSecond("rerank"), cfg=cfg)
+
+
+async def test_default_chain_ends_with_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
+    def broken(*_: object) -> list[float]:
+        raise RuntimeError("bm25 broken")
+
+    monkeypatch.setattr(scoring, "bm25_scores", broken)
+    pages, chunks = setup([f"c{n}" for n in range(12)], ["q0"])
+    qs = queries(1)
+    result = await score(every(qs, chunks), qs, pages, chunks, None, cfg=ScoreConfig(provider="rerank"))
+    assert result.scorer == "passthrough"
+    assert [f.item for f in result.failed] == ["rerank", "bm25"]
+    assert all(s.kept for s in result.scores)
 
 
 class ByQuery(FakeScorer):

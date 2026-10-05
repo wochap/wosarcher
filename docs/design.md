@@ -308,17 +308,20 @@ BM25 has three roles:
 - **Fallback** for the scorer.
 
 **Fallback is per stage, not per call.** The chain lives inside the score
-stage. If any call of the configured scorer fails, the whole score stage
-reruns with the next scorer in `score.fallback` (default
-`["bm25", "passthrough"]` after the configured one; only these two built-in
-scorers are allowed, because the score block configures one remote
-endpoint), so one run never mixes
-score scales. The terminal fallback is `passthrough`: chunks in search-rank
-order, then page order, capped by the token budget. A run never ends without
-context. The runner reports what the stages did: one `stage.failed` per
-scorer that failed (with the scorer that ran next) and `stage.done.provider`
-naming the scorer or prefilter method that actually ran. The prefilter falls
-back from embeddings to BM25 the same way, inside its stage.
+stage: the configured scorer, then exactly the entries of `score.fallback`
+(only `bm25` and `passthrough` are allowed, because the score block
+configures one remote endpoint). Nothing is appended. If any call of a
+scorer fails, the whole score stage reruns with the next entry, so one run
+never mixes score scales. The default `["bm25", "passthrough"]` ends in
+`passthrough`, which never fails: chunks in search-rank order, then page
+order, capped by the token budget, so a default run never ends without
+context. When every entry fails (for example `score.fallback = []` and the
+scorer is down), the score stage fails and its error names each scorer
+with its error. The runner reports what the stages did: one `stage.failed`
+per scorer that failed (with the scorer that ran next) and
+`stage.done.provider` naming the scorer or prefilter method that actually
+ran. The prefilter falls back from embeddings to BM25 the same way, inside
+its stage.
 
 ### Select
 
@@ -1160,8 +1163,8 @@ inputs. It drives the public CLI only, so it measures what users run.
 
 - `evals/variants.toml` names variants. Each forks from `prefilter` or
   `score` (any other stage is rejected) with a list of `--set` overrides.
-  Model variants set `score.fallback=[]` so a broken service is a failed
-  result, not a silent BM25 measurement.
+  Model variants set `score.fallback=[]` so a broken service fails the
+  fork instead of measuring a fallback.
 - `python -m evals.replay (--runs ID... | --all) --variants NAME... --out
   DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcher fork <id>
   --from <stage> --until select --json` (through `write` with `--write`) in
