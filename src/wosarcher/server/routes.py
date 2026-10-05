@@ -1,17 +1,20 @@
-"""`/api/runs`: create, list, show, delete, cancel, fork, rerun, and artifacts."""
+"""`/api/runs`: create, list, show, delete, cancel, fork, rerun, artifacts, and export."""
 
 import os
 import shutil
-from typing import Annotated
+from typing import Annotated, get_args
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import ValidationError
 
 from wosarcher.config import CUSTOM_DEPTH, ConfigError, list_depths, own_settings, select_profile
+from wosarcher.document import document
 from wosarcher.models import (
     Attachment,
+    ExportFormat,
     ForkCreate,
+    Report,
     RunCreate,
     RunCreated,
     RunDetail,
@@ -20,6 +23,7 @@ from wosarcher.models import (
     RunRecord,
     RunSummary,
 )
+from wosarcher.ports import ExportError
 from wosarcher.server import settings as global_settings
 from wosarcher.server import staging
 from wosarcher.server.errors import RouteError, invalid, not_found
@@ -48,6 +52,10 @@ ARTIFACTS: dict[str, str] = {
     "report.json": JSON,
     "events.jsonl": JSONL,
     "costs.json": JSON,
+}
+EXPORT_TYPES: dict[ExportFormat, str] = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 }
 
 
@@ -191,6 +199,29 @@ async def artifact(state: State, run_id: str, name: str) -> FileResponse:
     if not path.is_file():
         raise RouteError(404, "artifact_not_found", f"no artifact {name} in run {run_id}")
     return FileResponse(path, media_type=f"{ARTIFACTS[name]}; charset=utf-8")
+
+
+@router.get("/{run_id}/export")
+async def export_run(state: State, run_id: str, format: str | None = None) -> Response:
+    if format not in get_args(ExportFormat):
+        raise RouteError(422, "invalid_format", f"format must be one of: {', '.join(get_args(ExportFormat))}")
+    fmt: ExportFormat = format  # pyright: ignore[reportAssignmentType]  (checked above)
+    record = record_of(state, run_id)
+    if record is None:
+        raise not_found(run_id)
+    if not (state.runs_dir / run_id / "report.json").is_file():
+        raise RouteError(404, "report_not_found", f"run {run_id} has no report")
+    missing = state.exporter.missing(fmt)
+    if missing:
+        raise RouteError(503, "export_unavailable", f"{fmt.upper()} export needs {' and '.join(missing)} on the server")
+    markdown = document(record, state.store.read_artifact(run_id, "report.json", Report))
+    try:
+        async with state.exports:
+            data = await state.exporter.export(markdown, fmt)
+    except ExportError as error:
+        raise RouteError(500, "export_failed", str(error)) from None
+    headers = {"Content-Disposition": f'attachment; filename="{run_id}.{fmt}"'}
+    return Response(data, media_type=EXPORT_TYPES[fmt], headers=headers)
 
 
 @router.post("/{run_id}/cancel")

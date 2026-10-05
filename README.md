@@ -161,8 +161,8 @@ wosarcher logs <run-id> --follow
 
 ### Docker
 
-The `Dockerfile` builds one image (about 165 MB) with the CLI, the API, and
-the built web UI. Everything that changes at runtime (profiles, password
+The `Dockerfile` builds one image (about 400 MB) with the CLI, the API, the
+built web UI, and pinned pandoc and Typst binaries for PDF and Word export. Everything that changes at runtime (profiles, password
 hash, tokens, runs, caches) lives under `/data`.
 
 ```sh

@@ -9,12 +9,13 @@ from wosarcher.adapters.embeddings import OpenAIEmbedder
 from wosarcher.adapters.firecrawl import FirecrawlFetcher
 from wosarcher.adapters.jev import JevScorer
 from wosarcher.adapters.llm import ChatLLM
+from wosarcher.adapters.pandoc import PandocExporter
 from wosarcher.adapters.passthrough import PassthroughScorer
 from wosarcher.adapters.rerank import RerankScorer
 from wosarcher.adapters.searxng import SearxngSearcher
 from wosarcher.config import Provider, ScoreConfig, Settings
 from wosarcher.http import ProviderClient, UsageLedger
-from wosarcher.ports import Adapters, Embedder, Managed, Scorer
+from wosarcher.ports import Adapters, Embedder, Exporter, Managed, Scorer
 
 ScorerFactory = Callable[[ScoreConfig, ProviderClient | None, UsageLedger], Scorer]
 
@@ -94,3 +95,8 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
         writer=writer,
         managed=managed,
     )
+
+
+def exporter() -> Exporter:
+    """Report export; it needs no profile settings, so runs do not build it."""
+    return PandocExporter()

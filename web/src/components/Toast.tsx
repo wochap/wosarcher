@@ -1,13 +1,14 @@
-// The prototype's toast: one at a time, 2.2 s, or 6 s when it offers Undo.
-import { Check } from "@phosphor-icons/react";
+// The prototype's toast: one at a time, 2.2 s, 5 s for an error, or 6 s when it offers Undo.
+import { Check, WarningCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ToastOptions } from "../app/context";
 import css from "./Toast.module.css";
 
 export const TOAST_MS = 2200;
 export const UNDO_MS = 6000;
+export const ERROR_MS = 5000;
 
-type Shown = { id: number; message: string; undo?: () => void };
+type Shown = { id: number; message: string; undo?: () => void; error?: boolean };
 
 export function useToastState() {
   const [shown, setShown] = useState<Shown | null>(null);
@@ -16,8 +17,9 @@ export function useToastState() {
   const toast = useCallback((message: string, options: ToastOptions = {}) => {
     clearTimeout(timer.current);
     const id = ++next.current;
-    setShown({ id, message, undo: options.undo });
-    timer.current = setTimeout(() => setShown(null), options.undo ? UNDO_MS : TOAST_MS);
+    setShown({ id, message, undo: options.undo, error: options.error });
+    const ms = options.undo ? UNDO_MS : options.error ? ERROR_MS : TOAST_MS;
+    timer.current = setTimeout(() => setShown(null), ms);
   }, []);
   const dismiss = useCallback(() => {
     clearTimeout(timer.current);
@@ -32,7 +34,11 @@ export function Toast({ shown, dismiss }: { shown: Shown | null; dismiss: () => 
   const undo = shown.undo;
   return (
     <div role="status" className={css.toast} key={shown.id}>
-      <Check className={css.icon} />
+      {shown.error ? (
+        <WarningCircle className={css.danger} aria-hidden="true" />
+      ) : (
+        <Check className={css.icon} />
+      )}
       {shown.message}
       {undo && (
         <button

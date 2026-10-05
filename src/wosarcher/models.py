@@ -86,6 +86,7 @@ class WritingOptions(Contract):
 
 
 Sources = Literal["both", "web", "files"]
+ExportFormat = Literal["pdf", "docx"]
 
 
 class Query(Contract):

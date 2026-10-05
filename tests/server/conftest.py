@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from wosarcher.auth import AuthStore
 from wosarcher.config import AuthConfig, ServerConfig, Settings
+from wosarcher.ports import Exporter
 from wosarcher.server import create_app
 
 FAKE = Path(__file__).with_name("fake_wosarcher.py")
@@ -43,11 +44,15 @@ def config_dir(tmp_path: Path, runs_dir: Path) -> Path:
 @pytest.fixture
 def make_app(runs_dir: Path, config_dir: Path, tmp_path: Path) -> MakeApp:
     def make(
-        limit: int = 1, static_dir: Path | None = None, grace: float = 0.5, auth: AuthConfig | None = None
+        limit: int = 1,
+        static_dir: Path | None = None,
+        grace: float = 0.5,
+        auth: AuthConfig | None = None,
+        exporter: Exporter | None = None,
     ) -> FastAPI:
         server = ServerConfig(max_concurrent_runs=limit, static_dir=static_dir or tmp_path / "no-build")
         settings = Settings(server=server, auth=auth or AuthConfig())
-        return create_app(settings, runs_dir, config_dir, COMMAND, grace=grace)
+        return create_app(settings, runs_dir, config_dir, COMMAND, grace=grace, exporter=exporter)
 
     return make
 

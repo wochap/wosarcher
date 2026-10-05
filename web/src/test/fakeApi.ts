@@ -1,6 +1,6 @@
 // In-memory ApiClient for tests and the dev preview. Records every call; any method can be
 // replaced on the returned object to script a test.
-import { type ApiClient, ApiError, type LoginResult } from "../api/client";
+import { type ApiClient, ApiError, type ExportFormat, type LoginResult } from "../api/client";
 import type {
   DepthInfo,
   HealthReport,
@@ -17,6 +17,8 @@ import type {
 import * as fixtures from "./fixtures/data";
 
 export type FakeData = {
+  /** Export answers by format: a failure `ApiError`, or bytes; default a small fixed file. */
+  exports: Partial<Record<ExportFormat, ApiError | string>>;
   runs: RunSummary[];
   events: Record<string, RunEvent[]>;
   /** Artifact text by run id and name; a missing one answers 404. */
@@ -39,6 +41,7 @@ export type FakeApi = ApiClient & { calls: Call[]; data: FakeData };
 export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
   return structuredClone({
     runs: fixtures.runs,
+    exports: {},
     events: {},
     artifacts: {},
     sources: {},
@@ -116,6 +119,13 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       const text = data.artifacts[id]?.[name];
       if (text === undefined) throw new ApiError(404, "not_found", `no artifact ${name}`);
       return text;
+    },
+    async exportRun(id, format) {
+      record("exportRun", id, format);
+      find(id);
+      const answer = data.exports[format] ?? `fake ${format}`;
+      if (answer instanceof ApiError) throw answer;
+      return new Blob([answer]);
     },
     async source(id, sourceId) {
       record("source", id, sourceId);

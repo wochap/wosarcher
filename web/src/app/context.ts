@@ -22,7 +22,8 @@ export type Auth = {
 export const AuthContext = createContext<Auth | null>(null);
 
 export type OverlayKind = "help" | "alertdialog" | "dialog" | "tooltip";
-export type ToastOptions = { undo?: () => void };
+/** `error`: the danger-colored warning icon in place of the check. */
+export type ToastOptions = { undo?: () => void; error?: boolean };
 
 export type RunOptions = {
   recipe: Recipe;

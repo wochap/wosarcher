@@ -22,6 +22,9 @@
             pkgs.uv
             pkgs.nodejs
             pkgs.pnpm
+            # Report export: pandoc writes DOCX and Typst source; typst renders the PDF.
+            pkgs.pandoc
+            pkgs.typst
           ];
 
           env = {

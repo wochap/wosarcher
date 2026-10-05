@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "../../api/client";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { finished } from "../../test/fixtures/finished";
 import { MD1, QUERY, RUN_ID, reportJson, summary } from "../../test/fixtures/sample";
@@ -7,7 +8,31 @@ import { versions } from "../../test/fixtures/versions";
 import { renderApp } from "../../test/renderApp";
 import { openScenario } from "../../test/scenario";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+/** Files the page saves through a link click, by name. */
+function captureDownloads() {
+  const saved: { name: string; blob: Blob }[] = [];
+  const blobs = new Map<string, Blob>();
+  vi.stubGlobal("URL", {
+    ...URL,
+    createObjectURL: (b: Blob) => {
+      const url = `blob:${blobs.size}`;
+      blobs.set(url, b);
+      return url;
+    },
+    revokeObjectURL() {},
+  });
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saved.push({ name: this.download, blob: blobs.get(this.getAttribute("href") ?? "") as Blob });
+  });
+  return saved;
+}
 
 const press = (name: string | RegExp) =>
   act(async () => {
@@ -152,7 +177,13 @@ describe("ReportScreen", () => {
     expect(screen.getByText(/· answer ·/)).toBeTruthy();
     expect(screen.getByText(/^Answer, at most 400 words · Analytical · English · /)).toBeTruthy();
     expect(screen.queryByText(/^Written with/)).toBeNull();
-    for (const name of [/^Rewrite$/, /Copy markdown/, /Download/]) {
+    for (const name of [
+      /^Rewrite$/,
+      /Copy markdown/,
+      /Download .md/,
+      /Download .pdf/,
+      /Download .docx/,
+    ]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
     expect(screen.getByRole("heading", { name: /^References/ })).toBeTruthy();
@@ -190,21 +221,7 @@ describe("ReportScreen states", () => {
 
 describe("Export", () => {
   it("downloads <id>.md starting with the query", async () => {
-    const saved: { name: string; blob: Blob }[] = [];
-    const blobs: Blob[] = [];
-    vi.stubGlobal("URL", {
-      ...URL,
-      createObjectURL: (b: Blob) => {
-        blobs.push(b);
-        return "blob:x";
-      },
-      revokeObjectURL() {},
-    });
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
-      this: HTMLAnchorElement,
-    ) {
-      saved.push({ name: this.download, blob: blobs[0] });
-    });
+    const saved = captureDownloads();
     await openScenario(finished);
     await screen.findByRole("heading", { level: 1, name: QUERY });
     await press(/Download .md/);
@@ -212,7 +229,96 @@ describe("Export", () => {
     const text = await saved[0].blob.text();
     expect(text.startsWith(`# ${QUERY}\n\n## Summary`)).toBe(true);
     expect(screen.getByRole("status").textContent).toBe(`Downloaded ${RUN_ID}.md`);
-    click.mockRestore();
+  });
+
+  it("shows the desktop downloads in order between Copy markdown and Copy JSON", async () => {
+    await openScenario(finished);
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    const labels = screen.getAllByRole("button").map((b) => b.textContent);
+    const start = labels.indexOf("Copy markdown");
+    expect(labels.slice(start, start + 5)).toEqual([
+      "Copy markdown",
+      "Download .md",
+      "Download .pdf",
+      "Download .docx",
+      "Copy JSON (context)",
+    ]);
+  });
+
+  it("exports a PDF on desktop with the busy state, then saves it", async () => {
+    const saved = captureDownloads();
+    const api = fakeApi(finished.data);
+    let finish: (blob: Blob) => void = () => {};
+    api.exportRun = (id, format) => {
+      api.calls.push({ method: "exportRun", args: [id, format] });
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    };
+    await openScenario(finished, { api });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    await press(/Download .pdf/);
+    const busy = screen.getByRole("button", { name: "Exporting…" });
+    expect(busy.hasAttribute("disabled")).toBe(true);
+    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByRole("button", { name: /Download .docx/ }).hasAttribute("disabled")).toBe(
+      false,
+    );
+    await act(async () => finish(new Blob(["%PDF"])));
+    expect(callsTo(api, "exportRun")).toEqual([[RUN_ID, "pdf"]]);
+    expect(saved.map((s) => s.name)).toEqual([`${RUN_ID}.pdf`]);
+    expect(screen.getByRole("status").textContent).toBe(`Downloaded ${RUN_ID}.pdf`);
+    expect(screen.getByRole("button", { name: /Download .pdf/ }).hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("shows the server's detail in an error toast when export is unavailable", async () => {
+    const saved = captureDownloads();
+    const api = fakeApi(finished.data);
+    const detail = "PDF export needs typst on the server";
+    api.data.exports.pdf = new ApiError(503, "export_unavailable", detail);
+    await openScenario(finished, { api });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    await press(/Download .pdf/);
+    expect(saved).toEqual([]);
+    const toast = screen.getByRole("status");
+    expect(toast.textContent).toBe(detail);
+    expect(toast.querySelector("svg")?.getAttribute("class")).toMatch(/danger/);
+  });
+
+  it("offers a Download format menu on a phone", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("max-width"),
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const saved = captureDownloads();
+    await openScenario(finished);
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    expect(screen.queryByRole("button", { name: /Download .pdf/ })).toBeNull();
+    const button = screen.getByRole("button", { name: "Download" });
+    expect(button.getAttribute("aria-haspopup")).toBe("menu");
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    await press("Download");
+    const menu = screen.getByRole("menu", { name: "Download format" });
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((i) => i.textContent),
+    ).toEqual([".mdMarkdown", ".pdfPDF", ".docxWord"]);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    await press("Download");
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+    await press("Download");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: /\.docx/ }));
+    });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(saved.map((s) => s.name)).toEqual([`${RUN_ID}.docx`]);
+    expect(screen.getByRole("status").textContent).toBe(`Downloaded ${RUN_ID}.docx`);
   });
 
   it("copies the markdown and the context JSON", async () => {

@@ -4,7 +4,18 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from wosarcher.models import Chunk, Completion, EmbedderInfo, Hit, Message, Page, ProviderHealth, Query, Score
+from wosarcher.models import (
+    Chunk,
+    Completion,
+    EmbedderInfo,
+    ExportFormat,
+    Hit,
+    Message,
+    Page,
+    ProviderHealth,
+    Query,
+    Score,
+)
 
 
 class Searcher(Protocol):
@@ -46,6 +57,20 @@ class Managed(Protocol):
     async def probe(self) -> ProviderHealth: ...
 
     async def release(self) -> None: ...
+
+
+class ExportError(Exception):
+    """A conversion that failed or timed out; the message is the converter's last error line."""
+
+
+class Exporter(Protocol):
+    """Turns export Markdown into a document."""
+
+    async def export(self, markdown: str, fmt: ExportFormat) -> bytes: ...
+
+    def missing(self, fmt: ExportFormat) -> list[str]:
+        """The programs `fmt` needs that are not installed."""
+        ...
 
 
 @dataclass(frozen=True)

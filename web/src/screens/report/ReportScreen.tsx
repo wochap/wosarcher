@@ -4,7 +4,6 @@ import {
   ArrowBendDownRight,
   BracketsCurly,
   Copy,
-  DownloadSimple,
   GitBranch,
   PenNib,
   Scissors,
@@ -25,6 +24,7 @@ import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { useRun } from "../../run/useRun";
 import { useRunData } from "../../run/useRunData";
 import { NotFound } from "../live/NotFound";
+import { Downloads } from "./Downloads";
 import { contextJson, download, markdownFile } from "./exportReport";
 import { ReportAside, SelectedPassages } from "./ReportAside";
 import css from "./ReportScreen.module.css";
@@ -126,19 +126,15 @@ export function ReportScreen({ runId }: { runId: string }) {
                   <Copy aria-hidden="true" />
                   Copy markdown
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() =>
-                    void withReport((md) => {
+                <Downloads
+                  runId={runId}
+                  markdown={() =>
+                    withReport((md) => {
                       download(`${runId}.md`, markdownFile(query, md));
                       toast(`Downloaded ${runId}.md`);
                     })
                   }
-                >
-                  <DownloadSimple aria-hidden="true" />
-                  Download .md
-                </button>
+                />
               </>
             )}
             <button

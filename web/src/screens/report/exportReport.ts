@@ -1,4 +1,4 @@
-// The Report screen's exports: the markdown file and the context as JSON.
+// The Report screen's exports: the markdown file, server-converted files, and the context as JSON.
 import type { Context } from "../../api/generated";
 import type { RunDetail } from "../../api/types";
 import { recipeOf } from "../../run/format";
@@ -6,9 +6,10 @@ import { recipeOf } from "../../run/format";
 /** `# <query>`, a blank line, and the report. */
 export const markdownFile = (query: string, report: string) => `# ${query}\n\n${report}`;
 
-export function download(name: string, text: string) {
+export function download(name: string, content: string | Blob) {
   const link = document.createElement("a");
-  link.href = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+  const blob = content instanceof Blob ? content : new Blob([content], { type: "text/markdown" });
+  link.href = URL.createObjectURL(blob);
   link.download = name;
   link.click();
   URL.revokeObjectURL(link.href);

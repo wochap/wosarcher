@@ -23,6 +23,8 @@ ALLOWED: dict[str, set[str]] = {
     "models": set(),
     "ports": {"models"},
     "lexical": {"models"},
+    # Builds the Markdown that report export converts.
+    "document": {"models"},
     "config": {"models"},
     "http": {"models", "config"},
     "store": {"models", "config"},
@@ -65,6 +67,7 @@ ALLOWED: dict[str, set[str]] = {
         "prompts",
         "attachments",
         "auth",
+        "document",
     },
     "cli": {
         "models",
@@ -82,12 +85,13 @@ ALLOWED: dict[str, set[str]] = {
         "prompts",
         "attachments",
         "auth",
+        "document",
     },
     "__main__": {"cli"},
 }
 
 # Parts that must stay free of I/O and interface libraries.
-PURE = {"models", "ports", "lexical", "stages", "prompts"}
+PURE = {"models", "ports", "lexical", "document", "stages", "prompts"}
 # Module prefixes pure parts may not import: `urllib.request` is caught, `urllib.parse` is not.
 PURE_FORBIDDEN = {
     "httpx",

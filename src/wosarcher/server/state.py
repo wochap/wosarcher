@@ -1,12 +1,14 @@
 """What every route needs, kept on `app.state.server` (no globals)."""
 
-from dataclasses import dataclass
+import asyncio
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from starlette.requests import HTTPConnection
 
 from wosarcher.auth import AuthStore
 from wosarcher.config import Settings
+from wosarcher.ports import Exporter
 from wosarcher.server.health import HealthCache
 from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import RunManager
@@ -24,6 +26,9 @@ class ServerState:
     auth: AuthStore
     limiter: LoginLimiter
     health: HealthCache
+    exporter: Exporter
+    # Report exports converting at once; each runs pandoc and maybe Typst.
+    exports: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(2))
 
 
 def get_state(connection: HTTPConnection) -> ServerState:

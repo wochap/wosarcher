@@ -13,7 +13,9 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from wosarcher.auth import AuthStore
+from wosarcher.build import exporter as build_exporter
 from wosarcher.config import Settings
+from wosarcher.ports import Exporter
 from wosarcher.server import errors, login, meta, routes, sources, stream, tokens
 from wosarcher.server.guard import Guard
 from wosarcher.server.health import HealthCache
@@ -24,13 +26,29 @@ from wosarcher.store import RunStore
 
 
 def create_app(
-    settings: Settings, runs_dir: Path, config_dir: Path, command: list[str], grace: float = GRACE_SECONDS
+    settings: Settings,
+    runs_dir: Path,
+    config_dir: Path,
+    command: list[str],
+    grace: float = GRACE_SECONDS,
+    exporter: Exporter | None = None,
 ) -> FastAPI:
     # The server never uses the caches; the store only reads and appends run logs.
     store = RunStore(runs_dir, runs_dir)
     manager = RunManager(runs_dir, command, settings.server.max_concurrent_runs, store, grace)
     auth = AuthStore.from_settings(settings, config_dir)
-    state = ServerState(settings, runs_dir, config_dir, command, store, manager, auth, LoginLimiter(), HealthCache())
+    state = ServerState(
+        settings,
+        runs_dir,
+        config_dir,
+        command,
+        store,
+        manager,
+        auth,
+        LoginLimiter(),
+        HealthCache(),
+        exporter or build_exporter(),
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:

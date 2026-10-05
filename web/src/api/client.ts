@@ -35,6 +35,8 @@ export interface ApiClient {
   cancelRun(id: string): Promise<CancelOutcome>;
   deleteRun(id: string): Promise<void>;
   getArtifact(id: string, name: string): Promise<string>;
+  /** A finished report or answer converted on the server (`GET /api/runs/{id}/export`). */
+  exportRun(id: string, format: ExportFormat): Promise<Blob>;
   /** One source's chunks and their fates (`GET /api/runs/{id}/sources/{source_id}`). */
   source(runId: string, sourceId: string): Promise<SourceView>;
   getSettings(): Promise<ServerSettings>;
@@ -90,6 +92,8 @@ async function readBody(response: Response): Promise<Body> {
     return {};
   }
 }
+
+export type ExportFormat = "pdf" | "docx";
 
 export function httpApi(onUnauthorized: () => void): ApiClient {
   async function fail(response: Response, error: Body): Promise<never> {
@@ -148,6 +152,8 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     deleteRun: async (id) => void (await send("DELETE", run(id))),
     getArtifact: async (id, name) =>
       (await send("GET", `${run(id)}/artifacts/${encodeURIComponent(name)}`)).text(),
+    exportRun: async (id, format) =>
+      (await send("GET", `${run(id)}/export?format=${encodeURIComponent(format)}`)).blob(),
     source: (id, sourceId) => json("GET", `${run(id)}/sources/${encodeURIComponent(sourceId)}`),
     getSettings: () => json("GET", "/settings"),
     putSettings: (settings) => json("PUT", "/settings", settings),

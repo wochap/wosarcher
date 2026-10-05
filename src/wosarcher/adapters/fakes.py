@@ -7,6 +7,7 @@ from wosarcher.models import (
     Chunk,
     Completion,
     EmbedderInfo,
+    ExportFormat,
     Hit,
     Message,
     Page,
@@ -16,8 +17,10 @@ from wosarcher.models import (
     Source,
     web_source_id,
 )
+from wosarcher.ports import ExportError
 
 FAKE_DIMENSION = 8
+FAKE_EXPORTS: dict[ExportFormat, bytes] = {"pdf": b"%PDF-fake", "docx": b"PK-fake-docx"}
 
 
 def ignore(_reason: str | None) -> None:
@@ -153,3 +156,21 @@ class FakeLLM(FakeManaged):
             yield word if position == len(words) - 1 else word + " "
         reasons = self.finish_reasons
         on_finish(reasons.pop(0) if len(reasons) > 1 else reasons[0])
+
+
+class FakeExporter:
+    """Fixed bytes per format; records each Markdown it was given. `missing` and `failure` simulate errors."""
+
+    def __init__(self, missing: Mapping[ExportFormat, list[str]] | None = None, failure: str | None = None) -> None:
+        self.absent = dict(missing or {})
+        self.failure = failure
+        self.inputs: list[tuple[str, ExportFormat]] = []
+
+    def missing(self, fmt: ExportFormat) -> list[str]:
+        return self.absent.get(fmt, [])
+
+    async def export(self, markdown: str, fmt: ExportFormat) -> bytes:
+        self.inputs.append((markdown, fmt))
+        if self.failure is not None:
+            raise ExportError(self.failure)
+        return FAKE_EXPORTS[fmt]

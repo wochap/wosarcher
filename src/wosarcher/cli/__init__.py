@@ -1,4 +1,4 @@
-"""Command line: `profile`, `doctor`, `schema`; `run`, `fork`, `runs`, `logs`, `serve`, `auth` in submodules."""
+"""Command line: `profile`, `doctor`, `schema`; `run`, `fork`, `runs`, `logs`, `export`, `serve`, `auth` elsewhere."""
 
 import asyncio
 import json
@@ -144,6 +144,7 @@ def main() -> None:
     app()
 
 
+from wosarcher.cli import export as export_command  # noqa: E402
 from wosarcher.cli import logs as logs_command  # noqa: E402
 from wosarcher.cli import run as run_commands  # noqa: E402  (registers run, fork, runs on `app`)
 from wosarcher.cli import serve as serve_command  # noqa: E402
@@ -153,6 +154,7 @@ app.command("run")(run_commands.run)
 app.command("fork")(run_commands.fork)
 app.command("runs")(run_commands.runs)
 app.command("logs")(logs_command.logs)
+app.command("export")(export_command.export)
 app.command("serve")(serve_command.serve)
 app.add_typer(auth_app, name="auth")
 from wosarcher.cli.depth import depth_app  # noqa: E402

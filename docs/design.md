@@ -616,6 +616,10 @@ behind each claim.
   order of first citation for every style, formatted by code in the chosen
   `reference_style`. Under each source, its cited passages are listed with
   their heading path, or `p. <page ID>` and block IDs for pdf-ingest files.
+- Export (PDF, DOCX) converts `Report.markdown`, so exported documents keep
+  the rendered markers and the reference list. Superscript markers
+  (`<sup>1,2</sup>`) are rewritten to pandoc superscript (`^1,2^`), since
+  the export reader takes no raw HTML.
 
 ### Prompt injection
 
@@ -705,7 +709,7 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 ```
 src/wosarcher/
   models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, server API bodies, events) and ID helpers
-  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed; the Adapters bundle
+  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed, Exporter (and ExportError); the Adapters bundle
   config.py      # settings, profiles, precedence, secret redaction
   auth.py        # password hashing, API tokens, session signing, auth.json (AuthStore); stdlib only, no FastAPI
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
@@ -716,12 +720,13 @@ src/wosarcher/
   build.py       # composition root: config -> adapters (a dict, no registry)
   doctor.py      # provider health probes and exclusive-GPU warnings
   lexical.py     # BM25: tokenizer, scoring, relative threshold (pure functions)
+  document.py    # export Markdown: title, date and run ID, "Question" block, report (pure)
   attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
   stages/        # one file per stage
-  adapters/      # one file per adapter, plus fakes.py
+  adapters/      # one file per adapter (pandoc.py: report export), plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
   cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; logs.py: logs, event lines, stderr listener;
-                 # serve.py: serve; auth.py: auth; progress.py: rich Live view
+                 # export.py: export; serve.py: serve; auth.py: auth; progress.py: rich Live view
   __main__.py    # python -m wosarcher
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
                  # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
@@ -862,6 +867,14 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   <summary>` (local time; the summary on one line, at most 160 characters).
   Unreadable lines are skipped. `--follow` polls every 0.5 s and exits 0
   after a terminal event. An unknown run exits 2.
+- `wosarcher export <id> --format pdf|docx [--output PATH] [--force] [--profile NAME]`:
+  writes a finished report or answer as a document (see Report export) to
+  `PATH`, by default `<id>.<format>` in the current directory, and prints
+  the path. An existing file needs `--force`. Exit status: 0 written; 1 a
+  converter missing or the conversion failed (the route's messages); 2 an
+  unknown run, a run without `report.json`, an unknown format, or an
+  existing file without `--force`. `--profile` only picks the runs
+  directory.
 - `wosarcher serve [--host H] [--port P]`: the HTTP server (see Server);
   binds `server.host` and `server.port` (`127.0.0.1:8765`).
 
@@ -1013,6 +1026,30 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
+- `GET /api/runs/{id}/export?format=pdf|docx`: the run's report or answer
+  as a document (see Report export), with `Content-Disposition: attachment;
+  filename="<id>.<format>"`. Errors: 404 `run_not_found`; 404
+  `report_not_found` without `report.json` (running, failed before write,
+  or a `context` run); 422 `invalid_format`; 503 `export_unavailable`
+  naming the missing program ("PDF export needs typst on the server"); 500
+  `export_failed` with the converter's last error line, also after the
+  60-second timeout. At most 2 conversions run at once; nothing is cached.
+
+#### Report export
+
+`document.py` builds the export Markdown: the title (the report's leading
+`# ` heading, which is then not repeated, else the first non-empty query
+line without emphasis markers, cut at a word boundary to 120 characters
+with "…"), a line `YYYY-MM-DD · <run id>`, a "Question" heading with the
+whole query as a quoted block when it differs from the title, then the
+report. The `Exporter` port's adapter (`adapters/pandoc.py`) runs pandoc
+as an argument list in a temporary directory: DOCX with pandoc's own
+writer, PDF with `--to typst --pdf-engine typst` on A4 in Typst's bundled
+Libertinus Serif. Report text is never code: the reader is `markdown`
+without `raw_html`, `raw_attribute`, `raw_tex`, the three `tex_math_*`
+extensions, `yaml_metadata_block`, and `citations`, so dollar amounts stay
+text and raw blocks print as text; pandoc runs with `--sandbox`, and a Lua
+filter replaces images with their alt text, so no file or URL is read.
 - `GET /api/runs/{id}/sources/{source_id}`: `SourceView`, one source's
   stored chunks in page order, each with a state per sub-query
   (`not_in_results`, `prefiltered`, `pending`, `below_threshold`,
@@ -1434,6 +1471,7 @@ orchestration; every model is behind HTTP.
 | Tokens | characters divided by `llm.chars_per_token` (default 3.5), times `llm.token_margin` (default 1.1), rounded up, plus 16 per passage label | local models use different tokenizers; a profile that switches models sets the ratio |
 | Tests | pytest, pytest-asyncio, respx, httpx2 | adapter tests without network; httpx2 is what Starlette's `TestClient` uses |
 | Quality | ruff (lint and format), basedpyright (strict) | readability enforced by tools |
+| Report export | pandoc (3.1.2 or later) and typst, system binaries in the Nix shell and the Docker image | one tool for PDF and DOCX; Typst is a single binary with fonts, no TeX; only export needs them |
 
 Frontend: Vite, React, TypeScript, react-markdown with remark-gfm (tables in
 reports), Biome (format and lint);
