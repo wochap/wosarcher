@@ -10,7 +10,10 @@ skipped files reported instead of stopping the run.
 
 ### Requirement: Search over queries
 The search stage SHALL search every given query, with requests running
-concurrently. Each hit SHALL record its URL, title, snippet, its best
+concurrently. The text sent to the searcher SHALL be at most 200
+characters: a longer query text SHALL be cut at the last whitespace within
+that limit (or at 200 characters when there is none), with surrounding
+whitespace trimmed. Each hit SHALL record its URL, title, snippet, its best
 (lowest) search rank, and the IDs of every query that found it. A failed
 search for one query SHALL be recorded with the query ID and the reason,
 and the other queries SHALL still be searched. Each new or updated hit
@@ -23,6 +26,10 @@ SHALL be reported to the stage's item callback.
 #### Scenario: One search fails
 - **WHEN** the search for `q2` raises an error and `q1` returns hits
 - **THEN** the result contains the hits of `q1` and one failure naming `q2` and the error text
+
+#### Scenario: Long query text
+- **WHEN** a query's text is 1500 characters of words separated by spaces
+- **THEN** the searcher receives at most its first 200 characters, ending at a word boundary, and the query keeps its full text in the plan
 
 ### Requirement: URL dedupe
 Hits SHALL be merged by normalised URL (core-contracts URL normalisation),

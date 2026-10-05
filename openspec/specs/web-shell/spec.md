@@ -292,8 +292,9 @@ SHALL come from `stage.started`; the provider that ran, the warnings, and
 the passthrough sub-queries SHALL come from `stage.done`. A phase is a
 fallback when the provider that ran names a different method (the part
 before `:`) than the configured provider. The run status SHALL be
-`interrupted` when the server reports it so. The initial search runs
-inside the `plan` stage and SHALL count as part of Plan.
+`interrupted` when the server reports it so. The initial search, when it
+runs, runs inside the `plan` stage and SHALL count as part of Plan; a search
+for `q0` made by the search stage SHALL count as part of Search.
 
 #### Scenario: Waiting for a device
 - **WHEN** `resource.waiting` arrives for the score stage with released stage `prefilter`, and `stage.started` for score has not
@@ -318,6 +319,11 @@ inside the `plan` stage and SHALL count as part of Plan.
 #### Scenario: Same method, model kept
 - **WHEN** `stage.started` for score carries `rerank:bge-reranker` and `stage.done` carries `rerank`
 - **THEN** the Score phase is not a fallback
+
+
+#### Scenario: Topic searched in Search
+- **WHEN** a long query skipped the initial search and `hit.found` events arrive for `q0` after `stage.started` for search
+- **THEN** they count toward the Search phase, and the Plan phase shows no hits
 
 ### Requirement: Settings providers
 The Settings screen of the prototype (`design/project/wosarcher.dc.html`, no

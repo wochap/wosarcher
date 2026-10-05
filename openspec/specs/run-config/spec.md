@@ -114,8 +114,10 @@ override single fields. Values SHALL be converted to the field's type.
 Every model or service provider block (search, fetch, prefilter, score, llm)
 SHALL accept the same fields: `provider`, `base_url`, `api_key`, `model`,
 `device`, `release`, `fallback_urls`, `batch_size`, `concurrency`,
-`connect_timeout`, `timeout`, `retry_budget` (seconds of waiting for
-retries, default 60, not negative), and `prices` (optional per-unit prices
+`connect_timeout`, `timeout` (seconds to wait for a response, default 60;
+default 300 in the `llm` block, sized for a small local model that
+processes a long prompt before its first token), `retry_budget` (seconds
+of waiting for retries, default 60, not negative), and `prices` (optional per-unit prices
 for cost recording). The `llm` block SHALL also accept `max_tokens_field`
 (`max_completion_tokens`, the default, or `max_tokens`),
 `reasoning_tokens` (an integer, default 0, not negative, added to every
@@ -141,6 +143,10 @@ Fields a provider does not use SHALL be ignored by it, not rejected.
 #### Scenario: Continuations
 - **WHEN** no source sets `llm.max_continuations`
 - **THEN** the resolved value is 2, and `--set llm.max_continuations=-1` fails with an error that names the field
+
+#### Scenario: LLM timeout default
+- **WHEN** no source sets `llm.timeout` or `search.timeout`
+- **THEN** the resolved `llm.timeout` is 300 and `search.timeout` is 60
 
 ### Requirement: Validation
 Configuration SHALL be validated when it is resolved. An invalid value SHALL
@@ -180,19 +186,36 @@ show [name]` (the fully resolved configuration with secrets redacted), and
 - **THEN** the `low-vram` line reads `  low-vram  (built-in)  Models take turns on one small GPU; slower, fits 8 GB.`
 
 ### Requirement: Output and context sizing
-The `llm` block SHALL accept `max_output_tokens`, a positive integer or
-unset (the default). When it is set, it caps the writer's output limit.
-`select.max_context_tokens` SHALL accept a positive integer (default 16000)
-or the string `auto`, which means no cap other than the room the context
+The `llm` block SHALL accept `max_output_tokens`, a positive integer,
+default 8192 (a quarter of the default 32768-token `llm.context_window`).
+It caps the writer's output limit.
+`select.max_context_tokens` SHALL accept a positive integer or the string
+`auto` (the default), which means no cap other than the room the context
 window leaves. `fetch.max_pages` SHALL be a positive integer, default 40.
 
 #### Scenario: Auto context in a profile
 - **WHEN** a profile sets `select.max_context_tokens = "auto"` and `llm.context_window = 1000000`
 - **THEN** the configuration resolves, and selection may use all the room the window leaves
 
+#### Scenario: Auto by default
+- **WHEN** no source sets `select.max_context_tokens`
+- **THEN** the resolved value is `auto`
+
+#### Scenario: Fixed cap
+- **WHEN** a profile sets `select.max_context_tokens = 12000`
+- **THEN** the resolved value is 12000
+
 #### Scenario: Invalid context value
 - **WHEN** a profile sets `select.max_context_tokens = "all"`
 - **THEN** loading fails with an error naming the field
+
+#### Scenario: Output cap default
+- **WHEN** no source sets `llm.max_output_tokens`
+- **THEN** the resolved value is 8192, and an exhaustive run's 3000-word target keeps its output limit of 6000 tokens
+
+#### Scenario: Larger model sets its own cap
+- **WHEN** a profile sets `llm.context_window = 1048576` and `llm.max_output_tokens = 131072`
+- **THEN** the resolved values are 1048576 and 131072
 
 #### Scenario: Page cap default
 - **WHEN** no source sets `fetch.max_pages`

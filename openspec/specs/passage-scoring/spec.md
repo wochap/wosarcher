@@ -25,12 +25,20 @@ pairs SHALL be scored.
 ### Requirement: Small-input passthrough
 When the pages paired with a query total fewer than
 `select.passthrough_chars` characters (default 8000), that query's pairs
-SHALL skip the prefilter and the scorer and SHALL all be kept, ordered by
-search rank, then page order, then chunk position, with no display score.
+SHALL skip the prefilter and the scorer. They SHALL be ordered by search
+rank, then page order, then chunk position, and the first `score.top_k`
+of them SHALL be kept, with no display score. The others SHALL be marked
+not kept with the drop reason `query_cap`. This cap applies only to
+small-input passthrough; the `passthrough` fallback scorer stays uncapped
+(Requirement: Thresholds).
 
 #### Scenario: Short pages
-- **WHEN** the pages paired with `q2` total 5000 characters and `select.passthrough_chars = 8000`
+- **WHEN** the pages paired with `q2` total 5000 characters, they hold 4 chunks, `select.passthrough_chars = 8000`, and `score.top_k = 6`
 - **THEN** every pair of `q2` is kept without a scorer call and is marked as passthrough
+
+#### Scenario: Many small chunks
+- **WHEN** the pages paired with `q0` total 7993 characters in 11 chunks and `score.top_k = 6`
+- **THEN** the first 6 pairs in passthrough order are kept without a scorer call, and the other 5 are not kept with the drop reason `query_cap`
 
 ### Requirement: Prefilter
 The prefilter SHALL keep, per query, the `prefilter.top_k` pairs (default
@@ -185,6 +193,7 @@ result SHALL include every pair, kept or not.
 #### Scenario: One report per query after fallback
 - **WHEN** `rerank` fails and `bm25` succeeds for a plan with three queries
 - **THEN** the item callback is called three times, each naming `bm25`
+
 ### Requirement: Drop reasons
 Every pair that is not kept SHALL record why, with the first rule that
 dropped it: `threshold` when the scorer's keep rule (Thresholds) did not

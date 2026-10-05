@@ -56,8 +56,10 @@ SHALL have `query` (required, non-empty), and these optional fields:
 - `profile`
 - `depth` (a preset name or `custom`)
 - `research`: any subset of `sub_queries`, `results_per_query`,
-  `max_pages`, `passages_per_query`, `context_tokens`, and `rounds`. Each
-  is a positive integer, and `rounds` is at most 8.
+  `max_pages`, `passages_per_query`, `context_tokens`,
+  `gap_context_tokens`, and `rounds`. Each is a positive integer,
+  `context_tokens` and `gap_context_tokens` may also be the string `auto`,
+  and `rounds` is at most 8.
 - `writing` (any subset of the writing option fields)
 - `set` (a list of `dotted.key=value` overrides)
 
@@ -95,6 +97,14 @@ with 422 `invalid_attachment` before anything is staged.
 #### Scenario: Too many rounds
 - **WHEN** a client posts `request = {"query": "q", "research": {"rounds": 9}}`
 - **THEN** the response is 422 and names `rounds`
+
+#### Scenario: Auto context for a custom run
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"context_tokens": "auto"}}`
+- **THEN** the run resolves `select.max_context_tokens` to `auto`
+
+#### Scenario: Gap context for a custom run
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"gap_context_tokens": "auto", "rounds": 3}}`
+- **THEN** the run resolves `research.gap_context_tokens` to `auto` and `research.rounds` to 3
 
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
@@ -342,7 +352,7 @@ SHALL answer 422 `invalid_attachment`.
 
 #### Scenario: Rerun keeps the depth
 - **WHEN** a client reruns a run that used depth `deep`
-- **THEN** the rerun's summary has `depth = "deep"` and its resolved `plan.max_sub_queries` is 5
+- **THEN** the rerun's summary has `depth = "deep"` and its resolved `plan.max_sub_queries` is 6
 
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
@@ -366,8 +376,7 @@ SHALL apply when the file does not exist.
 - whether it is `active`;
 - its `description` (empty when the profile sets none);
 - its resolved `context_window`, `prompt_reserve_tokens`, and
-  `max_output_tokens` (null when unset), so a client can show the
-  effective context budget.
+  `max_output_tokens`, so a client can show the effective context budget.
 
 #### Scenario: Active profile marked
 - **WHEN** the stored default profile is `cloud`
@@ -379,7 +388,7 @@ SHALL apply when the file does not exist.
 
 #### Scenario: Limits
 - **WHEN** the `workstation` profile resolves `llm.context_window = 32768`
-- **THEN** its entry has `context_window = 32768`, `prompt_reserve_tokens = 2000`, and `max_output_tokens = null`
+- **THEN** its entry has `context_window = 32768`, `prompt_reserve_tokens = 2000`, and `max_output_tokens = 8192`
 
 ### Requirement: Provider health
 `GET /api/providers/health` SHALL return, without sending any probe, the
@@ -481,11 +490,13 @@ and stored results SHALL stay unchanged.
 `standard`, `deep`, `exhaustive`. Each entry SHALL have:
 - its `name` and `description`;
 - `values` with `sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`, `rounds`, `queries_per_round`,
-  and `words`.
+  `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`,
+  `queries_per_round`, and `words`.
 
 Each value SHALL be the one the preset sets, or the built-in default when
-it sets none. The exception is `words`: it SHALL be null when the preset
+it sets none. `context_tokens` and `gap_context_tokens` SHALL each be a
+positive integer or the string `auto`; with the built-in presets
+`context_tokens` is `auto` and `gap_context_tokens` is 4000. The exception is `words`: it SHALL be null when the preset
 does not set it (the global default applies). Run summaries from
 `GET /api/runs` and `GET /api/runs/{id}` SHALL include:
 - the run's `depth` (a preset name, `custom`, or null);
@@ -496,7 +507,7 @@ does not set it (the global default applies). Run summaries from
 
 #### Scenario: Standard values
 - **WHEN** a client requests `GET /api/depths`
-- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` 16000, `rounds` 1, `queries_per_round` 3, and `words` null
+- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` "auto", `gap_context_tokens` 4000, `rounds` 1, `queries_per_round` 3, and `words` null
 
 #### Scenario: Summary depth
 - **WHEN** a run was started with `"depth": "quick"`

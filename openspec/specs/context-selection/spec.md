@@ -52,27 +52,40 @@ both sides, by the same round-robin rule.
 
 ### Requirement: Token budget
 The context budget SHALL be `llm.context_window` minus
-`select.prompt_reserve_tokens` (default 2000) minus the output allowance,
-capped at `select.max_context_tokens` (default 16000) unless that is
-`auto`. The output allowance is the writer's output limit (report-writing
-"Length and language"). A budget of zero or less SHALL fail with an error
-that names `llm.context_window`.
+`select.prompt_reserve_tokens` (default 2000) minus the output allowance
+minus the estimated tokens of the user's query, capped at
+`select.max_context_tokens` unless that is `auto` (the default). The output
+allowance is the writer's output limit (report-writing "Length and
+language"). The query's tokens SHALL be estimated as passages are, with
+`llm.chars_per_token` and `llm.token_margin`, because the writer's prompt
+holds the full query on top of the fixed prompt text that
+`prompt_reserve_tokens` covers. A budget of zero or less SHALL fail with an
+error that names `llm.context_window` and gives the prompt, query, and
+output tokens it subtracted.
 
 #### Scenario: Small context window
-- **WHEN** `llm.context_window = 8192`, `select.max_context_tokens = 16000`, and the target is 1200 words
-- **THEN** the budget is 8192 - 2000 - 2400 = 3792 tokens
+- **WHEN** `llm.context_window = 8192`, `select.max_context_tokens = 16000`, the target is 1200 words, and the query is 35 characters (11 tokens)
+- **THEN** the budget is 8192 - 2000 - 2400 - 11 = 3781 tokens
 
 #### Scenario: Window too small
-- **WHEN** `llm.context_window = 4000` and the target is 1200 words
-- **THEN** selection fails and the error names `llm.context_window`
+- **WHEN** `llm.context_window = 4000`, the target is 1200 words, and the query is 35 characters
+- **THEN** selection fails and the error names `llm.context_window` and the 2000 prompt, 11 query, and 2400 output tokens
 
 #### Scenario: Auto context
-- **WHEN** `llm.context_window = 1000000`, `select.max_context_tokens = "auto"`, and the target is 1200 words
-- **THEN** the budget is 1000000 - 2000 - 2400 = 995600 tokens
+- **WHEN** `llm.context_window = 1000000`, `select.max_context_tokens = "auto"`, the target is 1200 words, and the query is 35 characters
+- **THEN** the budget is 1000000 - 2000 - 2400 - 11 = 995589 tokens
 
 #### Scenario: Output cap lowers the allowance
-- **WHEN** `llm.context_window = 32768`, `select.max_context_tokens = "auto"`, the target is 3000 words, and `llm.max_output_tokens = 4000`
-- **THEN** the budget is 32768 - 2000 - 4000 = 26768 tokens
+- **WHEN** `llm.context_window = 32768`, `select.max_context_tokens = "auto"`, the target is 3000 words, `llm.max_output_tokens = 4000`, and the query is 35 characters
+- **THEN** the budget is 32768 - 2000 - 4000 - 11 = 26757 tokens
+
+#### Scenario: Default is auto
+- **WHEN** `llm.context_window = 131072`, `select.max_context_tokens` is not set, the target is 600 words, and the query is 35 characters
+- **THEN** the budget is 131072 - 2000 - 1200 - 11 = 127861 tokens
+
+#### Scenario: Long brief on a small local model
+- **WHEN** every setting has its default (`llm.context_window = 32768`, `llm.chars_per_token = 3.5`, `llm.token_margin = 1.1`, `llm.max_output_tokens = 8192`), the target is 1200 words, and the query is a 4,000-character brief
+- **THEN** the query is estimated at 1258 tokens and the budget is 32768 - 2000 - 2400 - 1258 = 27110 tokens
 
 ### Requirement: Token estimate
 The token count of a passage SHALL be estimated as its character count
@@ -93,6 +106,7 @@ kind, URI, title, author, and date when known.
 #### Scenario: Numbers map to chunks
 - **WHEN** three passages are selected
 - **THEN** they have the numbers 1, 2, and 3, each with its chunk ID and source ID, and each source appears once in the context
+
 ### Requirement: Skipped passages
 Selection SHALL report every passage kept by the score stage that it does
 not select, once, with its chunk ID, its best query ID, and a reason:

@@ -11,24 +11,31 @@ timeouts and cancellation, and records costs.
 ### Requirement: Stage order and phases
 A run SHALL execute the stages in this order: `load`, `plan`, `search`,
 `fetch`, `chunk`, `prefilter`, `score`, `gap`, `select`, `write`.
-- `plan` first searches the main query (the initial search), then plans.
-- `search` searches the sub-queries, reusing the initial search's hits.
+- `plan` searches the user's query first when it is at most 200 characters
+  (the initial search, research-planning "Initial search"), then calls the
+  planner, which returns the topic line `q0` and the sub-queries.
+- `search` searches the sub-queries of round 1, and `q0` too when the
+  initial search did not run, then each later round's follow-ups.
 - With more than one research round, `search` through `gap` repeat once
   per round (research-rounds "Rounds"). Otherwise `gap` is skipped.
 
 Each stage SHALL run once per round over all of that round's queries (a
 phase), never once per query. A stage SHALL start only after the previous
-stage is finished. The `plan` stage SHALL include one search for the main
-query (the initial search) before planning, unless the run's sources are
-`files`.
+stage is finished. The `plan` stage SHALL include the initial search when
+the run's sources are not `files` and the user's query is at most 200
+characters after trimming.
 
 #### Scenario: Phases across sub-queries
 - **WHEN** the plan produces three sub-queries
 - **THEN** the score stage starts once, after the fetch stage has finished for all three sub-queries
 
 #### Scenario: Initial search
-- **WHEN** a run with sources `both` reaches the plan stage
-- **THEN** one search for the main query runs before the planner is called, and the planner receives its result titles and snippets
+- **WHEN** a run with sources `both` and the query "what is BM25" reaches the plan stage
+- **THEN** one search for that query runs before the planner is called, the planner receives its result titles and snippets, and the search stage searches only the sub-queries
+
+#### Scenario: Long query
+- **WHEN** a run with sources `both` has a 4000-character query and the plan `q0` to `q2`
+- **THEN** the plan stage makes no search request, and the search stage searches `q0`, `q1`, and `q2`
 
 #### Scenario: Gap skipped in a single round
 - **WHEN** a run has `research.rounds = 1`

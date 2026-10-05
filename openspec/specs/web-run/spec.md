@@ -133,7 +133,19 @@ The Live run screen (scenario `live`) SHALL show a header with the status
 tag (Connecting, Running, Completed, Failed, Cancelled, with the
 prototype's tints and pulses), a "rewrite of <id>" tag for a fork from the
 write stage, the run id, the meta line `recipe · sources · profile [· N
-files]`, and the query clamped to two lines. Actions: Cancel only while
+files]`, and the query clamped to two lines. When the query is longer than
+240 characters (scenario `long-brief`), a ghost text button SHALL follow
+the query: a caret-down icon, "Show full question", and "· <N>
+characters" in the faint color, where N is the query's character count
+with thousands separators (for example "4,030 characters"). Pressing it
+SHALL show the whole query as plain text, line breaks kept and Markdown
+marks (`#`, `**`, list markers) shown as typed, never rendered as
+formatting, in a tinted box no taller
+than the smaller of 40% of the viewport and 360px that scrolls inside
+itself, and SHALL change the button to a caret-up icon and "Show less";
+pressing again SHALL restore the two-line clamp. The button SHALL carry
+`aria-expanded` and `aria-controls` naming the query element. A query of
+240 characters or fewer SHALL show no button. Actions: Cancel only while
 the run status is queued or running, "Open report" when completed, Rerun
 when failed, interrupted, or cancelled. Cancel SHALL send
 `POST /api/runs/{id}/cancel` and SHALL be disabled until the request
@@ -151,6 +163,14 @@ run screen.
 #### Scenario: Cancel a run that already failed
 - **WHEN** the header still shows Running, the user presses Cancel, and the server answers 409 `run_not_active` with `status = "failed"`
 - **THEN** no error toast is shown, the tag reads Failed (scenario `failure`), Cancel is gone, and Rerun is shown
+
+#### Scenario: Long question
+- **WHEN** the run's query is a 4,030-character brief (scenario `long-brief`)
+- **THEN** the header shows the query clamped to two lines and the button "Show full question · 4,030 characters"; pressing it shows the whole brief in a scrolling box and the button reads "Show less · 4,030 characters"
+
+#### Scenario: Short question
+- **WHEN** the run's query has 120 characters
+- **THEN** no "Show full question" button is shown
 
 #### Scenario: Cancel in flight
 - **WHEN** the user presses Cancel and the server has not answered yet
@@ -283,7 +303,7 @@ had one (faint icon).
 
 ### Requirement: Sub-queries and sources panels
 The Live run screen (scenario `live`) SHALL show the Sub-queries panel
-(number, text, status queued, searching, "N results", reused, or
+(query ID, text, status queued, searching, "N results", reused, or
 cancelled; summary `done/total`) and the Sources panel, newest first, each
 row with icon, title linking to the URL in a new tab, URL without scheme,
 and state: found, fetched, cached (for a fork), the failure reason, not
@@ -291,6 +311,20 @@ fetched (cancelled run), or for files the size; plus "N kept" once
 passages are selected. The Sources summary SHALL read "N of M fetched · K
 files" and a danger note "N failed · run continues" SHALL show while any
 page failed.
+
+Every Sub-queries row SHALL start with its query ID (`q0`, `q1`, …) in the
+11px faint number column, matching the IDs of the Research rounds panel.
+The first row is `q0`, the planner's topic line (scenario `live`): above
+its text, on a line of its own, the row SHALL show the muted 11px label
+"Topic line" followed by its help button (Requirement: Run help
+placements), and it counts toward the
+`done/total` summary like the other rows. Its status SHALL count the hits
+of `q0`, whether they came from the search before planning or from the
+Search phase.
+
+#### Scenario: Topic row
+- **WHEN** `plan.ready` lists `q0` "speculative decoding: draft-model size vs acceptance on 8–12 GB GPUs" and `q1` to `q3`
+- **THEN** the Sub-queries panel shows four rows numbered `q0` to `q3`, the first showing the label "Topic line" and a help button above the topic text
 
 #### Scenario: Failed page
 - **WHEN** `page.failed` arrives with reason "403 Forbidden"
@@ -668,9 +702,26 @@ and Selected passages (label, score, heading path, text, domain). A run
 with recipe `context` SHALL show the selected passages in place of the
 report and SHALL NOT offer Rewrite or Copy markdown or Download.
 
+A query of 240 characters or fewer SHALL show as the full H1, with no
+clamp and no button (scenarios `finished` and `report-cut`). When the query
+is longer than 240 characters (scenario `long-brief`), the H1 SHALL be
+clamped to three lines and followed by the same "Show full question · <N> characters" /
+"Show less" button as the Live run header (Requirement: Live run header).
+Expanded, the H1 SHALL show the whole query at 15px regular weight, line
+breaks kept, in a tinted box no taller than the smaller of 50% of the
+viewport and 480px that scrolls inside itself.
+
 #### Scenario: Finished report
 - **WHEN** the user opens a completed report run
 - **THEN** the report, the sources with kept counts, and the selected passages are shown
+
+#### Scenario: Long question title
+- **WHEN** the user opens the report of a run whose query has 4,030 characters
+- **THEN** the title shows three lines of the query and "Show full question · 4,030 characters"; pressing it shows the whole query in a scrolling box
+
+#### Scenario: Short question title
+- **WHEN** the user opens the report of a run whose query has 120 characters
+- **THEN** the title shows the whole query, not clamped, and no "Show full question" button
 
 #### Scenario: References heading
 - **WHEN** the run's reference style is `MLA`
@@ -816,6 +867,7 @@ accessible label is "Help: <label>"):
 | Options, after "Profile" | Profile | Profile | A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server. | |
 | Options, after an "overridden" mark | Overridden | Overridden | This value differs from your default in Settings and applies to this run only. | |
 | Rewrite dialog, after a "changed" mark | Changed | Changed | This value differs from the version you are rewriting. | |
+| Sub-queries and Research rounds, after the "Topic line" label on the `q0` row | Topic line | Topic line | A short topic the planner writes from your question. Passages are ranked against it as the first query, q0. Questions up to 200 characters are searched as written; longer ones are searched by this topic. | |
 | Phase card Plan | Plan | Plan | Splits your question into focused sub-queries for search. | |
 | Phase card Search | Search | Search | Runs each sub-query against the search provider and collects candidate URLs. | |
 | Phase card Fetch | Fetch | Fetch | Downloads each URL and extracts its readable text. Failed pages are skipped and the run continues. | |
@@ -873,6 +925,10 @@ saved results of earlier stages."
 - **WHEN** the user opens the Options panel and focuses the help button after "Recipe"
 - **THEN** exactly one help button follows the label, and the tooltip shows the Recipe text
 
+#### Scenario: Topic line help
+- **WHEN** the user focuses the help button after the "Topic line" label on the `q0` row
+- **THEN** the tooltip title is "Topic line" and the body is "A short topic the planner writes from your question. Passages are ranked against it as the first query, q0. Questions up to 200 characters are searched as written; longer ones are searched by this topic."
+
 #### Scenario: Rewrite mark help
 - **WHEN** a field in the Rewrite dialog shows "changed" and the user taps the help button after it
 - **THEN** the tooltip reads "Changed" and "This value differs from the version you are rewriting."
@@ -905,8 +961,23 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
     <effective> (model window)", in thousands of tokens such as "32k".
 - An "Advanced" disclosure listing, each with its help button: Sub-queries
   (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds
-  (1-8), Passages per query (1-40), and Context tokens (1000-128000, step
-  1000).
+  (1-8), Passages per query (1-40), Context tokens (Auto, or
+  1000-128000, step 1000), and Gap context tokens (Auto, or 1000-128000,
+  step 1000).
+  - Context tokens is a number input with an "Auto" option. Auto (the value
+    of every built-in preset) shows "Auto · <effective>" with the effective
+    budget; emptying the input selects Auto.
+  - Gap context tokens is a number input with the same "Auto" option.
+    Presets show 4,000. Auto shows "Auto · <effective>", where the
+    effective gap budget is the profile's `context_window` minus
+    `prompt_reserve_tokens` minus 768 (the query's own size is not
+    subtracted in the browser). It is disabled with the lock icon and the
+    note "Used between rounds; needs 2+ rounds." while Rounds is 1. The
+    prototype has no such field; it SHALL reuse the Context tokens field's
+    controls and styles, and its help button SHALL read "Gap context
+    tokens" / "Token budget for the passages the gap step reads between
+    rounds to choose follow-up searches. Auto uses all the room the
+    model window leaves."
   - With a preset selected, the fields show the preset's values and look
     read-only (dashed, muted), but accept typing. Editing a field switches
     the depth to Custom with the edited values.
@@ -915,17 +986,22 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
     selected before.
 - When Sources is `files`, Rounds is disabled with the lock icon at 1 and
   the note "Files-only runs use 1 round.", and the estimate counts 1 round.
-- Context tokens shows "<asked> → <effective> (model window)" when the
-  asked value is above the effective budget.
+- Context tokens shows "<asked> → <effective> (model window)" when a
+  number is asked and it is above the effective budget; with Auto it shows
+  no clamp text and the estimate line has no context part. Gap context
+  tokens follows the same rule against its own effective budget and never
+  adds to the estimate line.
   - The effective budget is the selected profile's `context_window` minus
-    `prompt_reserve_tokens` minus the output limit.
+    `prompt_reserve_tokens` minus the output limit (the query's own size
+    is not subtracted in the browser).
   - The output limit is the larger of 1024 and twice the words, capped at
-    `max_output_tokens` when set.
+    the profile's `max_output_tokens`.
   - Asked and effective are formatted with thousands separators.
 
 The run request SHALL send `depth` set to the preset name and no `research`
 for a preset. For Custom it SHALL send `depth` = `custom` and `research`
-with all six values. Help texts SHALL be verbatim from the prototype's
+with all seven values, `context_tokens` and `gap_context_tokens` as
+`"auto"` when Auto is selected. Help texts SHALL be verbatim from the prototype's
 help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 `d-ctx`, and `w-words-def`.
 
@@ -935,11 +1011,23 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 
 #### Scenario: Edit switches to Custom
 - **WHEN** Deep is selected and the user changes Max pages to 80
-- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those six values
+- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those seven values
+
+#### Scenario: Auto context
+- **WHEN** Deep is selected and the profile has `context_window` 131072, `prompt_reserve_tokens` 2000, `max_output_tokens` 8192, and words is 2000
+- **THEN** Context tokens shows "Auto · 125,072" and the estimate line has no context part
 
 #### Scenario: Clamped context
-- **WHEN** Exhaustive asks 32,000 context tokens, the profile has `context_window` 32768, `prompt_reserve_tokens` 2000, no `max_output_tokens`, and words is 3000
+- **WHEN** Custom asks 32,000 context tokens, the profile has `context_window` 32768, `prompt_reserve_tokens` 2000, `max_output_tokens` 8192, and words is 3000
 - **THEN** Context tokens shows "32,000 → 24,768 (model window)" and the estimate line ends with "context 32k → 25k (model window)"
+
+#### Scenario: Auto gap context
+- **WHEN** Custom is selected with Rounds 3, Gap context tokens Auto, and the profile has `context_window` 1000000 and `prompt_reserve_tokens` 2000
+- **THEN** Gap context tokens shows "Auto · 997,232" and the request has `research.gap_context_tokens` = `"auto"`
+
+#### Scenario: Gap context locked at one round
+- **WHEN** Rounds is 1
+- **THEN** Gap context tokens is disabled with "Used between rounds; needs 2+ rounds."
 
 #### Scenario: Custom remembered
 - **WHEN** the user started a Custom run with Sub-queries 6, then opens New run again and picks Custom
@@ -950,7 +1038,7 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 - **THEN** Rounds is disabled at 1 with "Files-only runs use 1 round."
 
 #### Scenario: Deep estimate
-- **WHEN** Deep is selected with Sub-queries 5, Results per query 10, Max pages 60, Rounds 3, and queries per round 3
+- **WHEN** Deep is selected with Sub-queries 6, Results per query 10, Max pages 60, Rounds 3, and queries per round 3
 - **THEN** the estimate line reads "~60 pages · 3 rounds · ~4 LLM calls"
 
 ### Requirement: Depth tags
@@ -987,8 +1075,11 @@ Each round that has started shows:
     while running;
   - "0 new pages · <m> already fetched" for a round with no new pages.
 - The gap note written after it, when there is one.
-- Its queries, each with its ID, text, and status: "queued", "searching",
-  or "<n> results". With more than 3 queries, only 2 are shown, plus a
+- Its queries, each with its ID (`q0`, `q1`, …), text, and status:
+  "queued", "searching", or "<n> results". Round 1 starts with `q0`, shown
+  as in the Sub-queries panel: the muted label "Topic line" and its help
+  button on a line above the topic text (scenarios `rounds-*`). `q0` counts as
+  one of round 1's queries. With more than 3 queries, only 2 are shown, plus a
   "+<n> more" button that toggles to "Show fewer". A running round is
   expanded.
 - A gap line: "Gap: reading the best passages so far…" while the gap step
@@ -1012,6 +1103,10 @@ shows "Planning round 1 queries…".
 #### Scenario: Live round
 - **WHEN** a three-round run is fetching in round 2 (scenario `rounds-live`)
 - **THEN** round 1 shows its pages and kept count and its gap note, round 2 shows a spinner with "fetching", and the line "Up to 1 more round if the gap step finds gaps" is shown
+
+#### Scenario: Topic in round 1
+- **WHEN** round 1 has `q0` and five planner sub-queries
+- **THEN** round 1 lists `q0` first, with the "Topic line" label and its help button above its text, shows two queries plus "+4 more", and "+4 more" reveals `q2` to `q5`
 
 #### Scenario: No new sources
 - **WHEN** research stopped after round 2 with `no new sources` (scenario `rounds-nonew`)

@@ -14,15 +14,18 @@ files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
 `--depth NAME`, `--set KEY=VALUE` (repeatable), `--tone`,
 `--tone-instructions`, `--words`, `--language`, `--citation-marker`,
 `--reference-style`, `--sub-queries N`, `--results-per-query N`,
-`--max-pages N`, `--passages-per-query N`, `--context-tokens N`,
-`--rounds N`, `--run-id ID`, and `--json`. Each writing flag SHALL act as
+`--max-pages N`, `--passages-per-query N`, `--context-tokens N|auto`,
+`--gap-context-tokens N|auto`, `--rounds N`, `--run-id ID`, and `--json`. Each writing flag SHALL act as
 `--set write.<field>=<value>`. Each research flag SHALL act as `--set` on
 its key:
 - `--sub-queries`: `plan.max_sub_queries`
 - `--results-per-query`: `search.max_results`
 - `--max-pages`: `fetch.max_pages`
 - `--passages-per-query`: `score.top_k`
-- `--context-tokens`: `select.max_context_tokens`
+- `--context-tokens`: `select.max_context_tokens` (a positive integer or
+  `auto`)
+- `--gap-context-tokens`: `research.gap_context_tokens` (a positive
+  integer or `auto`)
 - `--rounds`: `research.rounds`
 
 Writing and research flags SHALL take precedence over `--set` for the same
@@ -43,11 +46,19 @@ field. The depth preset SHALL apply below all of them (depth-presets
 
 #### Scenario: Depth with a research flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --max-pages 80`
-- **THEN** the resolved `fetch.max_pages` is 80, `plan.max_sub_queries` is 5, and `request.json` records depth `deep` and the `fetch.max_pages` override
+- **THEN** the resolved `fetch.max_pages` is 80, `plan.max_sub_queries` is 6, and `request.json` records depth `deep` and the `fetch.max_pages` override
 
 #### Scenario: Rounds flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --rounds 2`
 - **THEN** the resolved `research.rounds` is 2
+
+#### Scenario: Auto context flag
+- **WHEN** the user runs `wosarcher run "q" --profile p --context-tokens auto` and profile `p` sets `select.max_context_tokens = 12000`
+- **THEN** the resolved `select.max_context_tokens` is `auto`
+
+#### Scenario: Gap context flag
+- **WHEN** the user runs `wosarcher run "q" --depth deep --gap-context-tokens auto`
+- **THEN** the resolved `research.gap_context_tokens` is `auto` and `request.json` records that override
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
