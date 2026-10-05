@@ -727,7 +727,7 @@ sent.
 The Report screen SHALL match the prototype scenario `finished`: Completed
 tag, run id, meta `date · duration · recipe · N sources · N passages`, the
 query as H1, the actions Rewrite (followed by its help button), Copy
-markdown, Download .md, and Copy JSON (context), the line "Written with
+markdown, the downloads (Requirement: Export), and Copy JSON (context), the line "Written with
 <Tone> · <N> words · <Language> · <citation marker label> · <reference
 style> [· custom instructions]" (for recipe `answer`, scenario
 `finished-answer`: "Answer, at most <N> words · <Tone> · <Language> ·
@@ -738,7 +738,7 @@ report's reference entries below it, and an aside with Sources (count
 fetched and failed, "N kept", the citation labels that use each source)
 and Selected passages (label, score, heading path, text, domain). A run
 with recipe `context` SHALL show the selected passages in place of the
-report and SHALL NOT offer Rewrite or Copy markdown or Download. A run
+report and SHALL NOT offer Rewrite, Copy markdown, or any download. A run
 with recipe `answer` SHALL use the same layout, actions, and References as
 a report (scenario `finished-answer`).
 
@@ -757,7 +757,7 @@ viewport and 480px that scrolls inside itself.
 
 #### Scenario: Finished answer
 - **WHEN** the user opens a completed run with `writing.format` = `answer` and words 400 (scenario `finished-answer`)
-- **THEN** the meta line names `answer`, the options line starts "Answer, at most 400 words ·", and the answer is shown with its citation chips, References, Rewrite, Copy markdown, and Download .md
+- **THEN** the meta line names `answer`, the options line starts "Answer, at most 400 words ·", and the answer is shown with its citation chips, References, Rewrite, Copy markdown, and the same downloads as a report
 
 #### Scenario: Long question title
 - **WHEN** the user opens the report of a run whose query has 4,030 characters
@@ -850,16 +850,61 @@ Citation markers inside table cells SHALL render as citation chips.
 
 ### Requirement: Export
 On the Report screen (scenario `finished`), "Copy markdown" SHALL copy the
-report, "Download .md" SHALL save `<run id>.md` with `# <query>` and a
-blank line before the report, and "Copy JSON (context)" SHALL copy
-`{run, parent, query, options: {recipe, sources, profile, writing},
-passages: [{cite, score, source, heading_path, text}]}`. Each SHALL confirm
-with a toast ("Markdown copied", "Downloaded <id>.md", "Context JSON
-copied").
+report, the downloads SHALL save the report as Markdown, PDF, or Word, and
+"Copy JSON (context)" SHALL copy `{run, parent, query, options: {recipe,
+sources, profile, writing}, passages: [{cite, score, source, heading_path,
+text}]}`.
+
+- "Download .md" SHALL save `<run id>.md` with `# <query>` and a blank line
+  before the report, built in the browser.
+- "Download .pdf" and "Download .docx" SHALL fetch `GET
+  /api/runs/{id}/export?format=pdf|docx` and save `<run id>.pdf` or
+  `<run id>.docx`.
+
+Layout, as in the prototype's `downloads` tweak set to `auto`: on desktop
+(scenarios `finished`, `report-cut`, `finished-answer`) the three downloads
+SHALL be three secondary buttons in that order, each with the
+download-simple icon and the label "Download .md", "Download .pdf", or
+"Download .docx", placed between Copy markdown and Copy JSON (context). On a
+phone they SHALL be one secondary "Download" button with the download-simple
+icon and a caret-down icon (`aria-haspopup="menu"`, `aria-expanded`) that
+opens a menu labelled "Download format" below it (scenario `export-menu`),
+with one item per format: a muted file icon (file-text, file-pdf,
+file-doc), the extension in the mono font (`.md`, `.pdf`, `.docx`), and a
+muted description ("Markdown", "PDF", "Word"); items are 44px tall on a
+phone. Choosing an item SHALL close the menu and start that download;
+Escape or a click outside SHALL close it.
+
+While a PDF or DOCX export is in progress (scenario `export-busy`), its
+button, or the phone's "Download" button, SHALL show a spinning
+circle-notch icon and "Exporting…", carry `aria-busy="true"`, and be
+disabled; the other desktop buttons stay usable. On success the toast SHALL
+read "Downloaded <id>.<ext>". A failed export (scenario `export-error`)
+SHALL save nothing and show an error toast with the warning-circle icon in
+the danger color and the response's `detail` (for example "PDF export
+needs typst on the server"). "Copy markdown" and "Copy JSON (context)"
+SHALL confirm with the toasts "Markdown copied" and "Context JSON copied".
+Runs with recipe `context` SHALL show no downloads.
 
 #### Scenario: Download
 - **WHEN** the user presses "Download .md" on run `r_8c21`
 - **THEN** a file `r_8c21.md` starting with `# <query>` is saved and the toast "Downloaded r_8c21.md" shows
+
+#### Scenario: Download PDF on desktop
+- **WHEN** the user presses "Download .pdf" on run `r_8c21` on desktop
+- **THEN** that button shows "Exporting…" and is disabled until the response arrives, then `r_8c21.pdf` is saved and the toast "Downloaded r_8c21.pdf" shows
+
+#### Scenario: Phone menu
+- **WHEN** the user opens run `r_8c21`'s Report screen on a phone and presses "Download"
+- **THEN** a menu "Download format" lists `.md` Markdown, `.pdf` PDF, and `.docx` Word, and choosing `.docx` closes it and saves `r_8c21.docx`
+
+#### Scenario: Export unavailable
+- **WHEN** the user presses "Download .pdf" and the server answers 503 `export_unavailable` with detail "PDF export needs typst on the server"
+- **THEN** no file is saved and an error toast with the danger-colored warning icon shows "PDF export needs typst on the server"
+
+#### Scenario: Context run
+- **WHEN** the user opens a run with recipe `context`
+- **THEN** no download button or menu is shown
 
 ### Requirement: Rewrite
 Rewrite on the Report screen (scenarios `finished` and `versions`) SHALL
