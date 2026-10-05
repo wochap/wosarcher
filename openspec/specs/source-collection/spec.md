@@ -121,13 +121,28 @@ marked as pdf-ingest markdown, so chunking keeps its page and block IDs.
 - **THEN** its page is marked as pdf-ingest markdown
 
 ### Requirement: Fetch page cap and order
-The fetch stage SHALL fetch at most `fetch.max_pages` pages successfully.
+The fetch stage SHALL keep at most `fetch.max_pages` counted pages (thin
+pages, below, are not counted). In a multi-round run each round's fetch
+uses its round cap in place of `fetch.max_pages` (research-rounds "Fetch
+and pairing across rounds"); below, "the cap" means the one that fetch
+uses.
 Unique hits SHALL be queued round-robin across queries in query order (`q0`
 first), taking each query's hits in rank order. A hit found by several
 queries SHALL be queued once, at its earliest turn. Fetches SHALL start in
 queue order, within the `fetch.concurrency` limit. A failed or empty fetch
 SHALL NOT count toward the cap: the next queued hit is fetched in its place.
-No new fetch SHALL start once the pages fetched plus the fetches in flight
+
+A thin page is a fetched web page whose text has fewer than
+`chunk.min_chars` characters (default 500), measured as the page's
+character count (the `chars` of `page.fetched`). Attached files are never
+thin.
+A thin page SHALL be kept and recorded like any other page, but SHALL NOT
+count toward the cap, so the next queued hit is fetched in its place. At
+most as many thin pages as the cap SHALL be exempt in one fetch; thin
+pages beyond that count toward the cap. With `chunk.min_chars =
+0` no page is thin.
+
+No new fetch SHALL start once the counted pages plus the fetches in flight
 reach the cap. Queued hits that were never fetched SHALL NOT be recorded as
 failures. The stage SHALL report how many there were.
 
@@ -142,6 +157,18 @@ failures. The stage SHALL report how many there were.
 #### Scenario: Under the cap
 - **WHEN** 10 unique hits are found and `fetch.max_pages = 40`
 - **THEN** all 10 are fetched
+
+#### Scenario: Thin page replaced
+- **WHEN** `fetch.max_pages = 2`, `fetch.concurrency = 1`, `chunk.min_chars = 500`, and the queue is X, Y, Z with X returning 94 characters
+- **THEN** X, Y, and Z are all kept as pages, X is thin, and no hit is reported as not fetched
+
+#### Scenario: Thin exemption bounded
+- **WHEN** `fetch.max_pages = 2`, `fetch.concurrency = 1`, and every queued hit returns a thin page
+- **THEN** the stage keeps 4 pages (2 exempt, 2 counted) and reports the rest as not fetched
+
+#### Scenario: Thin exemption uses the round cap
+- **WHEN** a 2-round run has `fetch.max_pages = 15`, round 1's cap is 8, and every round-1 hit returns a thin page
+- **THEN** round 1 keeps 16 pages (8 exempt, 8 counted)
 
 ### Requirement: Domain filter
 The search stage SHALL drop every hit whose host is blocked, and, when the

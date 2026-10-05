@@ -57,18 +57,26 @@ SHALL have `query` (required, non-empty), and these optional fields:
 - `depth` (a preset name or `custom`)
 - `research`: any subset of `sub_queries`, `results_per_query`,
   `max_pages`, `passages_per_query`, `context_tokens`,
-  `gap_context_tokens`, and `rounds`. Each is a positive integer,
+  `gap_context_tokens`, `rounds`, and `queries_per_round` (sets
+  `research.queries_per_round`). Each is a positive integer,
   `context_tokens` and `gap_context_tokens` may also be the string `auto`,
   and `rounds` is at most 8.
 - `writing` (any subset of the writing option fields)
 - `domains`: `allow` and `block`, each optional, each a list of domain
   entries (run-config "Domain lists") that replaces the configured list
   for this run
+- `search_language`: a search language that sets `search.language` for
+  this run; absent or null leaves the configured value. A search language
+  SHALL be `all`, `auto`, or a code matching
+  `^[a-z]{2,3}(-[A-Za-z]{2,4}){0,2}$`, such as `es`, `es-PE`, or
+  `zh-Hans-CN`. The CLI, the web form, and the `search.language`
+  configuration key SHALL use this same rule.
 - `set` (a list of `dotted.key=value` overrides)
 
 An unknown `depth` SHALL be rejected with 422 that names `depth`. An
 invalid domain entry SHALL be rejected with 422 that names `domains.allow`
-or `domains.block` and the entry. The
+or `domains.block` and the entry. An invalid `search_language` SHALL be
+rejected with 422 that names `search_language`. The
 response SHALL be 201 with the new `run_id` and its status (`queued` or
 `running`). Attachment file names SHALL be reduced to their base name; two
 attachments with the same base name SHALL be rejected with 422. A request
@@ -118,6 +126,26 @@ with 422 `invalid_attachment` before anything is staged.
 #### Scenario: Invalid domain
 - **WHEN** a client posts `request = {"query": "q", "domains": {"allow": ["gob.pe/tramites"]}}`
 - **THEN** the response is 422, the detail names `domains.allow` and `gob.pe/tramites`, and no run is queued
+
+#### Scenario: Follow-ups per round for a custom run
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"rounds": 2, "queries_per_round": 6}}`
+- **THEN** the run resolves `research.rounds` 2 and `research.queries_per_round` 6
+
+#### Scenario: Search language for one run
+- **WHEN** a client posts `request = {"query": "q", "search_language": "es-PE"}`
+- **THEN** the run resolves `search.language` to `es-PE` and `request.json` records the override
+
+#### Scenario: No search language
+- **WHEN** a client posts `request = {"query": "q"}` and the profile leaves `search.language` empty
+- **THEN** the run resolves `search.language` to empty and SearXNG receives no `language` parameter
+
+#### Scenario: Invalid search language
+- **WHEN** a client posts `request = {"query": "q", "search_language": "spanish"}`
+- **THEN** the response is 422, the detail names `search_language`, and no run is queued
+
+#### Scenario: Script and region language
+- **WHEN** a client posts `request = {"query": "q", "search_language": "zh-Hans-CN"}`
+- **THEN** the run resolves `search.language` to `zh-Hans-CN`
 
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does

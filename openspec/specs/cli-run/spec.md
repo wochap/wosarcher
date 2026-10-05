@@ -15,8 +15,9 @@ files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
 `--tone-instructions`, `--words`, `--language`, `--citation-marker`,
 `--reference-style`, `--format report|answer`, `--sub-queries N`, `--results-per-query N`,
 `--max-pages N`, `--passages-per-query N`, `--context-tokens N|auto`,
-`--gap-context-tokens N|auto`, `--rounds N`, `--allow-domain DOMAIN`
-(repeatable), `--block-domain DOMAIN` (repeatable), `--run-id ID`, and
+`--gap-context-tokens N|auto`, `--rounds N`, `--queries-per-round N`,
+`--search-language CODE`, `--allow-domain DOMAIN` (repeatable),
+`--block-domain DOMAIN` (repeatable), `--run-id ID`, and
 `--json`. Each writing flag SHALL act as
 `--set write.<field>=<value>`. Each research flag SHALL act as `--set` on
 its key:
@@ -29,13 +30,23 @@ its key:
 - `--gap-context-tokens`: `research.gap_context_tokens` (a positive
   integer or `auto`)
 - `--rounds`: `research.rounds`
+- `--queries-per-round`: `research.queries_per_round` (a positive
+  integer)
+
+`--search-language` SHALL set `search.language` for that run, as a quoted
+string. Its value SHALL follow the search language rule (http-api "Create
+a run"); any other value SHALL fail with exit status 2 before a run is
+created, with an error naming `--search-language`. An invalid
+`search.language` given through `--set` or a profile SHALL fail
+configuration validation with an error naming `search.language`. Without
+the flag, `search.language` is left unchanged.
 
 The `--allow-domain` values together SHALL set `search.allow_domains`, and
 the `--block-domain` values `search.block_domains`, replacing the
 configured list for that run; a list whose flag is not given is left
 unchanged.
 
-Writing, research, and domain flags SHALL take precedence over `--set` for
+Writing, research, search language, and domain flags SHALL take precedence over `--set` for
 the same field. The depth preset SHALL apply below all of them (depth-presets
 "Preset expansion").
 
@@ -82,6 +93,22 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 #### Scenario: Unknown format
 - **WHEN** the user runs `wosarcher run "q" --format summary`
 - **THEN** the command exits with status 2 before creating a run, with an error naming `--format` and the values `report` and `answer`
+
+#### Scenario: Follow-ups per round flag
+- **WHEN** the user runs `wosarcher run "q" --depth deep --queries-per-round 6`
+- **THEN** the resolved `research.queries_per_round` is 6 and `request.json` records that override
+
+#### Scenario: Search language flag
+- **WHEN** the user runs `wosarcher run "q" --search-language es-PE`
+- **THEN** the resolved `search.language` is `es-PE` and SearXNG receives `language=es-PE` with every query
+
+#### Scenario: Invalid search language
+- **WHEN** the user runs `wosarcher run "q" --search-language "spanish please"`
+- **THEN** the command exits with status 2 before creating a run, with an error naming `--search-language`
+
+#### Scenario: Invalid language through --set
+- **WHEN** the user runs `wosarcher run "q" --set search.language='"spanish"'`
+- **THEN** the command exits with status 2 before creating a run, with an error naming `search.language`
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,

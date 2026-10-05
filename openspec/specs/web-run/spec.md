@@ -55,7 +55,22 @@ Depth control), then the Run group. The Run group SHALL offer:
   followed by "  (user profile)", and the active one is preselected. The
   selected profile's `description` is shown under the select (12px, muted,
   4px above) when it is not empty;
-- Allow domains and Block domains (Requirement: Domain rows).
+- Allow domains and Block domains (Requirement: Domain rows);
+- Search language: a text input `min(260px, 100%)` wide with the
+  placeholder "Any language" and a help button reading "Search language" /
+  "Language SearXNG searches in. Use all, auto, or a language code: two or
+  three lowercase letters, optionally followed by a script or region, such
+  as es, es-PE, or zh-Hans-CN. Leave empty to search every language."
+  Under the input, a faint hint SHALL read "all, auto, es, es-PE…" while
+  the input is empty or valid. The value SHALL be kept with the other
+  options of the New run draft while the user moves between screens, and
+  cleared with the draft after a run starts; a fresh draft starts empty. A
+  trimmed non-empty value SHALL be sent as `search_language`; an empty one
+  sends no `search_language`. A value that breaks the search language rule
+  (http-api "Create a run") SHALL replace the hint with the danger note
+  "Use all, auto, or a code such as es or es-PE." under the input and
+  disable Start until fixed. The prototype has no such
+  row; it SHALL reuse the Profile row's label, input, and note styles.
 
 Each Run label sits at the top of its row in the prototype's form grid.
 Recipe `context` SHALL start the run with `until` set to `select`, so no
@@ -94,7 +109,19 @@ count.
 
 #### Scenario: Domain rows in the Run group
 - **WHEN** the user opens the Options panel (scenario `new-domains`)
-- **THEN** the Run group shows Recipe, Sources, Profile, Allow domains, and Block domains, in that order
+- **THEN** the Run group shows Recipe, Sources, Profile, Allow domains, Block domains, and Search language, in that order
+
+#### Scenario: Search language left empty
+- **WHEN** the user starts a run without typing a search language
+- **THEN** the run request has no `search_language`
+
+#### Scenario: Search language set
+- **WHEN** the user types " es-PE " as the search language and starts a run
+- **THEN** the run request has `search_language` = `es-PE`
+
+#### Scenario: Invalid search language
+- **WHEN** the user types "spanish" as the search language
+- **THEN** the row shows "Use all, auto, or a code such as es or es-PE." in place of the hint, and Start is disabled
 
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
@@ -344,7 +371,19 @@ cancelled; summary `done/total`) and the Sources panel, newest first, each
 row with icon, title linking to the URL in a new tab, URL without scheme,
 and state: found, fetched, cached (for a fork), the failure reason, not
 fetched (cancelled run), or for files the size; plus "N kept" once
-passages are selected. The Sources summary SHALL read "N of M fetched · K
+passages are selected. A fetched page whose `page.fetched` has `thin` true
+SHALL show the state "thin" in place of "fetched" or "cached", in the
+muted tone.
+
+Each web source row SHALL show, under its URL, the IDs of every query
+whose `hit.found` listed that URL, in query order (`q0` first), joined by
+" · ", on its own line in the URL line's style. The same URL may arrive in
+several `hit.found` events with overlapping query IDs (a later round, or
+a merged hit); the row SHALL show the union, each ID once. Hovering
+or focusing an ID SHALL show that query's text as a native tooltip, taken
+from the Sub-queries or Research rounds data; an ID whose text is not known
+yet shows no tooltip. File rows show no query IDs. The prototype has no
+such line; it SHALL reuse the URL line's layout. The Sources summary SHALL read "N of M fetched · K
 files" and a danger note "N failed · run continues" SHALL show while any
 page failed.
 
@@ -365,6 +404,18 @@ Search phase.
 #### Scenario: Failed page
 - **WHEN** `page.failed` arrives with reason "403 Forbidden"
 - **THEN** that row shows "403 Forbidden" in the danger color and the header shows "1 failed · run continues"
+
+#### Scenario: Source found by two queries
+- **WHEN** `hit.found` events list `https://www.gob.pe/371-inscribir-alerta-registral` for `q4` in round 1 and for `q7` in round 2
+- **THEN** its Sources row shows "q4 · q7" under the URL, and hovering `q7` shows q7's text
+
+#### Scenario: Thin page row
+- **WHEN** `page.fetched` arrives for a URL with `thin` true
+- **THEN** its Sources row shows the state "thin" and the summary counts it as fetched
+
+#### Scenario: Search language kept in the draft
+- **WHEN** the user types "es" as the search language, opens Settings, and returns to New run
+- **THEN** the search language still reads "es"; after the user starts that run, New run shows it empty
 
 ### Requirement: Passages panel
 The Live run screen SHALL show the Passages panel as the prototype does in
@@ -1049,17 +1100,24 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
 - An estimate line: "~<P> pages · <R> round(s) · ~<C> LLM calls".
   - R is Rounds, and the word is "round" when R is 1.
   - P is the smaller of Max pages and the sum of two terms:
-    (Sub-queries + 1) × Results per query, and (R − 1) × queries per round
-    × Results per query. Queries per round is the selected preset's
-    `queries_per_round`, or the last preset's for Custom.
+    (Sub-queries + 1) × Results per query, and (R − 1) × Follow-ups per
+    round × Results per query.
   - C is (1 when Sub-queries > 0) + (R − 1) + 1.
   - When context is clamped, the line adds " · context <asked> →
     <effective> (model window)", in thousands of tokens such as "32k".
 - An "Advanced" disclosure listing, each with its help button: Sub-queries
   (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds
-  (1-8), Passages per query (1-40), Context tokens (Auto, or
-  1000-128000, step 1000), and Gap context tokens (Auto, or 1000-128000,
-  step 1000).
+  (1-8), Follow-ups per round (1-12), Passages per query (1-40), Context
+  tokens (Auto, or 1000-128000, step 1000), and Gap context tokens (Auto,
+  or 1000-128000, step 1000).
+  - Follow-ups per round shows the depth's `queries_per_round` from
+    `GET /api/depths`. Like Gap context tokens, it is disabled with the
+    lock icon and the note "Used between rounds; needs 2+ rounds." while
+    Rounds is 1. The prototype has no such field; it SHALL reuse the
+    Sub-queries field's controls and styles, and its help button SHALL
+    read "Follow-ups per round" / "Most follow-up searches the gap step
+    writes after each round but the last. Round 1 searches the
+    sub-queries."
   - Context tokens is a number input with an "Auto" option. Auto (the value
     of every built-in preset) shows "Auto · <effective>" with the effective
     budget; emptying the input selects Auto.
@@ -1096,7 +1154,7 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
 
 The run request SHALL send `depth` set to the preset name and no `research`
 for a preset. For Custom it SHALL send `depth` = `custom` and `research`
-with all seven values, `context_tokens` and `gap_context_tokens` as
+with all eight values, `context_tokens` and `gap_context_tokens` as
 `"auto"` when Auto is selected. Help texts SHALL be verbatim from the prototype's
 help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 `d-ctx`, and `w-words-def`.
@@ -1107,7 +1165,7 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 
 #### Scenario: Edit switches to Custom
 - **WHEN** Deep is selected and the user changes Max pages to 80
-- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those seven values
+- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those eight values
 
 #### Scenario: Auto context
 - **WHEN** Deep is selected and the profile has `context_window` 131072, `prompt_reserve_tokens` 2000, `max_output_tokens` 8192, and words is 2000
@@ -1125,6 +1183,14 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 - **WHEN** Rounds is 1
 - **THEN** Gap context tokens is disabled with "Used between rounds; needs 2+ rounds."
 
+#### Scenario: Follow-ups per round edited
+- **WHEN** Deep is selected and the user changes Follow-ups per round to 6
+- **THEN** the control shows Custom, the estimate counts 6 follow-ups per round, and starting sends `research.queries_per_round` = 6
+
+#### Scenario: Follow-ups locked at one round
+- **WHEN** Rounds is 1
+- **THEN** Follow-ups per round is disabled with "Used between rounds; needs 2+ rounds."
+
 #### Scenario: Custom remembered
 - **WHEN** the user started a Custom run with Sub-queries 6, then opens New run again and picks Custom
 - **THEN** Sub-queries shows 6
@@ -1134,7 +1200,7 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 - **THEN** Rounds is disabled at 1 with "Files-only runs use 1 round."
 
 #### Scenario: Deep estimate
-- **WHEN** Deep is selected with Sub-queries 6, Results per query 10, Max pages 60, Rounds 3, and queries per round 3
+- **WHEN** Deep is selected with Sub-queries 6, Results per query 10, Max pages 60, Rounds 3, and Follow-ups per round 3
 - **THEN** the estimate line reads "~60 pages · 3 rounds · ~4 LLM calls"
 
 ### Requirement: Depth tags

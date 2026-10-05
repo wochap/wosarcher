@@ -134,16 +134,19 @@ counts as a failed gap step.
 - **THEN** the gap call after round 2 names `q6` and `q7` under "Round 2 found only pages fetched in earlier rounds:"
 
 ### Requirement: Stop rules
-Research SHALL stop, and select SHALL follow, at the first of these. Each
-has a stop reason:
+Research SHALL stop, and select SHALL follow, at the first of these, checked
+in table order. Each has a stop reason:
 
 | Condition | Stop reason |
 |---|---|
 | the last round ran | `max rounds` |
 | two rounds in a row after round 1 fetched no new page because all their hits were already fetched or queued | `no new sources` |
-| the pages fetched across all rounds reached `fetch.max_pages` | `page limit reached` |
+| the counted pages (thin pages excluded) across all rounds reached `fetch.max_pages` | `page limit reached` |
 | the gap step kept no follow-up after its second call | `no follow-ups` |
 | a gap call failed, timed out, or its reply was unreadable | `gap step failed` |
+
+When the last planned round ran, the stop reason SHALL be `max rounds`
+even if that round also reached the page cap or fetched no new page.
 
 A single round after round 1 that fetched no new page SHALL NOT stop
 research: the gap step runs and is told which queries found only known
@@ -166,8 +169,12 @@ run.
 - **THEN** research stops after round 3 with `no new sources`, no gap step runs after round 3, and the end note is "Follow-up searches returned only pages fetched in earlier rounds."
 
 #### Scenario: Page limit
-- **WHEN** `fetch.max_pages = 20` and rounds 1 and 2 fetch 12 and 8 pages
+- **WHEN** `research.rounds = 3`, `fetch.max_pages = 20`, and rounds 1 and 2 fetch 12 and 8 counted pages
 - **THEN** research stops after round 2 with `page limit reached`
+
+#### Scenario: Cap reached in the last round
+- **WHEN** `research.rounds = 2`, `fetch.max_pages = 15`, and rounds 1 and 2 fetch 8 and 7 counted pages
+- **THEN** `research.json` and `research.done` carry 2 planned, 2 ran, and the stop reason `max rounds`
 
 #### Scenario: Gap failure
 - **WHEN** the gap LLM call fails after round 1
@@ -196,10 +203,15 @@ every round. A multi-round run SHALL write `research.json` with:
 
 ### Requirement: Fetch and pairing across rounds
 The fetch page cap (`fetch.max_pages`) SHALL count pages across all rounds.
+Only counted pages SHALL count: a thin page (source-collection "Fetch page
+cap and order") SHALL NOT reduce `left` for later rounds, and a round's
+new and known page counts SHALL include its thin pages. A round's thin
+exemption is bounded by that round's cap.
 In a run with more than one planned round, round k SHALL fetch at most its
 round cap:
 
-- `left` is `fetch.max_pages` minus the pages fetched in earlier rounds;
+- `left` is `fetch.max_pages` minus the counted pages fetched in earlier
+  rounds;
 - `later` is the number of planned rounds after round k;
 - the reserve is `research.queries_per_round` × `search.max_results` ×
   `later`;
@@ -235,6 +247,10 @@ later round's query.
 #### Scenario: Single round
 - **WHEN** `research.rounds = 1` and `fetch.max_pages = 15`
 - **THEN** the round fetches up to 15 pages
+
+#### Scenario: Thin page leaves room
+- **WHEN** `fetch.max_pages = 15`, `research.rounds = 2`, and round 1 fetches 8 counted pages and 1 thin page
+- **THEN** round 2 may fetch up to 7 counted pages, and round 1's `round.done` reports 9 new pages
 
 ### Requirement: Scoring across rounds
 When a round's scorer falls back, later rounds SHALL start with the scorer

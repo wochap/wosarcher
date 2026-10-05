@@ -35,7 +35,7 @@ The system SHALL define exactly these event types and data:
 | `resource.released` | device, released stage |
 | `plan.ready` | sub-queries |
 | `hit.found` | URL, title, query IDs |
-| `page.fetched` | URL, source ID, title, characters, cached, round |
+| `page.fetched` | URL, source ID, title, characters, cached, thin, round |
 | `page.failed` | URL, reason |
 | `passages.scored` | query ID, scorer, pair count, kept count, display threshold, kept passages |
 | `round.done` | round, query IDs, new pages, known pages, kept passages |
@@ -49,6 +49,10 @@ single-round runs and for stages outside the loop). `round.done`,
 `gap.ready`, and `research.done` SHALL be emitted only by multi-round runs.
 `gap.ready` SHALL carry the stage `gap`. `round.done` SHALL carry `score`,
 and `research.done` SHALL carry `gap`.
+
+`thin` of `page.fetched` SHALL be true when the page is a thin page
+(source-collection "Fetch page cap and order"), and false otherwise. It is
+always false for attached files, which the load stage emits.
 
 Each kept passage in `passages.scored` SHALL carry chunk ID, source ID,
 source title and URI, heading path, text, and the display score from 0 to
@@ -100,6 +104,10 @@ reports 0.
 #### Scenario: Filtered hits counted
 - **WHEN** `search.allow_domains = ["gob.pe"]` and the search stage drops 7 distinct hits from other domains
 - **THEN** `stage.done` for search carries `filtered` = 7, and `stage.done` for fetch carries `filtered` = 0
+
+#### Scenario: Thin page event
+- **WHEN** a fetched page has 94 characters of text and `chunk.min_chars = 500`
+- **THEN** its `page.fetched` event carries `chars` 94 and `thin` true
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for
