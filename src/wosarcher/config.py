@@ -134,13 +134,17 @@ class AttachConfig(Block):
 
 
 class ChunkConfig(Block):
-    size: int = Field(default=1000, gt=0)
-    overlap: int = Field(default=100, ge=0)
+    size_chars: int = Field(default=1800, gt=0)
+    overlap: int = Field(default=150, ge=0)
+    min_chars: int = Field(default=500, ge=0)
+    """Floor for merging short sections and for the last window; 0 turns both off."""
 
     @model_validator(mode="after")
-    def check_overlap(self) -> "ChunkConfig":
-        if self.overlap >= self.size:
-            raise ValueError(f"chunk.overlap ({self.overlap}) must be below chunk.size ({self.size})")
+    def check_sizes(self) -> "ChunkConfig":
+        for name in ("overlap", "min_chars"):
+            value = getattr(self, name)
+            if value >= self.size_chars:
+                raise ValueError(f"chunk.{name} ({value}) must be below chunk.size_chars ({self.size_chars})")
         return self
 
 

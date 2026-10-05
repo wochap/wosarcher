@@ -312,7 +312,7 @@ async def chunk(ctx: StepContext) -> Outcome:
     cfg = ctx.settings.chunk
     existing = [] if ctx.first else ctx.items("chunks.jsonl", Chunk)
     pages = ctx.pages() if ctx.first else [page for page in ctx.round_pages() if page.source.kind == "web"]
-    result = chunking.chunk(pages, size=cfg.size, overlap=cfg.overlap, existing=existing)
+    result = chunking.chunk(pages, size=cfg.size_chars, overlap=cfg.overlap, min_chars=cfg.min_chars, existing=existing)
     ctx.save("chunks.jsonl", result.chunks)
     return Outcome(len(result.chunks))
 

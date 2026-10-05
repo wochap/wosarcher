@@ -27,6 +27,7 @@ export type TokensNeeded = (number | null)
 export type Display1 = (number | null)
 export type QueryId2 = string
 export type State = ("not_in_results" | "prefiltered" | "pending" | "below_threshold" | "query_cap" | "other_query" | "kept")
+export type Boilerplate = number
 export type Chunks = Chunk[]
 export type Duplicates = number
 export type InputTokens = number
@@ -564,6 +565,7 @@ state: State
  * via the `definition` "ChunkResult".
  */
 export interface ChunkResult {
+boilerplate?: Boilerplate
 chunks: Chunks
 duplicates?: Duplicates
 }

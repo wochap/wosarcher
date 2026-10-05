@@ -32,7 +32,7 @@ async def test_collection_flow() -> None:
     )
     found = await search(planned.queries[1:], searcher, initial=initial.hits)
     fetched = await fetch(found.hits, fetcher, concurrency=2, max_pages=40)
-    chunked = chunk([*loaded.pages, *fetched.pages], size=1000, overlap=100)
+    chunked = chunk([*loaded.pages, *fetched.pages], size=1800, overlap=150, min_chars=500)
 
     assert [query.id for query in planned.queries] == ["q0", "q1"]
     assert "Hydrometallurgy" in llm.calls[0][1].content

@@ -159,6 +159,7 @@ class LoadResult(Contract):
 class ChunkResult(Contract):
     chunks: list[Chunk]
     duplicates: int = 0
+    boilerplate: int = 0
 
 
 class Score(Contract):

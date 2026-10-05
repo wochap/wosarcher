@@ -29,7 +29,7 @@ def user_profile(env: dict[str, str], name: str, text: str) -> Path:
 
 
 def test_defaults_validate() -> None:
-    assert Settings().chunk.size == 1000
+    assert Settings().chunk.size_chars == 1800
 
 
 def test_invalid_release_names_allowed_values(env: dict[str, str]) -> None:
@@ -88,7 +88,7 @@ def test_override_wins_over_environment(env: dict[str, str]) -> None:
 
 
 def test_unset_values_fall_back_to_defaults(env: dict[str, str]) -> None:
-    assert resolve("workstation", [], env).chunk.size == 1000
+    assert resolve("workstation", [], env).chunk.size_chars == 1800
 
 
 def test_typed_override(env: dict[str, str]) -> None:
@@ -102,15 +102,15 @@ def test_unknown_override_key(env: dict[str, str]) -> None:
 
 
 def test_environment_value_typed_by_field(env: dict[str, str]) -> None:
-    env["WOSARCHER_CHUNK__SIZE"] = "500"
-    assert resolve(None, [], env).chunk.size == 500
+    env["WOSARCHER_CHUNK__SIZE_CHARS"] = "900"
+    assert resolve(None, [], env).chunk.size_chars == 900
 
 
 def test_invalid_profile_value_names_file_and_field(env: dict[str, str]) -> None:
-    path = user_profile(env, "bad", '[chunk]\nsize = "large"\n')
+    path = user_profile(env, "bad", '[chunk]\nsize_chars = "large"\n')
     with pytest.raises(ConfigError) as error:
         resolve("bad", [], env)
-    assert "chunk.size" in str(error.value)
+    assert "chunk.size_chars" in str(error.value)
     assert str(path) in str(error.value)
 
 
@@ -161,12 +161,25 @@ def test_ollama_release_needs_model(env: dict[str, str]) -> None:
 def test_collection_defaults() -> None:
     settings = Settings()
     assert (settings.plan.max_sub_queries, settings.attach.max_bytes) == (3, 5_000_000)
-    assert (settings.chunk.size, settings.chunk.overlap) == (1000, 100)
+    assert (settings.chunk.size_chars, settings.chunk.overlap, settings.chunk.min_chars) == (1800, 150, 500)
 
 
 def test_chunk_overlap_must_be_below_size(env: dict[str, str]) -> None:
     with pytest.raises(ConfigError, match=r"chunk\.overlap"):
-        resolve(None, ["chunk.size=100", "chunk.overlap=100"], env)
+        resolve(None, ["chunk.size_chars=100", "chunk.overlap=100", "chunk.min_chars=50"], env)
+
+
+def test_chunk_min_chars_must_be_below_size(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"chunk\.min_chars"):
+        resolve(None, ["chunk.min_chars=2000"], env)
+
+
+def test_old_chunk_size_key_fails(env: dict[str, str]) -> None:
+    path = user_profile(env, "old", "[chunk]\nsize = 1000\n")
+    with pytest.raises(ConfigError) as error:
+        resolve("old", [], env)
+    assert "chunk.size" in str(error.value)
+    assert str(path) in str(error.value)
 
 
 def test_ranking_defaults() -> None:

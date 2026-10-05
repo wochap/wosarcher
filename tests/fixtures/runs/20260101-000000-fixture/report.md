@@ -6,7 +6,7 @@ Collection and safe transport remain the largest practical obstacles [1][2].
 
 ## References
 
-- *Field notes: battery collection pilot* (n.d.). notes.md
-  - [1] Field notes: battery collection pilot › Summary
 - *Lithium-Ion Battery Recycling | US EPA* (n.d.). epa.gov. https://www.epa.gov/hw/lithium-ion-battery-recycling
-  - [2] Lithium-Ion Battery Recycling › Why recycle lithium-ion batteries
+  - [1] Lithium-Ion Battery Recycling
+- *Recycling lithium-ion batteries from electric vehicles* (n.d.). nature.com. https://www.nature.com/articles/s41586-019-1682-5.pdf
+  - [2]

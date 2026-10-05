@@ -474,9 +474,36 @@ to `context.json` and the skips to `select.jsonl`.
 
 ### Chunking
 
-Markdown-aware: split by headings, then by size (`chunk.size` 1000
-characters, `chunk.overlap` 100). Each chunk keeps its heading path. HTML
-comments, images (kept as alt text), link URLs (kept as link text), and
+Markdown-aware, in this order:
+
+1. Split the page at headings into sections.
+2. Web pages only: drop boilerplate sections. A section is boilerplate
+   when it has at least two links or bare URLs and they make up at least
+   half of its characters,
+   or when it has at most 12 words, no `. ? ! ; :` outside URLs, and is
+   not a list (every line a list item). The
+   rule is structural, never a phrase list. A section with a heading and
+   no text is not boilerplate; when every section is boilerplate, the
+   longest one is kept. Attachments never lose a section. The chunk
+   result counts the drops next to the near-duplicates.
+3. Merge short sections in page order: a group below `chunk.min_chars`
+   (500) takes the next section while it stays within `chunk.size_chars`
+   (1800); a short last group joins the one before it when it fits; a
+   heading with no text always joins the next section. A merged chunk's
+   heading path is the common parent of its sections, and the headings
+   below that parent stay in the text as plain lines. Merging never drops
+   text; `chunk.min_chars = 0` turns it off.
+4. Split each group by size: windows of at most `chunk.size_chars`
+   characters, each repeating the last `chunk.overlap` (150) characters of
+   the one before, cut at a paragraph, line, or word boundary in the
+   window's second half. A cut that would leave a last chunk under
+   `chunk.min_chars` moves earlier.
+5. Drop near-duplicates.
+
+Sizes are characters, about 500 tokens at the selector's 3.5 characters
+per token. Rerankers behind llama-server with a 512-token per-pair limit
+may truncate or fail on a long query plus a full chunk; profiles for such
+servers can lower `chunk.size_chars`. HTML comments, images (kept as alt text), link URLs (kept as link text), and
 autolinks are stripped from chunk text. pdf-ingest anchors become chunk
 metadata: `page_id` is the page in effect at the chunk start and
 `block_ids` the `<!-- a: … -->` anchors inside it; the anchors are removed
