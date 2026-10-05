@@ -32,6 +32,17 @@ write stage instead. A fork that fails SHALL be recorded as failed and the
 replay SHALL continue. A (run, variant) pair that already has a result
 SHALL be skipped unless `--force` is given.
 
+A fork that ends `done` SHALL still be recorded as `failed` when its event
+log shows that it did not measure the configured ranking:
+- it has a `stage.failed` event for `score`, meaning the score stage fell
+  back from the configured scorer. The error is then "score ran
+  <provider> instead of <configured>: <first failure>";
+- its prefilter `stage.done` provider method (the part before `:`) differs
+  from its resolved `prefilter.provider`. The error is then "prefilter ran
+  <method> instead of <configured>".
+
+The fork's run ID and run directory SHALL still be recorded.
+
 #### Scenario: Two variants
 - **WHEN** replay runs over two recorded runs with variants `bm25` and `bm25-wide`
 - **THEN** four forks are created and four result records are written
@@ -43,6 +54,18 @@ SHALL be skipped unless `--force` is given.
 #### Scenario: Failed fork
 - **WHEN** one variant's fork exits with a non-zero status (for example an invalid override)
 - **THEN** that result is recorded with status `failed` and the fork's error text, and the other variants still run
+
+#### Scenario: Scorer fell back
+- **WHEN** a variant sets `score.provider=jev` without `score.fallback=[]`, Jev answers HTTP 404, and the fork ends `done` with `bm25`
+- **THEN** the result has status `failed`, the fork's run ID, and an error starting "score ran bm25 instead of jev"
+
+#### Scenario: Prefilter fell back
+- **WHEN** a variant sets `prefilter.provider=embeddings`, the embedder is unreachable, and the fork's prefilter ran `bm25`
+- **THEN** the result has status `failed` and the error "prefilter ran bm25 instead of embeddings"
+
+#### Scenario: Small-input passthrough is not a fallback
+- **WHEN** every query of a fork is small-input passthrough, so the score stage reports `passthrough` with no `stage.failed`
+- **THEN** the result stays `done`
 
 ### Requirement: Metrics without an LLM
 `python -m evals.metrics` SHALL compute, for every result record and

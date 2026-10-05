@@ -61,24 +61,34 @@ by the SHA-256 of the text when a cache is given.
 
 ### Requirement: Stage-level fallback
 The score stage SHALL try the configured scorer, then each entry of
-`score.fallback` in order (default `bm25`, then `passthrough`). When any
-scorer call fails, the stage SHALL discard every score from that scorer and
-start again with the next entry, so all scored queries in one run use the
-same scorer. The result SHALL name the scorer that ran and list each failed
-scorer with its error. `passthrough` SHALL never fail, so the stage always
-returns scores. `score.fallback` SHALL accept only `bm25` and `passthrough`.
+`score.fallback` in order (default `bm25`, then `passthrough`). It SHALL try
+no scorer that is not in that list. When any scorer call fails, the stage
+SHALL discard every score from that scorer and start again with the next
+entry, so all scored queries in one run use the same scorer. The result
+SHALL name the scorer that ran and list each failed scorer with its error.
+`passthrough` SHALL never fail. When every entry of the chain fails, the
+stage SHALL fail with an error that names each scorer and its error.
+`score.fallback` SHALL accept only `bm25` and `passthrough`.
 
 #### Scenario: Reranker unreachable
 - **WHEN** the configured scorer `rerank` fails on its second query
 - **THEN** every query is scored with `bm25`, the result names `bm25`, and lists `rerank` with its error
 
 #### Scenario: Everything fails
-- **WHEN** the configured scorer fails and BM25 is not in the fallback list
+- **WHEN** the configured scorer fails and `score.fallback = ["passthrough"]`
 - **THEN** every pair is kept by `passthrough` and the result names `passthrough`
 
 #### Scenario: Invalid fallback
 - **WHEN** a profile sets `score.fallback = ["jev"]`
 - **THEN** configuration fails and names `score.fallback` and the allowed values
+
+#### Scenario: No fallback
+- **WHEN** `score.fallback = []` and the configured scorer `jev` fails with HTTP 404
+- **THEN** the score stage fails, the run emits `run.failed` naming `score`, and the error names `jev` and the 404
+
+#### Scenario: Default chain
+- **WHEN** no source sets `score.fallback` and the configured scorer and BM25 both fail
+- **THEN** every pair is kept by `passthrough`
 
 ### Requirement: Thresholds
 A calibrated scorer SHALL keep pairs whose score is at least
