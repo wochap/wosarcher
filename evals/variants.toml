@@ -25,3 +25,29 @@ set = ["prefilter.provider=embeddings"]
 [prefilter-bm25]
 from = "prefilter"
 set = ["prefilter.provider=bm25"]
+
+# Scorer comparison with an explicit prefilter, so parents recorded with
+# another prefilter compare on equal terms. Jev variants set the Jev endpoint
+# and clear the model: a fork keeps the parent's score block, which may point
+# at a reranker.
+[embeddings-rerank]
+from = "prefilter"
+set = ["prefilter.provider=embeddings", "score.provider=rerank", "score.fallback=[]"]
+
+[embeddings-jev]
+from = "prefilter"
+set = ["prefilter.provider=embeddings", "score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]"]
+
+[bm25-jev]
+from = "prefilter"
+set = ["prefilter.provider=bm25", "score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]"]
+
+# Jev keeping 5 per sub-query instead of 10: about the passage count the
+# reranker's relative threshold selects, so precision compares at equal size.
+[embeddings-jev-k5]
+from = "prefilter"
+set = ["prefilter.provider=embeddings", "score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]", "score.top_k=5"]
+
+[bm25-jev-k5]
+from = "prefilter"
+set = ["prefilter.provider=bm25", "score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]", "score.top_k=5"]
