@@ -212,3 +212,39 @@ record no drop reason.
 #### Scenario: Kept through another query
 - **WHEN** a chunk is kept for `q1` with display 0.6 and for `q2` with display 0.8, both within their caps
 - **THEN** the `q1` pair is not kept and its drop reason is `other_query`
+
+### Requirement: Scoring text
+The prefilter and the scorer SHALL rank and score each chunk by its
+scoring text, not its body text alone. The scoring text SHALL be one
+context line, then an empty line, then the chunk text. The context line is
+the page title and every heading of the chunk's heading path, in order,
+joined by ` > `; empty parts are left out. The title is cut at 120
+characters and the whole context line at 300 characters, at a word
+boundary when one exists. A chunk with no title and an empty heading path
+SHALL have a scoring text equal to its body text. Every ranking method of a
+run (embedding similarity, BM25, rerank, Jev) SHALL use the same scoring
+text. The chunk artifact, the kept passages of `passages.scored`, the
+selected passages, the writer's passages block, and citations SHALL keep
+the body text only. Embeddings SHALL be cached by the SHA-256 of the text
+that was embedded, so a scoring text and its body text never share a
+cached vector.
+
+#### Scenario: Context line
+- **WHEN** a chunk of the page "Phase 3 trial of drug X" has the heading path `["Results", "Efficacy"]` and the text "Positive in 62% of cases."
+- **THEN** its scoring text is "Phase 3 trial of drug X > Results > Efficacy", an empty line, then "Positive in 62% of cases."
+
+#### Scenario: No context
+- **WHEN** a chunk has an empty heading path and its page has an empty title
+- **THEN** its scoring text is its body text
+
+#### Scenario: Scorer sees the context
+- **WHEN** the reranker scores a query's pairs
+- **THEN** every `documents` entry of the request is that chunk's scoring text, and the scores map back to the chunk IDs
+
+#### Scenario: Reader sees the body
+- **WHEN** a chunk is selected and cited
+- **THEN** its passage text in `context.json` and the writer's passages block is the body text, without the context line
+
+#### Scenario: Long title
+- **WHEN** a page title has 200 characters
+- **THEN** the context line holds the first 120 characters of it, cut at a word boundary, before the heading path
