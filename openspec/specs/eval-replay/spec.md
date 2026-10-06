@@ -173,6 +173,41 @@ SHALL be left out of the pairs.
 - **WHEN** a result has 30 passages and `llm.concurrency` is 4
 - **THEN** at most 4 judge calls are in flight at once and all 30 are made
 
+### Requirement: Judged items
+`python -m evals.judge` SHALL append one line per judged item to
+`<DIR>/items.jsonl`: `run_id`, `variant`, `kind` (`precision` or
+`faithfulness`), `index` (the item's position in its kind for that run),
+`n` (the passage's citation number), `claim` (the sentence, faithfulness
+only, else null), `passage` (the text as sent to the judge), `value` (1,
+0, or null when unreadable), and `answer` (the first sample's answer text,
+at most 80 characters). With `--samples N` the value is the averaged
+value. `--force` SHALL remove the re-judged runs' item lines before
+appending the new ones. A result recorded as missing because of a
+provider error SHALL write no item lines.
+
+`python -m evals.items --results DIR [--run ID] [--failed]` SHALL print
+the items of `<DIR>/items.jsonl` as Markdown without any model call: one
+section per run (`variant · run_id`), faithfulness items first, each item
+as its value, `n`, the claim, and the first 300 characters of the passage.
+`--failed` SHALL print only items whose value is below 1; `--run` only one
+run. A missing items file SHALL print nothing and exit 0.
+
+#### Scenario: Items written
+- **WHEN** a result with 3 passages and 2 claim pairs is judged
+- **THEN** `items.jsonl` gains 3 `precision` lines and 2 `faithfulness` lines for its run ID, each with `n`, `passage`, `value`, and `answer`
+
+#### Scenario: Unreadable item
+- **WHEN** the judge answers "unclear" for a passage
+- **THEN** that item's line has `value` null and `answer` "unclear"
+
+#### Scenario: Force replaces items
+- **WHEN** a run with 5 item lines is judged again with `--force`
+- **THEN** `items.jsonl` holds only the new lines for that run
+
+#### Scenario: Failed pairs listed
+- **WHEN** `python -m evals.items --results DIR --failed` runs over a run with one unsupported pair and four supported ones
+- **THEN** the output shows one faithfulness item for that run, with its claim and passage excerpt, and no supported item
+
 ### Requirement: Recorded-run fixture
 The repository SHALL contain, tracked in version control, a small recorded
 run directory produced by `wosarcher run` from recorded SearXNG, Firecrawl,
