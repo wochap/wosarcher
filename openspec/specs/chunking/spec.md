@@ -132,13 +132,19 @@ SHALL follow the merged text (Requirement: pdf-ingest anchors).
 
 ### Requirement: Boilerplate removal
 Before merging, each section of a web page SHALL be dropped as
-boilerplate when its text is mostly links (it has at least two links or
-bare URLs, and link text and bare URLs make up at least half of its
-characters) or when it has at most 12 words, no
-sentence punctuation (`.`, `?`, `!`, `;`, `:`) outside URLs, and is not a
-list (every line a list item). Sections with
-a heading and no text are not boilerplate. When every section of a page
-is boilerplate, its longest section SHALL be kept, so every page with text
+boilerplate when any of these holds:
+- its text is mostly links: it has at least two links or bare URLs, and
+  link text and bare URLs make up at least half of its characters;
+- it has no sentence punctuation (`.`, `?`, `!`, `;`, `:`) outside URLs,
+  whatever its length;
+- it is a rail: at least 5 non-empty lines, of which at least 80% have at
+  most 4 words and no sentence punctuation outside URLs.
+
+The second and third rules SHALL NOT apply to a list (every non-empty line
+a list item), a table (every non-empty line a table row starting with
+`|`), or a section that is a fenced code block. Sections with a heading
+and no text are not boilerplate. When every section of a page is
+boilerplate, its longest section SHALL be kept, so every page with text
 keeps at least one chunk. File pages (attachments) SHALL never lose a
 section as boilerplate. The chunk result SHALL report how many sections
 were dropped as boilerplate, next to the near-duplicate count.
@@ -170,3 +176,23 @@ were dropped as boilerplate, next to the near-duplicate count.
 #### Scenario: Navigation-only page
 - **WHEN** every section of a web page is boilerplate
 - **THEN** the page produces one chunk, from its longest section
+
+#### Scenario: Long menu
+- **WHEN** a web page section is 40 words of menu entries on one or several lines, such as "Tributos Pagos en Linea Mesa de Partes Virtual Consulta tu Trámite Convocatorias Papeletas de Infraccion Normatividad", with no sentence punctuation
+- **THEN** that section produces no chunk
+
+#### Scenario: Video rail
+- **WHEN** a web page section has eight lines like "Video Andina", "1:10", "JNE: conoce las causales", "2:30", of which seven have at most 4 words and no sentence punctuation
+- **THEN** that section produces no chunk
+
+#### Scenario: Table kept
+- **WHEN** a web page section is a Markdown table whose cells hold product names and prices with no sentence punctuation
+- **THEN** the section is not boilerplate
+
+#### Scenario: Code kept
+- **WHEN** a web page section is a fenced code block of short lines without sentence punctuation
+- **THEN** the section is not boilerplate
+
+#### Scenario: Prose without a period
+- **WHEN** a web page section is a 30-word paragraph that ends with a colon
+- **THEN** the section is not boilerplate
