@@ -933,8 +933,12 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   that executed the stage (the parent's own `copied_from` when it copied the
   stage too, else the parent), and continues with the saved config (secrets taken from the current
   environment) plus the overrides. With `--profile`, settings come from that
-  profile plus the parent's and the new overrides. Used for resume, for
-  changing writing options, and by the eval harness.
+  profile plus the parent's and the new overrides. Saved keys the current
+  configuration does not know (renamed or removed fields) are dropped
+  before validation, with one stderr line `warning: saved settings
+  dropped: llm.reasoning_tokens, ...`, and the fork's `request.json` omits
+  them; a saved value the configuration rejects still fails with exit 2.
+  Used for resume, for changing writing options, and by the eval harness.
 - `wosarcher depth list` (each preset with its description) and `wosarcher
   depth show NAME` (the keys it sets, or "sets nothing; uses the
   defaults"); an unknown name exits 2 with the known names.

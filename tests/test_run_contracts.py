@@ -157,11 +157,12 @@ def test_restore_secrets() -> None:
     saved = redact(resolve("workstation", ["score.top_k=7"], env))
     assert saved["score"]["api_key"] == "***"
     current = resolve("workstation", [], env)
-    restored = restore_secrets(saved, current)
+    restored, dropped = restore_secrets(saved, current)
+    assert dropped == []
     assert restored.score.api_key is not None
     assert restored.score.api_key.get_secret_value() == "sk-score"
     assert restored.score.top_k == 7
-    assert restore_secrets(saved, current, ["write.tone=critical"]).write.tone == "critical"
+    assert restore_secrets(saved, current, ["write.tone=critical"])[0].write.tone == "critical"
 
 
 def test_ledger_total_and_rows() -> None:

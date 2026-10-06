@@ -540,10 +540,36 @@ def unredact(saved: Mapping[str, Any], model: BaseModel) -> dict[str, Any]:
     return out
 
 
-def restore_secrets(saved: Mapping[str, Any], current: Settings, overrides: list[str] | None = None) -> Settings:
-    """Validate saved (redacted) settings, secrets taken from `current`, then `overrides` on top."""
-    restored = unredact(saved, current)
-    return validate([(restored, {}), override_layer(overrides or [])])
+def prune_unknown(
+    saved: Mapping[str, Any], model_type: type[BaseModel], prefix: str = ""
+) -> tuple[dict[str, Any], list[str]]:
+    """`saved` without keys `model_type` does not know, and those keys as dotted paths."""
+    out: dict[str, Any] = {}
+    dropped: list[str] = []
+    fields = model_type.model_fields
+    for key, value in saved.items():
+        if key not in fields:
+            dropped.append(f"{prefix}{key}")
+            continue
+        annotation = fields[key].annotation
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel) and isinstance(value, Mapping):
+            out[key], inner = prune_unknown(value, annotation, f"{prefix}{key}.")  # pyright: ignore[reportUnknownArgumentType]
+            dropped.extend(inner)
+        else:
+            out[key] = value
+    return out, dropped
+
+
+def restore_secrets(
+    saved: Mapping[str, Any], current: Settings, overrides: list[str] | None = None
+) -> tuple[Settings, list[str]]:
+    """Validate saved (redacted) settings, secrets taken from `current`, then `overrides` on top.
+
+    Keys the current `Settings` does not know are dropped and returned as dotted paths.
+    """
+    pruned, dropped = prune_unknown(saved, Settings)
+    restored = unredact(pruned, current)
+    return validate([(restored, {}), override_layer(overrides or [])]), dropped
 
 
 def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:

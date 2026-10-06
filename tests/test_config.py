@@ -8,8 +8,10 @@ from wosarcher.config import (
     list_profiles,
     load_depth,
     profile_description,
+    prune_unknown,
     redact,
     resolve,
+    restore_secrets,
     store_profile,
     to_toml,
 )
@@ -480,3 +482,26 @@ def test_invalid_prefilter_context_names_allowed_values(env: dict[str, str]) -> 
         resolve("workstation", ['prefilter.context="title"'], env)
     assert "prefilter.context" in str(error.value)
     assert "'header' or 'body'" in str(error.value)
+
+
+def test_restore_secrets_drops_unknown_keys(env: dict[str, str]) -> None:
+    current = resolve("workstation", [], env)
+    saved = redact(current)
+    saved["llm"]["reasoning_tokens"] = 4096
+    saved["prefilter"]["pairing"] = "all"
+    settings, dropped = restore_secrets(saved, current)
+    assert sorted(dropped) == ["llm.reasoning_tokens", "prefilter.pairing"]
+    assert settings.llm == current.llm
+
+
+def test_prune_keeps_dict_field_keys() -> None:
+    saved = {"run": {"stage_timeouts": {"nope": 1}}}
+    assert prune_unknown(saved, Settings) == (saved, [])
+
+
+def test_restore_secrets_rejects_bad_value(env: dict[str, str]) -> None:
+    current = resolve("workstation", [], env)
+    saved = redact(current)
+    saved["llm"]["provider"] = "llm"
+    with pytest.raises(ConfigError, match=r"llm\.provider"):
+        restore_secrets(saved, current)

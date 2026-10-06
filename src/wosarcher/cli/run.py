@@ -392,7 +392,16 @@ def fork(
     if profile:
         settings = checked(lambda: resolve(profile, [*parent.overrides, *new], env, parent.request.depth))
     else:
-        settings = checked(lambda: restore_secrets(parent.settings, resolve(parent.profile, [], env), new))
+        dropped: list[str] = []
+
+        def restored() -> Settings:
+            settings, pruned = restore_secrets(parent.settings, resolve(parent.profile, [], env), new)
+            dropped.extend(pruned)
+            return settings
+
+        settings = checked(restored)
+        if dropped:
+            typer.echo(f"warning: saved settings dropped: {', '.join(dropped)}", err=True)
     place = {"runs_dir": here.run.runs_dir, "cache_dir": here.run.cache_dir}
     settings = settings.model_copy(update={"run": settings.run.model_copy(update=place)})
     try:

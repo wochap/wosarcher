@@ -353,6 +353,33 @@ def test_fork_with_profile(world: World, tmp_path: Path) -> None:
     assert store.read_record(fork.run_id).profile == "cloud"
 
 
+def stale_parent(tmp_path: Path, block: str, key: str, value: object) -> RunRecord:
+    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
+    parent = only_run(tmp_path)
+    path = runs_dir(tmp_path) / parent.run_id / "request.json"
+    data = json.loads(path.read_text())
+    data["settings"][block][key] = value
+    path.write_text(json.dumps(data))
+    return parent
+
+
+def test_fork_drops_stale_saved_key(world: World, tmp_path: Path) -> None:
+    parent = stale_parent(tmp_path, "llm", "reasoning_tokens", 4096)
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
+    assert result.exit_code == 0, result.output
+    assert "warning: saved settings dropped: llm.reasoning_tokens" in result.stderr
+    store = RunStore(runs_dir(tmp_path), tmp_path)
+    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
+    assert "reasoning_tokens" not in store.read_record(fork.run_id).settings["llm"]
+
+
+def test_fork_fails_on_stale_saved_value(world: World, tmp_path: Path) -> None:
+    parent = stale_parent(tmp_path, "llm", "provider", "llm")
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
+    assert result.exit_code == 2
+    assert "llm.provider" in result.output
+
+
 def test_runs_json(world: World) -> None:
     for query in ("first", "second"):
         assert runner.invoke(app, ["run", query, "--until", "plan"]).exit_code == 0
