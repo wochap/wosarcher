@@ -173,7 +173,7 @@ describe("Depth", () => {
     fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
     expect((screen.getByLabelText("Gap context tokens") as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText("Follow-ups per round") as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(2);
+    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(3);
     expect(screen.getByRole("button", { name: "Help: Gap context tokens" })).toBeTruthy();
   });
 
@@ -268,5 +268,51 @@ describe("Depth", () => {
         found[n - 1].compareDocumentPosition(found[n]) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
+  });
+});
+
+describe("Model and thinking", () => {
+  const advanced = () => fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+
+  it("sends writer thinking with a preset and stays on the preset", async () => {
+    const api = await openOptions();
+    fireEvent.click(screen.getByLabelText("Deep"));
+    advanced();
+    fireEvent.change(screen.getByLabelText("Write thinking"), { target: { value: "high" } });
+    const request = await start(api);
+    expect(request.depth).toBe("deep");
+    expect(request.research).toBeUndefined();
+    expect(request.llm).toEqual({ reasoning: { write: "high" } });
+  });
+
+  it("sends a typed model when the endpoint lists none", async () => {
+    const api = await openOptions(fakeApi({ models: [] }));
+    advanced();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "deepseek-v4-flash" } });
+    expect((await start(api)).llm).toEqual({ model: "deepseek-v4-flash" });
+  });
+
+  it("offers the listed models", async () => {
+    await openOptions(fakeApi({ models: ["a", "b"] }));
+    advanced();
+    await act(async () => {});
+    const listed = [...document.querySelectorAll("#m-models option")].map((o) =>
+      o.getAttribute("value"),
+    );
+    expect(listed).toEqual(["a", "b"]);
+  });
+
+  it("sends no llm object when nothing is set", async () => {
+    const api = await openOptions();
+    advanced();
+    expect((await start(api)).llm).toBeUndefined();
+  });
+
+  it("locks Gap thinking at one round", async () => {
+    await openOptions();
+    advanced();
+    fireEvent.change(screen.getByLabelText("Rounds"), { target: { value: "1" } });
+    expect((screen.getByLabelText("Gap thinking") as HTMLSelectElement).disabled).toBe(true);
+    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.").length).toBeGreaterThan(0);
   });
 });

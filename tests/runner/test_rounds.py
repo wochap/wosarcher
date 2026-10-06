@@ -12,6 +12,7 @@ from wosarcher.config import (
     ChunkConfig,
     FetchConfig,
     PrefilterConfig,
+    ReasoningConfig,
     ResearchConfig,
     ScoreConfig,
     SelectConfig,
@@ -22,6 +23,7 @@ from wosarcher.models import (
     Candidate,
     Chunk,
     Completion,
+    Effort,
     GapReady,
     Message,
     Page,
@@ -344,9 +346,9 @@ async def test_summed_usage(tmp_path: Path) -> None:
     ledger = UsageLedger({})
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
-            return await super().complete(messages, max_tokens=max_tokens)
+            return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 
     cfg = configured(tmp_path)
     store = RunStore.from_settings(cfg)
@@ -439,3 +441,17 @@ async def test_single_round_unchanged(tmp_path: Path) -> None:
     assert store.done_events(run_id)["gap"].data.skipped
     assert not (store.run_dir(run_id) / "research.json").exists()
     assert QUERY
+
+
+async def test_thinking_per_step(tmp_path: Path) -> None:
+    base = configured(tmp_path, rounds=2)
+    reasoning = ReasoningConfig(plan="low", gap="high", write="default")
+    cfg = base.model_copy(update={"llm": base.llm.model_copy(update={"reasoning": reasoning})})
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    planner, gapper, writer = FakeLLM([PLAN_REPLY]), FakeLLM([gap_reply("lithium price")]), FakeLLM()
+    fakes = adapters(
+        searcher=FakeSearcher(WORLD), fetcher=FakeFetcher(PAGES_ALL), planner=planner, gapper=gapper, writer=writer
+    )
+    assert await run(cfg, run_id, fakes) == "done"
+    assert (planner.efforts, gapper.efforts, writer.efforts) == (["low"], ["high"], ["default"])

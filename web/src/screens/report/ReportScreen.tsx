@@ -16,6 +16,7 @@ import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { StatusTag } from "../../components/StatusTag";
+import { ThinkingTag } from "../../components/ThinkingTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
 import { aSummary, fmtElapsed, recipeOf, wDiff, wSummary } from "../../run/format";
@@ -87,6 +88,7 @@ export function ReportScreen({ runId }: { runId: string }) {
           <div className={css.line}>
             <StatusTag status={detail.status} />
             <DepthTag depth={detail.depth} />
+            <ThinkingTag reasoning={detail.reasoning} />
             <span className={css.id}>{runId}</span>
             <span>{meta}</span>
           </div>

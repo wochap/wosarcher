@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from typing import Literal, cast
 
 from wosarcher.config import ScoreConfig
-from wosarcher.models import Completion, Context, GapResult, Message, Query, Score
+from wosarcher.models import Completion, Context, Effort, GapResult, Message, Query, Score
 from wosarcher.ports import LLM
 from wosarcher.prompts import load
 from wosarcher.stages.plan import escape
@@ -162,6 +162,7 @@ async def gap(
     context: Context,
     llm: LLM,
     *,
+    effort: Effort,
     scores: Sequence[Score],
     score_cfg: ScoreConfig,
     known: Sequence[Query] = (),
@@ -171,12 +172,12 @@ async def gap(
     """At most two calls: the second only when the first reply keeps no follow-up."""
     table, uncovered = coverage(queries, scores, score_cfg)
     sent = messages(query, table, known, context, limit=limit, today=today)
-    completion: Completion = await llm.complete(sent, max_tokens=MAX_TOKENS)
+    completion: Completion = await llm.complete(sent, max_tokens=MAX_TOKENS, effort=effort)
     found, note = parse(completion.text)
     kept, rejected = follow_ups(found, queries, limit)
     if kept:
         return GapResult(queries=kept, note=note, uncovered=uncovered)
     retry = [*sent, Message(role="assistant", content=completion.text), retry_message(rejected, limit=limit)]
-    found, second = parse((await llm.complete(retry, max_tokens=MAX_TOKENS)).text)
+    found, second = parse((await llm.complete(retry, max_tokens=MAX_TOKENS, effort=effort)).text)
     kept, _ = follow_ups(found, queries, limit)
     return GapResult(queries=kept, note=second or note, retried=True, uncovered=uncovered)

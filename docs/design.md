@@ -302,6 +302,7 @@ device = "desktop:gpu0"
 release = "llama-swap"         # none | llama-swap | ollama
 
 [llm]
+provider = "openai"
 base_url = "http://localhost:8080/v1"
 device = "laptop:gpu0"
 ```
@@ -318,7 +319,7 @@ URL and each fallback URL.
   llama-server when the models fit.
 - `exclusive`: after a GPU stage, the runner releases its model only if the
   next GPU stage that runs uses the **same device label** and a different
-  block (`plan` and `write` use `llm`, `prefilter` uses `prefilter`, `score`
+  block (`plan`, `gap`, and `write` use `llm`, `prefilter` uses `prefilter`, `score`
   uses `score`). It emits `resource.waiting` for that next stage, calls
   `release()`, then emits `resource.released`; a release error becomes a
   warning on the next `stage.done`. A block with `release = "none"` is never
@@ -625,6 +626,21 @@ continuations` when k > 0. Each continuation re-sends the passages, so
 hosted models bill their input again. The Report screen shows "Continued
 N×", or the cut note and an end marker before References.
 
+**Thinking.** Each LLM step has its own thinking effort,
+`llm.reasoning.plan`, `llm.reasoning.gap`, and `llm.reasoning.write`:
+`none` (default), `low`, `medium`, `high`, or `default`. The writer's
+continuations use the writer's value; the eval judge always uses `none`.
+With `none` the call sends `reasoning_effort: "none"` and the exact output
+limit, so the limit covers only visible text. A level sends
+`reasoning_effort` and no token cap: the server sets the budget from the
+model's own limits, since no allowance can be guessed for hidden reasoning.
+`default` sends neither field, for servers that reject `reasoning_effort`.
+A server that ignores `reasoning_effort` but still counts reasoning in the
+cap can spend the whole limit on hidden reasoning; the error then says to
+set the step to `none` (or `default`, which drops the cap). Set per run with
+`--plan-thinking`, `--gap-thinking`, `--write-thinking`, the request's
+`llm.reasoning`, or the web Advanced panel's Thinking selects.
+
 Writing options affect only the write stage, so changing them on a finished
 run is cheap: `wosarcher fork <id> --from write --tone critical` reuses all context
 and only rewrites the report; `--format answer` rewrites it as an answer.
@@ -692,7 +708,7 @@ behind each claim.
 | Scorer | `jev` | `POST /systemone` | 64 | none | TypeSafe (`https://api.typesafe.ai/v1`) |
 | Scorer, Prefilter | `bm25` (built in, `wosarcher/lexical.py`) | none | none | CPU | none |
 | Scorer | `passthrough` (built in) | none | none | CPU | none |
-| LLM | `llm` (OpenAI-compatible chat) | `POST /chat/completions` | 1 | llama-server, Ollama | any |
+| LLM | `openai` (OpenAI-compatible chat) | `POST /chat/completions` | 1 | llama-server, Ollama | any |
 
 One adapter per wire format, not per vendor: `base_url` and `api_key` select
 the provider. Every adapter has a fake for tests.
@@ -708,12 +724,21 @@ search stage), `search.language`, `search.time_range` (`day`, `week`,
 `search.filter_pages` (3); `fetch.only_main_content`,
 `fetch.page_timeout` (45 s, must be below `fetch.timeout`; PDFs are slow),
 `fetch.max_chars` (50000). An unset `concurrency` takes the adapter default
-above; the planner and writer share one LLM client and its limit.
+above; the planner, gap, and writer adapters (ledger stages `plan`, `gap`,
+`write`) share one LLM client and its limit.
 
-The LLM adapter sends the output limit plus `llm.reasoning_tokens` under
-`llm.max_tokens_field` (`max_completion_tokens` by default, `max_tokens` for
-servers that need it; never both). An answer with empty content and finish
-reason `length` fails with an error naming `llm.reasoning_tokens`. Streaming
+Every LLM call carries an effort (see Thinking under Writing options).
+With `none` the adapter sends `reasoning_effort: "none"` and the caller's
+limit under `llm.max_tokens_field` (`max_completion_tokens` by default,
+`max_tokens` for servers that need it; never both); with `low`, `medium`,
+or `high` it sends `reasoning_effort` and no cap; with `default` neither.
+An answer with empty content and finish reason `length` fails with an
+error naming `llm.reasoning.<step>`, saying to set it to `none`, with the
+limit when one was sent. A 400 whose body names `reasoning_effort` fails
+with an error saying the server rejects the field and to set
+`llm.reasoning.<step> = "default"`; there is no silent retry without it.
+`models()` reads `GET <base_url>/models` (`data[].id`), empty on any
+error. Streaming
 fails with a provider error on an event with an `error` member, and reports
 the last `finish_reason` to the caller's `on_finish` callback. When it is
 `length`, the writer continues the report (see Writing options).
@@ -845,7 +870,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--run-id ID] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
   `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
@@ -856,7 +881,10 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   whose flag is not given is left alone. `--search-language` sets
   `search.language` as a quoted string, next to the domain lists; a value
   that breaks the search language rule (see Configuration) exits 2 naming
-  the flag. The two token flags take a positive integer or `auto`. `--until` on a loop stage
+  the flag. `--model` acts as `--set llm.model="NAME"` and the thinking
+  flags as `--set llm.reasoning.<step>=<level>` (`none`, `low`, `medium`,
+  `high`, `default`; another value exits 2 naming the flag), after the
+  domain lists, so forks and reruns keep them. The two token flags take a positive integer or `auto`. `--until` on a loop stage
   stops after that stage in round 1. The progress view shows a `gap` row
   only for multi-round runs, "round k/N" on running loop rows, and one
   final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
@@ -867,7 +895,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   terminal, progress goes to standard error; piped output is the report
   Markdown. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM, SIGINT),
   2 invalid arguments or configuration.
-- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
+- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
   copies `attachments/` and the artifacts before `<stage>` into a new run
   (version: the highest version in the parent's lineage plus one), logs a
   copied `stage.done` per earlier stage whose `copied_from` names the run
@@ -889,7 +917,9 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   cannot unload. After a successful LLM probe it reads the server's `n_ctx`
   from `GET <root>/props` (or `<root>/upstream/<model>/props` behind
   llama-swap), shows it as a note, and warns when it is below
-  `llm.context_window`. The rerank row's note shows the probe's raw score
+  `llm.context_window`; it then reads `GET <base_url>/models` and adds `<N>
+  models listed` to the note (nothing when that fails or lists none). The
+  LLM probe uses effort `none`. The rerank row's note shows the probe's raw score
   and its scale (`probe score -3.25 (logit scale)`). Warnings and notes do
   not change the exit code. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
@@ -1035,14 +1065,18 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   list replaces the configured one for this run; an invalid entry is 422
   naming `domains.allow` or `domains.block` and the entry),
   `search_language` (sets `search.language`; null keeps the configured
-  value; an invalid value is 422 naming `search_language`), and `set`. Request
+  value; an invalid value is 422 naming `search_language`), `llm`
+  (`model`, a non-empty string, and `reasoning`, any of `plan`, `gap`,
+  `write` with a thinking level; an invalid level is 422 naming
+  `llm.reasoning` and the step), and `set`. Request
   precedence, each later layer winning: defaults, profile, environment,
   global settings, the depth preset, the request's `sources`, `research`,
-  `writing`, and `domains`, then its `set`. The server builds the writing
+  `writing`, `domains`, and `llm`, then its `set`. The server builds the writing
   flags from the global writing, then the preset's `write.words`, then the
   request's `writing`; passes `--depth`; and emits the research values,
-  then the domain lists and the search language, as `--set` after the writing flags and before the
-  request's `set`. The global domain lists sit below the profile instead:
+  then the domain lists and the search language, then `llm.model` and
+  `llm.reasoning.<step>`, as `--set` after the writing flags and before the
+  request's `set`. `POST /api/runs/{id}/fork` accepts the same `llm`. The global domain lists sit below the profile instead:
   at staging, a non-empty global list is passed as `--set` only when
   neither the run's profile nor the environment sets that list (the same
   resolution `GET /api/profiles` uses), so a profile's own list wins. The
@@ -1054,7 +1088,9 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   the stage named by a final `run.failed` or `run.cancelled`;
   `rounds_planned`, the resolved `research.rounds`; `rounds_ran`, from
   `research.done`, 1 for a single-round run past the loop, else null;
-  `stop_reason`, null for single-round runs), and for one
+  `stop_reason`, null for single-round runs; `model`, the resolved
+  `llm.model`, empty when none; `reasoning`, the resolved `plan`, `gap`,
+  and `write` levels, `none` for older runs), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
   Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
@@ -1147,6 +1183,10 @@ filter replaces images with their alt text, so no file or URL is read.
   `block_domains`, the list the profile (or the environment) sets, or null
   when it sets none, so a client can tell a profile's list from the global
   default.
+- `GET /api/models[?profile=P]`: `{"models": [...]}`, the IDs the
+  profile's LLM endpoint lists at `GET <base_url>/models`, in order; an
+  empty list (still 200) when the request fails, the answer is not a list,
+  or the profile does not resolve. Nothing is inferred from the list.
 - `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
   `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
@@ -1369,13 +1409,15 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `batch_size`, `concurrency`, `connect_timeout`, `timeout`, `retry_budget`
 (seconds of retry waits, default 60), `prices` (optional `input_per_mtok`,
 `output_per_mtok`, `per_unit` for cost recording). The `llm` block adds
-`max_tokens_field` (`max_completion_tokens` or `max_tokens`) and
-`reasoning_tokens` (default 0, added to every LLM request's limit, for
-reasoning models that count hidden reasoning tokens), and `max_continuations`
+`max_tokens_field` (`max_completion_tokens` or `max_tokens`),
+`reasoning` (a table with `plan`, `gap`, and `write`, each `none`, `low`,
+`medium`, `high`, or `default`, default `none`; see Thinking), and `max_continuations`
 (default 2, how often the writer continues a report cut at the output
 limit), and `max_output_tokens` (default 8192; caps the writer's output
 limit); the `fetch` block adds
-`max_pages` (default 40, see Fetch cap and order); the `score` block adds
+`max_pages` (default 40, see Fetch cap and order); the `llm` block's
+`provider` is `openai` (an OpenAI-compatible chat endpoint), the only
+value; the `score` block adds
 `rerank_scale` (`auto`, `probability`, `logit`).
 
 A profile may start with a top-level `description` string, one line that
@@ -1390,8 +1432,9 @@ naming the first stage that uses the block and an error starting
 `preflight: <block>`; no stage starts.
 
 Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
-`workstation` (shared), `cloud` (no local models, high concurrency;
-`llm.reasoning_tokens = 4096` for `gpt-5-mini`). The local profiles set
+`workstation` (shared), `cloud` (no local models, high concurrency). Every
+built-in profile sets `llm.provider = "openai"` and leaves thinking at
+`none`. The local profiles set
 `llm.timeout = 600`.
 
 The built-in defaults target the smallest setup wosarcher supports well: a
@@ -1615,6 +1658,17 @@ These override the prototype where they differ:
   state "thin".
 - **Follow-ups per round:** an Advanced depth value like the others, locked
   while Rounds is 1; the estimate reads it from the values, not the preset.
+- **Model and thinking:** the Advanced disclosure ends with a Model group
+  (the design bundle has no such controls; it reuses the Advanced field
+  styles): a Model input with a datalist from `GET /api/models?profile=`
+  (free text allowed; empty means the profile's model) and Plan, Gap, and
+  Write thinking selects (None, Low, Medium, High, Default; Gap locked while
+  Rounds is 1). Editing them does not switch to Custom. The values persist
+  in browser storage; the request sends `llm.model` only when typed and
+  `llm.reasoning` only with steps other than None.
+- **Thinking tags:** the Live and Report headers show, after the depth
+  tag, one outline tag per step whose summary level is not `none`, in
+  order plan, gap, write: "Write thinking high".
 - **Recipes:** `report`, `answer`, and `context`, a UI name for `until`
   plus `writing.format`. `report` and `answer` run the full pipeline and
   always send `writing.format` equal to the recipe; `context` sends

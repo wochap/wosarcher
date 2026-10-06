@@ -448,6 +448,19 @@ class RunRequest(Contract):
     """The depth preset name, `custom`, or None (no depth: Standard)."""
 
 
+Effort = Literal["none", "low", "medium", "high", "default"]
+"""Thinking effort of one LLM call: `none` sends an exact cap and no reasoning, a level lets the server
+budget the reasoning, `default` sends neither field."""
+
+
+class ReasoningOptions(Contract):
+    """Resolved thinking effort per LLM step (`llm.reasoning`)."""
+
+    plan: Effort = "none"
+    gap: Effort = "none"
+    write: Effort = "none"
+
+
 class Message(Contract):
     role: Literal["system", "user", "assistant"]
     content: str
@@ -547,6 +560,10 @@ class RunSummary(Contract):
     """From `research.done`; 1 for a single-round run past the loop; None until then."""
     stop_reason: StopReason | None = None
     """None for single-round runs."""
+    model: str = ""
+    """The resolved `llm.model`; empty when none is set."""
+    reasoning: ReasoningOptions = ReasoningOptions()
+    """The resolved `llm.reasoning`; `none` for every step on older runs."""
 
 
 class RunOutput(Contract):
@@ -605,6 +622,21 @@ class ResearchPatch(Contract):
     queries_per_round: int | None = Field(default=None, gt=0)
 
 
+class ReasoningPatch(Contract):
+    """Any subset of the thinking levels; each sets `llm.reasoning.<step>`."""
+
+    plan: Effort | None = None
+    gap: Effort | None = None
+    write: Effort | None = None
+
+
+class LLMPatch(Contract):
+    """The run's model and thinking; unset fields keep the configured value."""
+
+    model: str | None = Field(default=None, min_length=1)
+    reasoning: ReasoningPatch = ReasoningPatch()
+
+
 class DomainPatch(Contract):
     """Domain lists for one run; a given list replaces the configured one."""
 
@@ -642,6 +674,7 @@ class RunCreate(Contract):
     research: ResearchPatch = ResearchPatch()
     writing: WritingPatch = WritingPatch()
     domains: DomainPatch = DomainPatch()
+    llm: LLMPatch = LLMPatch()
     search_language: str | None = None
     """Sets `search.language`; None keeps the configured value."""
     set: list[str] = []
@@ -660,6 +693,7 @@ class ForkCreate(Contract):
 
     from_stage: Stage = Field(validation_alias=AliasChoices("from", "from_stage"), serialization_alias="from")
     writing: WritingPatch = WritingPatch()
+    llm: LLMPatch = LLMPatch()
     set: list[str] = []
     profile: str | None = None
 
@@ -684,6 +718,12 @@ class ServerSettings(Contract):
     writing: WritingOptions = WritingOptions()
     sources: Sources = "both"
     domains: DomainDefaults = DomainDefaults()
+
+
+class ModelList(Contract):
+    """`GET /api/models`: the IDs the profile's LLM endpoint lists; empty when it lists none or fails."""
+
+    models: list[str] = []
 
 
 class ProfileInfo(Contract):
@@ -1170,11 +1210,15 @@ CONTRACTS: tuple[type[Contract], ...] = (
     RunCosts,
     WritingPatch,
     ResearchPatch,
+    ReasoningOptions,
+    ReasoningPatch,
+    LLMPatch,
     RunCreate,
     ForkCreate,
     RunCreated,
     RunDetail,
     ServerSettings,
+    ModelList,
     ProfileInfo,
     DepthValues,
     DepthInfo,

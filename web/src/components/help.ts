@@ -22,6 +22,14 @@ export const HELP: Record<string, Help> = {
     title: "Depth",
     body: "How much research to do. Each preset sets the values under Advanced and a default report length. Deeper runs take longer and use more tokens.",
   },
+  model: {
+    title: "Model",
+    body: "The chat model for this run. Pick one the endpoint lists, or type any name the endpoint accepts. Empty uses the profile's model.",
+  },
+  thinking: {
+    title: "Thinking",
+    body: "How much hidden reasoning the model may do for each step. None sends an exact output limit and no reasoning. Low, Medium and High let the server set the budget. Default leaves it to the model; use it when the endpoint rejects the reasoning_effort field.",
+  },
   "d-subq": {
     title: "Sub-queries",
     body: "How many focused searches the planner writes from your question.",

@@ -92,7 +92,7 @@ def devices(policy: str = "exclusive", score: str | None = "d0", llm: str | None
         run=RunConfig.model_validate({"gpu_policy": policy}),
         prefilter=PrefilterConfig(),
         score=ScoreConfig(provider="rerank", device=score),
-        llm=LLMConfig(provider="llm", device=llm),
+        llm=LLMConfig(provider="openai", device=llm),
     )
 
 

@@ -159,6 +159,30 @@ def test_search_language_flag(world: World, tmp_path: Path) -> None:
     assert only_run(tmp_path).overrides == ['search.language="es-PE"']
 
 
+def test_model_flag(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--model", "deepseek-v4-flash"])
+    assert result.exit_code == 0, result.output
+    assert world.built[0].llm.model == "deepseek-v4-flash"
+    assert only_run(tmp_path).overrides == ['llm.model="deepseek-v4-flash"']
+
+
+def test_thinking_flags(world: World, tmp_path: Path) -> None:
+    args = ["run", "q", "--set", 'llm.reasoning.write="low"', "--write-thinking", "high", "--gap-thinking", "low"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    reasoning = world.built[0].llm.reasoning
+    assert (reasoning.plan, reasoning.gap, reasoning.write) == ("none", "low", "high")
+    assert only_run(tmp_path).overrides[-2:] == ['llm.reasoning.gap="low"', 'llm.reasoning.write="high"']
+
+
+def test_invalid_thinking_level(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--plan-thinking", "max"], env={"COLUMNS": "200"})
+    assert result.exit_code == 2
+    assert "--plan-thinking" in result.output
+    assert "none, low, medium, high, default" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
 def test_invalid_search_language(world: World, tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", "q", "--search-language", "spanish please"])
     assert result.exit_code == 2
@@ -290,6 +314,17 @@ def test_fork_rewrite_only(world: World, tmp_path: Path) -> None:
     assert (fakes.planner.calls, fakes.searcher.calls) == ([], [])
     assert len(fakes.writer.calls) == 1
     assert world.built[-1].write.tone == "critical"
+
+
+def test_fork_keeps_thinking(world: World, tmp_path: Path) -> None:
+    assert runner.invoke(app, ["run", "battery recycling", "--write-thinking", "high"]).exit_code == 0
+    parent = only_run(tmp_path)
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--tone", "critical"])
+    assert result.exit_code == 0, result.output
+    assert world.built[-1].llm.reasoning.write == "high"
+    writer = world.fakes[-1].writer
+    assert isinstance(writer, FakeLLM)
+    assert writer.efforts == ["high"]
 
 
 def test_fork_as_answer(world: World, tmp_path: Path) -> None:

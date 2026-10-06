@@ -271,7 +271,7 @@ device = "desktop:gpu0"
 release = "llama-swap"          # none | llama-swap | ollama
 
 [llm]
-provider = "llm"
+provider = "openai"
 base_url = "http://localhost:8080/v1"
 model = "writer"
 device = "laptop:gpu0"
@@ -288,9 +288,12 @@ saved.
   `max_completion_tokens` (default) or `max_tokens` for servers that need
   the older field (for example an Ollama build that ignores
   `max_completion_tokens`).
-- `llm.reasoning_tokens`: extra output tokens added to every LLM request
-  for reasoning models (gpt-5, o-series) that count hidden reasoning against
-  the limit. Default 0; the `cloud` profile sets 4096.
+- `llm.reasoning.plan`, `llm.reasoning.gap`, `llm.reasoning.write`: thinking
+  per step, `none` (default: `reasoning_effort: "none"` and an exact output
+  limit), `low`, `medium`, `high` (`reasoning_effort` and no limit; the
+  server sets the budget), or `default` (neither field, for servers that
+  reject `reasoning_effort`). Per run: `--plan-thinking`, `--gap-thinking`,
+  `--write-thinking`, and `--model`.
 - `score.rerank_scale`: `auto` (default), `probability`, or `logit`. Logit
   scores from a reranker are mapped through a sigmoid before thresholds and
   display; `auto` detects the scale per run.

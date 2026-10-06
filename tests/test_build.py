@@ -107,7 +107,8 @@ async def test_planner_writer_share_client(tmp_path: Path, http: httpx.AsyncClie
     adapters = build(settings(tmp_path), http, UsageLedger({}))
     messages = [Message(role="user", content="hi")]
     await asyncio.gather(
-        adapters.planner.complete(messages, max_tokens=4), adapters.writer.complete(messages, max_tokens=4)
+        adapters.planner.complete(messages, max_tokens=4, effort="none"),
+        adapters.writer.complete(messages, max_tokens=4, effort="none"),
     )
     assert peak == 1
 
@@ -123,7 +124,7 @@ async def test_planner_and_writer_usage_separate(tmp_path: Path, http: httpx.Asy
     ledger = UsageLedger({})
     adapters = build(settings(tmp_path), http, ledger)
     messages = [Message(role="user", content="hi")]
-    await adapters.planner.complete(messages, max_tokens=4)
-    await adapters.writer.complete(messages, max_tokens=4)
-    assert ledger.totals[("llm", "plan")].input_tokens == 100
-    assert ledger.totals[("llm", "write")].input_tokens == 900
+    await adapters.planner.complete(messages, max_tokens=4, effort="none")
+    await adapters.writer.complete(messages, max_tokens=4, effort="none")
+    assert ledger.totals[("openai", "plan")].input_tokens == 100
+    assert ledger.totals[("openai", "write")].input_tokens == 900

@@ -19,7 +19,7 @@ def row(block: str, **fields: object) -> FakeManaged:
 def test_shared_device_without_release() -> None:
     settings = exclusive(
         score={"provider": "rerank", "device": "laptop:gpu0"},
-        llm={"provider": "llm", "device": "laptop:gpu0", "release": "llama-swap"},
+        llm={"provider": "openai", "device": "laptop:gpu0", "release": "llama-swap"},
     )
     warnings = exclusive_warnings(settings)
     assert len(warnings) == 1
@@ -31,14 +31,14 @@ def test_shared_device_without_release() -> None:
 def test_separate_devices_no_warning() -> None:
     settings = exclusive(
         score={"provider": "rerank", "device": "desktop:gpu0"},
-        llm={"provider": "llm", "device": "laptop:gpu0"},
+        llm={"provider": "openai", "device": "laptop:gpu0"},
     )
     assert exclusive_warnings(settings) == []
 
 
 def test_shared_policy_no_warning() -> None:
     settings = Settings.model_validate(
-        {"score": {"provider": "rerank", "device": "gpu"}, "llm": {"provider": "llm", "device": "gpu"}}
+        {"score": {"provider": "rerank", "device": "gpu"}, "llm": {"provider": "openai", "device": "gpu"}}
     )
     assert exclusive_warnings(settings) == []
 
@@ -85,7 +85,7 @@ async def test_release_unsupported_warns() -> None:
 
 
 def window(size: int) -> Settings:
-    return Settings.model_validate({"llm": {"provider": "llm", "context_window": size}})
+    return Settings.model_validate({"llm": {"provider": "openai", "context_window": size}})
 
 
 async def test_context_too_small_warns() -> None:
@@ -124,7 +124,11 @@ class Recorder(FakeManaged):
 def local_pair(policy: str, release: str) -> Settings:
     device = {"device": "desktop:gpu0", "release": release}
     return Settings.model_validate(
-        {"run": {"gpu_policy": policy}, "score": {"provider": "rerank", **device}, "llm": {"provider": "llm", **device}}
+        {
+            "run": {"gpu_policy": policy},
+            "score": {"provider": "rerank", **device},
+            "llm": {"provider": "openai", **device},
+        }
     )
 
 

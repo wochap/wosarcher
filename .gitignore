@@ -22,3 +22,5 @@ web/dist/
 # Runs and caches
 /runs/
 .cache/
+
+evals/out

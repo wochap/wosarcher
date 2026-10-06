@@ -77,7 +77,20 @@ Tones include `objective`, `formal`, `analytical`, `critical`, and
 `APA`, `MLA`, `Chicago`, `IEEE`. `--format` is `report` (default) or
 `answer`; for an answer, `--words` is a maximum.
 
-## 6. Rewrite a finished run
+## 6. Model and thinking
+
+```sh
+wosarcher run "<query>" --model deepseek-v4-flash --json
+wosarcher run "<query>" --write-thinking high --gap-thinking low --json
+```
+
+`--model` picks the chat model for this run. `--plan-thinking`,
+`--gap-thinking`, and `--write-thinking` set how much hidden reasoning each
+step may do: `none` (default), `low`, `medium`, `high`, or `default` (leave
+it to the server; use it when the endpoint rejects `reasoning_effort`).
+Forks keep both.
+
+## 7. Rewrite a finished run
 
 ```sh
 wosarcher fork <run_id> --from write --tone critical --json
@@ -85,7 +98,7 @@ wosarcher fork <run_id> --from write --tone critical --json
 
 Copies search, fetch, and ranking from the run and only rewrites the report.
 
-## 7. Runs and providers
+## 8. Runs and providers
 
 ```sh
 wosarcher runs --json
@@ -95,7 +108,7 @@ wosarcher doctor
 `runs` lists runs newest first. `doctor` checks that every configured
 provider answers; run it when a run fails with a provider error.
 
-## 8. Output
+## 9. Output
 
 `--json` prints one `RunOutput` document when the run ends:
 
@@ -150,7 +163,7 @@ configuration (fix the command), `130` cancelled.
 }
 ```
 
-## 9. Schema
+## 10. Schema
 
 ```sh
 wosarcher schema

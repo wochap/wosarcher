@@ -38,6 +38,7 @@ async def run(*replies: str, limit: int = 3, known: list[Query] | None = None) -
         PLAN,
         CONTEXT,
         llm,
+        effort="low",
         scores=[],
         score_cfg=CFG,
         known=known or [],
@@ -86,7 +87,7 @@ async def test_follow_ups_numbered() -> None:
 
 async def test_stop_field_ignored() -> None:
     llm = FakeLLM(['{"queries": ["a"], "note": " n ", "stop": true}'])
-    result = await gap("q", PLAN, CONTEXT, llm, scores=[], score_cfg=CFG, limit=3, today="2026-10-04")
+    result = await gap("q", PLAN, CONTEXT, llm, effort="none", scores=[], score_cfg=CFG, limit=3, today="2026-10-04")
     assert (result.queries[0].text, result.note, result.retried) == ("a", "n", False)
     assert len(llm.calls) == 1
 
@@ -114,8 +115,9 @@ async def test_known_pages_named() -> None:
 async def test_retry_after_only_duplicates() -> None:
     plan = [*PLAN[:3], Query(id="q3", text="b")]
     llm = FakeLLM(['{"queries": ["b", "B"], "note": "first"}', '{"queries": ["c"], "note": "second"}'])
-    result = await gap("q", plan, CONTEXT, llm, scores=[], score_cfg=CFG, limit=3, today="2026-10-04")
+    result = await gap("q", plan, CONTEXT, llm, effort="medium", scores=[], score_cfg=CFG, limit=3, today="2026-10-04")
     assert (result.queries, result.note, result.retried) == ([Query(id="q4", text="c", round=2)], "second", True)
+    assert llm.efforts == ["medium", "medium"]
     retry = llm.calls[1]
     assert [message.role for message in retry] == ["system", "user", "assistant", "user"]
     assert retry[2].content == '{"queries": ["b", "B"], "note": "first"}'

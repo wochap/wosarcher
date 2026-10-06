@@ -27,7 +27,7 @@ device = "local:gpu0"
 batch_size = 32
 
 [llm]
-provider = "llm"
+provider = "openai"
 base_url = "http://localhost:8080/v1"
 model = "writer"
 device = "local:gpu0"

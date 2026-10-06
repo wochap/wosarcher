@@ -29,6 +29,7 @@ from wosarcher.http import UsageLedger
 from wosarcher.models import (
     STAGES,
     Context,
+    Effort,
     Report,
     RunFailed,
     RunOutput,
@@ -135,6 +136,33 @@ SearchLanguageOption = Annotated[
 def language_overrides(language: str | None) -> list[str]:
     """`--search-language` as a quoted `search.language` override."""
     return [] if language is None else [f"search.language={json.dumps(language)}"]
+
+
+def effort_option(value: str | None) -> str | None:
+    if value is None or value in get_args(Effort):
+        return value
+    raise typer.BadParameter(f"must be one of: {', '.join(get_args(Effort))}")
+
+
+def thinking(step: str) -> object:
+    return typer.Option(
+        f"--{step}-thinking",
+        metavar="LEVEL",
+        callback=effort_option,
+        help=f"Thinking for the {step} step: {', '.join(get_args(Effort))}.",
+    )
+
+
+ModelOption = Annotated[str | None, typer.Option("--model", help="Chat model for this run (llm.model).")]
+PlanThinkingOption = Annotated[str | None, thinking("plan")]
+GapThinkingOption = Annotated[str | None, thinking("gap")]
+WriteThinkingOption = Annotated[str | None, thinking("write")]
+
+
+def llm_overrides(model: str | None, **reasoning: str | None) -> list[str]:
+    """`--model` and the thinking flags as `llm.model` and `llm.reasoning.<step>` overrides."""
+    found = [] if model is None else [f"llm.model={json.dumps(model)}"]
+    return [*found, *(f"llm.reasoning.{step}={json.dumps(level)}" for step, level in reasoning.items() if level)]
 
 
 def checked(make: Callable[[], Settings]) -> Settings:
@@ -271,6 +299,10 @@ def run(
         list[str] | None,
         typer.Option("--block-domain", metavar="DOMAIN", help="Drop search results from this domain (repeatable)."),
     ] = None,
+    model: ModelOption = None,
+    plan_thinking: PlanThinkingOption = None,
+    gap_thinking: GapThinkingOption = None,
+    write_thinking: WriteThinkingOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -300,7 +332,8 @@ def run(
         queries_per_round=queries_per_round,
     )
     domains = [*domain_overrides(allow_domain, block_domain), *language_overrides(search_language)]
-    overrides = [*(set_ or []), *flags, *research, *domains]
+    thinking = llm_overrides(model, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
+    overrides = [*(set_ or []), *flags, *research, *domains, *thinking]
     env = os.environ
     settings = checked(lambda: resolve(profile, overrides, env, depth))
     store = RunStore.from_settings(settings)
@@ -326,6 +359,10 @@ def fork(
     reference_style: StyleOption = None,
     format_: FormatOption = None,
     gap_context_tokens: GapContextTokensOption = None,
+    model: ModelOption = None,
+    plan_thinking: PlanThinkingOption = None,
+    gap_thinking: GapThinkingOption = None,
+    write_thinking: WriteThinkingOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
 ) -> None:
@@ -342,7 +379,9 @@ def fork(
         reference_style=reference_style,
         format=format_,
     )
-    new = [*(set_ or []), *flags, *research_overrides(gap_context_tokens=gap_context_tokens)]
+    research = research_overrides(gap_context_tokens=gap_context_tokens)
+    thinking = llm_overrides(model, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
+    new = [*(set_ or []), *flags, *research, *thinking]
     env = os.environ
     here = checked(lambda: resolve(profile, set_ or [], env))
     store = RunStore.from_settings(here)

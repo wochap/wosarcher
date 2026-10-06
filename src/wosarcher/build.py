@@ -45,9 +45,9 @@ PROVIDERS = {
     "fetch": ["firecrawl"],
     "prefilter": list(PREFILTERS),
     "score": ["rerank", "jev", "bm25"],
-    "llm": ["llm"],
+    "llm": ["openai"],
 }
-REMOTE = {"searxng", "firecrawl", "embeddings", "rerank", "jev", "llm"}
+REMOTE = {"searxng", "firecrawl", "embeddings", "rerank", "jev", "openai"}
 
 
 def check_providers(settings: Settings) -> None:
@@ -84,6 +84,7 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
 
     llm_client = client(settings.llm)
     planner = ChatLLM(settings.llm, llm_client, ledger, "plan")
+    gapper = ChatLLM(settings.llm, llm_client, ledger, "gap")
     writer = ChatLLM(settings.llm, llm_client, ledger, "write")
     managed["llm"] = planner
     return Adapters(
@@ -92,6 +93,7 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
         embedder=embedder,
         scorers=scorers,
         planner=planner,
+        gapper=gapper,
         writer=writer,
         managed=managed,
     )

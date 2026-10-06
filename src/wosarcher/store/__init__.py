@@ -21,6 +21,7 @@ from wosarcher.models import (
     STAGES,
     Event,
     Plan,
+    ReasoningOptions,
     ResearchDone,
     RunCancelled,
     RunCosts,
@@ -96,6 +97,16 @@ def settings_rounds(record: RunRecord) -> int:
     research: object = record.settings.get("research")
     rounds = cast(dict[str, object], research).get("rounds", 1) if isinstance(research, dict) else 1
     return rounds if isinstance(rounds, int) else 1
+
+
+def settings_llm(record: RunRecord) -> tuple[str, ReasoningOptions]:
+    """The run's resolved `llm.model` and `llm.reasoning`; empty and `none` for runs from before them."""
+    llm: object = record.settings.get("llm")
+    block = cast(dict[str, object], llm) if isinstance(llm, dict) else {}
+    model = block.get("model")
+    reasoning = block.get("reasoning")
+    options = ReasoningOptions.model_validate(reasoning) if isinstance(reasoning, dict) else ReasoningOptions()
+    return (model if isinstance(model, str) else ""), options
 
 
 def free_name(name: Path, taken: set[Path]) -> Path:
@@ -389,6 +400,7 @@ class RunStore:
         last = events[-1] if events else None
         ended = last if isinstance(last, RunFailed | RunCancelled) else None
         error = last.data.error if isinstance(last, RunFailed) else None
+        model, reasoning = settings_llm(record)
         return RunSummary(
             run_id=record.run_id,
             query=record.request.query,
@@ -409,6 +421,8 @@ class RunStore:
             rounds_planned=settings_rounds(record),
             rounds_ran=research.data.ran if research else (1 if gap_done else None),
             stop_reason=research.data.reason if research else None,
+            model=model,
+            reasoning=reasoning,
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:

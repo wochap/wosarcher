@@ -7,6 +7,7 @@ from typing import Protocol
 from wosarcher.models import (
     Chunk,
     Completion,
+    Effort,
     EmbedderInfo,
     ExportFormat,
     Hit,
@@ -42,10 +43,15 @@ class Scorer(Protocol):
 
 
 class LLM(Protocol):
-    async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion: ...
+    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion: ...
 
     def stream(
-        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = ...
+        self,
+        messages: list[Message],
+        *,
+        max_tokens: int,
+        effort: Effort,
+        on_finish: Callable[[str | None], None] = ...,
     ) -> AsyncIterator[str]:
         """Text deltas in order; `on_finish` gets the final finish reason (or None) when the stream ends."""
         ...
@@ -82,5 +88,6 @@ class Adapters:
     embedder: Embedder | None
     scorers: dict[str, Scorer]
     planner: LLM
+    gapper: LLM
     writer: LLM
     managed: dict[str, Managed]

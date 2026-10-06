@@ -94,7 +94,7 @@ def doctor(store: RunStore, argv: list[str], chosen: list[str]) -> int:
         ProviderHealth(block="fetch", provider="firecrawl", base_url="http://f", status="ok", latency_ms=90),
         ProviderHealth(block="prefilter", provider="embeddings", base_url="http://e", status="ok", latency_ms=30),
         ProviderHealth(block="score", provider="rerank", base_url="http://r", status=status, error="refused"),
-        ProviderHealth(block="llm", provider="llm", base_url="http://l", status="ok", latency_ms=200),
+        ProviderHealth(block="llm", provider="openai", base_url="http://l", status="ok", latency_ms=200),
     )
     rows = tuple(row for row in rows if not chosen or row.block in chosen)
     print(DoctorReport(providers=rows).model_dump_json(indent=2))
@@ -183,7 +183,7 @@ def main(argv: list[str]) -> int:
         if mode == "bad-line" and stage == STAGES[first]:
             with (store.run_dir(run_id) / "events.jsonl").open("a", encoding="utf-8") as log:
                 log.write("not json\n")
-    store.append_event(run_id, "stage.started", "write", StageStartedData(device=None, provider="llm"))
+    store.append_event(run_id, "stage.started", "write", StageStartedData(device=None, provider="openai"))
     streamed = ""
     for n in range(CHUNKS):
         if cancelled:

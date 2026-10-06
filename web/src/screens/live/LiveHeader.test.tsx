@@ -176,3 +176,17 @@ describe("LiveHeader depth tag", () => {
     expect(screen.getByText("Standard")).toBeTruthy();
   });
 });
+
+describe("LiveHeader thinking tags", () => {
+  it("shows a tag per thinking step", () => {
+    const reasoning = { plan: "none", gap: "low", write: "high" } as const;
+    header(all, false, { ...summary({ reasoning }), last_seq: 0 });
+    expect(screen.getByText("Gap thinking low")).toBeTruthy();
+    expect(screen.getByText("Write thinking high")).toBeTruthy();
+  });
+
+  it("shows none when every step is none", () => {
+    header(all);
+    expect(screen.queryByText(/thinking/)).toBeNull();
+  });
+});

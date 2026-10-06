@@ -235,6 +235,7 @@ async def plan(ctx: StepContext) -> Outcome:
         initial,
         [loading.outline(page) for page in files],
         ctx.adapters.planner,
+        effort=ctx.settings.llm.reasoning.plan,
         sources=request.sources,
         max_sub_queries=ctx.settings.plan.max_sub_queries,
     )
@@ -486,7 +487,8 @@ async def gap(ctx: StepContext) -> Outcome:
         ctx.record.request.query,
         plan.queries,
         selection.context,
-        ctx.adapters.planner,
+        ctx.adapters.gapper,
+        effort=settings.llm.reasoning.gap,
         scores=inputs[0],
         score_cfg=settings.score,
         known=known,
@@ -548,7 +550,9 @@ async def write(ctx: StepContext) -> Outcome:
         max_continuations=llm.max_continuations,
         max_output_tokens=llm.max_output_tokens,
     )
-    report = await writing.write(context, ctx.settings.write, ctx.adapters.writer, sizing=sizing, on_delta=on_delta)
+    report = await writing.write(
+        context, ctx.settings.write, ctx.adapters.writer, effort=llm.reasoning.write, sizing=sizing, on_delta=on_delta
+    )
     ctx.store.write_text(ctx.run_id, "report.md", report.markdown)
     ctx.store.write_artifact(ctx.run_id, "report.json", report)
     return Outcome(len(report.body.strip()), warnings=list(report.warnings))

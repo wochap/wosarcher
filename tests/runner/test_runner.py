@@ -13,6 +13,7 @@ from wosarcher.http import UsageLedger
 from wosarcher.models import (
     Chunk,
     Completion,
+    Effort,
     Hit,
     Message,
     Page,
@@ -139,7 +140,7 @@ async def test_failing_page_continues(tmp_path: Path) -> None:
 
 async def test_planner_error_fails_run(tmp_path: Path) -> None:
     class Broken(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
             raise RuntimeError("llm down")
 
     cfg = settings(tmp_path)
@@ -313,7 +314,7 @@ def gpu(tmp_path: Path, score_device: str, llm_device: str) -> Settings:
     return cfg.model_copy(
         update={
             "score": ScoreConfig(provider="rerank", device=score_device, release="llama-swap"),
-            "llm": LLMConfig(provider="llm", device=llm_device, release="llama-swap"),
+            "llm": LLMConfig(provider="openai", device=llm_device, release="llama-swap"),
             "select": cfg.select.model_copy(update={"passthrough_chars": 0}),
         }
     )
@@ -375,9 +376,9 @@ async def test_costs(tmp_path: Path) -> None:
     ledger = UsageLedger({})
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
-            return await super().complete(messages, max_tokens=max_tokens)
+            return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 
     cfg = settings(tmp_path)
     store = store_of(cfg)
@@ -415,9 +416,9 @@ async def test_cancel_writes_costs(tmp_path: Path) -> None:
     started = asyncio.Event()
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
-            return await super().complete(messages, max_tokens=max_tokens)
+            return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 
     class Stuck(FakeFetcher):
         async def fetch(self, url: str) -> Page:
@@ -459,7 +460,7 @@ def preflight_settings(tmp_path: Path, mode: str) -> Settings:
     return cfg.model_copy(
         update={
             "score": ScoreConfig(provider="rerank"),
-            "llm": LLMConfig(provider="llm", device="desktop:gpu0"),
+            "llm": LLMConfig(provider="openai", device="desktop:gpu0"),
         }
     )
 

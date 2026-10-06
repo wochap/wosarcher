@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, cast, get_args
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_core import to_jsonable_python
 
-from wosarcher.models import Stage, WritingOptions, domain_list, search_language
+from wosarcher.models import Effort, Stage, WritingOptions, domain_list, search_language
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
@@ -52,7 +52,7 @@ DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
 }
 
 # Concurrency per adapter when a block leaves `concurrency` unset.
-DEFAULT_CONCURRENCY = {"searxng": 4, "firecrawl": 6, "embeddings": 4, "rerank": 4, "jev": 64, "llm": 1}
+DEFAULT_CONCURRENCY = {"searxng": 4, "firecrawl": 6, "embeddings": 4, "rerank": 4, "jev": 64, "openai": 1}
 
 
 class ConfigError(Exception):
@@ -129,17 +129,33 @@ class PrefilterConfig(Provider):
     pairing: Literal["all", "found"] = "all"
 
 
+class ReasoningConfig(Block):
+    """Thinking effort per LLM step; see `models.Effort`."""
+
+    plan: Effort = "none"
+    gap: Effort = "none"
+    write: Effort = "none"
+
+
 class LLMConfig(Provider):
+    provider: str = "openai"
     context_window: int = Field(default=32768, gt=0)
     chars_per_token: float = Field(default=3.5, gt=0)
     token_margin: float = Field(default=1.1, ge=1)
     max_tokens_field: Literal["max_completion_tokens", "max_tokens"] = "max_completion_tokens"
-    reasoning_tokens: int = Field(default=0, ge=0)
+    reasoning: ReasoningConfig = ReasoningConfig()
     max_continuations: int = Field(default=2, ge=0)
     max_output_tokens: int = Field(default=8192, gt=0)
     """Caps the writer's output limit; a quarter of the default window."""
     timeout: float = Field(default=300.0, gt=0)
     """A small local model may take minutes on a long prompt before its first token."""
+
+    @field_validator("provider")
+    @classmethod
+    def check_provider(cls, value: str) -> str:
+        if value != "openai":
+            raise ValueError(f"'{value}' is not a known LLM provider; use 'openai'")
+        return value
 
 
 class PlanConfig(Block):
@@ -226,7 +242,7 @@ class Settings(Block):
     fetch: FetchConfig = FetchConfig(provider="firecrawl")
     prefilter: PrefilterConfig = PrefilterConfig()
     score: ScoreConfig = ScoreConfig(provider="bm25")
-    llm: LLMConfig = LLMConfig(provider="llm")
+    llm: LLMConfig = LLMConfig()
     plan: PlanConfig = PlanConfig()
     attach: AttachConfig = AttachConfig()
     chunk: ChunkConfig = ChunkConfig()

@@ -14,6 +14,7 @@ from wosarcher.models import (
     Attachment,
     ExportFormat,
     ForkCreate,
+    ReasoningOptions,
     Report,
     RunCreate,
     RunCreated,
@@ -80,6 +81,8 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         depth=staged.depth,
         writing=staged.writing_options,
         queue_position=state.manager.queue_position(staged.run_id),
+        model=staged.llm.model or "",
+        reasoning=ReasoningOptions.model_validate(staged.llm.reasoning.model_dump(exclude_none=True)),
     )
 
 

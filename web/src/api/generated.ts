@@ -99,6 +99,10 @@ export type Truncated = boolean
 export type Pages = Page[]
 export type Unfetched = number
 export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write")
+export type Model2 = (string | null)
+export type Gap = (("none" | "low" | "medium" | "high" | "default") | null)
+export type Plan = (("none" | "low" | "medium" | "high" | "default") | null)
+export type Write = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Profile = (string | null)
 export type Set = string[]
 export type CitationMarker = (("numeric" | "superscript" | "author-year") | null)
@@ -130,7 +134,7 @@ export type CheckedAt = (string | null)
 export type Detail1 = string
 export type Device1 = (string | null)
 export type LatencyMs1 = (number | null)
-export type Model2 = (string | null)
+export type Model3 = (string | null)
 export type Provider1 = string
 export type Release1 = ("none" | "llama-swap" | "ollama")
 export type Role = string
@@ -170,6 +174,7 @@ export type RetryAfter = (number | null)
 export type Password = string
 export type Content = string
 export type Role1 = ("system" | "user" | "assistant")
+export type Models = string[]
 export type Reason1 = string
 export type Url3 = string
 export type RunId2 = string
@@ -234,6 +239,9 @@ export type QueryId6 = string
 export type Scored1 = number
 export type Scorer3 = string
 export type ThresholdDisplay1 = (number | null)
+export type Gap1 = ("none" | "low" | "medium" | "high" | "default")
+export type Plan2 = ("none" | "low" | "medium" | "high" | "default")
+export type Write1 = ("none" | "low" | "medium" | "high" | "default")
 export type Entry = string
 export type Passages3 = number[]
 export type SourceId5 = string
@@ -334,6 +342,7 @@ export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefi
 export type Error3 = (string | null)
 export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type LastSeq = number
+export type Model4 = string
 export type ParentRunId = (string | null)
 export type Profile3 = string
 export type Query3 = string
@@ -410,6 +419,7 @@ export type DurationS1 = (number | null)
 export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Error7 = (string | null)
 export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Model5 = string
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
 export type Query6 = string
@@ -759,9 +769,25 @@ truncated?: Truncated
  */
 export interface ForkCreate {
 from: From
+llm?: LLMPatch
 profile?: Profile
 set?: Set
 writing?: WritingPatch
+}
+/**
+ * The run's model and thinking; unset fields keep the configured value.
+ */
+export interface LLMPatch {
+model?: Model2
+reasoning?: ReasoningPatch
+}
+/**
+ * Any subset of the thinking levels; each sets `llm.reasoning.<step>`.
+ */
+export interface ReasoningPatch {
+gap?: Gap
+plan?: Plan
+write?: Write
 }
 /**
  * Any subset of the writing options; unset fields keep the value from the layer below.
@@ -851,7 +877,7 @@ checked_at?: CheckedAt
 detail?: Detail1
 device?: Device1
 latency_ms?: LatencyMs1
-model?: Model2
+model?: Model3
 provider: Provider1
 release?: Release1
 role: Role
@@ -905,6 +931,16 @@ title: Title3
 uri: Uri1
 }
 /**
+ * The run's model and thinking; unset fields keep the configured value.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "LLMPatch".
+ */
+export interface LLMPatch1 {
+model?: Model2
+reasoning?: ReasoningPatch
+}
+/**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "LoadResult".
  */
@@ -936,6 +972,15 @@ password: Password
 export interface Message {
 content: Content
 role: Role1
+}
+/**
+ * `GET /api/models`: the IDs the profile's LLM endpoint lists; empty when it lists none or fails.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ModelList".
+ */
+export interface ModelList {
+models?: Models
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1010,7 +1055,7 @@ threshold_display: ThresholdDisplay
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "Plan".
  */
-export interface Plan {
+export interface Plan1 {
 queries: Queries2
 warnings?: Warnings2
 }
@@ -1084,6 +1129,28 @@ query_id: QueryId5
 round?: Round5
 scorer: Scorer2
 value: Value
+}
+/**
+ * Resolved thinking effort per LLM step (`llm.reasoning`).
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ReasoningOptions".
+ */
+export interface ReasoningOptions {
+gap?: Gap1
+plan?: Plan2
+write?: Write1
+}
+/**
+ * Any subset of the thinking levels; each sets `llm.reasoning.<step>`.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ReasoningPatch".
+ */
+export interface ReasoningPatch1 {
+gap?: Gap
+plan?: Plan
+write?: Write
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1313,6 +1380,7 @@ export interface Stages {
 export interface RunCreate {
 depth?: Depth
 domains?: DomainPatch1
+llm?: LLMPatch2
 profile?: Profile2
 query: Query2
 research?: ResearchPatch1
@@ -1328,6 +1396,13 @@ writing?: WritingPatch1
 export interface DomainPatch1 {
 allow?: Allow1
 block?: Block2
+}
+/**
+ * The run's model and thinking; unset fields keep the configured value.
+ */
+export interface LLMPatch2 {
+model?: Model2
+reasoning?: ReasoningPatch
 }
 /**
  * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
@@ -1378,10 +1453,12 @@ end_stage?: EndStage
 error?: Error3
 fork_from?: ForkFrom
 last_seq?: LastSeq
+model?: Model4
 parent_run_id?: ParentRunId
 profile: Profile3
 query: Query3
 queue_position?: QueuePosition
+reasoning?: ReasoningOptions1
 request?: (RunRecord | null)
 rounds_planned?: RoundsPlanned
 rounds_ran?: RoundsRan
@@ -1392,6 +1469,14 @@ stop_reason?: StopReason
 until?: Until2
 version?: Version1
 writing?: WritingOptions
+}
+/**
+ * Resolved thinking effort per LLM step (`llm.reasoning`).
+ */
+export interface ReasoningOptions1 {
+gap?: Gap1
+plan?: Plan2
+write?: Write1
 }
 /**
  * `request.json`: what a run was asked, with which configuration, and where it came from.
@@ -1556,10 +1641,12 @@ duration_s?: DurationS1
 end_stage?: EndStage1
 error?: Error7
 fork_from?: ForkFrom2
+model?: Model5
 parent_run_id?: ParentRunId3
 profile: Profile6
 query: Query6
 queue_position?: QueuePosition1
+reasoning?: ReasoningOptions2
 rounds_planned?: RoundsPlanned1
 rounds_ran?: RoundsRan1
 run_id: RunId22
@@ -1569,6 +1656,14 @@ stop_reason?: StopReason1
 until?: Until5
 version?: Version3
 writing?: WritingOptions1
+}
+/**
+ * Resolved thinking effort per LLM step (`llm.reasoning`).
+ */
+export interface ReasoningOptions2 {
+gap?: Gap1
+plan?: Plan2
+write?: Write1
 }
 export interface WritingOptions1 {
 citation_marker?: CitationMarker1

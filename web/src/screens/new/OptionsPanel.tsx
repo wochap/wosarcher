@@ -20,7 +20,9 @@ import {
   WritingOptionsForm,
 } from "../../components/WritingOptionsForm";
 import { DEPTH_LABELS, type Depth } from "../../run/depth";
+import type { LlmValues } from "../../run/thinking";
 import { DepthGroup } from "./DepthGroup";
+import { ModelGroup } from "./ModelGroup";
 import css from "./OptionsPanel.module.css";
 
 /** The fields of `value` that differ from `defaults`. */
@@ -70,12 +72,20 @@ export type DepthView = {
   onEdit: (field: keyof ResearchValues, value: TokenBudget) => void;
 };
 
+/** The Model group: the values, the endpoint's model IDs, and the change handler. */
+export type LlmView = {
+  values: LlmValues;
+  models: string[];
+  onChange: (values: LlmValues) => void;
+};
+
 type Props = {
   open: boolean;
   onOpen: (open: boolean) => void;
   options: RunOptions;
   profiles: ProfileInfo[];
   depth: DepthView;
+  llm: LlmView;
   onOption: <K extends keyof RunOptions>(key: K, value: RunOptions[K]) => void;
   writing: WritingOptions;
   defaults: WritingOptions;
@@ -132,7 +142,14 @@ export function OptionsPanel(props: Props) {
             filesOnly={options.sources === "files"}
             onPick={depth.onPick}
             onEdit={depth.onEdit}
-          />
+          >
+            <ModelGroup
+              values={props.llm.values}
+              models={props.llm.models}
+              rounds={options.sources === "files" ? 1 : depth.values.rounds}
+              onChange={props.llm.onChange}
+            />
+          </DepthGroup>
           <Row label="Recipe" help="recipe">
             <Seg
               label="Recipe"

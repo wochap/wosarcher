@@ -30,7 +30,7 @@ import wosarcher.build as building
 from evals.metrics import context
 from evals.replay import read_results
 from wosarcher.config import ConfigError, resolve
-from wosarcher.http import UsageLedger
+from wosarcher.http import ProviderError, UsageLedger
 from wosarcher.models import Context, Message, Report
 from wosarcher.ports import LLM
 from wosarcher.stages.write import citations
@@ -82,7 +82,7 @@ async def judge_result(llm: LLM, query: str, passages: Sequence[str]) -> float |
     system = Template(PROMPT.read_text(encoding="utf-8")).substitute(query=query)
     data = "\n\n".join(f"[{index}] {text[:PASSAGE_CHARS]}" for index, text in enumerate(passages))
     messages = [Message(role="system", content=system), Message(role="user", content=data)]
-    completion = await llm.complete(messages, max_tokens=MAX_TOKENS)
+    completion = await llm.complete(messages, max_tokens=MAX_TOKENS, effort="none")
     relevant = parse_answer(completion.text, len(passages))
     return None if relevant is None else len(relevant) / len(passages)
 
@@ -110,7 +110,7 @@ async def judge_faithfulness(llm: LLM, query: str, pairs: Sequence[tuple[str, st
         f"[{index}] claim: {claim}\npassage: {text[:PASSAGE_CHARS]}" for index, (claim, text) in enumerate(pairs)
     )
     messages = [Message(role="system", content=system), Message(role="user", content=data)]
-    completion = await llm.complete(messages, max_tokens=MAX_TOKENS)
+    completion = await llm.complete(messages, max_tokens=MAX_TOKENS, effort="none")
     supported = parse_answer(completion.text, len(pairs))
     return None if supported is None else len(supported) / len(pairs)
 
@@ -142,10 +142,14 @@ async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]
             if result.run_id is None or run_dir is None or found is None:
                 continue
             texts = [passage.text for passage in found.passages]
-            precision = await judge_result(writer, found.query, texts)
             report = read_report(run_dir)
             pairs = claims(report, found)[:MAX_PAIRS] if report else []
-            faithfulness = await judge_faithfulness(writer, found.query, pairs)
+            try:
+                precision = await judge_result(writer, found.query, texts)
+                faithfulness = await judge_faithfulness(writer, found.query, pairs)
+            except ProviderError as error:
+                print(f"{result.variant} {result.run_id}: {' '.join(str(error).split())}", file=sys.stderr)
+                precision = faithfulness = None
             judgement = Judgement(
                 run_id=result.run_id,
                 parent_run_id=result.parent_run_id,

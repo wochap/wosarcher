@@ -43,6 +43,8 @@ export interface ApiClient {
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
   listProfiles(): Promise<ProfileInfo[]>;
   listDepths(): Promise<DepthInfo[]>;
+  /** The model IDs the profile's LLM endpoint lists; empty when it lists none. */
+  listModels(profile?: string): Promise<string[]>;
   /** The stored provider checks; sends no probe. */
   health(profile?: string): Promise<HealthReport>;
   /** Probes the named blocks (every block when none) and returns the merged report. */
@@ -159,6 +161,8 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     putSettings: (settings) => json("PUT", "/settings", settings),
     listProfiles: () => json("GET", "/profiles"),
     listDepths: () => json("GET", "/depths"),
+    listModels: async (profile) =>
+      (await json<{ models: string[] }>("GET", `/models${profileQuery(profile)}`)).models,
     health: (profile) => json("GET", `/providers/health${profileQuery(profile)}`),
     checkHealth: (blocks, profile) =>
       json("POST", `/providers/health/check${profileQuery(profile)}`, { blocks: blocks ?? [] }),

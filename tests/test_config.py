@@ -249,7 +249,7 @@ def test_wire_format_defaults() -> None:
     settings = Settings()
     assert settings.llm.retry_budget == 60.0
     assert settings.llm.max_tokens_field == "max_completion_tokens"
-    assert settings.llm.reasoning_tokens == 0
+    assert settings.llm.reasoning.model_dump() == {"plan": "none", "gap": "none", "write": "none"}
     assert settings.llm.max_continuations == 2
     assert settings.score.rerank_scale == "auto"
     assert settings.prefilter.pairing == "all"
@@ -267,9 +267,31 @@ def test_negative_retry_budget_rejected(env: dict[str, str]) -> None:
         resolve("workstation", ["llm.retry_budget=-1"], env)
 
 
-def test_negative_reasoning_tokens_rejected(env: dict[str, str]) -> None:
+def test_thinking_per_step(env: dict[str, str]) -> None:
+    reasoning = resolve("workstation", ['llm.reasoning.write="high"'], env).llm.reasoning
+    assert (reasoning.plan, reasoning.gap, reasoning.write) == ("none", "none", "high")
+
+
+def test_invalid_thinking_level(env: dict[str, str]) -> None:
+    user_profile(env, "bad", '[llm]\nprovider = "openai"\n[llm.reasoning]\ngap = "max"\n')
+    with pytest.raises(ConfigError) as error:
+        resolve("bad", [], env)
+    assert "llm.reasoning.gap" in str(error.value)
+    assert "'none', 'low', 'medium', 'high' or 'default'" in str(error.value)
+
+
+def test_old_llm_provider(env: dict[str, str]) -> None:
+    user_profile(env, "old", '[llm]\nprovider = "llm"\n')
+    with pytest.raises(ConfigError) as error:
+        resolve("old", [], env)
+    assert "llm.provider" in str(error.value)
+    assert "openai" in str(error.value)
+
+
+def test_removed_reasoning_tokens(env: dict[str, str]) -> None:
+    user_profile(env, "left", '[llm]\nprovider = "openai"\nreasoning_tokens = 4096\n')
     with pytest.raises(ConfigError, match=r"llm\.reasoning_tokens"):
-        resolve("workstation", ["llm.reasoning_tokens=-1"], env)
+        resolve("left", [], env)
 
 
 def test_negative_continuations_rejected(env: dict[str, str]) -> None:
@@ -282,8 +304,10 @@ def test_local_profiles_llm_timeout(name: str, env: dict[str, str]) -> None:
     assert resolve(name, [], env).llm.timeout == 600
 
 
-def test_cloud_reasoning_tokens(env: dict[str, str]) -> None:
-    assert resolve("cloud", [], env).llm.reasoning_tokens == 4096
+def test_cloud_has_no_allowance(env: dict[str, str]) -> None:
+    llm = resolve("cloud", [], env).llm
+    assert (llm.provider, llm.reasoning.plan, llm.reasoning.gap, llm.reasoning.write) == ("openai", *["none"] * 3)
+    assert "reasoning_tokens" not in llm.model_dump()
 
 
 def test_description_is_not_a_setting(env: dict[str, str]) -> None:
@@ -318,19 +342,19 @@ def test_auto_context_in_profile(env: dict[str, str]) -> None:
     user_profile(
         env,
         "big",
-        PROVIDERS + '[llm]\nprovider = "llm"\ncontext_window = 1000000\n[select]\nmax_context_tokens = "auto"\n',
+        PROVIDERS + '[llm]\nprovider = "openai"\ncontext_window = 1000000\n[select]\nmax_context_tokens = "auto"\n',
     )
     assert resolve("big", [], env).select.max_context_tokens == "auto"
 
 
 def test_invalid_context_value(env: dict[str, str]) -> None:
-    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "llm"\n[select]\nmax_context_tokens = "all"\n')
+    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "openai"\n[select]\nmax_context_tokens = "all"\n')
     with pytest.raises(ConfigError, match=r"select\.max_context_tokens"):
         resolve("bad", [], env)
 
 
 def test_fixed_context_cap(env: dict[str, str]) -> None:
-    user_profile(env, "capped", PROVIDERS + '[llm]\nprovider = "llm"\n[select]\nmax_context_tokens = 12000\n')
+    user_profile(env, "capped", PROVIDERS + '[llm]\nprovider = "openai"\n[select]\nmax_context_tokens = 12000\n')
     assert resolve("capped", [], env).select.max_context_tokens == 12000
 
 
@@ -341,7 +365,7 @@ def test_output_cap_default(env: dict[str, str]) -> None:
 
 
 def test_larger_model_sets_its_own_cap(env: dict[str, str]) -> None:
-    body = '[llm]\nprovider = "llm"\ncontext_window = 1048576\nmax_output_tokens = 131072\n'
+    body = '[llm]\nprovider = "openai"\ncontext_window = 1048576\nmax_output_tokens = 131072\n'
     user_profile(env, "big", PROVIDERS + body)
     llm = resolve("big", [], env).llm
     assert (llm.context_window, llm.max_output_tokens) == (1048576, 131072)
@@ -362,7 +386,7 @@ def test_gap_context_default(env: dict[str, str]) -> None:
 
 
 def test_invalid_gap_context_value(env: dict[str, str]) -> None:
-    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "llm"\n[research]\ngap_context_tokens = "all"\n')
+    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "openai"\n[research]\ngap_context_tokens = "all"\n')
     with pytest.raises(ConfigError, match=r"research\.gap_context_tokens"):
         resolve("bad", [], env)
 
@@ -416,7 +440,7 @@ def test_flag_beats_preset(env: dict[str, str]) -> None:
 
 
 def test_preset_between_environment_and_overrides(env: dict[str, str]) -> None:
-    user_profile(env, "mid", PROVIDERS + '[llm]\nprovider = "llm"\n' + "[plan]\nmax_sub_queries = 1\n")
+    user_profile(env, "mid", PROVIDERS + '[llm]\nprovider = "openai"\n' + "[plan]\nmax_sub_queries = 1\n")
     assert resolve("mid", [], env, depth="deep").plan.max_sub_queries == 6
     overrides = ["plan.max_sub_queries=2"]
     assert resolve("mid", overrides, env, depth="deep").plan.max_sub_queries == 2

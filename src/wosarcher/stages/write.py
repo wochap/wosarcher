@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath
 from urllib.parse import urlparse
 
-from wosarcher.models import Context, Message, Passage, Reference, Report, Source, WritingOptions
+from wosarcher.models import Context, Effort, Message, Passage, Reference, Report, Source, WritingOptions
 from wosarcher.ports import LLM
 from wosarcher.prompts import load, tones
 from wosarcher.stages.select import estimate_tokens, output_tokens
@@ -280,6 +280,7 @@ async def write(
     options: WritingOptions,
     llm: LLM,
     *,
+    effort: Effort,
     sizing: Sizing = DEFAULT_SIZING,
     on_delta: Callable[[str], None] = noop,
 ) -> Report:
@@ -300,7 +301,7 @@ async def write(
             added += len(piece)
         return added
 
-    await call(llm.stream(first, max_tokens=limit, on_finish=reasons.append))
+    await call(llm.stream(first, max_tokens=limit, effort=effort, on_finish=reasons.append))
     continuations = 0
     failed: list[str] = []
     while reasons[-1:] == ["length"] and continuations < sizing.max_continuations:
@@ -311,7 +312,9 @@ async def write(
             break
         reasons.clear()
         try:
-            added = await call(trimmed(llm.stream(sent, max_tokens=tokens, on_finish=reasons.append), body))
+            added = await call(
+                trimmed(llm.stream(sent, max_tokens=tokens, effort=effort, on_finish=reasons.append), body)
+            )
         except Exception as error:
             failed.append(f"continuation failed: {error}")
             break

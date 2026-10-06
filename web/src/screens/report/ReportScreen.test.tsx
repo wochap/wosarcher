@@ -355,3 +355,23 @@ describe("ReportScreen depth tag", () => {
     expect(status.closest("span")?.nextElementSibling?.textContent).toBe("Deep");
   });
 });
+
+describe("ReportScreen thinking tags", () => {
+  it("shows writer thinking after the depth tag", async () => {
+    const reasoning = { plan: "none", gap: "none", write: "high" } as const;
+    await openScenario({
+      ...finished,
+      data: { ...finished.data, runs: [summary({ depth: "deep", reasoning })] },
+    });
+    const status = await screen.findByText("Completed");
+    const depth = status.closest("span")?.nextElementSibling;
+    expect(depth?.textContent).toBe("Deep");
+    expect(depth?.nextElementSibling?.textContent).toBe("Write thinking high");
+  });
+
+  it("shows no thinking tag when every step is none", async () => {
+    await openScenario(finished);
+    await screen.findByText("Completed");
+    expect(screen.queryByText(/thinking (low|medium|high|default)/)).toBeNull();
+  });
+});

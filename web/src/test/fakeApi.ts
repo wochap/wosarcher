@@ -28,6 +28,8 @@ export type FakeData = {
   settings: ServerSettings;
   profiles: ProfileInfo[];
   depths: DepthInfo[];
+  /** What `listModels` answers. */
+  models: string[];
   health: HealthReport;
   session: SessionInfo;
   tokens: TokenInfo[];
@@ -48,6 +50,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     settings: fixtures.settings,
     profiles: fixtures.profiles,
     depths: fixtures.depths,
+    models: [],
     health: fixtures.health,
     session: fixtures.session,
     tokens: fixtures.tokens,
@@ -150,6 +153,10 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     async listDepths() {
       record("listDepths");
       return structuredClone(data.depths);
+    },
+    async listModels(profile) {
+      record("listModels", profile);
+      return [...data.models];
     },
     async health(profile) {
       record("health", profile);

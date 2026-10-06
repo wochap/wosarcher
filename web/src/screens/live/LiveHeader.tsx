@@ -6,6 +6,7 @@ import type { RunDetail, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
+import { ThinkingTag } from "../../components/ThinkingTag";
 import { recipeOf } from "../../run/format";
 import type { RunView } from "../../run/reducer";
 import { DeviceChip } from "./DeviceChip";
@@ -65,6 +66,7 @@ export function LiveHeader({
             {LABELS[status]}
           </span>
           <DepthTag depth={detail?.depth} />
+          <ThinkingTag reasoning={detail?.reasoning} />
           {detail?.fork_from === "write" && parent && (
             <span className={`tag tag-outline ${css.rewrite}`}>
               <GitBranch aria-hidden="true" />

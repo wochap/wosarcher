@@ -31,6 +31,7 @@ import {
   researchOf,
   saveCustom,
 } from "../../run/depth";
+import { type LlmValues, llmPatch, loadLlm, saveLlm } from "../../run/thinking";
 import { Attachments } from "./Attachments";
 import css from "./NewRunScreen.module.css";
 import {
@@ -80,6 +81,7 @@ export function runRequest(
   custom?: ResearchValues,
   domains: Partial<DomainLists> = {},
   searchLanguage = "",
+  llm?: LlmValues,
 ): RunCreate {
   const request: RunCreate = {
     query,
@@ -97,6 +99,8 @@ export function runRequest(
   if (Object.keys(overrides).length) request.writing = overrides;
   if (Object.keys(domains).length) request.domains = domains;
   if (searchLanguage.trim()) request.search_language = searchLanguage.trim();
+  const patch = llm && llmPatch(llm);
+  if (patch) request.llm = patch;
   return request;
 }
 
@@ -109,6 +113,7 @@ export function NewRunScreen() {
   const [error, setError] = useState<StartError | null>(null);
   const [busy, setBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
   const [focusField, setFocusField] = useState<DomainKind | null>(null);
   const question = useRef<HTMLTextAreaElement>(null);
 
@@ -134,6 +139,7 @@ export function NewRunScreen() {
     depth: "standard",
     ...draft.options,
   };
+  const llm = draft.llm ?? loadLlm();
   const saved = settings?.writing;
   const presetOf = (d: Depth) => depths.find((info) => info.name === d);
   const standard = presetOf("standard");
@@ -156,6 +162,16 @@ export function NewRunScreen() {
   };
   const domains: DomainLists = { ...domainDefaults, ...draft.domains };
 
+  useEffect(() => {
+    if (!options.profile) return;
+    api.listModels(options.profile).then(setModels, () => setModels([]));
+  }, [api, options.profile]);
+
+  function setLlm(values: LlmValues) {
+    saveLlm(values);
+    setDraft((d) => ({ ...d, llm: values }));
+  }
+
   async function start() {
     if (blank || busy || languageInvalid || !defaults || !writing) return;
     const invalid = invalidDomain(domains);
@@ -177,6 +193,7 @@ export function NewRunScreen() {
           values,
           overriddenDomains(domains, domainDefaults),
           draft.searchLanguage,
+          llm,
         ),
         draft.files,
       );
@@ -335,6 +352,7 @@ export function NewRunScreen() {
               onPick: pickDepth,
               onEdit: editResearch,
             }}
+            llm={{ values: llm, models, onChange: setLlm }}
             onOption={setOption}
             writing={writing}
             defaults={defaults}

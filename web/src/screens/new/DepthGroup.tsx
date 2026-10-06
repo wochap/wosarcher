@@ -1,7 +1,7 @@
 // The Depth row of the Options panel: the preset control, its description and estimate, and the
 // Advanced values. Editing a value switches to Custom.
 import { CaretDown, CaretRight, Info, LockSimple } from "@phosphor-icons/react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import type { ResearchValues, TokenBudget } from "../../api/types";
 import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
@@ -46,6 +46,8 @@ type Props = {
   filesOnly: boolean;
   onPick: (depth: Depth) => void;
   onEdit: (field: keyof ResearchValues, value: TokenBudget) => void;
+  /** Shown below the research values, inside Advanced. */
+  children?: ReactNode;
 };
 
 export function DepthGroup({
@@ -58,6 +60,7 @@ export function DepthGroup({
   filesOnly,
   onPick,
   onEdit,
+  children,
 }: Props) {
   const [open, setOpen] = useState(depth === "custom");
   const preset = depth !== "custom";
@@ -161,6 +164,7 @@ export function DepthGroup({
                 );
               })}
             </div>
+            {children}
           </div>
         )}
       </div>

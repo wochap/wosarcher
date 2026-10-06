@@ -34,17 +34,21 @@ def adapters(
     searcher: Searcher | None = None,
     fetcher: Fetcher | None = None,
     planner: LLM | None = None,
+    gapper: LLM | None = None,
     writer: LLM | None = None,
     scorers: dict[str, Scorer] | None = None,
     embedder: Embedder | None = None,
     managed: Mapping[str, Managed] | None = None,
 ) -> Adapters:
+    """`gapper` defaults to the planner, so one script holds the plan and gap replies."""
+    planner = planner or FakeLLM([PLAN_REPLY])
     return Adapters(
         searcher=searcher or FakeSearcher(SEARCH),
         fetcher=fetcher or FakeFetcher(PAGES),
         embedder=embedder or FakeEmbedder(),
         scorers=scorers or {},
-        planner=planner or FakeLLM([PLAN_REPLY]),
+        planner=planner,
+        gapper=gapper or planner,
         writer=writer or FakeLLM([REPORT_REPLY]),
         managed=dict(managed or {}),
     )

@@ -158,6 +158,7 @@ def stage_fork(runs_dir: Path, parent: RunRecord, request: ForkCreate) -> Staged
         profile=request.profile,
         depth=parent.request.depth,
         writing=request.writing,
+        llm=request.llm,
         set=request.set,
         run_id=fresh_id(runs_dir),
         kind="fork",
@@ -228,8 +229,17 @@ def attach_flags(path: Path) -> list[str]:
     return [flag for entry in entries for flag in ("--attach", str(entry))]
 
 
+def llm_flags(staged: StagedRun) -> list[str]:
+    model = [] if staged.llm.model is None else [f"llm.model={toml_value(staged.llm.model)}"]
+    levels = staged.llm.reasoning.model_dump(exclude_none=True).items()
+    return [*model, *(f"llm.reasoning.{step}={toml_value(level)}" for step, level in levels)]
+
+
 def set_flags(staged: StagedRun) -> list[str]:
-    """Writing, then research, then domains and language, then the request's own `set`, each later one winning."""
+    """Writing, research, domains and language, the model and thinking, then the request's own `set`.
+
+    Each later one wins.
+    """
     writing = [f"write.{name}={toml_value(value)}" for name, value in staged.writing_flags.items()]
     research = [
         f"{RESEARCH_KEYS[name]}={value}" for name, value in staged.research.model_dump(exclude_none=True).items()
@@ -237,7 +247,9 @@ def set_flags(staged: StagedRun) -> list[str]:
     domains = [f"{key}={toml_value(value)}" for key, value in staged.domain_flags.items()]
     if staged.search_language is not None:
         domains.append(f"search.language={toml_value(staged.search_language)}")
-    return [flag for value in [*writing, *research, *domains, *staged.set] for flag in ("--set", value)]
+    return [
+        flag for value in [*writing, *research, *domains, *llm_flags(staged), *staged.set] for flag in ("--set", value)
+    ]
 
 
 def depth_flags(staged: StagedRun) -> list[str]:

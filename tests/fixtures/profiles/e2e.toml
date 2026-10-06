@@ -17,7 +17,7 @@ provider = "bm25"
 provider = "bm25"
 
 [llm]
-provider = "llm"
+provider = "openai"
 base_url = "http://llm.test/v1"
 model = "recorded-llm"
 

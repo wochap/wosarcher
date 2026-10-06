@@ -28,6 +28,9 @@ export type ResearchValues = {
     ? TokenBudget
     : number;
 };
+/** Thinking effort of one LLM step. */
+export type Effort = NonNullable<G.ReasoningOptions["plan"]>;
+export type ReasoningOptions = Required<G.ReasoningOptions>;
 export type ProviderCheck = G.ProviderCheck;
 export type HealthReport = G.HealthReport;
 export type SessionInfo = G.SessionInfo & { method: "cookie" | "token" | "none" };

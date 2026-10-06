@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 from typing import Any, Protocol
 
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 from tests.server.conftest import BASE_URL, MakeApp
@@ -216,3 +218,16 @@ def test_profile_domain_lists(client: TestClient, tmp_path: Path) -> None:
     found = {p["name"]: p for p in client.get("/api/profiles").json()}
     assert (found["nixos"]["block_domains"], found["nixos"]["allow_domains"]) == (["facebook.com"], None)
     assert found["workstation"]["block_domains"] is None
+
+
+@respx.mock
+def test_models_listed(client: TestClient) -> None:
+    respx.get("http://localhost:8080/v1/models").respond(200, json={"data": [{"id": "a"}, {"id": "b"}]})
+    assert client.get("/api/models?profile=workstation").json() == {"models": ["a", "b"]}
+
+
+@respx.mock
+def test_models_endpoint_down(client: TestClient) -> None:
+    respx.get("http://localhost:8080/v1/models").mock(side_effect=httpx.ConnectError("refused"))
+    response = client.get("/api/models?profile=workstation")
+    assert (response.status_code, response.json()) == (200, {"models": []})

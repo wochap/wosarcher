@@ -28,7 +28,13 @@ async def test_collection_flow() -> None:
     loaded = load([Attachment(name="notes.md", data=b"# Notes\n## Findings\nHydrometallurgy wins.\n")])
     initial = await search([Query(id="q0", text=QUERY)], searcher)
     planned = await plan(
-        QUERY, initial.hits, [outline(page) for page in loaded.pages], llm, sources="both", max_sub_queries=3
+        QUERY,
+        initial.hits,
+        [outline(page) for page in loaded.pages],
+        llm,
+        effort="none",
+        sources="both",
+        max_sub_queries=3,
     )
     found = await search(planned.queries[1:], searcher, initial=initial.hits)
     fetched = await fetch(found.hits, fetcher, concurrency=2, max_pages=40)

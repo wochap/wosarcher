@@ -25,10 +25,8 @@ concurrency = 16
 timeout = 120.0
 
 [llm]
-provider = "llm"
+provider = "openai"
 base_url = "https://api.openai.com/v1"
 model = "gpt-5-mini"
 concurrency = 8
 timeout = 300.0
-# gpt-5-mini counts hidden reasoning tokens against the output limit.
-reasoning_tokens = 4096

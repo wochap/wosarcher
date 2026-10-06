@@ -111,7 +111,7 @@
       "rerank_scale": "auto"
     },
     "llm": {
-      "provider": "llm",
+      "provider": "openai",
       "base_url": "http://llm.test/v1",
       "api_key": "",
       "model": "recorded-llm",
@@ -132,7 +132,7 @@
       "chars_per_token": 3.5,
       "token_margin": 1.1,
       "max_tokens_field": "max_completion_tokens",
-      "reasoning_tokens": 0,
+      "reasoning": {"plan": "none", "gap": "none", "write": "none"},
       "max_continuations": 2,
       "max_output_tokens": 8192
     },

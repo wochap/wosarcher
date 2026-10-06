@@ -27,7 +27,7 @@ base_url = "http://rerank.test/v1"
 fallback_urls = ["http://rerank-backup.test/v1"]
 
 [llm]
-provider = "llm"
+provider = "openai"
 base_url = "http://llm.test/v1"
 model = "writer"
 """
@@ -52,6 +52,7 @@ def healthy_routes() -> None:
     respx.post("http://llm.test/v1/chat/completions", name="llm").respond(200, json=reply)
     respx.get("http://llm.test/props").respond(404)
     respx.get(url__regex=r"^http://llm.test/upstream/.*/props$").respond(404)
+    respx.get("http://llm.test/v1/models").respond(404)
 
 
 @respx.mock
@@ -82,8 +83,29 @@ def test_doctor_other_profile() -> None:
     assert runner.invoke(app, ["profile", "use", "workstation"]).exit_code == 0
     result = runner.invoke(app, ["doctor", "--profile", "test", "--set", "llm.model=other", "--json"])
     assert result.exit_code == 0, result.output
-    assert respx.calls.call_count == 6  # with two props; unmatched hosts (the workstation profile) would raise
+    assert (
+        respx.calls.call_count == 7
+    )  # with two props and models; unmatched hosts (the workstation profile) would raise
     assert json.loads(respx.routes["llm"].calls.last.request.content)["model"] == "other"
+
+
+@respx.mock
+def test_doctor_models_note() -> None:
+    healthy_routes()
+    respx.get("http://llm.test/v1/models").respond(200, json={"data": [{"id": f"m{n}"} for n in range(12)]})
+    result = runner.invoke(app, ["doctor", "--profile", "test", "--json"])
+    assert result.exit_code == 0, result.output
+    rows = {row["block"]: row for row in json.loads(result.output)["providers"]}
+    assert "12 models listed" in rows["llm"]["note"]
+
+
+@respx.mock
+def test_doctor_no_models_endpoint() -> None:
+    healthy_routes()
+    result = runner.invoke(app, ["doctor", "--profile", "test", "--json"])
+    assert result.exit_code == 0, result.output
+    rows = {row["block"]: row for row in json.loads(result.output)["providers"]}
+    assert rows["llm"]["note"] is None
 
 
 @respx.mock

@@ -192,3 +192,22 @@ describe("NewRunScreen", () => {
     expect(screen.queryByText("overridden")).toBeNull();
   });
 });
+
+describe("NewRunScreen model and thinking", () => {
+  it("asks the selected profile's endpoint for models and keeps the values in the browser", async () => {
+    localStorage.clear();
+    const { api, question } = await open(fakeApi({ models: ["m1"] }));
+    expect(callsTo(api, "listModels")[0]).toEqual(["low-vram"]);
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.change(screen.getByLabelText("Plan thinking"), { target: { value: "default" } });
+    fireEvent.change(question, { target: { value: "q" } });
+    await ctrlEnter(question);
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate, File[]];
+    expect(request.llm).toEqual({ reasoning: { plan: "default" } });
+    expect(JSON.parse(localStorage.getItem("wosarcher.llm") ?? "{}").reasoning.plan).toBe(
+      "default",
+    );
+    localStorage.clear();
+  });
+});

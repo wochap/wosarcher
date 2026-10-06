@@ -12,8 +12,8 @@ from tests.evals.helpers import eval_env
 from tests.runner.helpers import adapters
 from wosarcher.adapters.fakes import FakeLLM
 from wosarcher.config import Settings
-from wosarcher.http import UsageLedger
-from wosarcher.models import Context, Passage, Report
+from wosarcher.http import ProviderError, UsageLedger
+from wosarcher.models import Completion, Context, Effort, Message, Passage, Report
 from wosarcher.ports import Adapters
 
 PASSAGES = ["Lithium is recovered.", "Unrelated {text} with $query and <data>.", "Cobalt prices.", "Weather."]
@@ -147,3 +147,35 @@ def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert (without.citations, without.faithfulness) == (0, None)
     assert judged.precision is not None
     assert without.precision is not None
+
+
+class FailingFirst(FakeLLM):
+    """Raises a provider error on the first call, then replies like `FakeLLM`."""
+
+    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        if not self.calls:
+            self.calls.append(list(messages))
+            raise ProviderError("openai", "HTTP 502 at http://llm.test/v1/chat/completions: reasoning truncated")
+        return await super().complete(messages, max_tokens=max_tokens, effort=effort)
+
+
+def test_provider_error_continues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env, parent = eval_env(tmp_path)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "out"
+    assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
+    llm = FailingFirst(["[0]"])
+
+    def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
+        return adapters(writer=llm)
+
+    monkeypatch.setattr(building, "build", fake_build)
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    first, second = judge.read_judgements(out / "judgements.jsonl")
+    assert (first.precision, first.faithfulness) == (None, None)
+    assert second.precision is not None
+    assert set(llm.efforts) == {"none"}
+    assert "HTTP 502" in capsys.readouterr().err

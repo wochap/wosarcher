@@ -1,13 +1,15 @@
-"""`/api/settings`, `/api/profiles`, `/api/depths`, `/api/providers/health`, and `/api/providers/health/check`."""
+"""`/api/settings`, `/api/profiles`, `/api/models`, `/api/depths`, and `/api/providers/health` (and `/check`)."""
 
 import asyncio
 import os
 from datetime import UTC, datetime
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, Depends
 from pydantic import ValidationError
 
+from wosarcher.adapters.llm import ChatLLM
 from wosarcher.config import (
     RESEARCH_KEYS,
     ConfigError,
@@ -22,12 +24,14 @@ from wosarcher.config import (
     select_profile,
 )
 from wosarcher.doctor import BLOCKS
+from wosarcher.http import ProviderClient, UsageLedger
 from wosarcher.models import (
     DepthInfo,
     DepthValues,
     DoctorReport,
     HealthCheckRequest,
     HealthReport,
+    ModelList,
     ProfileInfo,
     ServerSettings,
 )
@@ -78,6 +82,19 @@ def profile_info(name: str, source: str, active: str) -> ProfileInfo:
 async def profiles() -> list[ProfileInfo]:
     active = select_profile(None, os.environ)
     return [profile_info(name, source, active) for name, (_, source) in list_profiles(os.environ).items()]
+
+
+@router.get("/models")
+async def models(profile: str | None = None) -> ModelList:
+    """What the profile's LLM endpoint lists at `GET /models`; empty on any failure."""
+    try:
+        settings = resolve(select_profile(profile, os.environ), [], os.environ)
+    except ConfigError:
+        return ModelList()
+    ledger = UsageLedger({})
+    async with httpx.AsyncClient() as http:
+        llm = ChatLLM(settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "plan")
+        return ModelList(models=await llm.models())
 
 
 def depth_info(name: str) -> DepthInfo:

@@ -11,7 +11,7 @@ import json
 from collections.abc import Sequence
 from typing import cast
 
-from wosarcher.models import Hit, Message, Plan, Query, Sources
+from wosarcher.models import Effort, Hit, Message, Plan, Query, Sources
 from wosarcher.ports import LLM
 from wosarcher.prompts import load
 from wosarcher.stages.search import MAX_SEARCH_CHARS, cut
@@ -90,6 +90,7 @@ async def plan(
     outlines: Sequence[str],
     llm: LLM,
     *,
+    effort: Effort,
     sources: Sources,
     max_sub_queries: int,
 ) -> Plan:
@@ -98,7 +99,9 @@ async def plan(
         return Plan(queries=[fallback])
     if sources == "web":
         outlines = ()
-    completion = await llm.complete(messages(query, initial, outlines, max_sub_queries), max_tokens=MAX_TOKENS)
+    completion = await llm.complete(
+        messages(query, initial, outlines, max_sub_queries), max_tokens=MAX_TOKENS, effort=effort
+    )
     found = parse(completion.text)
     if found is None:
         return Plan(queries=[fallback], warnings=[UNREADABLE])

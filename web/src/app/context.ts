@@ -6,6 +6,7 @@ import type { DomainLists, ResearchValues, WritingOptions } from "../api/types";
 import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
 import type { Recipe } from "../run/format";
+import type { LlmValues } from "../run/thinking";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -44,6 +45,8 @@ export type Draft = {
   searchLanguage: string;
   /** The Custom depth's values and its default Length, once Custom was picked or edited. */
   custom?: { values: ResearchValues; words: number };
+  /** The Model group's values, once edited; until then the stored ones. */
+  llm?: LlmValues;
 };
 export const EMPTY_DRAFT: Draft = {
   query: "",

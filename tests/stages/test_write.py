@@ -42,11 +42,16 @@ class StreamLLM:
         self.pieces = pieces
         self.calls: list[tuple[list[Message], int]] = []
 
-    async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+    async def complete(self, messages: list[Message], *, max_tokens: int, effort: str) -> Completion:
         raise AssertionError("write streams")
 
     async def stream(
-        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = lambda _: None
+        self,
+        messages: list[Message],
+        *,
+        max_tokens: int,
+        effort: str,
+        on_finish: Callable[[str | None], None] = lambda _: None,
     ) -> AsyncIterator[str]:
         self.calls.append((messages, max_tokens))
         for piece in self.pieces:
@@ -89,14 +94,21 @@ class ScriptedLLM:
     def __init__(self, replies: list[tuple[list[str], str] | Exception]) -> None:
         self.replies = replies
         self.calls: list[tuple[list[Message], int]] = []
+        self.efforts: list[str] = []
 
-    async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
+    async def complete(self, messages: list[Message], *, max_tokens: int, effort: str) -> Completion:
         raise AssertionError("write streams")
 
     async def stream(
-        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = lambda _: None
+        self,
+        messages: list[Message],
+        *,
+        max_tokens: int,
+        effort: str,
+        on_finish: Callable[[str | None], None] = lambda _: None,
     ) -> AsyncIterator[str]:
         self.calls.append((messages, max_tokens))
+        self.efforts.append(effort)
         reply = self.replies[min(len(self.calls), len(self.replies)) - 1]
         if isinstance(reply, Exception):
             raise reply
@@ -112,8 +124,9 @@ TRUNCATED = "report truncated at the output limit of 2400 tokens"
 async def test_continued_once() -> None:
     llm = ScriptedLLM([(["Intro text"], "length"), ([" [1]."], "stop")])
     received: list[str] = []
-    report = await write(FIVE, WritingOptions(words=1200), llm, on_delta=received.append)
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="high", on_delta=received.append)
     assert [tokens for _, tokens in llm.calls] == [2400, 2400]
+    assert llm.efforts == ["high", "high"]
     assert received == ["Intro text", " [1]."]
     assert report.body == "Intro text [1]."
     assert (report.continuations, report.truncated) == (1, False)
@@ -122,7 +135,7 @@ async def test_continued_once() -> None:
 
 async def test_continuation_roles_alternate() -> None:
     llm = ScriptedLLM([(["Intro [1]"], "length"), (["."], "stop")])
-    await write(FIVE, WritingOptions(), llm)
+    await write(FIVE, WritingOptions(), llm, effort="none")
     sent = llm.calls[1][0]
     assert [message.role for message in sent] == ["system", "user", "assistant", "user"]
     assert sent[:2] == llm.calls[0][0]
@@ -132,7 +145,7 @@ async def test_continuation_roles_alternate() -> None:
 
 async def test_still_cut_off() -> None:
     llm = ScriptedLLM([(["Part [1]. "], "length")])
-    report = await write(FIVE, WritingOptions(words=1200), llm, sizing=Sizing(max_continuations=2))
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="none", sizing=Sizing(max_continuations=2))
     assert len(llm.calls) == 3
     assert (report.continuations, report.truncated) == (2, True)
     assert f"{TRUNCATED} after 2 continuations" in report.warnings
@@ -140,7 +153,7 @@ async def test_still_cut_off() -> None:
 
 async def test_continuation_off() -> None:
     llm = ScriptedLLM([(["Part [1]."], "length")])
-    report = await write(FIVE, WritingOptions(words=1200), llm, sizing=Sizing(max_continuations=0))
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="none", sizing=Sizing(max_continuations=0))
     assert len(llm.calls) == 1
     assert report.truncated
     assert TRUNCATED in report.warnings
@@ -156,14 +169,14 @@ def continuation_tokens() -> int:
 async def test_room_left_in_window() -> None:
     llm = ScriptedLLM([(["Part [1]."], "length"), (["."], "stop")])
     sizing = Sizing(context_window=continuation_tokens() + 1768)
-    await write(FIVE, WritingOptions(words=1200), llm, sizing=sizing)
+    await write(FIVE, WritingOptions(words=1200), llm, effort="none", sizing=sizing)
     assert llm.calls[1][1] == 1768
 
 
 async def test_no_room_left() -> None:
     llm = ScriptedLLM([(["Part [1]."], "length"), (["."], "stop")])
     sizing = Sizing(context_window=continuation_tokens() + 168)
-    report = await write(FIVE, WritingOptions(words=1200), llm, sizing=sizing)
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="none", sizing=sizing)
     assert len(llm.calls) == 1
     assert report.truncated
 
@@ -172,14 +185,14 @@ async def test_repeated_seam() -> None:
     end = "latency drops by 40% on long prompts"
     llm = ScriptedLLM([([f"We find [1] {end}"], "length"), ([end, ", while throughput rises."], "stop")])
     received: list[str] = []
-    report = await write(FIVE, WritingOptions(), llm, on_delta=received.append)
+    report = await write(FIVE, WritingOptions(), llm, effort="none", on_delta=received.append)
     assert received[1:] == [", while throughput rises."]
     assert report.body == f"We find [1] {end}, while throughput rises."
 
 
 async def test_failed_continuation() -> None:
     llm = ScriptedLLM([(["Text [1]."], "length"), RuntimeError("llm: output limit spent")])
-    report = await write(FIVE, WritingOptions(words=1200), llm)
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="none")
     assert report.body == "Text [1]."
     assert report.truncated
     assert "continuation failed: llm: output limit spent" in report.warnings
@@ -190,14 +203,14 @@ async def test_citations_across_parts() -> None:
     source = Source(source_id="o", kind="web", uri="https://other.org", title="Other")
     found = context([passage(2, WEB), passage(5, source)], [WEB, source])
     llm = ScriptedLLM([(["A [2]. "], "length"), (["B [2, 5]."], "stop")])
-    report = await write(found, WritingOptions(), llm)
+    report = await write(found, WritingOptions(), llm, effort="none")
     assert [reference.source_id for reference in report.references] == ["w", "o"]
     assert report.markdown.count("example.org/d") == 1
 
 
 async def test_normal_end() -> None:
     llm = ScriptedLLM([(["Text [1]."], "stop")])
-    report = await write(FIVE, WritingOptions(words=1200), llm)
+    report = await write(FIVE, WritingOptions(words=1200), llm, effort="none")
     assert len(llm.calls) == 1
     assert (report.continuations, report.truncated) == (0, False)
     assert not any("truncated" in warning for warning in report.warnings)
@@ -213,7 +226,7 @@ def test_passage_labels() -> None:
 async def test_tone_and_options_in_system() -> None:
     llm = StreamLLM(["x [1]"])
     options = WritingOptions(tone="Critical", tone_instructions="Use short sentences.", words=600, language="German")
-    await write(FIVE, options, llm)
+    await write(FIVE, options, llm, effort="none")
     system = llm.calls[0][0][0].content
     assert "Critical (judging the validity and relevance of the research and its conclusions)" in system
     assert "Use short sentences." in system
@@ -223,7 +236,7 @@ async def test_tone_and_options_in_system() -> None:
 
 async def test_provider_output_cap() -> None:
     llm = StreamLLM(["x [1]"])
-    await write(FIVE, WritingOptions(words=3000), llm, sizing=Sizing(max_output_tokens=4000))
+    await write(FIVE, WritingOptions(words=3000), llm, effort="none", sizing=Sizing(max_output_tokens=4000))
     assert "3000 words" in llm.calls[0][0][0].content
     assert llm.calls[0][1] == 4000
 
@@ -231,7 +244,7 @@ async def test_provider_output_cap() -> None:
 async def test_deltas() -> None:
     llm = StreamLLM(["Intro ", "text [1]", "."])
     received: list[str] = []
-    report = await write(FIVE, WritingOptions(), llm, on_delta=received.append)
+    report = await write(FIVE, WritingOptions(), llm, effort="none", on_delta=received.append)
     assert received == ["Intro ", "text [1]", "."]
     assert report.body == "Intro text [1]."
 
@@ -246,14 +259,14 @@ async def test_deltas() -> None:
 async def test_unknown_options_fail_before_llm(options: WritingOptions, names: list[str]) -> None:
     llm = StreamLLM(["x"])
     with pytest.raises(ValueError, match="unknown") as error:
-        await write(FIVE, options, llm)
+        await write(FIVE, options, llm, effort="none")
     assert all(name in str(error.value) for name in names)
     assert llm.calls == []
 
 
 async def test_empty_context() -> None:
     with pytest.raises(ValueError, match="no passages"):
-        await write(context([], []), WritingOptions(), StreamLLM(["x"]))
+        await write(context([], []), WritingOptions(), StreamLLM(["x"]), effort="none")
 
 
 def test_unknown_numbers() -> None:

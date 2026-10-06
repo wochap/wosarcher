@@ -6,6 +6,7 @@ from hashlib import sha256
 from wosarcher.models import (
     Chunk,
     Completion,
+    Effort,
     EmbedderInfo,
     ExportFormat,
     Hit,
@@ -138,20 +139,28 @@ class FakeLLM(FakeManaged):
         super().__init__(healthy("llm", "fake", "fake-llm"))
         self.replies = list(replies or ["ok"])
         self.calls: list[list[Message]] = []
+        self.efforts: list[Effort] = []
+        """The effort of each call, in call order."""
         self.finish_reasons: list[str | None] = ["stop"]
         """One per stream call; the last one repeats."""
 
-    def _next(self, messages: list[Message]) -> str:
+    def _next(self, messages: list[Message], effort: Effort) -> str:
         self.calls.append(list(messages))
+        self.efforts.append(effort)
         return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
 
-    async def complete(self, messages: list[Message], *, max_tokens: int) -> Completion:
-        return Completion(text=self._next(messages))
+    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        return Completion(text=self._next(messages, effort))
 
     async def stream(
-        self, messages: list[Message], *, max_tokens: int, on_finish: Callable[[str | None], None] = ignore
+        self,
+        messages: list[Message],
+        *,
+        max_tokens: int,
+        effort: Effort,
+        on_finish: Callable[[str | None], None] = ignore,
     ) -> AsyncIterator[str]:
-        words = self._next(messages).split(" ")
+        words = self._next(messages, effort).split(" ")
         for position, word in enumerate(words):
             yield word if position == len(words) - 1 else word + " "
         reasons = self.finish_reasons

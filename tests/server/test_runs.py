@@ -463,3 +463,38 @@ def test_request_list_wins(client: TestClient, runs_dir: Path, monkeypatch: pyte
     run_id = create(client, {"query": "q", "domains": {"block": []}})
     finished(client, run_id)
     assert resolved(runs_dir, run_id)["search"]["block_domains"] == []
+
+
+def test_model_and_thinking_for_one_run(client: TestClient, runs_dir: Path) -> None:
+    llm = {"model": "deepseek-v4-flash", "reasoning": {"write": "high"}}
+    run_id = create(client, {"query": "q", "llm": llm})
+    finished(client, run_id)
+    settings = resolved(runs_dir, run_id)
+    assert (settings["llm"]["model"], settings["llm"]["reasoning"]["write"]) == ("deepseek-v4-flash", "high")
+    record = RunRecord.model_validate_json((runs_dir / run_id / "request.json").read_text())
+    assert {'llm.model="deepseek-v4-flash"', 'llm.reasoning.write="high"'} <= set(record.overrides)
+    shown = summary(client, run_id)
+    assert (shown["model"], shown["reasoning"]) == (
+        "deepseek-v4-flash",
+        {"plan": "none", "gap": "none", "write": "high"},
+    )
+
+
+def test_invalid_thinking_level_422(client: TestClient, runs_dir: Path) -> None:
+    fields = [("request", (None, json.dumps({"query": "q", "llm": {"reasoning": {"gap": "max"}}}).encode()))]
+    response = client.post("/api/runs", files=fields)
+    assert response.status_code == 422
+    assert "llm.reasoning.gap" in response.json()["detail"]
+    assert client.get("/api/runs").json() == []
+
+
+def test_set_wins_over_llm_model(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, {"query": "q", "llm": {"model": "a"}, "set": ['llm.model="b"']})
+    finished(client, run_id)
+    assert resolved(runs_dir, run_id)["llm"]["model"] == "b"
+
+
+def test_older_run_shows_no_thinking(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True)
+    shown = summary(client, "r")
+    assert (shown["model"], shown["reasoning"]) == ("", {"plan": "none", "gap": "none", "write": "none"})
