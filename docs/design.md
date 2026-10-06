@@ -413,8 +413,8 @@ Remote endpoints:
   them.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
-    (default 1.5). When no pair of a query reaches it, the query keeps its
-    single best pair (earlier in page order on ties) as a floor pair,
+    (default 2.0, Jev's "partially answers" level and above). When no
+    pair of a query reaches it, the query keeps its single best pair (earlier in page order on ties) as a floor pair,
     `Score.floor = true`, so a strict threshold trims a query instead of
     starving it. A floor pair is kept like any other (no drop reason, the
     cap and best pair per chunk apply); the UI marks it "best available".

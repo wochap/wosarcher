@@ -185,7 +185,7 @@ def test_old_chunk_size_key_fails(env: dict[str, str]) -> None:
 def test_ranking_defaults() -> None:
     settings = Settings()
     assert (settings.prefilter.provider, settings.prefilter.top_k) == ("bm25", 50)
-    assert (settings.score.min_score, settings.score.fallback) == (1.5, ["bm25", "passthrough"])
+    assert (settings.score.min_score, settings.score.fallback) == (2.0, ["bm25", "passthrough"])
     select = settings.select
     assert (select.passthrough_chars, select.max_chunks_per_source, select.max_context_tokens) == (8000, 5, "auto")
     assert (select.file_share, select.prompt_reserve_tokens) == (0.5, 2000)

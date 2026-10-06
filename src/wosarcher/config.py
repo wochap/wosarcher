@@ -116,7 +116,7 @@ class FetchConfig(Provider):
 
 
 class ScoreConfig(Provider):
-    min_score: float = 1.5
+    min_score: float = 2.0
     relative_threshold: float = Field(default=0.5, ge=0, le=1)
     top_k: int = Field(default=10, gt=0)
     fallback: list[Literal["bm25", "passthrough"]] = ["bm25", "passthrough"]

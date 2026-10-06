@@ -22,6 +22,15 @@ async def jev_stage(values: list[float], min_score: float) -> ScoreResult:
     return await score(every(qs, chunks), qs, pages, chunks, jev, cfg=ScoreConfig(provider="jev", min_score=min_score))
 
 
+async def test_default_threshold() -> None:
+    pages, chunks = setup(["c0", "c1", "c2"], ["q0"])
+    qs = [Query(id="q0", text="x")]
+    values = dict(zip([c.chunk_id for c in chunks], [2.4, 2.0, 1.9], strict=True))
+    jev = FakeScorer("jev", calibrated=True, values=values)
+    result = await score(every(qs, chunks), qs, pages, chunks, jev, cfg=ScoreConfig(provider="jev"))
+    assert [s.kept for s in result.scores] == [True, True, False]
+
+
 async def test_calibrated_floor() -> None:
     result = await jev_stage([1.4, 1.1, 0.3], 2.0)
     assert [(s.kept, s.floor, s.dropped) for s in result.scores] == [
@@ -83,7 +92,7 @@ async def test_jev_display_threshold() -> None:
     qs = [Query(id="q0", text="anything")]
     jev = FakeScorer("jev", calibrated=True, values={chunks[0].chunk_id: 2.4, chunks[1].chunk_id: 1.0})
     result = await score(every(qs, chunks), qs, pages, chunks, jev, cfg=ScoreConfig(provider="jev"))
-    assert result.queries[0].threshold_display == pytest.approx(0.5)
+    assert result.queries[0].threshold_display == pytest.approx(2 / 3)
     assert [s.chunk_id for s in result.queries[0].passages] == [chunks[0].chunk_id]
     assert result.queries[0].passages[0].display == pytest.approx(0.8)
 
