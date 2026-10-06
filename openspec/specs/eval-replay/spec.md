@@ -137,7 +137,12 @@ marker, Markdown emphasis and heading marks, list markers, and table
 pipes SHALL be removed from the claim and its whitespace collapsed; the
 judged marker stays as `[n]` so the judge can see which part of the
 sentence it follows. Citations in one sentence share the sentence; a
-claim is never empty when the sentence has any word. Faithfulness SHALL
+claim is never empty when the sentence has any word. In a Markdown table
+whose first row is a header, a citation in a body cell SHALL take as its
+claim the row's first cell, the cell's column header, and the cell's own
+text, joined as `<row label> — <column header>: <cell text>` with the
+marker kept in the cell text; a citation in a header cell or in a table
+without a header row SHALL take the row's cells joined by ` — `. Faithfulness SHALL
 be recorded as supported pairs divided by readable pairs, and the number
 of pairs SHALL be recorded as `citations`. A fork without a finished
 report, a report with no citation, or a result with no readable pair
@@ -177,8 +182,16 @@ passage in `context.json` SHALL be left out of the pairs.
 - **THEN** the pairs have the claims "Both say so [1]" and "Both say so [2]"
 
 #### Scenario: List item and table row
-- **WHEN** a report holds the line "- **Costo:** gratuito [1]" and the row "| CEJ | gratis [3] |"
-- **THEN** the claims are "Costo: gratuito [1]" and "CEJ gratis [3]"
+- **WHEN** a report holds the line "- **Costo:** gratuito [1]" and a table with the header "| Portal | Costo |" and the row "| CEJ | gratis [3] |"
+- **THEN** the claims are "Costo: gratuito [1]" and "CEJ — Costo: gratis [3]"
+
+#### Scenario: Several cited cells in one row
+- **WHEN** a table has the header "| Tool | Role | License | Status |" and the row "| Jellyfin | Watch | GPL [13] | Active [38] |"
+- **THEN** the pairs have the claims "Jellyfin — License: GPL [13]" and "Jellyfin — Status: Active [38]"
+
+#### Scenario: Table without a header row
+- **WHEN** a table's first row is "| CEJ | gratis [3] |" and no separator row follows it
+- **THEN** the claim is "CEJ — gratis [3]"
 
 #### Scenario: Line break inside a paragraph
 - **WHEN** a report paragraph is "The CEJ changed\nits form in 2026 [4]."
