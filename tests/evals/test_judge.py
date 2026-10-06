@@ -199,8 +199,17 @@ def test_claim_adjacent_citations() -> None:
 
 
 def test_claim_list_item_and_table_row() -> None:
-    body = "Prices:\n- **Costo:** gratuito [1]\n\n| Name | Price |\n|---|---|\n| CEJ | gratis [3] |\n"
-    assert claimed(body) == ["Costo: gratuito [1]", "CEJ gratis [3]"]
+    body = "Prices:\n- **Costo:** gratuito [1]\n\n| Portal | Costo |\n|---|---|\n| CEJ | gratis [3] |\n"
+    assert claimed(body) == ["Costo: gratuito [1]", "CEJ — Costo: gratis [3]"]
+
+
+def test_claim_several_cited_cells() -> None:
+    body = "| Tool | Role | License | Status |\n|---|---|---|---|\n| Jellyfin | Watch | GPL [3] | Active [4] |\n"
+    assert claimed(body) == ["Jellyfin — License: GPL [3]", "Jellyfin — Status: Active [4]"]
+
+
+def test_claim_table_without_header() -> None:
+    assert claimed("| CEJ | gratis [3] |\n| Other | paid |\n") == ["CEJ — gratis [3]"]
 
 
 def test_claim_line_break() -> None:

@@ -24,9 +24,10 @@ import os
 import re
 import sys
 from collections.abc import Sequence
+from itertools import pairwise
 from pathlib import Path
 from string import Template
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import httpx
 from pydantic import BaseModel
@@ -51,6 +52,10 @@ SENTENCE_BREAK = re.compile(r"[.!?](?=\s)")
 OWN_LINE = re.compile(r"[ \t]*(?:[-*+][ \t]|\d+[.)][ \t]|\||#)")
 """List items, table rows, and headings are their own block."""
 LINE_MARK = re.compile(r"^\s*(?:#+|[-*+]|\d+[.)])\s+")
+TABLE_ROW = re.compile(r"[ \t]*\|")
+SEPARATOR = re.compile(r"[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$")
+"""A header separator row such as `|---|:--:|`."""
+CELL_PIPE = re.compile(r"(?<!\\)\|")
 EMPHASIS = re.compile(r"\*+|`+|\||(?<!\w)_+|_+(?!\w)")
 SHORT_WORDS = 3
 MARK = "\x00"
@@ -139,20 +144,62 @@ async def judge_result(
     return *ratio(values), items
 
 
-def sentences(body: str) -> list[tuple[int, int]]:
-    """(start, end) spans: blocks split at blank lines and own-line items, then after sentence ends."""
-    spans: list[tuple[int, int]] = []
+class Span(NamedTuple):
+    """A claim's source: a sentence, a table cell with its `label`, or a whole table `row`."""
+
+    start: int
+    end: int
+    label: str | None = None
+    row: bool = False
+
+
+def cells(line: str) -> list[tuple[int, int]]:
+    """(start, end) of each cell of a table row, split on unescaped pipes, outer empties dropped."""
+    bounds = [found.start() for found in CELL_PIPE.finditer(line)]
+    spans = [(a + 1, b) for a, b in pairwise([-1, *bounds, len(line.rstrip())])]
+    if spans and not line[spans[0][0] : spans[0][1]].strip():
+        spans = spans[1:]
+    if spans and not line[spans[-1][0] : spans[-1][1]].strip():
+        spans = spans[:-1]
+    return spans
+
+
+def table(rows: list[tuple[int, str]]) -> list[Span]:
+    """Spans of a table: one per body cell, labelled `row label — column header`, when a separator marks the header."""
+    if len(rows) < 2 or not SEPARATOR.match(rows[1][1]):
+        return [Span(start, start + len(line), row=True) for start, line in rows]
+    header = [clean(rows[0][1][a:b]) for a, b in cells(rows[0][1])]
+    spans = [Span(rows[0][0], rows[0][0] + len(rows[0][1]), row=True)]
+    for start, line in rows[2:]:
+        row = cells(line)
+        label = clean(line[row[0][0] : row[0][1]]) if row else ""
+        for j, (a, b) in enumerate(row):
+            column = header[j] if j < len(header) else ""
+            spans.append(Span(start + a, start + b, label=" — ".join(part for part in (label, column) if part)))
+    return spans
+
+
+def sentences(body: str) -> list[Span]:
+    """Spans: blocks split at blank lines and own-line items, then after sentence ends; tables by cell."""
+    spans: list[Span] = []
 
     def split(start: int, end: int) -> None:
         for found in SENTENCE_BREAK.finditer(body, start, end):
-            spans.append((start, found.end()))
+            spans.append(Span(start, found.end()))
             start = found.end()
-        spans.append((start, end))
+        spans.append(Span(start, end))
 
     block: int | None = None
+    rows: list[tuple[int, str]] = []
     offset = 0
     for line in body.splitlines(keepends=True):
         start, offset = offset, offset + len(line)
+        if TABLE_ROW.match(line):
+            rows.append((start, line))
+            continue
+        if rows:
+            spans.extend(table(rows))
+            rows = []
         if line.strip() and not OWN_LINE.match(line):
             block = start if block is None else block
             continue
@@ -161,6 +208,8 @@ def sentences(body: str) -> list[tuple[int, int]]:
             block = None
         if line.strip():
             split(start, offset)
+    if rows:
+        spans.extend(table(rows))
     if block is not None:
         split(block, offset)
     return spans
@@ -173,14 +222,23 @@ def clean(text: str) -> str:
     return re.sub(r"\s+([,;:.!?])", r"\1", text).rstrip(".!?;, ")
 
 
+def claim_text(text: str, span: Span) -> str:
+    """The cleaned claim: a cell prefixed by its label, a row's cells joined by ` — `, or the sentence."""
+    if span.row:
+        return " — ".join(part for part in (clean(text[a:b]) for a, b in cells(text)) if part)
+    if span.label:
+        return f"{span.label}: {clean(text)}"
+    return clean(text)
+
+
 def claims(report: Report, context: Context) -> list[tuple[str, int, str]]:
-    """One (claim, n, passage text) pair per cited number; the claim is its sentence, marked `[n]`."""
+    """One (claim, n, passage text) pair per cited number; the claim is its sentence or cell, marked `[n]`."""
     texts = {passage.n: passage.text for passage in context.passages}
     spans = sentences(report.body)
     pairs: list[tuple[str, int, str]] = []
     for start, stop, numbers in citations(report.body):
-        begin, end = next(((a, b) for a, b in spans if a <= start < b), (start, start))
-        claim = clean(report.body[begin:start] + MARK + report.body[stop:end])
+        span = next((span for span in spans if span.start <= start < span.end), Span(start, start))
+        claim = claim_text(report.body[span.start : start] + MARK + report.body[stop : span.end], span)
         pairs.extend(
             (claim.replace(MARK, f"[{number}]"), number, texts[number]) for number in numbers if number in texts
         )

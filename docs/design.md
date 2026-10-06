@@ -1591,7 +1591,11 @@ over the same inputs. It drives the public CLI only, so it measures what users r
   not split. The claim drops every `[n]` marker except the judged
   citation's, which stays as `[n]` in place, plus Markdown emphasis,
   heading and list marks, and table pipes, and collapses whitespace;
-  citations in one sentence share it. A claim under 3 words is still judged and its item
+  citations in one sentence share it. In a Markdown table whose header
+  row is followed by a separator (`|---|`), each body cell is its own
+  claim, `<row label> — <column header>: <cell text>`, with the row's
+  first cell as label; a citation in a header cell or in a table without
+  a separator takes the row's cells joined by ` — `. A claim under 3 words is still judged and its item
   records `short`. Numbers without a passage are left out, and at most 200 pairs are
   sent. One call per pair with `evals/prompts/faithfulness.md` (query only;
   claim and whole passage in the user message) asks whether the passage
