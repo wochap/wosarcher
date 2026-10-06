@@ -56,7 +56,9 @@ openspec-pipeline uses it as its gate: `--gate scripts/check`.
 `scripts/dev-serve` runs this checkout in place of the NixOS container on
 the same host: it reads the live `podman-wosarcher` unit (profile, origins,
 secrets file) and the lazy proxy socket (address, port), stops them, copies
-the Nix-managed profiles into `~/.local/state/wosarcher-dev` (and the
+the Nix-managed profiles, runs, and caches into
+`~/.local/state/wosarcher-dev` (one way: dev runs never reach the
+container; and the
 container's `auth.json` on the first run; after that the dev server keeps
 its own password, set with `XDG_CONFIG_HOME=~/.local/state/wosarcher-dev/config
 uv run wosarcher auth set-password`), builds the web UI (`--no-web` skips

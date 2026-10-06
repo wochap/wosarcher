@@ -15,10 +15,11 @@
 # server through nginx. On exit the socket is started again and the
 # container comes back on the next request.
 #
-# Runs, caches, and tokens of the dev server live in $WOSARCHER_DEV_DATA
-# (default ~/.local/state/wosarcher-dev), not in /var/lib/wosarcher, so the
-# container's files stay owned by its user. Needs sudo (systemctl, reading
-# root-only files).
+# The dev server works in $WOSARCHER_DEV_DATA (default
+# ~/.local/state/wosarcher-dev), not in /var/lib/wosarcher, so the
+# container's files stay owned by its user. The container's runs and caches
+# are copied in at every start, so the history is there; dev runs are not
+# copied back. Needs sudo (systemctl, reading root-only files).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -59,6 +60,11 @@ rm -f "$data"/config/wosarcher/profiles/*.toml
 for file in $(sudo find "$container_data/config/wosarcher/profiles" -maxdepth 1 -name '*.toml'); do
   sudo cat "$file" > "$data/config/wosarcher/profiles/$(basename "$file")"
 done
+# The container's runs (history) and caches (pages, embeddings), copied in
+# one way: dev runs stay in the dev directory and never reach the container.
+sudo rsync -a --chown="$(id -u):$(id -g)" "$container_data/share/" "$data/share/"
+sudo rsync -a --chown="$(id -u):$(id -g)" "$container_data/cache/" "$data/cache/"
+
 # auth.json (password hash, session secret, tokens) is the dev server's own
 # once it exists: set a dev password with
 #   XDG_CONFIG_HOME=<data>/config uv run wosarcher auth set-password
