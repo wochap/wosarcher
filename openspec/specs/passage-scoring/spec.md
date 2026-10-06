@@ -112,27 +112,34 @@ stage SHALL fail with an error that names each scorer and its error.
 
 ### Requirement: Thresholds
 A calibrated scorer SHALL keep pairs whose score is at least
-`score.min_score` (default 1.5). An uncalibrated scorer SHALL keep pairs
-whose mapped score is at least `score.relative_threshold` (default 0.5)
-times the best mapped score of the same query; when the best mapped score
-of a query is not positive, only the best pair SHALL be kept. For the
-`rerank` scorer, the mapped score is the logistic sigmoid
-`1 / (1 + e^-x)` of the raw score when the stage's scores are on the logit
-scale, and the raw score otherwise. The scale SHALL be `score.rerank_scale`
-when it is `probability` or `logit`; with `auto` (the default) it SHALL be
-`logit` when any raw rerank score of the stage is below 0 or above 1, and
-`probability` otherwise, so one stage never mixes scales. Raw scores SHALL
-be kept unchanged in the scores artifact. BM25 SHALL follow the BM25
-ranking rule of lexical-bm25: pairs with score 0 are dropped, at most 25
-pairs per query are kept, and when no pair of a query matches any query
-term, the first pairs in page order are kept. Every scorer except
-`passthrough` SHALL then keep at most `score.top_k` pairs per query
-(default 10), best first. This per-query cap SHALL run before the best
-pair per chunk is chosen.
+`score.min_score` (default 1.5). When no pair of a query reaches
+`score.min_score`, the query's single best pair SHALL be kept as a floor
+pair, marked `floor` on the score (ties: the earlier pair in page order);
+a pair kept at or above the threshold is never marked. An uncalibrated
+scorer SHALL keep pairs whose mapped score is at least
+`score.relative_threshold` (default 0.5) times the best mapped score of
+the same query; when the best mapped score of a query is not positive,
+only the best pair SHALL be kept. For the `rerank` scorer, the mapped
+score is the logistic sigmoid `1 / (1 + e^-x)` of the raw score when the
+stage's scores are on the logit scale, and the raw score otherwise. The
+scale SHALL be `score.rerank_scale` when it is `probability` or `logit`;
+with `auto` (the default) it SHALL be `logit` when any raw rerank score of
+the stage is below 0 or above 1, and `probability` otherwise, so one stage
+never mixes scales. Raw scores SHALL be kept unchanged in the scores
+artifact. BM25 SHALL follow the BM25 ranking rule of lexical-bm25: pairs
+with score 0 are dropped, at most 25 pairs per query are kept, and when no
+pair of a query matches any query term, the first pairs in page order are
+kept. Every scorer except `passthrough` SHALL then keep at most
+`score.top_k` pairs per query (default 10), best first. This per-query cap
+SHALL run before the best pair per chunk is chosen.
 
 #### Scenario: Calibrated threshold
 - **WHEN** Jev scores three pairs 2.5, 1.5, and 1.0 with `score.min_score = 1.5`
-- **THEN** the pairs scored 2.5 and 1.5 are kept
+- **THEN** the pairs scored 2.5 and 1.5 are kept and neither is a floor pair
+
+#### Scenario: Calibrated floor
+- **WHEN** Jev scores a query's three pairs 1.4, 1.1, and 0.3 with `score.min_score = 2.0`
+- **THEN** only the pair scored 1.4 is kept, marked `floor`, and the other two are not kept with the drop reason `threshold`
 
 #### Scenario: Relative threshold
 - **WHEN** a reranker scores a query's pairs 0.9, 0.5, and 0.4 with `score.relative_threshold = 0.5` and every score of the stage is between 0 and 1
@@ -211,11 +218,14 @@ Every pair that is not kept SHALL record why, with the first rule that
 dropped it: `threshold` when the scorer's keep rule (Thresholds) did not
 keep it, `query_cap` when the per-query cap removed it, and `other_query`
 when the chunk's best pair belongs to another query. A kept pair SHALL
-record no drop reason.
+record no drop reason; a floor pair is kept and records `floor = true`
+instead. A floor pair SHALL take part in the per-query cap and in the best
+pair per chunk like any kept pair, and a floor pair that loses its chunk to
+another query SHALL record `other_query`.
 
 #### Scenario: Below the threshold
-- **WHEN** Jev scores a pair 1.0 with `score.min_score = 1.5`
-- **THEN** the pair is not kept and its drop reason is `threshold`
+- **WHEN** Jev scores a pair 1.0 with `score.min_score = 1.5` and another pair of the same query 1.8
+- **THEN** the pair scored 1.0 is not kept and its drop reason is `threshold`
 
 #### Scenario: Over the query cap
 - **WHEN** a query has eleven pairs above its threshold with `score.top_k = 10`
@@ -224,6 +234,10 @@ record no drop reason.
 #### Scenario: Kept through another query
 - **WHEN** a chunk is kept for `q1` with display 0.6 and for `q2` with display 0.8, both within their caps
 - **THEN** the `q1` pair is not kept and its drop reason is `other_query`
+
+#### Scenario: Floor pair recorded
+- **WHEN** a query's only kept pair is a floor pair
+- **THEN** that score has `kept = true`, `floor = true`, and no drop reason
 
 ### Requirement: Scoring text
 With `prefilter.context = "header"` (the default), the prefilter and the

@@ -305,26 +305,29 @@ round so far):
 
 `<ID> · <status> · best <display or —> · kept <n> — <query text>`
 
-- `kept` is the number of the query's pairs that are kept.
+- `kept` is the number of the query's pairs that are kept, floor pairs
+  included.
 - `best` is the highest display score among the query's pairs, with two
   decimals, or `—` when the query has no pair or only pairs without a
   display score.
 - The status is:
-  - `covered` when the query has a kept pair with a display score, or a
-    pair dropped because its chunk was kept for another query
-    (`other_query`);
+  - `covered` when the query has a kept pair with a display score that is
+    not a floor pair, or a pair dropped because its chunk was kept for
+    another query (`other_query`);
   - `unscored` when its only kept pairs have no display score (small-input
     passthrough);
-  - `uncovered` otherwise: no pair, or every pair dropped by the threshold.
+  - `uncovered` otherwise: no pair, every pair dropped by the threshold,
+    or only floor pairs kept.
 
 The table SHALL start with one line naming the scorers that produced the
 scores, and for each whether its scores are calibrated (`jev`: "absolute
-0–1 scale, kept from <threshold display>") or relative (`rerank`, `bm25`:
-"relative scale; every query keeps its best pair, so judge by best").
+0–1 scale, kept from <threshold display>; a query below it keeps its best
+pair as a floor") or relative (`rerank`, `bm25`: "relative scale; every
+query keeps its best pair, so judge by best").
 
 #### Scenario: Jev uncovered query
-- **WHEN** the scorer is `jev` with `score.min_score = 1.5` and every pair of `q4` scored below 1.5
-- **THEN** the table has "q4 · uncovered · best 0.43 · kept 0 — <q4 text>" when its best value was 1.3
+- **WHEN** the scorer is `jev` with `score.min_score = 1.5` and every pair of `q4` scored below 1.5, the best 1.3
+- **THEN** the table has "q4 · uncovered · best 0.43 · kept 1 — <q4 text>", the kept pair being the floor pair
 
 #### Scenario: Covered elsewhere
 - **WHEN** `q2`'s only kept pair was dropped as `other_query` because `q1` kept the same chunk
