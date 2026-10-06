@@ -28,7 +28,7 @@ from wosarcher.models import RunOutput, RunRecord, StageDone, StageFailed, parse
 from wosarcher.store import RunStore
 
 VARIANTS = Path(__file__).parent / "variants.toml"
-ForkStage = Literal["prefilter", "score"]
+ForkStage = Literal["chunk", "prefilter", "score"]
 ERROR_CHARS = 2000
 
 

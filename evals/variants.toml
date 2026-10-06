@@ -1,5 +1,5 @@
 # Named ranking variants for `python -m evals.replay`. Each forks a recorded
-# run from `prefilter` or `score` with the given `--set` overrides. Model
+# run from `chunk`, `prefilter`, or `score` with the given `--set` overrides. Model
 # variants disable fallback so a broken service fails the fork; replay also
 # marks a fork failed when its scorer or prefilter fell back.
 
@@ -78,3 +78,10 @@ set = ["prefilter.context=\"header\""]
 [context-body]
 from = "prefilter"
 set = ["prefilter.context=\"body\""]
+
+# Chunking comparison: re-chunk the parent's pages with the current code.
+# Compare with a `prefilter` fork of the same parent on precision and
+# faithfulness; chunk IDs differ, so overlap reads low.
+[chunk-current]
+from = "chunk"
+set = []

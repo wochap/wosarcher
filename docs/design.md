@@ -808,7 +808,7 @@ src/wosarcher/
                  # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
 skill/SKILL.md
 evals/
-  variants.toml  # named ranking variants: fork stage (prefilter or score) plus --set overrides
+  variants.toml  # named variants: fork stage (chunk, prefilter, or score) plus --set overrides
   replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
   metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
   judge.py       # python -m evals.judge: pointwise precision and faithfulness
@@ -1522,8 +1522,10 @@ against `wosarcher schema`, and its example output against `RunOutput`.
 The eval harness measures prefilter and scorer choices over the same
 inputs. It drives the public CLI only, so it measures what users run.
 
-- `evals/variants.toml` names variants. Each forks from `prefilter` or
-  `score` (any other stage is rejected) with a list of `--set` overrides.
+- `evals/variants.toml` names variants. Each forks from `chunk`,
+  `prefilter`, or `score` (any other stage is rejected) with a list of
+  `--set` overrides. A `chunk` fork keeps the parent's pages and chunks
+  them again, so chunking changes compare on the same inputs.
   Model variants set `score.fallback=[]` so a broken service fails the
   fork instead of measuring a fallback.
 - `python -m evals.replay (--runs ID... | --all) --variants NAME... --out

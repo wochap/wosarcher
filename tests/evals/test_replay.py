@@ -15,12 +15,13 @@ def test_shipped_variants_load() -> None:
     variants = load_variants(VARIANTS)
     assert {"bm25", "bm25-wide", "rerank", "jev", "prefilter-embeddings", "prefilter-bm25"} <= set(variants)
     assert variants["bm25"] == Variant(name="bm25", from_stage="score", set=["score.provider=bm25"])
+    assert variants["chunk-current"] == Variant(name="chunk-current", from_stage="chunk", set=[])
 
 
 def test_invalid_stage_names_variant(tmp_path: Path) -> None:
     path = tmp_path / "variants.toml"
     path.write_text('[early]\nfrom = "fetch"\nset = []\n')
-    with pytest.raises(VariantError, match=r"variant 'early'.*prefilter, score"):
+    with pytest.raises(VariantError, match=r"variant 'early'.*chunk, prefilter, score"):
         load_variants(path)
 
 
@@ -70,6 +71,20 @@ def test_search_and_fetch_held_constant(tmp_path: Path) -> None:
         assert done[stage].data.copied_from == parent
     for name in ("hits.jsonl", "chunks.jsonl"):
         assert (fork_dir / name).read_bytes() == (parent_dir / name).read_bytes()
+
+
+def test_chunk_variant_rechunks_parent_pages(tmp_path: Path) -> None:
+    env, parent = eval_env(tmp_path)
+    result = fork(parent, load_variants(VARIANTS)["chunk-current"], write=False, env=env)
+    assert result.status == "done"
+    assert result.run_dir is not None
+    fork_dir, parent_dir = Path(result.run_dir), tmp_path / "runs" / parent
+    events = [parse_event(line) for line in (fork_dir / "events.jsonl").read_text().splitlines()]
+    done = {event.stage: event for event in events if isinstance(event, StageDone)}
+    for stage in ("search", "fetch"):
+        assert done[stage].data.copied_from == parent
+    assert done["chunk"].data.copied_from is None
+    assert (fork_dir / "hits.jsonl").read_bytes() == (parent_dir / "hits.jsonl").read_bytes()
 
 
 DEAD = "http://127.0.0.1:9"
