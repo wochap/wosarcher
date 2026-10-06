@@ -799,6 +799,7 @@ evals/
   replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
   metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
   judge.py       # python -m evals.judge: pointwise precision and faithfulness
+  items.py       # python -m evals.items: judged items as Markdown
   prompts/       # precision.md
 tests/
   fixtures/      # recorded HTTP bodies (http/), profiles/e2e.toml, recorded.py (respx router),
@@ -1556,6 +1557,18 @@ inputs. It drives the public CLI only, so it measures what users run.
   the claim, under the same rules; faithfulness is supported over readable
   pairs and `citations` is the pair count. No report, no citation, or no
   readable pair records faithfulness as missing.
+  Every judged item also goes to `DIR/items.jsonl`, one line per passage
+  (`kind` `precision`) and per pair (`faithfulness`): `run_id`, `variant`,
+  `index` within its kind, passage number `n`, `claim` (pairs only), the
+  `passage` text as sent, `value` (the averaged value, or null when
+  unreadable), and the first sample's `answer` (at most 80 characters).
+  `--force` replaces a run's item lines with its judgement line; a provider
+  error writes no items.
+- `python -m evals.items --results DIR [--run ID] [--failed]` prints
+  `items.jsonl` as Markdown without any model call: one section per run
+  (`variant · run_id`), faithfulness items first, each as its value, `n`,
+  claim, and the first 300 characters of the passage. `--failed` keeps
+  items below 1 (unreadable included); a missing file prints nothing.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,
 tracked in git (only the root `/runs/` is ignored) so tests pass on a fresh

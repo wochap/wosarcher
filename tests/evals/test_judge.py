@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+import evals.items as evals_items
 import evals.judge as judge
 import evals.replay as replay
 import wosarcher.build as building
@@ -19,7 +20,8 @@ from wosarcher.http import ProviderClient, ProviderError, UsageLedger
 from wosarcher.models import Completion, Context, Effort, Message, Passage, Report
 from wosarcher.ports import Adapters
 
-PASSAGES = ["Lithium is recovered.", "Unrelated {text} with $query and <data>.", "Cobalt prices.", "Weather."]
+TEXTS = ["Lithium is recovered.", "Unrelated {text} with $query and <data>.", "Cobalt prices.", "Weather."]
+PASSAGES = list(enumerate(TEXTS, 1))
 
 
 def test_parse_yes_no() -> None:
@@ -32,32 +34,32 @@ def test_parse_yes_no() -> None:
 
 async def test_precision() -> None:
     llm = FakeLLM(["yes", "no", "yes", "no"])
-    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (0.5, 0)
+    assert (await judge.judge_result(llm, "battery recycling", PASSAGES))[:2] == (0.5, 0)
     assert set(llm.efforts) == {"none"}
     assert set(llm.temperatures) == {0}
 
 
 async def test_unparsable_answer() -> None:
     llm = FakeLLM(["yes", "I cannot tell", "yes", "yes"])
-    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (1.0, 1)
+    assert (await judge.judge_result(llm, "battery recycling", PASSAGES))[:2] == (1.0, 1)
 
 
 async def test_all_unreadable() -> None:
-    assert await judge.judge_result(FakeLLM(["maybe"]), "battery recycling", PASSAGES) == (None, 4)
+    assert (await judge.judge_result(FakeLLM(["maybe"]), "battery recycling", PASSAGES))[:2] == (None, 4)
 
 
 async def test_samples_averaged() -> None:
-    values = await judge.judge_items(FakeLLM(["yes", "yes", "no"]), "system", ["passage"], 3)
+    values, _ = await judge.judge_items(FakeLLM(["yes", "yes", "no"]), "system", ["passage"], 3)
     assert [round(value or 0, 2) for value in values] == [0.67]
 
 
 async def test_passages_in_separate_message() -> None:
     llm = FakeLLM(["no"])
-    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (0.0, 0)
-    for (system, user), text in zip(llm.calls, PASSAGES, strict=True):
+    assert (await judge.judge_result(llm, "battery recycling", PASSAGES))[:2] == (0.0, 0)
+    for (system, user), text in zip(llm.calls, TEXTS, strict=True):
         assert (system.role, user.role) == ("system", "user")
         assert "battery recycling" in system.content
-        assert all(passage not in system.content for passage in PASSAGES)
+        assert all(passage not in system.content for passage in TEXTS)
         assert user.content == text
 
 
@@ -78,7 +80,7 @@ async def test_concurrent_calls() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         client = ProviderClient(cfg.provider, cfg, http, ledger, backoff=0)
         llm = ChatLLM(cfg, client, ledger, "write")
-        assert await judge.judge_result(llm, "q", [f"passage {n}" for n in range(30)]) == (1.0, 0)
+        assert (await judge.judge_result(llm, "q", [(n, f"passage {n}") for n in range(30)]))[:2] == (1.0, 0)
     assert (len(bodies), flight["peak"]) == (30, 4)
     assert all(
         (body["reasoning_effort"], body["temperature"], body["max_completion_tokens"]) == ("none", 0, judge.MAX_TOKENS)
@@ -168,22 +170,22 @@ def passages(count: int) -> Context:
 def test_claims() -> None:
     pairs = judge.claims(report("A is true [1]. B and C hold [2, 3]. Lost [9]."), passages(3))
     assert pairs == [
-        ("A is true", "passage 1"),
-        ("B and C hold", "passage 2"),
-        ("B and C hold", "passage 3"),
+        ("A is true", 1, "passage 1"),
+        ("B and C hold", 2, "passage 2"),
+        ("B and C hold", 3, "passage 3"),
     ]
     assert judge.claims(report("See [1](https://example.com)."), passages(1)) == []
 
 
-PAIRS = [("A is true", "passage 1"), ("B and C hold", "passage 2"), ("B and C hold", "passage 3")]
+PAIRS = [("A is true", 1, "passage 1"), ("B and C hold", 2, "passage 2"), ("B and C hold", 3, "passage 3")]
 
 
 async def test_faithfulness() -> None:
     llm = FakeLLM(["yes", "no", "yes"])
-    score, unreadable = await judge.judge_faithfulness(llm, "battery recycling", PAIRS)
+    score, unreadable, _ = await judge.judge_faithfulness(llm, "battery recycling", PAIRS)
     assert score is not None
     assert (round(score, 2), unreadable) == (0.67, 0)
-    for (system, user), (claim, text) in zip(llm.calls, PAIRS, strict=True):
+    for (system, user), (claim, _, text) in zip(llm.calls, PAIRS, strict=True):
         assert "battery recycling" in system.content
         assert claim not in system.content
         assert claim in user.content
@@ -191,7 +193,7 @@ async def test_faithfulness() -> None:
 
 
 async def test_unparsable_faithfulness() -> None:
-    assert await judge.judge_faithfulness(FakeLLM(["all of them"]), "q", PAIRS) == (None, 3)
+    assert (await judge.judge_faithfulness(FakeLLM(["all of them"]), "q", PAIRS))[:2] == (None, 3)
 
 
 def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -250,5 +252,77 @@ def test_provider_error_continues(
     first, second = judge.read_judgements(out / "judgements.jsonl")
     assert (first.precision, first.faithfulness) == (None, None)
     assert second.precision is not None
+    assert {item.run_id for item in judge.read_items(out / "items.jsonl")} == {second.run_id}
     assert set(llm.efforts) == {"none"}
     assert "HTTP 502" in capsys.readouterr().err
+
+
+async def test_unreadable_item() -> None:
+    _, _, (item,) = await judge.judge_result(FakeLLM(["unclear"]), "q", [(4, "passage")])
+    assert (item.kind, item.n, item.value, item.answer) == ("precision", 4, None, "unclear")
+
+
+def test_items_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env, parent = eval_env(tmp_path)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "out"
+    assert replay.main(["--runs", parent, "--variants", "bm25", "--out", str(out)]) == 0
+    (result,) = replay.read_results(out / "results.jsonl")
+    run_dir = Path(result.run_dir or "")
+    found = judge.context(run_dir)
+    assert found is not None
+    first, second = found.passages[0].n, found.passages[1].n
+    (run_dir / "report.json").write_text(report(f"A [{first}]. B [{second}].").model_dump_json(), encoding="utf-8")
+    llm = FakeLLM(["yes"])
+
+    def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
+        return adapters(writer=llm)
+
+    monkeypatch.setattr(building, "build", fake_build)
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    items = judge.read_items(out / "items.jsonl")
+    kinds = [item.kind for item in items]
+    assert (kinds.count("precision"), kinds.count("faithfulness")) == (len(found.passages), 2)
+    assert {(item.run_id, item.variant) for item in items} == {(result.run_id, "bm25")}
+    pairs = [item for item in items if item.kind == "faithfulness"]
+    assert [(item.claim, item.n, item.value, item.answer) for item in pairs] == [
+        ("A", first, 1.0, "yes"),
+        ("B", second, 1.0, "yes"),
+    ]
+    assert pairs[0].passage == found.passages[0].text[: judge.PASSAGE_CHARS]
+
+    llm.replies = ["no"]
+    assert judge.main(["--results", str(out), "--profile", "e2e", "--force"]) == 0
+    again = judge.read_items(out / "items.jsonl")
+    assert len(again) == len(items)
+    assert all(item.value == 0.0 for item in again)
+
+
+def judged_pair(index: int, value: float, claim: str) -> judge.JudgedItem:
+    return judge.JudgedItem(
+        run_id="r1",
+        variant="bm25",
+        kind="faithfulness",
+        index=index,
+        n=index + 1,
+        claim=claim,
+        passage=f"passage {index} " + "x" * 400,
+        value=value,
+        answer="yes",
+    )
+
+
+def test_items_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    pairs = [judged_pair(index, 1.0, f"Fine {index}") for index in range(5)]
+    pairs[1] = judged_pair(1, 0.0, "Wrong claim")
+    judge.write_lines(tmp_path / "items.jsonl", pairs, "w")
+    assert evals_items.main(["--results", str(tmp_path), "--failed"]) == 0
+    shown = capsys.readouterr().out
+    assert "bm25 · r1" in shown
+    assert "Wrong claim" in shown
+    assert "passage 1 " in shown
+    assert "x" * 300 not in shown
+    assert "Fine" not in shown
+    assert evals_items.main(["--results", str(tmp_path / "missing")]) == 0
+    assert capsys.readouterr().out == ""

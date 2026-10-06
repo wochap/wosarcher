@@ -10,8 +10,9 @@ first word is neither yes nor no is unreadable and left out.
     python -m evals.judge --results DIR [--profile NAME] [--set KEY=VALUE ...]
                           [--samples N] [--force]
 
-Judgements go to `<DIR>/judgements.jsonl`, keyed by fork run ID; judged runs
-are skipped on the next call unless `--force`. `--samples N` asks every item
+Judgements go to `<DIR>/judgements.jsonl`, keyed by fork run ID, and every
+judged item to `<DIR>/items.jsonl` (read with `python -m evals.items`); judged
+runs are skipped on the next call unless `--force`. `--samples N` asks every item
 N times and averages. Only the query goes through the prompt templates;
 passages and claims are sent as a separate user message.
 """
@@ -24,6 +25,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 from string import Template
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel
@@ -42,6 +44,7 @@ FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
 PASSAGE_CHARS = 1500
 MAX_TOKENS = 8
 MAX_PAIRS = 200
+ANSWER_CHARS = 80
 WORD = re.compile(r"[A-Za-z]+")
 SENTENCE_END = re.compile(r"[.!?\n]")
 
@@ -62,14 +65,31 @@ class Judgement(BaseModel):
     samples: int = 1
 
 
+class JudgedItem(BaseModel):
+    """One line of `items.jsonl`: a passage (precision) or a claim pair (faithfulness) and its verdict."""
+
+    run_id: str = ""
+    variant: str = ""
+    kind: Literal["precision", "faithfulness"]
+    index: int
+    n: int
+    claim: str | None = None
+    passage: str
+    value: float | None
+    answer: str
+    """The first sample's answer text, cut to `ANSWER_CHARS`."""
+
+
 def parse_yes_no(text: str) -> float | None:
     """1.0 for yes, 0.0 for no, judged on the first word without case or punctuation; None otherwise."""
     found = WORD.search(text)
     return {"yes": 1.0, "no": 0.0}.get(found.group().lower()) if found else None
 
 
-async def judge_items(llm: LLM, system: str, items: Sequence[str], samples: int) -> list[float | None]:
-    """Each item asked `samples` times concurrently; its share of yes over readable samples, else None."""
+async def judge_items(
+    llm: LLM, system: str, items: Sequence[str], samples: int
+) -> tuple[list[float | None], list[str]]:
+    """Each item asked `samples` times at once: its share of yes over readable samples (else None) and first answer."""
     calls = [
         llm.complete(
             [Message(role="system", content=system), Message(role="user", content=item)],
@@ -80,12 +100,13 @@ async def judge_items(llm: LLM, system: str, items: Sequence[str], samples: int)
         for item in items
         for _ in range(samples)
     ]
-    answers = [parse_yes_no(completion.text) for completion in await asyncio.gather(*calls)]
+    texts = [completion.text for completion in await asyncio.gather(*calls)]
+    answers = [parse_yes_no(text) for text in texts]
     values: list[float | None] = []
     for index in range(len(items)):
         readable = [answer for answer in answers[index * samples : (index + 1) * samples] if answer is not None]
         values.append(sum(readable) / len(readable) if readable else None)
-    return values
+    return values, [text[:ANSWER_CHARS] for text in texts[::samples]]
 
 
 def ratio(values: Sequence[float | None]) -> tuple[float | None, int]:
@@ -94,32 +115,47 @@ def ratio(values: Sequence[float | None]) -> tuple[float | None, int]:
     return (sum(readable) / len(readable) if readable else None), len(values) - len(readable)
 
 
-async def judge_result(llm: LLM, query: str, passages: Sequence[str], samples: int = 1) -> tuple[float | None, int]:
-    """Precision over readable passages and the unreadable count; None when there is nothing readable."""
+async def judge_result(
+    llm: LLM, query: str, passages: Sequence[tuple[int, str]], samples: int = 1
+) -> tuple[float | None, int, list[JudgedItem]]:
+    """Precision over readable (n, text) passages, unreadable count, and items; None when nothing is readable."""
     system = Template(PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    return ratio(await judge_items(llm, system, [text[:PASSAGE_CHARS] for text in passages], samples))
+    sent = [text[:PASSAGE_CHARS] for _, text in passages]
+    values, answers = await judge_items(llm, system, sent, samples)
+    items = [
+        JudgedItem(kind="precision", index=index, n=n, passage=text, value=value, answer=answer)
+        for index, ((n, _), text, value, answer) in enumerate(zip(passages, sent, values, answers, strict=True))
+    ]
+    return *ratio(values), items
 
 
-def claims(report: Report, context: Context) -> list[tuple[str, str]]:
-    """One (claim, passage text) pair per cited number; the claim is the sentence holding the citation."""
+def claims(report: Report, context: Context) -> list[tuple[str, int, str]]:
+    """One (claim, n, passage text) pair per cited number; the claim is the sentence holding the citation."""
     texts = {passage.n: passage.text for passage in context.passages}
-    pairs: list[tuple[str, str]] = []
+    pairs: list[tuple[str, int, str]] = []
     previous = 0
     for start, end, numbers in citations(report.body):
         ends = [found.end() for found in SENTENCE_END.finditer(report.body, previous, start)]
         claim = " ".join(report.body[ends[-1] if ends else previous : start].split())
-        pairs.extend((claim, texts[number]) for number in numbers if number in texts)
+        pairs.extend((claim, number, texts[number]) for number in numbers if number in texts)
         previous = end
     return pairs
 
 
 async def judge_faithfulness(
-    llm: LLM, query: str, pairs: Sequence[tuple[str, str]], samples: int = 1
-) -> tuple[float | None, int]:
-    """Supported pairs over readable pairs and the unreadable count; None when there is nothing readable."""
+    llm: LLM, query: str, pairs: Sequence[tuple[str, int, str]], samples: int = 1
+) -> tuple[float | None, int, list[JudgedItem]]:
+    """Supported pairs over readable pairs, the unreadable count, and the items; None when nothing is readable."""
     system = Template(FAITHFULNESS_PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    items = [f"claim: {claim}\npassage: {text[:PASSAGE_CHARS]}" for claim, text in pairs[:MAX_PAIRS]]
-    return ratio(await judge_items(llm, system, items, samples))
+    sent = [(claim, n, text[:PASSAGE_CHARS]) for claim, n, text in pairs[:MAX_PAIRS]]
+    values, answers = await judge_items(
+        llm, system, [f"claim: {claim}\npassage: {text}" for claim, _, text in sent], samples
+    )
+    items = [
+        JudgedItem(kind="faithfulness", index=index, n=n, claim=claim, passage=text, value=value, answer=answer)
+        for index, ((claim, n, text), value, answer) in enumerate(zip(sent, values, answers, strict=True))
+    ]
+    return *ratio(values), items
 
 
 def read_report(run_dir: Path) -> Report | None:
@@ -128,11 +164,22 @@ def read_report(run_dir: Path) -> Report | None:
 
 
 def read_judgements(path: Path) -> list[Judgement]:
+    return [Judgement.model_validate_json(line) for line in lines(path)]
+
+
+def read_items(path: Path) -> list[JudgedItem]:
+    return [JudgedItem.model_validate_json(line) for line in lines(path)]
+
+
+def lines(path: Path) -> list[str]:
     if not path.is_file():
         return []
-    return [
-        Judgement.model_validate_json(line) for line in path.read_text(encoding="utf-8").split("\n") if line.strip()
-    ]
+    return [line for line in path.read_text(encoding="utf-8").split("\n") if line.strip()]
+
+
+def write_lines(path: Path, records: Sequence[BaseModel], mode: Literal["w", "a"]) -> None:
+    with path.open(mode, encoding="utf-8") as out:
+        out.write("".join(record.model_dump_json() + "\n" for record in records))
 
 
 async def judge_all(
@@ -140,12 +187,14 @@ async def judge_all(
 ) -> int:
     settings = resolve(profile, overrides, os.environ)
     path = results_dir / "judgements.jsonl"
+    items_path = results_dir / "items.jsonl"
     done = [r for r in read_results(results_dir / "results.jsonl") if r.status == "done"]
     kept = read_judgements(path)
     if force:
         again = {r.run_id for r in done}
         kept = [item for item in kept if item.run_id not in again]
-        path.write_text("".join(item.model_dump_json() + "\n" for item in kept), encoding="utf-8")
+        write_lines(path, kept, "w")
+        write_lines(items_path, [item for item in read_items(items_path) if item.run_id not in again], "w")
     judged = {item.run_id for item in kept}
     pending = [r for r in done if r.run_id not in judged]
     ledger = UsageLedger({settings.llm.provider: settings.llm.prices})
@@ -156,17 +205,19 @@ async def judge_all(
             found = context(run_dir) if run_dir else None
             if result.run_id is None or run_dir is None or found is None:
                 continue
-            texts = [passage.text for passage in found.passages]
+            texts = [(passage.n, passage.text) for passage in found.passages]
             report = read_report(run_dir)
             pairs = claims(report, found)[:MAX_PAIRS] if report else []
             try:
-                precision, unreadable = await judge_result(writer, found.query, texts, samples)
-                faithfulness, unread_pairs = await judge_faithfulness(writer, found.query, pairs, samples)
+                precision, unreadable, items = await judge_result(writer, found.query, texts, samples)
+                faithfulness, unread_pairs, pair_items = await judge_faithfulness(writer, found.query, pairs, samples)
                 unreadable += unread_pairs
+                items += pair_items
             except ProviderError as error:
                 print(f"{result.variant} {result.run_id}: {' '.join(str(error).split())}", file=sys.stderr)
                 precision = faithfulness = None
                 unreadable = 0
+                items = []
             judgement = Judgement(
                 run_id=result.run_id,
                 parent_run_id=result.parent_run_id,
@@ -178,8 +229,9 @@ async def judge_all(
                 unreadable=unreadable,
                 samples=samples,
             )
-            with path.open("a", encoding="utf-8") as out:
-                out.write(judgement.model_dump_json() + "\n")
+            write_lines(path, [judgement], "a")
+            key = {"run_id": result.run_id, "variant": result.variant}
+            write_lines(items_path, [item.model_copy(update=key) for item in items], "a")
             print(
                 f"{result.variant} {result.run_id}: precision {shown(precision)} faithfulness {shown(faithfulness)}",
                 file=sys.stderr,
