@@ -224,13 +224,23 @@ The last planned round's cap is `left`. A single-round run fetches at most
 not fetched or queued in an earlier round; hits beyond the round cap stay
 unfetched for that round, in the fetch order of source-collection. Each
 round SHALL chunk only its new pages. It SHALL prefilter and score only
-pairs of its own queries with its new chunks, plus attached file chunks for
-its own queries. A page fetched in an earlier round SHALL NOT pair with a
-later round's query.
+pairs of its own queries, with every chunk of the run so far (attached
+files, earlier rounds' pages, and its new pages) under the pairing rule of
+passage-scoring. A query of an earlier round SHALL NOT pair with a later
+round's new pages, so every (query, chunk) pair is scored at most once, in
+the query's round.
 
 #### Scenario: Known page
 - **WHEN** round 2's query `q6` finds a URL fetched in round 1
-- **THEN** the URL is counted as known for round 2, and no pair of `q6` with that page's chunks is scored
+- **THEN** the URL is counted as known for round 2, and `q6` pairs with that page's chunks like with any earlier chunk
+
+#### Scenario: Earlier page answers a follow-up
+- **WHEN** `prefilter.pairing = "all"`, round 1 fetched page P, and round 2 adds the follow-up `q6`
+- **THEN** every chunk of P is paired with `q6` before round 2's prefilter
+
+#### Scenario: Earlier query does not see new pages
+- **WHEN** round 2 fetches a new page N and `q1` is a round-1 query
+- **THEN** no pair of `q1` with N's chunks is scored
 
 #### Scenario: Cap across rounds
 - **WHEN** `fetch.max_pages = 30`, `research.rounds = 2`, and round 1 fetched 25 pages
