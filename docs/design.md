@@ -1469,6 +1469,15 @@ inputs. It drives the public CLI only, so it measures what users run.
   `evals/prompts/precision.md`; passages go in a separate user message. An
   unparsable answer, including a list that is not valid JSON such as
   `[1, 2,]`, records precision as missing and the judge goes on.
+  For a fork replayed with `--write`, the judge also records faithfulness:
+  every number of every `[n]` group in `report.json`'s `body` (links
+  excluded) pairs its claim, the text from the previous sentence end (`.`,
+  `!`, `?`, or newline) or previous citation to the marker, with passage
+  `n`. Numbers without a passage are left out, and at most 200 pairs are
+  sent. One call with `evals/prompts/faithfulness.md` (query only; pairs
+  in the user message) returns the supported pair indexes; faithfulness is
+  supported / pairs and `citations` is the pair count. No report, no
+  citation, or an unparsable answer records faithfulness as missing.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,
 tracked in git (only the root `/runs/` is ignored) so tests pass on a fresh

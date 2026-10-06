@@ -1,10 +1,15 @@
-"""Context precision judged by the configured `llm`: the share of selected passages rated relevant.
+"""Context precision and report faithfulness judged by the configured `llm`.
+
+Precision is the share of selected passages rated relevant. Faithfulness is
+the share of (claim, passage) pairs, one per cited number in `report.json`,
+whose passage supports the claim; the claim is the sentence holding the
+citation.
 
     python -m evals.judge --results DIR [--profile NAME] [--set KEY=VALUE ...]
 
 Judgements go to `<DIR>/judgements.jsonl`, keyed by fork run ID; judged runs
 are skipped on the next call. Only the query goes through the prompt
-template; passages are sent as a separate user message.
+templates; passages and claims are sent as a separate user message.
 """
 
 import argparse
@@ -26,13 +31,17 @@ from evals.metrics import context
 from evals.replay import read_results
 from wosarcher.config import ConfigError, resolve
 from wosarcher.http import UsageLedger
-from wosarcher.models import Message
+from wosarcher.models import Context, Message, Report
 from wosarcher.ports import LLM
+from wosarcher.stages.write import citations
 
 PROMPT = Path(__file__).parent / "prompts" / "precision.md"
+FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
 PASSAGE_CHARS = 1500
 MAX_TOKENS = 256
+MAX_PAIRS = 200
 ANSWER = re.compile(r"\[[\d,\s]*\]")
+SENTENCE_END = re.compile(r"[.!?\n]")
 
 
 class Judgement(BaseModel):
@@ -43,6 +52,9 @@ class Judgement(BaseModel):
     variant: str
     selected: int
     precision: float | None
+    citations: int = 0
+    """(claim, passage) pairs sent to the faithfulness judge."""
+    faithfulness: float | None = None
 
 
 def parse_answer(text: str, count: int) -> set[int] | None:
@@ -75,6 +87,39 @@ async def judge_result(llm: LLM, query: str, passages: Sequence[str]) -> float |
     return None if relevant is None else len(relevant) / len(passages)
 
 
+def claims(report: Report, context: Context) -> list[tuple[str, str]]:
+    """One (claim, passage text) pair per cited number; the claim is the sentence holding the citation."""
+    texts = {passage.n: passage.text for passage in context.passages}
+    pairs: list[tuple[str, str]] = []
+    previous = 0
+    for start, end, numbers in citations(report.body):
+        ends = [found.end() for found in SENTENCE_END.finditer(report.body, previous, start)]
+        claim = " ".join(report.body[ends[-1] if ends else previous : start].split())
+        pairs.extend((claim, texts[number]) for number in numbers if number in texts)
+        previous = end
+    return pairs
+
+
+async def judge_faithfulness(llm: LLM, query: str, pairs: Sequence[tuple[str, str]]) -> float | None:
+    """Supported pairs / pairs sent; None when there is nothing to judge or the answer is unreadable."""
+    pairs = pairs[:MAX_PAIRS]
+    if not pairs:
+        return None
+    system = Template(FAITHFULNESS_PROMPT.read_text(encoding="utf-8")).substitute(query=query)
+    data = "\n\n".join(
+        f"[{index}] claim: {claim}\npassage: {text[:PASSAGE_CHARS]}" for index, (claim, text) in enumerate(pairs)
+    )
+    messages = [Message(role="system", content=system), Message(role="user", content=data)]
+    completion = await llm.complete(messages, max_tokens=MAX_TOKENS)
+    supported = parse_answer(completion.text, len(pairs))
+    return None if supported is None else len(supported) / len(pairs)
+
+
+def read_report(run_dir: Path) -> Report | None:
+    path = run_dir / "report.json"
+    return Report.model_validate_json(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+
 def read_judgements(path: Path) -> list[Judgement]:
     if not path.is_file():
         return []
@@ -92,29 +137,43 @@ async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]
     async with httpx.AsyncClient() as http:
         writer = building.build(settings, http, ledger).writer
         for result in pending:
-            found = context(Path(result.run_dir)) if result.run_dir else None
-            if result.run_id is None or found is None:
+            run_dir = Path(result.run_dir) if result.run_dir else None
+            found = context(run_dir) if run_dir else None
+            if result.run_id is None or run_dir is None or found is None:
                 continue
             texts = [passage.text for passage in found.passages]
             precision = await judge_result(writer, found.query, texts)
+            report = read_report(run_dir)
+            pairs = claims(report, found)[:MAX_PAIRS] if report else []
+            faithfulness = await judge_faithfulness(writer, found.query, pairs)
             judgement = Judgement(
                 run_id=result.run_id,
                 parent_run_id=result.parent_run_id,
                 variant=result.variant,
                 selected=len(texts),
                 precision=precision,
+                citations=len(pairs),
+                faithfulness=faithfulness,
             )
             with path.open("a", encoding="utf-8") as out:
                 out.write(judgement.model_dump_json() + "\n")
-            shown = "missing" if precision is None else f"{precision:.2f}"
-            print(f"{result.variant} {result.run_id}: precision {shown}", file=sys.stderr)
+            print(
+                f"{result.variant} {result.run_id}: precision {shown(precision)} faithfulness {shown(faithfulness)}",
+                file=sys.stderr,
+            )
     total = ledger.total()
     print(f"llm usage: {total.requests} requests, {total.input_tokens} input and {total.output_tokens} output tokens")
     return 0
 
 
+def shown(value: float | None) -> str:
+    return "missing" if value is None else f"{value:.2f}"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="python -m evals.judge", description="LLM-judged context precision.")
+    parser = argparse.ArgumentParser(
+        prog="python -m evals.judge", description="LLM-judged context precision and faithfulness."
+    )
     parser.add_argument("--results", type=Path, required=True, help="Directory with results.jsonl.")
     parser.add_argument("--profile", help="Profile whose llm block judges.")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
