@@ -112,30 +112,35 @@ stage SHALL fail with an error that names each scorer and its error.
 
 ### Requirement: Thresholds
 A calibrated scorer SHALL keep pairs whose score is at least
-`score.min_score` (default 1.5). When no pair of a query reaches
-`score.min_score`, the query's single best pair SHALL be kept as a floor
-pair, marked `floor` on the score (ties: the earlier pair in page order);
-a pair kept at or above the threshold is never marked. An uncalibrated
-scorer SHALL keep pairs whose mapped score is at least
-`score.relative_threshold` (default 0.5) times the best mapped score of
-the same query; when the best mapped score of a query is not positive,
-only the best pair SHALL be kept. For the `rerank` scorer, the mapped
-score is the logistic sigmoid `1 / (1 + e^-x)` of the raw score when the
-stage's scores are on the logit scale, and the raw score otherwise. The
-scale SHALL be `score.rerank_scale` when it is `probability` or `logit`;
-with `auto` (the default) it SHALL be `logit` when any raw rerank score of
-the stage is below 0 or above 1, and `probability` otherwise, so one stage
-never mixes scales. Raw scores SHALL be kept unchanged in the scores
-artifact. BM25 SHALL follow the BM25 ranking rule of lexical-bm25: pairs
-with score 0 are dropped, at most 25 pairs per query are kept, and when no
-pair of a query matches any query term, the first pairs in page order are
-kept. Every scorer except `passthrough` SHALL then keep at most
-`score.top_k` pairs per query (default 10), best first. This per-query cap
-SHALL run before the best pair per chunk is chosen.
+`score.min_score` (default 2.0: Jev's "partially answers" level and
+above). When no pair of a query reaches `score.min_score`, the query's
+single best pair SHALL be kept as a floor pair, marked `floor` on the
+score (ties: the earlier pair in page order); a pair kept at or above the
+threshold is never marked. An uncalibrated scorer SHALL keep pairs whose
+mapped score is at least `score.relative_threshold` (default 0.5) times
+the best mapped score of the same query; when the best mapped score of a
+query is not positive, only the best pair SHALL be kept. For the `rerank`
+scorer, the mapped score is the logistic sigmoid `1 / (1 + e^-x)` of the
+raw score when the stage's scores are on the logit scale, and the raw
+score otherwise. The scale SHALL be `score.rerank_scale` when it is
+`probability` or `logit`; with `auto` (the default) it SHALL be `logit`
+when any raw rerank score of the stage is below 0 or above 1, and
+`probability` otherwise, so one stage never mixes scales. Raw scores SHALL
+be kept unchanged in the scores artifact. BM25 SHALL follow the BM25
+ranking rule of lexical-bm25: pairs with score 0 are dropped, at most 25
+pairs per query are kept, and when no pair of a query matches any query
+term, the first pairs in page order are kept. Every scorer except
+`passthrough` SHALL then keep at most `score.top_k` pairs per query
+(default 10), best first. This per-query cap SHALL run before the best
+pair per chunk is chosen.
 
 #### Scenario: Calibrated threshold
 - **WHEN** Jev scores three pairs 2.5, 1.5, and 1.0 with `score.min_score = 1.5`
 - **THEN** the pairs scored 2.5 and 1.5 are kept and neither is a floor pair
+
+#### Scenario: Default threshold
+- **WHEN** no source sets `score.min_score` and Jev scores a query's pairs 2.4, 2.0, and 1.9
+- **THEN** the pairs scored 2.4 and 2.0 are kept and the pair scored 1.9 is not
 
 #### Scenario: Calibrated floor
 - **WHEN** Jev scores a query's three pairs 1.4, 1.1, and 0.3 with `score.min_score = 2.0`
