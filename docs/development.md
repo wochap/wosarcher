@@ -53,6 +53,14 @@ and skips a side that does not exist yet:
 
 openspec-pipeline uses it as its gate: `--gate scripts/check`.
 
+`scripts/dev-serve` runs this checkout in place of the NixOS container on
+the same host: it reads the live `podman-wosarcher` unit (profile, origins,
+secrets file) and the lazy proxy socket (address, port), stops them, copies
+the Nix-managed profiles and `auth.json` into `~/.local/state/wosarcher-dev`,
+builds the web UI (`--no-web` skips it), and serves on the socket's port, so
+the nginx URL reaches the dev server. Exiting starts the socket again. Needs
+sudo.
+
 ## Rules
 
 - Maintainability and readability come first.
