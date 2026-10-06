@@ -2,8 +2,9 @@
 
 Pointwise: one yes/no call per selected passage (relevant to the query?) and
 one per (claim, passage) pair, one pair per cited number in `report.json`
-(does the passage support the claim?); the claim is the sentence holding the
-citation. Calls run concurrently at temperature 0. Precision and
+(does the passage support the claim, or the part the citation follows?); the
+claim is the sentence holding the citation, with that citation kept as `[n]`.
+Calls run concurrently at temperature 0. Precision and
 faithfulness are the shares of yes over readable items; an answer whose
 first word is neither yes nor no is unreadable and left out.
 
@@ -41,7 +42,6 @@ from wosarcher.stages.write import CITATION, citations
 
 PROMPT = Path(__file__).parent / "prompts" / "precision.md"
 FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
-PASSAGE_CHARS = 1500
 MAX_TOKENS = 8
 MAX_PAIRS = 200
 ANSWER_CHARS = 80
@@ -53,6 +53,8 @@ OWN_LINE = re.compile(r"[ \t]*(?:[-*+][ \t]|\d+[.)][ \t]|\||#)")
 LINE_MARK = re.compile(r"^\s*(?:#+|[-*+]|\d+[.)])\s+")
 EMPHASIS = re.compile(r"\*+|`+|\||(?<!\w)_+|_+(?!\w)")
 SHORT_WORDS = 3
+MARK = "\x00"
+"""Stands in for the judged citation while the claim is cleaned."""
 
 
 class Judgement(BaseModel):
@@ -128,7 +130,7 @@ async def judge_result(
 ) -> tuple[float | None, int, list[JudgedItem]]:
     """Precision over readable (n, text) passages, unreadable count, and items; None when nothing is readable."""
     system = Template(PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    sent = [text[:PASSAGE_CHARS] for _, text in passages]
+    sent = [text for _, text in passages]
     values, answers = await judge_items(llm, system, sent, samples)
     items = [
         JudgedItem(kind="precision", index=index, n=n, passage=text, value=value, answer=answer)
@@ -165,21 +167,23 @@ def sentences(body: str) -> list[tuple[int, int]]:
 
 
 def clean(text: str) -> str:
-    """Claim text: no citations, emphasis, heading or list marks, or table pipes; whitespace collapsed."""
+    """Claim text: no citations (`MARK` stays), emphasis, heading or list marks, or table pipes; spaces collapsed."""
     text = CITATION.sub("", LINE_MARK.sub("", text))
     text = " ".join(EMPHASIS.sub(" ", text).split())
     return re.sub(r"\s+([,;:.!?])", r"\1", text).rstrip(".!?;, ")
 
 
 def claims(report: Report, context: Context) -> list[tuple[str, int, str]]:
-    """One (claim, n, passage text) pair per cited number; the claim is the sentence holding the citation."""
+    """One (claim, n, passage text) pair per cited number; the claim is its sentence, marked `[n]`."""
     texts = {passage.n: passage.text for passage in context.passages}
     spans = sentences(report.body)
     pairs: list[tuple[str, int, str]] = []
-    for start, _, numbers in citations(report.body):
+    for start, stop, numbers in citations(report.body):
         begin, end = next(((a, b) for a, b in spans if a <= start < b), (start, start))
-        claim = clean(report.body[begin:end])
-        pairs.extend((claim, number, texts[number]) for number in numbers if number in texts)
+        claim = clean(report.body[begin:start] + MARK + report.body[stop:end])
+        pairs.extend(
+            (claim.replace(MARK, f"[{number}]"), number, texts[number]) for number in numbers if number in texts
+        )
     return pairs
 
 
@@ -188,7 +192,7 @@ async def judge_faithfulness(
 ) -> tuple[float | None, int, list[JudgedItem]]:
     """Supported pairs over readable pairs, the unreadable count, and the items; None when nothing is readable."""
     system = Template(FAITHFULNESS_PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    sent = [(claim, n, text[:PASSAGE_CHARS]) for claim, n, text in pairs[:MAX_PAIRS]]
+    sent = list(pairs[:MAX_PAIRS])
     values, answers = await judge_items(
         llm, system, [f"claim: {claim}\npassage: {text}" for claim, _, text in sent], samples
     )
@@ -198,7 +202,7 @@ async def judge_faithfulness(
             index=index,
             n=n,
             claim=claim,
-            short=len(claim.split()) < SHORT_WORDS,
+            short=len(CITATION.sub("", claim).split()) < SHORT_WORDS,
             passage=text,
             value=value,
             answer=answer,

@@ -170,9 +170,9 @@ def passages(count: int) -> Context:
 def test_claims() -> None:
     pairs = judge.claims(report("A is true [1]. B and C hold [2, 3]. Lost [9]."), passages(3))
     assert pairs == [
-        ("A is true", 1, "passage 1"),
-        ("B and C hold", 2, "passage 2"),
-        ("B and C hold", 3, "passage 3"),
+        ("A is true [1]", 1, "passage 1"),
+        ("B and C hold [2]", 2, "passage 2"),
+        ("B and C hold [3]", 3, "passage 3"),
     ]
     assert judge.claims(report("See [1](https://example.com)."), passages(1)) == []
 
@@ -183,23 +183,31 @@ def claimed(body: str) -> list[str]:
 
 def test_claim_decimal_and_domain() -> None:
     body = "Hybrid reaches 0.7497 NDCG on gob.pe data [2], a 7.4% lift [3]."
-    assert claimed(body) == ["Hybrid reaches 0.7497 NDCG on gob.pe data, a 7.4% lift"] * 2
+    assert claimed(body) == [
+        "Hybrid reaches 0.7497 NDCG on gob.pe data [2], a 7.4% lift",
+        "Hybrid reaches 0.7497 NDCG on gob.pe data, a 7.4% lift [3]",
+    ]
+
+
+def test_claim_attributed_part_marked() -> None:
+    body = "BM25 beats dense [2]; HyDE costs 40 ms [4]."
+    assert claimed(body) == ["BM25 beats dense [2]; HyDE costs 40 ms", "BM25 beats dense; HyDE costs 40 ms [4]"]
 
 
 def test_claim_adjacent_citations() -> None:
-    assert claimed("Intro. Both say so [1][2].") == ["Both say so"] * 2
+    assert claimed("Intro. Both say so [1][2].") == ["Both say so [1]", "Both say so [2]"]
 
 
 def test_claim_list_item_and_table_row() -> None:
     body = "Prices:\n- **Costo:** gratuito [1]\n\n| Name | Price |\n|---|---|\n| CEJ | gratis [3] |\n"
-    assert claimed(body) == ["Costo: gratuito", "CEJ gratis"]
+    assert claimed(body) == ["Costo: gratuito [1]", "CEJ gratis [3]"]
 
 
 def test_claim_line_break() -> None:
-    assert claimed("# Heading\n\nThe CEJ changed\nits form in 2026 [4].") == ["The CEJ changed its form in 2026"]
+    assert claimed("# Heading\n\nThe CEJ changed\nits form in 2026 [4].") == ["The CEJ changed its form in 2026 [4]"]
 
 
-PAIRS = [("A is true", 1, "passage 1"), ("B and C hold", 2, "passage 2"), ("B and C hold", 3, "passage 3")]
+PAIRS = [("A is true [1]", 1, "passage 1"), ("B and C hold [2]", 2, "passage 2"), ("B and C hold [3]", 3, "passage 3")]
 
 
 async def test_faithfulness() -> None:
@@ -212,6 +220,15 @@ async def test_faithfulness() -> None:
         assert claim not in system.content
         assert claim in user.content
         assert text in user.content
+
+
+async def test_whole_passage_sent() -> None:
+    text = "x" * 1800
+    llm = FakeLLM(["yes"])
+    await judge.judge_result(llm, "q", [(1, text)])
+    await judge.judge_faithfulness(llm, "q", [("A is true [1]", 1, text)])
+    assert all(text in user.content for _, user in llm.calls)
+    assert len(llm.calls) == 2
 
 
 async def test_unparsable_faithfulness() -> None:
@@ -309,11 +326,11 @@ def test_items_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert {(item.run_id, item.variant) for item in items} == {(result.run_id, "bm25")}
     pairs = [item for item in items if item.kind == "faithfulness"]
     assert [(item.claim, item.n, item.value, item.answer) for item in pairs] == [
-        ("A", first, 1.0, "yes"),
-        ("B", second, 1.0, "yes"),
+        (f"A [{first}]", first, 1.0, "yes"),
+        (f"B [{second}]", second, 1.0, "yes"),
     ]
     assert all(item.short for item in pairs)
-    assert pairs[0].passage == found.passages[0].text[: judge.PASSAGE_CHARS]
+    assert pairs[0].passage == found.passages[0].text
 
     llm.replies = ["no"]
     assert judge.main(["--results", str(out), "--profile", "e2e", "--force"]) == 0

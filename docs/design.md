@@ -1548,8 +1548,8 @@ inputs. It drives the public CLI only, so it measures what users run.
   call per selected passage asks whether it helps answer the query, yes or
   no, and precision is yes over readable passages, recorded in
   `DIR/judgements.jsonl`. Only the query goes through
-  `evals/prompts/precision.md` (the system message); the passage goes in a
-  separate user message. Every judge call sends effort `none`, temperature
+  `evals/prompts/precision.md` (the system message); the whole passage,
+  never cut, goes in a separate user message. Every judge call sends effort `none`, temperature
   0, and an 8-token cap; the calls of one result run concurrently within
   the `llm` block's concurrency. The answer is its first word without case
   or punctuation; anything but yes or no makes the item unreadable: it is
@@ -1566,13 +1566,15 @@ inputs. It drives the public CLI only, so it measures what users run.
   `n`. Sentences split at blank lines, at list items, table rows, and
   headings (each its own line), and after `.`, `!`, or `?` followed by
   whitespace, so `0.69`, `gob.pe`, and a line break inside a paragraph do
-  not split. The claim drops `[n]` markers, Markdown emphasis, heading and
-  list marks, and table pipes, and collapses whitespace; citations in one
-  sentence share it. A claim under 3 words is still judged and its item
+  not split. The claim drops every `[n]` marker except the judged
+  citation's, which stays as `[n]` in place, plus Markdown emphasis,
+  heading and list marks, and table pipes, and collapses whitespace;
+  citations in one sentence share it. A claim under 3 words is still judged and its item
   records `short`. Numbers without a passage are left out, and at most 200 pairs are
   sent. One call per pair with `evals/prompts/faithfulness.md` (query only;
-  claim and passage in the user message) asks whether the passage supports
-  the claim, under the same rules; faithfulness is supported over readable
+  claim and whole passage in the user message) asks whether the passage
+  supports the claim or the part the `[n]` marker follows, under the same
+  rules; faithfulness is supported over readable
   pairs and `citations` is the pair count. No report, no citation, or no
   readable pair records faithfulness as missing.
   Every judged item also goes to `DIR/items.jsonl`, one line per passage
