@@ -7,6 +7,9 @@ scorer plus `score.fallback`; when every entry fails, the stage raises
 `ScoreChainError`. `passthrough` never fails. Small-input candidates always
 get passthrough scores.
 
+Scorers and BM25 see each chunk's scoring text (page title and heading path,
+then the body); scores carry only chunk IDs, so readers keep the body text.
+
 Each pair goes through three rules in order: the scorer's threshold, the
 per-query cap (`score.top_k`; small-input passthrough keeps its first
 `top_k` in passthrough order, the `passthrough` fallback scorer is not
@@ -26,6 +29,7 @@ from wosarcher.config import ScoreConfig
 from wosarcher.lexical import bm25_scores, rank
 from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, Score, ScoreResult, Skipped
 from wosarcher.ports import Scorer
+from wosarcher.stages.chunk import scoring_text
 
 JEV_MAX = 3.0
 BM25_MAX_RESULTS = 25
@@ -255,8 +259,13 @@ async def score(
     cfg: ScoreConfig,
     on_item: Callable[[QueryScores], None] = noop,
 ) -> ScoreResult:
-    by_id = {chunk.chunk_id: chunk for chunk in chunks}
     page_of = {page.source.source_id: page for page in pages}
+    by_id = {
+        chunk.chunk_id: chunk.model_copy(
+            update={"text": scoring_text(page_of[chunk.source_id].source.title, chunk.heading_path, chunk.text)}
+        )
+        for chunk in chunks
+    }
     page_index = {page.source.source_id: i for i, page in enumerate(pages)}
     plan_index = {query.id: i for i, query in enumerate(queries)}
 

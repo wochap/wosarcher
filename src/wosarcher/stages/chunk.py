@@ -28,6 +28,10 @@ SHORT_WORDS = 12
 SENTENCE_PUNCTUATION = set(".?!;:")
 LIST_ITEM = re.compile(r"\s*(?:[-*+]|\d+[.)])\s")
 
+# Scoring text: caps on the title and the whole context line.
+TITLE_CHARS = 120
+CONTEXT_CHARS = 300
+
 # Applied in order to every section.
 CLEANING = [
     (re.compile(r"<!--.*?-->", re.DOTALL), ""),
@@ -235,6 +239,23 @@ def page_chunks(page: Page, size: int, overlap: int, min_chars: int) -> tuple[li
         pages = [value for _, (kind, value) in markers if kind == "page"]
         page_id = pages[-1] if pages else page_id
     return chunks, dropped
+
+
+def cut(text: str, limit: int) -> str:
+    """`text` cut to `limit` characters, at the last word boundary when one exists."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    word_end = head.rfind(" ")
+    return (head[:word_end] if word_end > 0 else head).rstrip()
+
+
+def scoring_text(title: str, heading_path: Sequence[str], text: str) -> str:
+    """The text rankers and scorers see: `title > h1 > h2`, an empty line, then the chunk text."""
+    parts = [part for part in (cut(title.strip(), TITLE_CHARS), *(h.strip() for h in heading_path)) if part]
+    if not parts:
+        return text
+    return f"{cut(' > '.join(parts), CONTEXT_CHARS)}\n\n{text}"
 
 
 def text_hash(text: str) -> str:

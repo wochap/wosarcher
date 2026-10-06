@@ -277,3 +277,16 @@ def test_chunk_kept_once_across_rounds() -> None:
         first,
         later.model_copy(update={"kept": False, "dropped": "other_query"}),
     ]
+
+
+async def test_scorer_sees_scoring_text() -> None:
+    pages, chunks = setup(["Positive in 62% of cases."], ["q0"])
+    chunks = [chunks[0].model_copy(update={"heading_path": ["Results"]})]
+    qs = [Query(id="q0", text="drug X")]
+    rerank = FakeScorer("rerank", default=0.9)
+    result = await score(every(qs, chunks), qs, pages, chunks, rerank, cfg=ScoreConfig(provider="rerank"))
+    sent = rerank.calls[0][1][0]
+    assert sent.text == f"{pages[0].source.title} > Results\n\nPositive in 62% of cases."
+    assert sent.chunk_id == chunks[0].chunk_id
+    assert [s.chunk_id for s in result.queries[0].passages] == [chunks[0].chunk_id]
+    assert chunks[0].text == "Positive in 62% of cases."

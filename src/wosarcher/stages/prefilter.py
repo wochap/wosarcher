@@ -3,7 +3,8 @@
 Web chunks pair with every query that found their page; file chunks pair with
 every query. A query whose paired pages are short skips ranking (small-input
 passthrough). Others keep `top_k` pairs by embedding similarity or BM25, or all
-with `none`. An embedder failure or a vector of another dimension switches the
+with `none`. Embeddings and BM25 rank each chunk's scoring text (page title
+and heading path, then the body). An embedder failure or a vector of another dimension switches the
 whole stage to BM25.
 """
 
@@ -15,6 +16,7 @@ from typing import Literal, cast, get_args
 from wosarcher.lexical import bm25_scores, rank
 from wosarcher.models import Candidate, Chunk, Page, PrefilterResult, Query
 from wosarcher.ports import Embedder
+from wosarcher.stages.chunk import scoring_text
 
 Method = Literal["embeddings", "bm25", "none"]
 
@@ -104,7 +106,12 @@ async def prefilter(
     if method not in get_args(Method):
         raise ValueError(f"prefilter.provider '{method}' is not one of: {', '.join(get_args(Method))}")
     ran = cast(Method, method)
-    paired = pairs(queries, pages, chunks)
+    titles = {page.source.source_id: page.source.title for page in pages}
+    scored = [
+        chunk.model_copy(update={"text": scoring_text(titles.get(chunk.source_id, ""), chunk.heading_path, chunk.text)})
+        for chunk in chunks
+    ]
+    paired = pairs(queries, pages, scored)
     small = {query.id for query in queries if is_small(query, pages, passthrough_chars)}
     ranked = [query for query in queries if query.id not in small]
     warnings: list[str] = []

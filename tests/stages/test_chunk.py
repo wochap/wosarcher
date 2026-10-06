@@ -2,7 +2,7 @@ from itertools import pairwise
 from typing import Literal
 
 from wosarcher.models import Page, Source
-from wosarcher.stages.chunk import boilerplate, chunk, clean, sections
+from wosarcher.stages.chunk import boilerplate, chunk, clean, scoring_text, sections
 
 
 def page(
@@ -196,3 +196,22 @@ def test_same_paragraph_on_two_pages() -> None:
     )
     assert [c.source_id for c in result.chunks] == ["s1"]
     assert result.duplicates == 1
+
+
+def test_scoring_text_context_line() -> None:
+    text = scoring_text("Phase 3 trial of drug X", ["Results", "Efficacy"], "Positive in 62% of cases.")
+    assert text == "Phase 3 trial of drug X > Results > Efficacy\n\nPositive in 62% of cases."
+
+
+def test_scoring_text_no_context() -> None:
+    assert scoring_text("", [], "Body only.") == "Body only."
+
+
+def test_scoring_text_long_title() -> None:
+    title = " ".join(["word"] * 40)  # 199 characters
+    context = scoring_text(title, ["Results"], "Body.").split("\n\n")[0]
+    head, path = context.rsplit(" > ", 1)
+    assert path == "Results"
+    assert len(head) <= 120
+    assert title.startswith(head)
+    assert head.endswith("word")

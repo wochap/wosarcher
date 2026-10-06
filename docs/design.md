@@ -381,8 +381,19 @@ Remote endpoints:
   50, by embedding similarity or BM25, or all with `none`) reach the
   scorer. If the embedder fails, or returns a vector of another dimension,
   the prefilter uses BM25 for the whole stage and records a warning.
-  Embeddings are cached by the SHA-256 of the text; the cache refuses a
+  Embeddings are cached by the SHA-256 of the text embedded, so a scoring
+  text and its body text never share a vector; the cache refuses a
   vector whose dimension differs from its identity.
+- The prefilter and the scorer rank each chunk's scoring text: a context
+  line (page title, then each heading of the heading path, joined by
+  ` > `, empty parts left out), an empty line, then the chunk text. The
+  title is cut at 120 characters and the context line at 300, at a word
+  boundary, so a junk title cannot crowd a 512-token reranker pair. A chunk
+  with no title and no heading path is scored by its body text. Every
+  ranking method of a run (embeddings, BM25, rerank, Jev) gets the same
+  scoring text. `scoring_text` in `stages/chunk.py` builds it; it is never
+  stored, and chunks, passages, events, the writer, and citations keep the
+  body text.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
     (default 1.5).
@@ -544,7 +555,8 @@ Markdown-aware, in this order:
 Sizes are characters, about 500 tokens at the selector's 3.5 characters
 per token. Rerankers behind llama-server with a 512-token per-pair limit
 may truncate or fail on a long query plus a full chunk; profiles for such
-servers can lower `chunk.size_chars`. HTML comments, images (kept as alt text), link URLs (kept as link text), and
+servers can lower `chunk.size_chars`; the scoring text adds a context
+line of at most 300 characters to each pair (see Scoring). HTML comments, images (kept as alt text), link URLs (kept as link text), and
 autolinks are stripped from chunk text. pdf-ingest anchors become chunk
 metadata: `page_id` is the page in effect at the chunk start and
 `block_ids` the `<!-- a: … -->` anchors inside it; the anchors are removed

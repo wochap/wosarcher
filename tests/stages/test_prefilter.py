@@ -5,6 +5,7 @@ import pytest
 from wosarcher.adapters.fakes import FakeEmbedder
 from wosarcher.models import Chunk, EmbedderInfo, Page
 from wosarcher.runner.caches import EmbeddingMapping
+from wosarcher.stages.chunk import scoring_text
 from wosarcher.stages.prefilter import pairs, prefilter, text_key
 from wosarcher.store.caches import EmbeddingCache
 
@@ -44,6 +45,10 @@ def many(count: int) -> tuple[list[Page], list[Chunk]]:
     return [page], chunks_of(page, [f"query word{n} text {n}" for n in range(count)])
 
 
+def scored(page: Page, chunk: Chunk) -> str:
+    return scoring_text(page.source.title, chunk.heading_path, chunk.text)
+
+
 @pytest.mark.parametrize(("method", "expected"), [("bm25", 50), ("none", 300)])
 async def test_top_k_per_query(method: str, expected: int) -> None:
     pages, chunks = many(300)
@@ -55,8 +60,9 @@ async def test_top_k_per_query(method: str, expected: int) -> None:
 async def test_embeddings_use_cache() -> None:
     pages, chunks = many(3)
     embedder = FakeEmbedder()
-    vector = (await embedder.embed([chunks[0].text]))[0]
-    cache = {text_key(chunks[0].text): vector}
+    first, last = scored(pages[0], chunks[0]), scored(pages[0], chunks[2])
+    vector = (await embedder.embed([first]))[0]
+    cache = {text_key(first): vector}
     embedder.calls.clear()
     result = await prefilter(
         queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000, cache=cache
@@ -64,8 +70,8 @@ async def test_embeddings_use_cache() -> None:
     assert result.method == "embeddings"
     assert len(result.candidates) == 2
     assert len(embedder.calls) == 1
-    assert chunks[0].text not in embedder.calls[0]
-    assert text_key(chunks[2].text) in cache
+    assert first not in embedder.calls[0]
+    assert text_key(last) in cache
 
 
 class NearEmbedder:
@@ -84,8 +90,8 @@ class NearEmbedder:
 
 async def test_embeddings_keep_nearest() -> None:
     pages, chunks = many(6)
-    near = {chunks[1].text, chunks[4].text}
-    embedder = NearEmbedder({chunk.text for chunk in chunks}, near)
+    near = {scored(pages[0], chunks[1]), scored(pages[0], chunks[4])}
+    embedder = NearEmbedder({scored(pages[0], chunk) for chunk in chunks}, near)
     result = await prefilter(
         queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000
     )
@@ -130,7 +136,8 @@ class ShrinkingEmbedder:
 async def test_dimension_change_falls_back() -> None:
     pages, chunks = many(3)
     embedder = ShrinkingEmbedder()
-    cache = {text_key(chunks[0].text): (await embedder.embed([chunks[0].text]))[0]}
+    first = scored(pages[0], chunks[0])
+    cache = {text_key(first): (await embedder.embed([first]))[0]}
     result = await prefilter(
         queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000, cache=cache
     )
@@ -150,3 +157,15 @@ async def test_cache_put_error_falls_back(tmp_path: Path) -> None:
     assert len(result.warnings) == 1
     assert "3 dimensions" in result.warnings[0]
     assert "expected 4" in result.warnings[0]
+
+
+async def test_embeds_scoring_text() -> None:
+    pages, chunks = many(6)
+    chunks = [chunk.model_copy(update={"heading_path": ["Results"]}) for chunk in chunks]
+    embedder = FakeEmbedder()
+    result = await prefilter(
+        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000
+    )
+    assert f"{pages[0].source.title} > Results\n\n{chunks[0].text}" in embedder.calls[0]
+    assert {candidate.chunk_id for candidate in result.candidates} <= {chunk.chunk_id for chunk in chunks}
+    assert len(result.candidates) == 2
