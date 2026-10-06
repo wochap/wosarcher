@@ -141,16 +141,21 @@ class FakeLLM(FakeManaged):
         self.calls: list[list[Message]] = []
         self.efforts: list[Effort] = []
         """The effort of each call, in call order."""
+        self.temperatures: list[float | None] = []
+        """The temperature of each call, in call order."""
         self.finish_reasons: list[str | None] = ["stop"]
         """One per stream call; the last one repeats."""
 
-    def _next(self, messages: list[Message], effort: Effort) -> str:
+    def _next(self, messages: list[Message], effort: Effort, temperature: float | None) -> str:
         self.calls.append(list(messages))
         self.efforts.append(effort)
+        self.temperatures.append(temperature)
         return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
 
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
-        return Completion(text=self._next(messages, effort))
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+    ) -> Completion:
+        return Completion(text=self._next(messages, effort, temperature))
 
     async def stream(
         self,
@@ -158,9 +163,10 @@ class FakeLLM(FakeManaged):
         *,
         max_tokens: int,
         effort: Effort,
+        temperature: float | None = None,
         on_finish: Callable[[str | None], None] = ignore,
     ) -> AsyncIterator[str]:
-        words = self._next(messages, effort).split(" ")
+        words = self._next(messages, effort, temperature).split(" ")
         for position, word in enumerate(words):
             yield word if position == len(words) - 1 else word + " "
         reasons = self.finish_reasons

@@ -1,5 +1,7 @@
 """Judged precision with the fake LLM: parsing, message separation, and stored judgements."""
 
+import asyncio
+import json
 from pathlib import Path
 
 import httpx
@@ -11,30 +13,77 @@ import wosarcher.build as building
 from tests.evals.helpers import eval_env
 from tests.runner.helpers import adapters
 from wosarcher.adapters.fakes import FakeLLM
-from wosarcher.config import Settings
-from wosarcher.http import ProviderError, UsageLedger
+from wosarcher.adapters.llm import ChatLLM
+from wosarcher.config import LLMConfig, Settings
+from wosarcher.http import ProviderClient, ProviderError, UsageLedger
 from wosarcher.models import Completion, Context, Effort, Message, Passage, Report
 from wosarcher.ports import Adapters
 
 PASSAGES = ["Lithium is recovered.", "Unrelated {text} with $query and <data>.", "Cobalt prices.", "Weather."]
 
 
+def test_parse_yes_no() -> None:
+    assert judge.parse_yes_no("yes") == 1.0
+    assert judge.parse_yes_no("No.") == 0.0
+    assert judge.parse_yes_no("Yes, because it names lithium") == 1.0
+    assert judge.parse_yes_no("unclear") is None
+    assert judge.parse_yes_no("") is None
+
+
 async def test_precision() -> None:
-    assert await judge.judge_result(FakeLLM(["Relevant: [0, 2]"]), "battery recycling", PASSAGES) == 0.5
+    llm = FakeLLM(["yes", "no", "yes", "no"])
+    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (0.5, 0)
+    assert set(llm.efforts) == {"none"}
+    assert set(llm.temperatures) == {0}
 
 
 async def test_unparsable_answer() -> None:
-    assert await judge.judge_result(FakeLLM(["passages one and three"]), "battery recycling", PASSAGES) is None
+    llm = FakeLLM(["yes", "I cannot tell", "yes", "yes"])
+    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (1.0, 1)
+
+
+async def test_all_unreadable() -> None:
+    assert await judge.judge_result(FakeLLM(["maybe"]), "battery recycling", PASSAGES) == (None, 4)
+
+
+async def test_samples_averaged() -> None:
+    values = await judge.judge_items(FakeLLM(["yes", "yes", "no"]), "system", ["passage"], 3)
+    assert [round(value or 0, 2) for value in values] == [0.67]
 
 
 async def test_passages_in_separate_message() -> None:
-    llm = FakeLLM(["[]"])
-    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == 0.0
-    system, user = llm.calls[0]
-    assert (system.role, user.role) == ("system", "user")
-    assert "battery recycling" in system.content
-    assert all(text not in system.content for text in PASSAGES)
-    assert all(text in user.content for text in PASSAGES)
+    llm = FakeLLM(["no"])
+    assert await judge.judge_result(llm, "battery recycling", PASSAGES) == (0.0, 0)
+    for (system, user), text in zip(llm.calls, PASSAGES, strict=True):
+        assert (system.role, user.role) == ("system", "user")
+        assert "battery recycling" in system.content
+        assert all(passage not in system.content for passage in PASSAGES)
+        assert user.content == text
+
+
+async def test_concurrent_calls() -> None:
+    flight = {"now": 0, "peak": 0}
+    bodies: list[dict[str, object]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        flight["now"] += 1
+        flight["peak"] = max(flight["peak"], flight["now"])
+        await asyncio.sleep(0.01)
+        flight["now"] -= 1
+        return httpx.Response(200, json={"choices": [{"message": {"content": "yes"}, "finish_reason": "stop"}]})
+
+    cfg = LLMConfig.model_validate({"provider": "openai", "base_url": "http://llm.test/v1", "concurrency": 4})
+    ledger = UsageLedger({})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = ProviderClient(cfg.provider, cfg, http, ledger, backoff=0)
+        llm = ChatLLM(cfg, client, ledger, "write")
+        assert await judge.judge_result(llm, "q", [f"passage {n}" for n in range(30)]) == (1.0, 0)
+    assert (len(bodies), flight["peak"]) == (30, 4)
+    assert all(
+        (body["reasoning_effort"], body["temperature"], body["max_completion_tokens"]) == ("none", 0, judge.MAX_TOKENS)
+        for body in bodies
+    )
 
 
 def test_second_call_skips_judged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -43,22 +92,39 @@ def test_second_call_skips_judged(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         monkeypatch.setenv(key, value)
     out = tmp_path / "out"
     assert replay.main(["--runs", parent, "--variants", "bm25", "--out", str(out)]) == 0
-    llm = FakeLLM(["[0]"])
+    llm = FakeLLM(["yes"])
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)
 
     monkeypatch.setattr(building, "build", fake_build)
     assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
-    assert len(llm.calls) == 1
+    calls = len(llm.calls)
     (judged,) = judge.read_judgements(out / "judgements.jsonl")
-    assert judged.precision is not None
+    assert judged.precision == 1.0
     assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
-    assert len(llm.calls) == 1
+    assert len(llm.calls) == calls
 
 
-def test_parse_answer_malformed_list() -> None:
-    assert judge.parse_answer("[1, 2,]", 4) is None
+def test_force_rejudges(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env, parent = eval_env(tmp_path)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "out"
+    assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
+    llm = FakeLLM(["yes"])
+
+    def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
+        return adapters(writer=llm)
+
+    monkeypatch.setattr(building, "build", fake_build)
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    llm.replies = ["no"]
+    assert judge.main(["--results", str(out), "--profile", "e2e", "--force", "--samples", "2"]) == 0
+    judged = judge.read_judgements(out / "judgements.jsonl")
+    assert len(judged) == 2
+    assert len({item.run_id for item in judged}) == 2
+    assert all((item.precision, item.samples) == (0.0, 2) for item in judged)
 
 
 def test_malformed_list_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -67,7 +133,10 @@ def test_malformed_list_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         monkeypatch.setenv(key, value)
     out = tmp_path / "out"
     assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
-    llm = FakeLLM(["[1, 2,]", "[0]"])
+    first_result, _ = replay.read_results(out / "results.jsonl")
+    found = judge.context(Path(first_result.run_dir or ""))
+    assert found is not None
+    llm = FakeLLM(["[1, 2,]"] * len(found.passages) + ["yes"])
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)
@@ -75,8 +144,8 @@ def test_malformed_list_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(building, "build", fake_build)
     assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
     first, second = judge.read_judgements(out / "judgements.jsonl")
-    assert first.precision is None
-    assert second.precision is not None
+    assert (first.precision, first.unreadable) == (None, len(found.passages))
+    assert second.precision == 1.0
 
 
 def report(body: str) -> Report:
@@ -110,17 +179,19 @@ PAIRS = [("A is true", "passage 1"), ("B and C hold", "passage 2"), ("B and C ho
 
 
 async def test_faithfulness() -> None:
-    llm = FakeLLM(["[0, 2]"])
-    score = await judge.judge_faithfulness(llm, "battery recycling", PAIRS)
+    llm = FakeLLM(["yes", "no", "yes"])
+    score, unreadable = await judge.judge_faithfulness(llm, "battery recycling", PAIRS)
     assert score is not None
-    assert round(score, 2) == 0.67
-    system, user = llm.calls[0]
-    assert "battery recycling" in system.content
-    assert all(claim not in system.content and claim in user.content for claim, _ in PAIRS)
+    assert (round(score, 2), unreadable) == (0.67, 0)
+    for (system, user), (claim, text) in zip(llm.calls, PAIRS, strict=True):
+        assert "battery recycling" in system.content
+        assert claim not in system.content
+        assert claim in user.content
+        assert text in user.content
 
 
 async def test_unparsable_faithfulness() -> None:
-    assert await judge.judge_faithfulness(FakeLLM(["all of them"]), "q", PAIRS) is None
+    assert await judge.judge_faithfulness(FakeLLM(["all of them"]), "q", PAIRS) == (None, 3)
 
 
 def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +206,7 @@ def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert found is not None
     first = found.passages[0].n
     (run_dir / "report.json").write_text(report(f"Claim [{first}].").model_dump_json(), encoding="utf-8")
-    llm = FakeLLM(["[0]", "[0]", "[0]"])
+    llm = FakeLLM(["yes"])
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)
@@ -152,11 +223,13 @@ def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 class FailingFirst(FakeLLM):
     """Raises a provider error on the first call, then replies like `FakeLLM`."""
 
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+    ) -> Completion:
         if not self.calls:
             self.calls.append(list(messages))
             raise ProviderError("openai", "HTTP 502 at http://llm.test/v1/chat/completions: reasoning truncated")
-        return await super().complete(messages, max_tokens=max_tokens, effort=effort)
+        return await super().complete(messages, max_tokens=max_tokens, effort=effort, temperature=temperature)
 
 
 def test_provider_error_continues(
@@ -167,7 +240,7 @@ def test_provider_error_continues(
         monkeypatch.setenv(key, value)
     out = tmp_path / "out"
     assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
-    llm = FailingFirst(["[0]"])
+    llm = FailingFirst(["yes"])
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)

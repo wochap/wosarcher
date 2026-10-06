@@ -42,7 +42,9 @@ class StreamLLM:
         self.pieces = pieces
         self.calls: list[tuple[list[Message], int]] = []
 
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: str) -> Completion:
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: str, temperature: float | None = None
+    ) -> Completion:
         raise AssertionError("write streams")
 
     async def stream(
@@ -51,6 +53,7 @@ class StreamLLM:
         *,
         max_tokens: int,
         effort: str,
+        temperature: float | None = None,
         on_finish: Callable[[str | None], None] = lambda _: None,
     ) -> AsyncIterator[str]:
         self.calls.append((messages, max_tokens))
@@ -96,7 +99,9 @@ class ScriptedLLM:
         self.calls: list[tuple[list[Message], int]] = []
         self.efforts: list[str] = []
 
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: str) -> Completion:
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: str, temperature: float | None = None
+    ) -> Completion:
         raise AssertionError("write streams")
 
     async def stream(
@@ -105,6 +110,7 @@ class ScriptedLLM:
         *,
         max_tokens: int,
         effort: str,
+        temperature: float | None = None,
         on_finish: Callable[[str | None], None] = lambda _: None,
     ) -> AsyncIterator[str]:
         self.calls.append((messages, max_tokens))

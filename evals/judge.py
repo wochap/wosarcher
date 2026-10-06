@@ -1,27 +1,29 @@
 """Context precision and report faithfulness judged by the configured `llm`.
 
-Precision is the share of selected passages rated relevant. Faithfulness is
-the share of (claim, passage) pairs, one per cited number in `report.json`,
-whose passage supports the claim; the claim is the sentence holding the
-citation.
+Pointwise: one yes/no call per selected passage (relevant to the query?) and
+one per (claim, passage) pair, one pair per cited number in `report.json`
+(does the passage support the claim?); the claim is the sentence holding the
+citation. Calls run concurrently at temperature 0. Precision and
+faithfulness are the shares of yes over readable items; an answer whose
+first word is neither yes nor no is unreadable and left out.
 
     python -m evals.judge --results DIR [--profile NAME] [--set KEY=VALUE ...]
+                          [--samples N] [--force]
 
 Judgements go to `<DIR>/judgements.jsonl`, keyed by fork run ID; judged runs
-are skipped on the next call. Only the query goes through the prompt
-templates; passages and claims are sent as a separate user message.
+are skipped on the next call unless `--force`. `--samples N` asks every item
+N times and averages. Only the query goes through the prompt templates;
+passages and claims are sent as a separate user message.
 """
 
 import argparse
 import asyncio
-import json
 import os
 import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from string import Template
-from typing import cast
 
 import httpx
 from pydantic import BaseModel
@@ -38,9 +40,9 @@ from wosarcher.stages.write import citations
 PROMPT = Path(__file__).parent / "prompts" / "precision.md"
 FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
 PASSAGE_CHARS = 1500
-MAX_TOKENS = 256
+MAX_TOKENS = 8
 MAX_PAIRS = 200
-ANSWER = re.compile(r"\[[\d,\s]*\]")
+WORD = re.compile(r"[A-Za-z]+")
 SENTENCE_END = re.compile(r"[.!?\n]")
 
 
@@ -55,36 +57,47 @@ class Judgement(BaseModel):
     citations: int = 0
     """(claim, passage) pairs sent to the faithfulness judge."""
     faithfulness: float | None = None
+    unreadable: int = 0
+    """Items (passages and pairs) whose answers were neither yes nor no."""
+    samples: int = 1
 
 
-def parse_answer(text: str, count: int) -> set[int] | None:
-    """Passage indexes from the first `[..]` list; indexes outside the range are ignored."""
-    found = ANSWER.search(text)
-    if found is None:
-        return None
-    try:
-        indexes: object = json.loads(found.group()) if found.group().strip("[] ,") else []
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(indexes, list):
-        return None
-    items = cast(list[object], indexes)
-    numbers = [item for item in items if type(item) is int]
-    if len(numbers) != len(items):
-        return None
-    return {index for index in numbers if 0 <= index < count}
+def parse_yes_no(text: str) -> float | None:
+    """1.0 for yes, 0.0 for no, judged on the first word without case or punctuation; None otherwise."""
+    found = WORD.search(text)
+    return {"yes": 1.0, "no": 0.0}.get(found.group().lower()) if found else None
 
 
-async def judge_result(llm: LLM, query: str, passages: Sequence[str]) -> float | None:
-    """Relevant passages / selected passages; None when there is nothing to judge or the answer is unreadable."""
-    if not passages:
-        return None
+async def judge_items(llm: LLM, system: str, items: Sequence[str], samples: int) -> list[float | None]:
+    """Each item asked `samples` times concurrently; its share of yes over readable samples, else None."""
+    calls = [
+        llm.complete(
+            [Message(role="system", content=system), Message(role="user", content=item)],
+            max_tokens=MAX_TOKENS,
+            effort="none",
+            temperature=0,
+        )
+        for item in items
+        for _ in range(samples)
+    ]
+    answers = [parse_yes_no(completion.text) for completion in await asyncio.gather(*calls)]
+    values: list[float | None] = []
+    for index in range(len(items)):
+        readable = [answer for answer in answers[index * samples : (index + 1) * samples] if answer is not None]
+        values.append(sum(readable) / len(readable) if readable else None)
+    return values
+
+
+def ratio(values: Sequence[float | None]) -> tuple[float | None, int]:
+    """Mean over readable items (None when there is none) and the number of unreadable items."""
+    readable = [value for value in values if value is not None]
+    return (sum(readable) / len(readable) if readable else None), len(values) - len(readable)
+
+
+async def judge_result(llm: LLM, query: str, passages: Sequence[str], samples: int = 1) -> tuple[float | None, int]:
+    """Precision over readable passages and the unreadable count; None when there is nothing readable."""
     system = Template(PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    data = "\n\n".join(f"[{index}] {text[:PASSAGE_CHARS]}" for index, text in enumerate(passages))
-    messages = [Message(role="system", content=system), Message(role="user", content=data)]
-    completion = await llm.complete(messages, max_tokens=MAX_TOKENS, effort="none")
-    relevant = parse_answer(completion.text, len(passages))
-    return None if relevant is None else len(relevant) / len(passages)
+    return ratio(await judge_items(llm, system, [text[:PASSAGE_CHARS] for text in passages], samples))
 
 
 def claims(report: Report, context: Context) -> list[tuple[str, str]]:
@@ -100,19 +113,13 @@ def claims(report: Report, context: Context) -> list[tuple[str, str]]:
     return pairs
 
 
-async def judge_faithfulness(llm: LLM, query: str, pairs: Sequence[tuple[str, str]]) -> float | None:
-    """Supported pairs / pairs sent; None when there is nothing to judge or the answer is unreadable."""
-    pairs = pairs[:MAX_PAIRS]
-    if not pairs:
-        return None
+async def judge_faithfulness(
+    llm: LLM, query: str, pairs: Sequence[tuple[str, str]], samples: int = 1
+) -> tuple[float | None, int]:
+    """Supported pairs over readable pairs and the unreadable count; None when there is nothing readable."""
     system = Template(FAITHFULNESS_PROMPT.read_text(encoding="utf-8")).substitute(query=query)
-    data = "\n\n".join(
-        f"[{index}] claim: {claim}\npassage: {text[:PASSAGE_CHARS]}" for index, (claim, text) in enumerate(pairs)
-    )
-    messages = [Message(role="system", content=system), Message(role="user", content=data)]
-    completion = await llm.complete(messages, max_tokens=MAX_TOKENS, effort="none")
-    supported = parse_answer(completion.text, len(pairs))
-    return None if supported is None else len(supported) / len(pairs)
+    items = [f"claim: {claim}\npassage: {text[:PASSAGE_CHARS]}" for claim, text in pairs[:MAX_PAIRS]]
+    return ratio(await judge_items(llm, system, items, samples))
 
 
 def read_report(run_dir: Path) -> Report | None:
@@ -128,11 +135,19 @@ def read_judgements(path: Path) -> list[Judgement]:
     ]
 
 
-async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]) -> int:
+async def judge_all(
+    results_dir: Path, profile: str | None, overrides: list[str], *, samples: int = 1, force: bool = False
+) -> int:
     settings = resolve(profile, overrides, os.environ)
     path = results_dir / "judgements.jsonl"
-    judged = {item.run_id for item in read_judgements(path)}
-    pending = [r for r in read_results(results_dir / "results.jsonl") if r.status == "done" and r.run_id not in judged]
+    done = [r for r in read_results(results_dir / "results.jsonl") if r.status == "done"]
+    kept = read_judgements(path)
+    if force:
+        again = {r.run_id for r in done}
+        kept = [item for item in kept if item.run_id not in again]
+        path.write_text("".join(item.model_dump_json() + "\n" for item in kept), encoding="utf-8")
+    judged = {item.run_id for item in kept}
+    pending = [r for r in done if r.run_id not in judged]
     ledger = UsageLedger({settings.llm.provider: settings.llm.prices})
     async with httpx.AsyncClient() as http:
         writer = building.build(settings, http, ledger).writer
@@ -145,11 +160,13 @@ async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]
             report = read_report(run_dir)
             pairs = claims(report, found)[:MAX_PAIRS] if report else []
             try:
-                precision = await judge_result(writer, found.query, texts)
-                faithfulness = await judge_faithfulness(writer, found.query, pairs)
+                precision, unreadable = await judge_result(writer, found.query, texts, samples)
+                faithfulness, unread_pairs = await judge_faithfulness(writer, found.query, pairs, samples)
+                unreadable += unread_pairs
             except ProviderError as error:
                 print(f"{result.variant} {result.run_id}: {' '.join(str(error).split())}", file=sys.stderr)
                 precision = faithfulness = None
+                unreadable = 0
             judgement = Judgement(
                 run_id=result.run_id,
                 parent_run_id=result.parent_run_id,
@@ -158,6 +175,8 @@ async def judge_all(results_dir: Path, profile: str | None, overrides: list[str]
                 precision=precision,
                 citations=len(pairs),
                 faithfulness=faithfulness,
+                unreadable=unreadable,
+                samples=samples,
             )
             with path.open("a", encoding="utf-8") as out:
                 out.write(judgement.model_dump_json() + "\n")
@@ -181,9 +200,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--results", type=Path, required=True, help="Directory with results.jsonl.")
     parser.add_argument("--profile", help="Profile whose llm block judges.")
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE")
+    parser.add_argument("--samples", type=int, default=1, help="Times each item is asked; answers are averaged.")
+    parser.add_argument("--force", action="store_true", help="Judge again results that already have a judgement.")
     args = parser.parse_args(argv)
+    if args.samples < 1:
+        parser.error("--samples must be at least 1")
     try:
-        return asyncio.run(judge_all(args.results, args.profile, args.set))
+        return asyncio.run(judge_all(args.results, args.profile, args.set, samples=args.samples, force=args.force))
     except (ConfigError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

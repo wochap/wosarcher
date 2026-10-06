@@ -732,6 +732,8 @@ With `none` the adapter sends `reasoning_effort: "none"` and the caller's
 limit under `llm.max_tokens_field` (`max_completion_tokens` by default,
 `max_tokens` for servers that need it; never both); with `low`, `medium`,
 or `high` it sends `reasoning_effort` and no cap; with `default` neither.
+A caller may pass a `temperature`, sent only when given (the eval judge
+sends 0); the stages pass none, so the server's default applies.
 An answer with empty content and finish reason `length` fails with an
 error naming `llm.reasoning.<step>`, saying to set it to `none`, with the
 limit when one was sent. A 400 whose body names `reasoning_effort` fails
@@ -796,7 +798,7 @@ evals/
   variants.toml  # named ranking variants: fork stage (prefilter or score) plus --set overrides
   replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
   metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
-  judge.py       # python -m evals.judge: precision judged by the configured llm
+  judge.py       # python -m evals.judge: pointwise precision and faithfulness
   prompts/       # precision.md
 tests/
   fixtures/      # recorded HTTP bodies (http/), profiles/e2e.toml, recorded.py (respx router),
@@ -1527,22 +1529,33 @@ inputs. It drives the public CLI only, so it measures what users run.
   `DIR/metrics.json` and prints a Markdown table per variant with medians,
   p90 tokens and seconds, and the median overlap with the baseline (default:
   the first variant).
-- `python -m evals.judge --results DIR [--profile NAME] [--set ...]` asks
-  the profile's `llm` which selected passages are relevant to the query
-  and records precision (relevant / selected) in `DIR/judgements.jsonl`;
-  judged runs are skipped next time. Only the query goes through
-  `evals/prompts/precision.md`; passages go in a separate user message. An
-  unparsable answer, including a list that is not valid JSON such as
-  `[1, 2,]`, records precision as missing and the judge goes on.
+- `python -m evals.judge --results DIR [--profile NAME] [--set ...]
+  [--samples N] [--force]` judges pointwise with the profile's `llm`: one
+  call per selected passage asks whether it helps answer the query, yes or
+  no, and precision is yes over readable passages, recorded in
+  `DIR/judgements.jsonl`. Only the query goes through
+  `evals/prompts/precision.md` (the system message); the passage goes in a
+  separate user message. Every judge call sends effort `none`, temperature
+  0, and an 8-token cap; the calls of one result run concurrently within
+  the `llm` block's concurrency. The answer is its first word without case
+  or punctuation; anything but yes or no makes the item unreadable: it is
+  left out of the ratio and counted in `unreadable`, and a result with no
+  readable item records the metric as missing. `--samples N` (default 1)
+  asks every item N times; an item's value is its share of yes over its
+  readable samples, and the judgement records `samples`. A provider error
+  on any call records the result's precision and faithfulness as missing,
+  prints one line, and the judge goes on. Judged runs are skipped next
+  time; `--force` judges them again and replaces their lines.
   For a fork replayed with `--write`, the judge also records faithfulness:
   every number of every `[n]` group in `report.json`'s `body` (links
   excluded) pairs its claim, the text from the previous sentence end (`.`,
   `!`, `?`, or newline) or previous citation to the marker, with passage
   `n`. Numbers without a passage are left out, and at most 200 pairs are
-  sent. One call with `evals/prompts/faithfulness.md` (query only; pairs
-  in the user message) returns the supported pair indexes; faithfulness is
-  supported / pairs and `citations` is the pair count. No report, no
-  citation, or an unparsable answer records faithfulness as missing.
+  sent. One call per pair with `evals/prompts/faithfulness.md` (query only;
+  claim and passage in the user message) asks whether the passage supports
+  the claim, under the same rules; faithfulness is supported over readable
+  pairs and `citations` is the pair count. No report, no citation, or no
+  readable pair records faithfulness as missing.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,
 tracked in git (only the root `/runs/` is ignored) so tests pass on a fresh

@@ -30,7 +30,9 @@ class ChatLLM:
         self.ledger = ledger
         self.stage = stage
 
-    def body(self, messages: list[Message], max_tokens: int, effort: Effort, *, stream: bool) -> dict[str, Any]:
+    def body(
+        self, messages: list[Message], max_tokens: int, effort: Effort, temperature: float | None, *, stream: bool
+    ) -> dict[str, Any]:
         """`none`: exact cap and no reasoning; a level: no cap, the server budgets; `default`: neither field."""
         body: dict[str, Any] = {
             "messages": [{"role": message.role, "content": message.content} for message in messages],
@@ -40,6 +42,8 @@ class ChatLLM:
             body["reasoning_effort"] = effort
         if effort == "none":
             body[self.cfg.max_tokens_field] = max_tokens
+        if temperature is not None:
+            body["temperature"] = temperature
         if self.cfg.model:
             body["model"] = self.cfg.model
         if stream:
@@ -47,9 +51,9 @@ class ChatLLM:
         return body
 
     async def _complete(
-        self, messages: list[Message], max_tokens: int, effort: Effort
+        self, messages: list[Message], max_tokens: int, effort: Effort, temperature: float | None = None
     ) -> tuple[Completion, str | None]:
-        body = self.body(messages, max_tokens, effort, stream=False)
+        body = self.body(messages, max_tokens, effort, temperature, stream=False)
         try:
             data = await self.client.post_json("/chat/completions", body)
         except ProviderError as error:
@@ -101,8 +105,10 @@ class ChatLLM:
         text = message if isinstance(message, str) else str(cast("object", error))
         return ProviderError(self.cfg.provider, f"stream error: {text[:200]}")
 
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
-        return (await self._complete(messages, max_tokens, effort))[0]
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+    ) -> Completion:
+        return (await self._complete(messages, max_tokens, effort, temperature))[0]
 
     async def stream(
         self,
@@ -110,12 +116,13 @@ class ChatLLM:
         *,
         max_tokens: int,
         effort: Effort,
+        temperature: float | None = None,
         on_finish: Callable[[str | None], None] = ignore,
     ) -> AsyncGenerator[str]:
         usage: dict[str, Any] = {}
         reason: str | None = None
         wrote = False
-        body = self.body(messages, max_tokens, effort, stream=True)
+        body = self.body(messages, max_tokens, effort, temperature, stream=True)
         lines = self.client.stream_lines("/chat/completions", body)
         try:
             try:

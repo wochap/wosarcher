@@ -140,7 +140,9 @@ async def test_failing_page_continues(tmp_path: Path) -> None:
 
 async def test_planner_error_fails_run(tmp_path: Path) -> None:
     class Broken(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        async def complete(
+            self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+        ) -> Completion:
             raise RuntimeError("llm down")
 
     cfg = settings(tmp_path)
@@ -376,7 +378,9 @@ async def test_costs(tmp_path: Path) -> None:
     ledger = UsageLedger({})
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        async def complete(
+            self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+        ) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
             return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 
@@ -416,7 +420,9 @@ async def test_cancel_writes_costs(tmp_path: Path) -> None:
     started = asyncio.Event()
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        async def complete(
+            self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+        ) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
             return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 

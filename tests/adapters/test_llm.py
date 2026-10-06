@@ -147,6 +147,20 @@ async def test_server_default_sends_neither(http: httpx.AsyncClient, ledger: Usa
 
 
 @respx.mock
+async def test_temperature_sent(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    route = respx.post(f"{BASE}/chat/completions").respond(200, json=chat("yes"))
+    await llm(http, ledger).complete(MESSAGES, max_tokens=8, effort="none", temperature=0)
+    assert json.loads(route.calls.last.request.content)["temperature"] == 0
+
+
+@respx.mock
+async def test_no_temperature(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+    route = respx.post(f"{BASE}/chat/completions").respond(200, content=sse(delta("ok", "stop"), "[DONE]"))
+    _ = [text async for text in llm(http, ledger).stream(MESSAGES, max_tokens=8, effort="high")]
+    assert "temperature" not in json.loads(route.calls.last.request.content)
+
+
+@respx.mock
 async def test_empty_content_at_length_fails(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     respx.post(f"{BASE}/chat/completions").respond(200, json=chat("", finish_reason="length"))
     with pytest.raises(ProviderError, match=r"limit of 512 tokens .*set llm\.reasoning\.plan to none"):

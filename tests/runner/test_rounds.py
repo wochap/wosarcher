@@ -346,7 +346,9 @@ async def test_summed_usage(tmp_path: Path) -> None:
     ledger = UsageLedger({})
 
     class Counting(FakeLLM):
-        async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion:
+        async def complete(
+            self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+        ) -> Completion:
             ledger.record("llm", "plan", input_tokens=100)
             return await super().complete(messages, max_tokens=max_tokens, effort=effort)
 

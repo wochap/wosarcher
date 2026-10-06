@@ -43,7 +43,9 @@ class Scorer(Protocol):
 
 
 class LLM(Protocol):
-    async def complete(self, messages: list[Message], *, max_tokens: int, effort: Effort) -> Completion: ...
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+    ) -> Completion: ...
 
     def stream(
         self,
@@ -51,9 +53,13 @@ class LLM(Protocol):
         *,
         max_tokens: int,
         effort: Effort,
+        temperature: float | None = None,
         on_finish: Callable[[str | None], None] = ...,
     ) -> AsyncIterator[str]:
-        """Text deltas in order; `on_finish` gets the final finish reason (or None) when the stream ends."""
+        """Text deltas in order; `on_finish` gets the final finish reason (or None) when the stream ends.
+
+        `temperature` is sent only when given; otherwise the server's default applies.
+        """
         ...
 
 
