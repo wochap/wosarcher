@@ -49,6 +49,10 @@ what the question is about. A one-line question and a 4,000-character
 brief therefore search and rank the same way, and no stage after `search`
 needs to know which one the user typed.
 
+Search decides which pages are fetched, not which queries may use them: by
+default every chunk pairs with every query, and the prefilter picks each
+query's candidates.
+
 | Stage | Input | Output | Resource |
 |---|---|---|---|
 | plan | query, initial search snippets (short queries), attachment outlines | topic line `q0`, sub-queries | LLM |
@@ -128,9 +132,11 @@ pure. Each round:
   `left`. The cap depends only on the settings and the pages fetched so
   far, so resume and fork compute it the same way;
 - chunks its new pages, deduplicated against earlier chunks;
-- prefilters and scores only pairs of its own queries with its new chunks,
-  plus attached file chunks, so a page from an earlier round never pairs
-  with a later query;
+- prefilters and scores only pairs of its own queries, with every chunk of
+  the run so far (attached files, earlier rounds' pages, and its new
+  pages) under the pairing rule. A query of an earlier round never pairs
+  with a later round's pages, so each (query, chunk) pair is scored at
+  most once, in the query's round;
 - starts with the scorer the previous round ended on, so a fallback stays
   in use;
 - appends to the cumulative artifacts. After each round's score,
@@ -263,7 +269,7 @@ them as `unfetched`.
 
 ### Small-input passthrough
 
-When all pages for a query total less than `select.passthrough_chars`
+When all pages paired with a query total less than `select.passthrough_chars`
 (default 8000), they skip prefilter and score, whatever scorer the run
 uses. Their pairs are ordered by search rank, page order, and chunk
 position, and the first `score.top_k` are kept with `passthrough` scores;
@@ -375,8 +381,12 @@ Remote endpoints:
 ### Scoring
 
 - A score is always for a pair: `Score(query_id, chunk_id, value, scorer)`.
-- Web chunks are paired with every query that found their page.
-- File chunks are paired with the main query and each sub-query. Only
+- `prefilter.pairing` sets the pairing rule. With `all` (default), web
+  chunks are paired with the main query and each sub-query; with `found`,
+  only with the queries that found their page. `found` is kept for the
+  eval variants `pairing-found` and `pairing-all`.
+- File chunks are paired with the main query and each sub-query under
+  both rules. Only
   pairs that survive the prefilter (`prefilter.top_k` per query, default
   50, by embedding similarity or BM25, or all with `none`) reach the
   scorer. If the embedder fails, or returns a vector of another dimension,

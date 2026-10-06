@@ -1,21 +1,21 @@
 {
   "body": "## Battery recycling\n\nBattery recycling recovers metals such as lithium, cobalt and nickel from spent cells [1]. The main industrial routes are pyrometallurgy and hydrometallurgy, and their economics depend on the cell chemistry and on the cost of collection [2].\n\nCollection and safe transport remain the largest practical obstacles [1][2].",
-  "markdown": "## Battery recycling\n\nBattery recycling recovers metals such as lithium, cobalt and nickel from spent cells [1]. The main industrial routes are pyrometallurgy and hydrometallurgy, and their economics depend on the cell chemistry and on the cost of collection [2].\n\nCollection and safe transport remain the largest practical obstacles [1][2].\n\n## References\n\n- *Lithium-Ion Battery Recycling | US EPA* (n.d.). epa.gov. https://www.epa.gov/hw/lithium-ion-battery-recycling\n  - [1] Lithium-Ion Battery Recycling\n- *Recycling lithium-ion batteries from electric vehicles* (n.d.). nature.com. https://www.nature.com/articles/s41586-019-1682-5.pdf\n  - [2]\n",
+  "markdown": "## Battery recycling\n\nBattery recycling recovers metals such as lithium, cobalt and nickel from spent cells [1]. The main industrial routes are pyrometallurgy and hydrometallurgy, and their economics depend on the cell chemistry and on the cost of collection [2].\n\nCollection and safe transport remain the largest practical obstacles [1][2].\n\n## References\n\n- *Field notes: battery collection pilot* (n.d.). notes.md\n  - [1] Field notes: battery collection pilot\n- *Recycling of critical minerals - IEA* (n.d.). iea.org. https://www.iea.org/reports/recycling-of-critical-minerals\n  - [2] Recycling of critical minerals\n",
   "cited": [
     1,
     2
   ],
   "references": [
     {
-      "source_id": "bad9a45a31f6f5cd",
-      "entry": "*Lithium-Ion Battery Recycling | US EPA* (n.d.). epa.gov. https://www.epa.gov/hw/lithium-ion-battery-recycling",
+      "source_id": "ddd1e1eda5245f75",
+      "entry": "*Field notes: battery collection pilot* (n.d.). notes.md",
       "passages": [
         1
       ]
     },
     {
-      "source_id": "e94ab9a9817e74e0",
-      "entry": "*Recycling lithium-ion batteries from electric vehicles* (n.d.). nature.com. https://www.nature.com/articles/s41586-019-1682-5.pdf",
+      "source_id": "571383a59a7314d6",
+      "entry": "*Recycling of critical minerals - IEA* (n.d.). iea.org. https://www.iea.org/reports/recycling-of-critical-minerals",
       "passages": [
         2
       ]

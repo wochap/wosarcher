@@ -132,10 +132,6 @@ class StepContext:
             else [page for page in pages if page.source.kind == "file" or page.round == self.round.number]
         )
 
-    def round_chunks(self, pages: Sequence[Page]) -> list[Chunk]:
-        sources = {page.source.source_id for page in pages}
-        return [piece for piece in self.items("chunks.jsonl", Chunk) if piece.source_id in sources]
-
     def items[T: Page | Hit | Chunk | Candidate | Score](self, name: str, model_type: type[T]) -> list[T]:
         return self.store.read_items(self.run_id, name, model_type)
 
@@ -342,6 +338,7 @@ async def chunk(ctx: StepContext) -> Outcome:
 
 
 async def prefilter(ctx: StepContext) -> Outcome:
+    """Pair the round's queries with every chunk of the run so far."""
     cfg = ctx.settings.prefilter
     embedder = ctx.adapters.embedder
     warnings: list[str] = []
@@ -353,12 +350,12 @@ async def prefilter(ctx: StepContext) -> Outcome:
         except Exception as error:
             warnings.append(f"embedding model unknown, cache not used: {error}")
     queries = ctx.round_queries()
-    pages = ctx.round_pages()
     result = await prefiltering.prefilter(
         queries,
-        pages,
-        ctx.round_chunks(pages),
+        ctx.pages(),
+        ctx.items("chunks.jsonl", Chunk),
         method=cfg.provider,
+        pairing=cfg.pairing,
         embedder=embedder,
         top_k=cfg.top_k,
         passthrough_chars=ctx.settings.select.passthrough_chars,
@@ -395,12 +392,15 @@ def kept_passages(report: QueryScores, chunks: dict[str, Chunk], pages: dict[str
 
 
 async def score(ctx: StepContext) -> Outcome:
-    """Score the round's candidates with the scorer the last round ended on, then keep each chunk once."""
+    """Score the round's candidates with the scorer the last round ended on, then keep each chunk once.
+
+    Candidates pair the round's queries with every chunk of the run so far.
+    """
     state = ctx.round
     plan = ctx.plan()
     queries = [query for query in plan.queries if query.round == state.number]
-    pages = ctx.round_pages()
-    chunks = ctx.round_chunks(pages)
+    pages = ctx.pages()
+    chunks = ctx.items("chunks.jsonl", Chunk)
     chunk_of = {piece.chunk_id: piece for piece in chunks}
     page_of = {page.source.source_id: page for page in pages}
     done = 0

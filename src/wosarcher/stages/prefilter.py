@@ -1,7 +1,8 @@
 """Prefilter: pair chunks with the queries they can answer, then keep the top pairs per query cheaply.
 
-Web chunks pair with every query that found their page; file chunks pair with
-every query. A query whose paired pages are short skips ranking (small-input
+With pairing `all`, every chunk pairs with every query; with `found`, web
+chunks pair with the queries that found their page and file chunks with every
+query. A query whose paired pages are short skips ranking (small-input
 passthrough). Others keep `top_k` pairs by embedding similarity or BM25, or all
 with `none`. Embeddings and BM25 rank each chunk's scoring text (page title
 and heading path, then the body). An embedder failure or a vector of another dimension switches the
@@ -19,28 +20,33 @@ from wosarcher.ports import Embedder
 from wosarcher.stages.chunk import scoring_text
 
 Method = Literal["embeddings", "bm25", "none"]
+Pairing = Literal["all", "found"]
 
 
-def paired_pages(query: Query, pages: Sequence[Page]) -> list[Page]:
-    """Web pages the query found, then every file, in page order."""
-    web = [page for page in pages if page.source.kind == "web" and query.id in page.query_ids]
+def paired_pages(query: Query, pages: Sequence[Page], pairing: Pairing) -> list[Page]:
+    """Web pages (every one with `all`, the ones the query found with `found`), then every file, in page order."""
+    web = [page for page in pages if page.source.kind == "web" and (pairing == "all" or query.id in page.query_ids)]
     files = [page for page in pages if page.source.kind == "file"]
     return [*web, *files]
 
 
-def pairs(queries: Sequence[Query], pages: Sequence[Page], chunks: Sequence[Chunk]) -> dict[str, list[Chunk]]:
+def pairs(
+    queries: Sequence[Query], pages: Sequence[Page], chunks: Sequence[Chunk], pairing: Pairing
+) -> dict[str, list[Chunk]]:
     """Each query ID's chunks, in page order then position."""
     by_source: dict[str, list[Chunk]] = {}
     for chunk in sorted(chunks, key=lambda chunk: chunk.position):
         by_source.setdefault(chunk.source_id, []).append(chunk)
     return {
-        query.id: [chunk for page in paired_pages(query, pages) for chunk in by_source.get(page.source.source_id, [])]
+        query.id: [
+            chunk for page in paired_pages(query, pages, pairing) for chunk in by_source.get(page.source.source_id, [])
+        ]
         for query in queries
     }
 
 
-def is_small(query: Query, pages: Sequence[Page], passthrough_chars: int) -> bool:
-    distinct = {page.source.source_id: page for page in paired_pages(query, pages)}
+def is_small(query: Query, pages: Sequence[Page], pairing: Pairing, passthrough_chars: int) -> bool:
+    distinct = {page.source.source_id: page for page in paired_pages(query, pages, pairing)}
     return sum(len(page.text) for page in distinct.values()) < passthrough_chars
 
 
@@ -98,6 +104,7 @@ async def prefilter(
     chunks: Sequence[Chunk],
     *,
     method: str,
+    pairing: Pairing,
     embedder: Embedder | None,
     top_k: int,
     passthrough_chars: int,
@@ -111,8 +118,8 @@ async def prefilter(
         chunk.model_copy(update={"text": scoring_text(titles.get(chunk.source_id, ""), chunk.heading_path, chunk.text)})
         for chunk in chunks
     ]
-    paired = pairs(queries, pages, scored)
-    small = {query.id for query in queries if is_small(query, pages, passthrough_chars)}
+    paired = pairs(queries, pages, scored, pairing)
+    small = {query.id for query in queries if is_small(query, pages, pairing, passthrough_chars)}
     ranked = [query for query in queries if query.id not in small]
     warnings: list[str] = []
     vectors: MutableMapping[str, list[float]] = cache if cache is not None else {}

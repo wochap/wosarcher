@@ -6,24 +6,32 @@ from wosarcher.adapters.fakes import FakeEmbedder
 from wosarcher.models import Chunk, EmbedderInfo, Page
 from wosarcher.runner.caches import EmbeddingMapping
 from wosarcher.stages.chunk import scoring_text
-from wosarcher.stages.prefilter import pairs, prefilter, text_key
+from wosarcher.stages.prefilter import Pairing, pairs, prefilter, text_key
 from wosarcher.store.caches import EmbeddingCache
 
 from .ranking_data import chunks_of, file_page, queries, web_page
 
 
+def test_web_chunks_pair_with_every_query() -> None:
+    page = web_page("https://a.example", ["q1"])
+    chunks = chunks_of(page, ["one", "two"])
+    paired = pairs(queries(4), [page], chunks, "all")
+    assert paired == {"q0": chunks, "q1": chunks, "q2": chunks, "q3": chunks}
+
+
 def test_web_chunks_pair_with_finding_queries_only() -> None:
     page = web_page("https://a.example", ["q1", "q3"])
     chunks = chunks_of(page, ["one", "two"])
-    paired = pairs(queries(4), [page], chunks)
+    paired = pairs(queries(4), [page], chunks, "found")
     assert {query_id for query_id, found in paired.items() if found} == {"q1", "q3"}
     assert paired["q1"] == chunks
 
 
-def test_file_chunk_pairs_with_every_query() -> None:
+@pytest.mark.parametrize("pairing", ["all", "found"])
+def test_file_chunk_pairs_with_every_query(pairing: Pairing) -> None:
     page = file_page("notes.md")
     chunks = chunks_of(page, ["only"])
-    paired = pairs(queries(3), [page], chunks)
+    paired = pairs(queries(3), [page], chunks, pairing)
     assert paired == {"q0": chunks, "q1": chunks, "q2": chunks}
 
 
@@ -32,7 +40,14 @@ async def test_small_input_is_passthrough() -> None:
     big = web_page("https://b.example", ["q1"])
     chunks = [*chunks_of(small, ["a", "b"]), *chunks_of(big, ["c"])]
     result = await prefilter(
-        queries(3), [small, big], chunks, method="bm25", embedder=None, top_k=50, passthrough_chars=8000
+        queries(3),
+        [small, big],
+        chunks,
+        method="bm25",
+        pairing="found",
+        embedder=None,
+        top_k=50,
+        passthrough_chars=8000,
     )
     q2 = [c for c in result.candidates if c.query_id == "q2"]
     assert len(q2) == 2
@@ -52,7 +67,9 @@ def scored(page: Page, chunk: Chunk) -> str:
 @pytest.mark.parametrize(("method", "expected"), [("bm25", 50), ("none", 300)])
 async def test_top_k_per_query(method: str, expected: int) -> None:
     pages, chunks = many(300)
-    result = await prefilter(queries(1), pages, chunks, method=method, embedder=None, top_k=50, passthrough_chars=8000)
+    result = await prefilter(
+        queries(1), pages, chunks, method=method, pairing="found", embedder=None, top_k=50, passthrough_chars=8000
+    )
     assert len(result.candidates) == expected
     assert result.method == method
 
@@ -65,7 +82,15 @@ async def test_embeddings_use_cache() -> None:
     cache = {text_key(first): vector}
     embedder.calls.clear()
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000, cache=cache
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
+        cache=cache,
     )
     assert result.method == "embeddings"
     assert len(result.candidates) == 2
@@ -93,7 +118,14 @@ async def test_embeddings_keep_nearest() -> None:
     near = {scored(pages[0], chunks[1]), scored(pages[0], chunks[4])}
     embedder = NearEmbedder({scored(pages[0], chunk) for chunk in chunks}, near)
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
     )
     assert result.method == "embeddings"
     assert {candidate.chunk_id for candidate in result.candidates} == {chunks[1].chunk_id, chunks[4].chunk_id}
@@ -110,7 +142,14 @@ class DownEmbedder:
 async def test_embedder_down_falls_back_to_bm25() -> None:
     pages, chunks = many(60)
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=DownEmbedder(), top_k=50, passthrough_chars=8000
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=DownEmbedder(),
+        top_k=50,
+        passthrough_chars=8000,
     )
     assert result.method == "bm25"
     assert len(result.warnings) == 1
@@ -139,7 +178,15 @@ async def test_dimension_change_falls_back() -> None:
     first = scored(pages[0], chunks[0])
     cache = {text_key(first): (await embedder.embed([first]))[0]}
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000, cache=cache
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
+        cache=cache,
     )
     assert result.method == "bm25"
     assert len(result.warnings) == 1
@@ -151,7 +198,15 @@ async def test_cache_put_error_falls_back(tmp_path: Path) -> None:
     embedder.calls = 1
     cache = EmbeddingMapping(EmbeddingCache(tmp_path), "m", 4)
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000, cache=cache
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
+        cache=cache,
     )
     assert result.method == "bm25"
     assert len(result.warnings) == 1
@@ -164,7 +219,14 @@ async def test_embeds_scoring_text() -> None:
     chunks = [chunk.model_copy(update={"heading_path": ["Results"]}) for chunk in chunks]
     embedder = FakeEmbedder()
     result = await prefilter(
-        queries(1), pages, chunks, method="embeddings", embedder=embedder, top_k=2, passthrough_chars=8000
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
     )
     assert f"{pages[0].source.title} > Results\n\n{chunks[0].text}" in embedder.calls[0]
     assert {candidate.chunk_id for candidate in result.candidates} <= {chunk.chunk_id for chunk in chunks}

@@ -25,7 +25,14 @@ async def test_ranking_flow() -> None:
     ]
 
     prefiltered = await prefilter(
-        queries, pages, chunks, method="embeddings", embedder=FakeEmbedder(), top_k=5, passthrough_chars=8000
+        queries,
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        embedder=FakeEmbedder(),
+        top_k=5,
+        passthrough_chars=8000,
     )
     scored = await score(
         prefiltered.candidates,

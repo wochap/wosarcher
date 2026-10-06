@@ -8,7 +8,15 @@ import pytest
 
 from tests.runner.helpers import PAGES, PLAN_REPLY, QUERY, SEARCH, adapters, kinds, new_run, settings
 from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
-from wosarcher.config import ChunkConfig, FetchConfig, ResearchConfig, ScoreConfig, SelectConfig, Settings
+from wosarcher.config import (
+    ChunkConfig,
+    FetchConfig,
+    PrefilterConfig,
+    ResearchConfig,
+    ScoreConfig,
+    SelectConfig,
+    Settings,
+)
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     Candidate,
@@ -172,7 +180,7 @@ async def test_no_follow_ups(tmp_path: Path) -> None:
 
 
 async def test_uncovered_recorded(tmp_path: Path) -> None:
-    cfg = configured(tmp_path)
+    cfg = configured(tmp_path, prefilter=PrefilterConfig(pairing="found"))
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
     fakes = world(gap_reply("nothing found here"), gap_reply("lithium price"))
@@ -260,7 +268,20 @@ def test_gap_budget_below_zero_fails(tmp_path: Path) -> None:
         gap_budget(cfg, "q", [])
 
 
-async def test_known_page_not_paired(tmp_path: Path) -> None:
+def source_ids(store: RunStore, run_id: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Each chunk's source ID, and each page URL's source ID."""
+    sources = {chunk.chunk_id: chunk.source_id for chunk in store.read_items(run_id, "chunks.jsonl", Chunk)}
+    pages = {page.source.uri: page.source.source_id for page in store.read_items(run_id, "pages.jsonl", Page)}
+    return sources, pages
+
+
+def paired_sources(store: RunStore, run_id: str, query_id: str) -> set[str]:
+    sources, _ = source_ids(store, run_id)
+    candidates = store.read_items(run_id, "candidates.jsonl", Candidate)
+    return {sources[c.chunk_id] for c in candidates if c.query_id == query_id}
+
+
+async def test_known_page_paired(tmp_path: Path) -> None:
     searcher = FakeSearcher({**WORLD, "lithium price": ["https://a.test/x", "https://d.test"]})
     cfg = configured(tmp_path, rounds=2)
     store = RunStore.from_settings(cfg)
@@ -269,12 +290,32 @@ async def test_known_page_not_paired(tmp_path: Path) -> None:
     assert await run(cfg, run_id, fakes) == "done"
     record = research(store, run_id)
     assert (record.rounds[1].new_pages, record.rounds[1].known_pages) == (1, 1)
-    sources = {chunk.chunk_id: chunk.source_id for chunk in store.read_items(run_id, "chunks.jsonl", Chunk)}
-    paired = {
-        sources[c.chunk_id] for c in store.read_items(run_id, "candidates.jsonl", Candidate) if c.query_id == "q2"
-    }
-    page_ids = {page.source.uri: page.source.source_id for page in store.read_items(run_id, "pages.jsonl", Page)}
-    assert paired == {page_ids["https://d.test"]}
+    _, pages = source_ids(store, run_id)
+    assert paired_sources(store, run_id, "q2") == set(pages.values())
+
+
+async def test_follow_up_pairs_with_earlier_pages(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=2)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    assert await run(cfg, run_id, world(gap_reply("lithium price"))) == "done"
+    _, pages = source_ids(store, run_id)
+    assert pages["https://c.test"] in paired_sources(store, run_id, "q2")
+    assert pages["https://d.test"] not in paired_sources(store, run_id, "q1")
+    assert pages["https://d.test"] not in paired_sources(store, run_id, "q0")
+
+
+async def test_follow_up_keeps_earliest_round_pair(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=2)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    assert await run(cfg, run_id, world(gap_reply("lithium price"))) == "done"
+    scores = store.read_items(run_id, "scores.jsonl", Score)
+    first = {s.chunk_id for s in scores if s.round == 1 and s.kept}
+    again = [s for s in scores if s.query_id == "q2" and s.chunk_id in first]
+    assert again
+    assert all(not s.kept for s in again)
+    assert any(s.dropped == "other_query" for s in again)
 
 
 async def test_gap_failure_keeps_run(tmp_path: Path) -> None:
