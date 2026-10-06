@@ -90,19 +90,19 @@ result pointwise with the configured `llm`: one call per selected passage
 asking whether it is relevant to the run's query, answered yes or no.
 Precision is relevant passages divided by readable passages. Each call
 SHALL send the query through the prompt template as the system message
-and the passage in a separate user message, never through a template, with
-effort `none` and temperature 0, whatever `llm.reasoning` says. The answer
-is its first word, compared without case; a passage whose answer is
-neither yes nor no is unreadable: it is left out of the ratio and counted
-in the judgement's `unreadable`. A result with no readable passage
-SHALL record precision as missing, not zero. The calls of one result
-SHALL run concurrently within the LLM block's concurrency limit. A
-provider error on any call of a result SHALL record that result's
-precision and faithfulness as missing, print the error on one line, and
-the judge SHALL go on; it SHALL never end with a traceback. Judgements
-SHALL be saved so a second run does not call the model again; `--force`
-SHALL judge again every result that already has a judgement and replace
-its line.
+and the whole passage text, never cut, in a separate user message, never
+through a template, with effort `none` and temperature 0, whatever
+`llm.reasoning` says. The answer is its first word, compared without
+case; a passage whose answer is neither yes nor no is unreadable: it is
+left out of the ratio and counted in the judgement's `unreadable`. A
+result with no readable passage SHALL record precision as missing, not
+zero. The calls of one result SHALL run concurrently within the LLM
+block's concurrency limit. A provider error on any call of a result SHALL
+record that result's precision and faithfulness as missing, print the
+error on one line, and the judge SHALL go on; it SHALL never end with a
+traceback. Judgements SHALL be saved so a second run does not call the
+model again; `--force` SHALL judge again every result that already has a
+judgement and replace its line.
 
 `--samples N` (default 1) SHALL ask every item N times; an item's value
 is its share of yes answers over its readable samples, and the ratios use
@@ -111,18 +111,21 @@ these values. The judgement SHALL record `samples`.
 For every result whose fork finished `write`, the judge SHALL also judge
 faithfulness: each citation in the report (every `[n]` group that is not a
 link, with every number it holds) pairs its claim with passage `n`, and
-one call per pair asks whether the passage supports the claim, yes or no,
-under the same rules (template with the query only, claim and passage as
-data, effort `none`, temperature 0, first-word answer, unreadable items).
-The claim is the sentence that holds the citation: the report text from
-the sentence boundary before the citation to the boundary after it. A
+one call per pair asks whether the passage supports the claim, or the
+part of the claim the citation is attached to, yes or no, under the same
+rules (template with the query only, claim and whole passage as data,
+effort `none`, temperature 0, first-word answer, unreadable items). The
+claim is the sentence that holds the citation: the report text from the
+sentence boundary before the citation to the boundary after it. A
 sentence boundary is `.`, `!`, or `?` followed by whitespace or the end of
 the text, or a blank line, or the start or end of a list item, table row,
 or heading line; a single line break inside a paragraph is not a
 boundary, and a `.` followed by a letter or digit (as in `0.69` or
-`gob.pe`) is not one. Every `[n]` marker, Markdown emphasis and heading
-marks, list markers, and table pipes SHALL be removed from the claim and
-its whitespace collapsed. Citations in one sentence share the claim; a
+`gob.pe`) is not one. Every `[n]` marker except the judged citation's own
+marker, Markdown emphasis and heading marks, list markers, and table
+pipes SHALL be removed from the claim and its whitespace collapsed; the
+judged marker stays as `[n]` so the judge can see which part of the
+sentence it follows. Citations in one sentence share the sentence; a
 claim is never empty when the sentence has any word. Faithfulness SHALL
 be recorded as supported pairs divided by readable pairs, and the number
 of pairs SHALL be recorded as `citations`. A fork without a finished
@@ -144,23 +147,31 @@ passage in `context.json` SHALL be left out of the pairs.
 
 #### Scenario: Faithfulness
 - **WHEN** a report holds the sentences "A is true [1]." and "B and C hold [2, 3]." and the judge answers yes, no, yes for the three pairs
-- **THEN** the result records `citations` 3 and faithfulness 0.67 (2 of 3), with claims "A is true" and "B and C hold"
+- **THEN** the result records `citations` 3 and faithfulness 0.67 (2 of 3), with claims "A is true [1]", "B and C hold [2]", and "B and C hold [3]"
+
+#### Scenario: Whole passage sent
+- **WHEN** a selected passage has 1800 characters
+- **THEN** the precision call and every faithfulness call for it carry all 1800 characters
+
+#### Scenario: Attributed part marked
+- **WHEN** a report sentence is "BM25 beats dense [2]; HyDE costs 40 ms [11]."
+- **THEN** the pair for passage 11 has the claim "BM25 beats dense; HyDE costs 40 ms [11]" and the pair for passage 2 has "BM25 beats dense [2]; HyDE costs 40 ms"
 
 #### Scenario: Decimal and domain inside a sentence
 - **WHEN** a report sentence is "Hybrid reaches 0.7497 NDCG on gob.pe data [2], a 7.4% lift [3]."
-- **THEN** both pairs have the claim "Hybrid reaches 0.7497 NDCG on gob.pe data, a 7.4% lift"
+- **THEN** the pair for passage 2 has the claim "Hybrid reaches 0.7497 NDCG on gob.pe data [2], a 7.4% lift"
 
 #### Scenario: Adjacent citations
 - **WHEN** a report sentence is "Both say so [1][2]."
-- **THEN** both pairs have the claim "Both say so"
+- **THEN** the pairs have the claims "Both say so [1]" and "Both say so [2]"
 
 #### Scenario: List item and table row
 - **WHEN** a report holds the line "- **Costo:** gratuito [1]" and the row "| CEJ | gratis [3] |"
-- **THEN** the claims are "Costo: gratuito" and "CEJ gratis"
+- **THEN** the claims are "Costo: gratuito [1]" and "CEJ gratis [3]"
 
 #### Scenario: Line break inside a paragraph
 - **WHEN** a report paragraph is "The CEJ changed\nits form in 2026 [4]."
-- **THEN** the claim is "The CEJ changed its form in 2026"
+- **THEN** the claim is "The CEJ changed its form in 2026 [4]"
 
 #### Scenario: Replayed without --write
 - **WHEN** a result's fork stopped at `select` and has no `report.json`
