@@ -9,7 +9,8 @@
 # It reads the live podman unit (profile name, allowed origins, secrets
 # file, bind address) and the lazy proxy socket (public port), stops the
 # socket and the container, copies the Nix-managed profiles and auth.json
-# into a dev data directory, and runs `uv run wosarcher serve` on the
+# into a dev data directory (auth.json on the first run only; the dev
+# server keeps its own password after that), and runs `uv run wosarcher serve` on the
 # socket's address and port, so https://wosarcher.<domain> reaches the dev
 # server through nginx. On exit the socket is started again and the
 # container comes back on the next request.
@@ -58,9 +59,14 @@ rm -f "$data"/config/wosarcher/profiles/*.toml
 for file in $(sudo find "$container_data/config/wosarcher/profiles" -maxdepth 1 -name '*.toml'); do
   sudo cat "$file" > "$data/config/wosarcher/profiles/$(basename "$file")"
 done
-if sudo test -f "$container_data/config/wosarcher/auth.json"; then
-  sudo cat "$container_data/config/wosarcher/auth.json" > "$data/config/wosarcher/auth.json"
-  chmod 600 "$data/config/wosarcher/auth.json"
+# auth.json (password hash, session secret, tokens) is the dev server's own
+# once it exists: set a dev password with
+#   XDG_CONFIG_HOME=<data>/config uv run wosarcher auth set-password
+# The container's file seeds it on the first run only.
+auth="$data/config/wosarcher/auth.json"
+if [[ ! -f "$auth" ]] && sudo test -f "$container_data/config/wosarcher/auth.json"; then
+  sudo cat "$container_data/config/wosarcher/auth.json" > "$auth"
+  chmod 600 "$auth"
 fi
 
 # --- Web UI ------------------------------------------------------------------
