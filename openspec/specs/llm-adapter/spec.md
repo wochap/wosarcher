@@ -107,9 +107,10 @@ Every completion and stream call SHALL carry an effort, one of `none`,
 SHALL send, per effort:
 - `none`: `reasoning_effort: "none"` and the token cap equal to the
   caller's limit, so visible text is all the cap covers;
-- `low`, `medium`, `high`: `reasoning_effort` set to that level and no
-  token cap field at all; the server resolves the budget from the model's
-  own limits;
+- `low`, `medium`, `high`: `reasoning_effort` set to that level and the
+  token cap equal to `llm.max_output_tokens`, the model's configured
+  output maximum, so hidden reasoning and the answer share the model's own
+  room instead of the server's default cap;
 - `default`: neither `reasoning_effort` nor a token cap field.
 
 When the endpoint answers HTTP 400 whose body names `reasoning_effort`,
@@ -121,8 +122,8 @@ the call SHALL fail with a provider error that says the server rejects
 - **THEN** the request body has `reasoning_effort: "none"` and `max_completion_tokens: 768`
 
 #### Scenario: Thinking level
-- **WHEN** the writer streams with effort `high` and a limit of 2400
-- **THEN** the request body has `reasoning_effort: "high"` and neither `max_completion_tokens` nor `max_tokens`
+- **WHEN** the writer streams with effort `high` and a limit of 2400 and `llm.max_output_tokens = 131072`
+- **THEN** the request body has `reasoning_effort: "high"` and `max_completion_tokens: 131072`, and no `max_tokens`
 
 #### Scenario: Server default
 - **WHEN** the planner calls with effort `default`
