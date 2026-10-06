@@ -129,12 +129,13 @@ async def test_legacy_limit_field(http: httpx.AsyncClient, ledger: UsageLedger) 
 
 
 @respx.mock
-async def test_thinking_level_sends_no_cap(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
+async def test_thinking_level_sends_model_cap(http: httpx.AsyncClient, ledger: UsageLedger) -> None:
     route = respx.post(f"{BASE}/chat/completions").respond(200, content=sse(delta("ok"), "[DONE]"))
-    _ = [text async for text in llm(http, ledger).stream(MESSAGES, max_tokens=2400, effort="high")]
+    writer = llm(http, ledger, max_output_tokens=131072)
+    _ = [text async for text in writer.stream(MESSAGES, max_tokens=2400, effort="high")]
     body = json.loads(route.calls.last.request.content)
     assert body["reasoning_effort"] == "high"
-    assert "max_completion_tokens" not in body
+    assert body["max_completion_tokens"] == 131072
     assert "max_tokens" not in body
 
 

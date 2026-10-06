@@ -661,8 +661,10 @@ N×", or the cut note and an end marker before References.
 continuations use the writer's value; the eval judge always uses `none`.
 With `none` the call sends `reasoning_effort: "none"` and the exact output
 limit, so the limit covers only visible text. A level sends
-`reasoning_effort` and no token cap: the server sets the budget from the
-model's own limits, since no allowance can be guessed for hidden reasoning.
+`reasoning_effort` and the token cap `llm.max_output_tokens`, the model's
+configured output maximum, so hidden reasoning and the answer share the
+model's own room rather than the server's default cap; no allowance is
+guessed for hidden reasoning.
 `default` sends neither field, for servers that reject `reasoning_effort`.
 A server that ignores `reasoning_effort` but still counts reasoning in the
 cap can spend the whole limit on hidden reasoning; the error then says to
@@ -760,7 +762,8 @@ Every LLM call carries an effort (see Thinking under Writing options).
 With `none` the adapter sends `reasoning_effort: "none"` and the caller's
 limit under `llm.max_tokens_field` (`max_completion_tokens` by default,
 `max_tokens` for servers that need it; never both); with `low`, `medium`,
-or `high` it sends `reasoning_effort` and no cap; with `default` neither.
+or `high` it sends `reasoning_effort` and `llm.max_output_tokens` under
+the same field; with `default` neither.
 A caller may pass a `temperature`, sent only when given (the eval judge
 sends 0); the stages pass none, so the server's default applies.
 An answer with empty content and finish reason `length` fails with an
@@ -1446,7 +1449,7 @@ Each provider block has the same shape: `provider`, `base_url`, `api_key`,
 `medium`, `high`, or `default`, default `none`; see Thinking), and `max_continuations`
 (default 2, how often the writer continues a report cut at the output
 limit), and `max_output_tokens` (default 8192; caps the writer's output
-limit); the `fetch` block adds
+limit and is the cap of a thinking call); the `fetch` block adds
 `max_pages` (default 40, see Fetch cap and order); the `llm` block's
 `provider` is `openai` (an OpenAI-compatible chat endpoint), the only
 value; the `score` block adds

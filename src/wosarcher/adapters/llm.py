@@ -33,7 +33,7 @@ class ChatLLM:
     def body(
         self, messages: list[Message], max_tokens: int, effort: Effort, temperature: float | None, *, stream: bool
     ) -> dict[str, Any]:
-        """`none`: exact cap and no reasoning; a level: no cap, the server budgets; `default`: neither field."""
+        """`none`: exact cap and no reasoning; a level: `max_output_tokens` as cap; `default`: neither field."""
         body: dict[str, Any] = {
             "messages": [{"role": message.role, "content": message.content} for message in messages],
             "stream": stream,
@@ -42,6 +42,8 @@ class ChatLLM:
             body["reasoning_effort"] = effort
         if effort == "none":
             body[self.cfg.max_tokens_field] = max_tokens
+        elif effort != "default":
+            body[self.cfg.max_tokens_field] = self.cfg.max_output_tokens
         if temperature is not None:
             body["temperature"] = temperature
         if self.cfg.model:
