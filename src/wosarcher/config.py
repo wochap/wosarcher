@@ -127,6 +127,7 @@ class PrefilterConfig(Provider):
     provider: str = "bm25"
     top_k: int = Field(default=50, gt=0)
     pairing: Literal["all", "found"] = "all"
+    context: Literal["header", "body"] = "header"
 
 
 class ReasoningConfig(Block):

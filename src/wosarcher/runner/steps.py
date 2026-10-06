@@ -357,6 +357,7 @@ async def prefilter(ctx: StepContext) -> Outcome:
         ctx.items("chunks.jsonl", Chunk),
         method=cfg.provider,
         pairing=cfg.pairing,
+        context=cfg.context,
         embedder=embedder,
         top_k=cfg.top_k,
         passthrough_chars=ctx.settings.select.passthrough_chars,
@@ -426,7 +427,9 @@ async def score(ctx: StepContext) -> Outcome:
     own = {query.id for query in queries}
     candidates = [item for item in ctx.items("candidates.jsonl", Candidate) if item.query_id in own]
     scorer = ctx.adapters.scorers.get(cfg.provider)
-    result = await scoring.score(candidates, queries, pages, chunks, scorer, cfg=cfg, on_item=on_item)
+    result = await scoring.score(
+        candidates, queries, pages, chunks, scorer, cfg=cfg, context=ctx.settings.prefilter.context, on_item=on_item
+    )
     state.scorer = result.scorer
     for n, failure in enumerate(result.failed):
         following = result.failed[n + 1].item if n + 1 < len(result.failed) else result.scorer

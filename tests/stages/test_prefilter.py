@@ -231,3 +231,22 @@ async def test_embeds_scoring_text() -> None:
     assert f"{pages[0].source.title} > Results\n\n{chunks[0].text}" in embedder.calls[0]
     assert {candidate.chunk_id for candidate in result.candidates} <= {chunk.chunk_id for chunk in chunks}
     assert len(result.candidates) == 2
+
+
+async def test_body_context_embeds_body_text() -> None:
+    pages, chunks = many(6)
+    chunks = [chunk.model_copy(update={"heading_path": ["Results"]}) for chunk in chunks]
+    embedder = FakeEmbedder()
+    await prefilter(
+        queries(1),
+        pages,
+        chunks,
+        method="embeddings",
+        pairing="found",
+        context="body",
+        embedder=embedder,
+        top_k=2,
+        passthrough_chars=8000,
+    )
+    assert set(embedder.calls[0]) >= {chunk.text for chunk in chunks}
+    assert not any(" > Results" in text for text in embedder.calls[0])

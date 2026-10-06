@@ -404,7 +404,10 @@ Remote endpoints:
   ranking method of a run (embeddings, BM25, rerank, Jev) gets the same
   scoring text. `scoring_text` in `stages/chunk.py` builds it; it is never
   stored, and chunks, passages, events, the writer, and citations keep the
-  body text.
+  body text. `prefilter.context` picks the format for both stages:
+  `header` (default) is the scoring text above, `body` is the body text
+  alone; the eval variants `context-header` and `context-body` compare
+  them.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
     (default 1.5).

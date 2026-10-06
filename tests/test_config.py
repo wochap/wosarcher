@@ -476,3 +476,10 @@ def test_invalid_prefilter_pairing(env: dict[str, str]) -> None:
         resolve("workstation", ['prefilter.pairing="some"'], env)
     assert "prefilter.pairing" in str(error.value)
     assert "'all' or 'found'" in str(error.value)
+
+
+def test_invalid_prefilter_context_names_allowed_values(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError) as error:
+        resolve("workstation", ['prefilter.context="title"'], env)
+    assert "prefilter.context" in str(error.value)
+    assert "'header' or 'body'" in str(error.value)

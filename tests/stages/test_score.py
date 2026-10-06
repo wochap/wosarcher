@@ -290,3 +290,12 @@ async def test_scorer_sees_scoring_text() -> None:
     assert sent.chunk_id == chunks[0].chunk_id
     assert [s.chunk_id for s in result.queries[0].passages] == [chunks[0].chunk_id]
     assert chunks[0].text == "Positive in 62% of cases."
+
+
+async def test_body_context_scorer_sees_body_text() -> None:
+    pages, chunks = setup(["Positive in 62% of cases."], ["q0"])
+    chunks = [chunks[0].model_copy(update={"heading_path": ["Results"]})]
+    qs = [Query(id="q0", text="drug X")]
+    rerank = FakeScorer("rerank", default=0.9)
+    await score(every(qs, chunks), qs, pages, chunks, rerank, cfg=ScoreConfig(provider="rerank"), context="body")
+    assert rerank.calls[0][1][0].text == "Positive in 62% of cases."

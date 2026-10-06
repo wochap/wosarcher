@@ -258,6 +258,11 @@ def scoring_text(title: str, heading_path: Sequence[str], text: str) -> str:
     return f"{cut(' > '.join(parts), CONTEXT_CHARS)}\n\n{text}"
 
 
+def text_for(context: str, title: str, heading_path: Sequence[str], text: str) -> str:
+    """The scoring text under `prefilter.context`: `header` adds the context line, `body` is the text alone."""
+    return scoring_text(title, heading_path, text) if context == "header" else text
+
+
 def text_hash(text: str) -> str:
     return sha256(normalised(text).encode("utf-8")).hexdigest()
 

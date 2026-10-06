@@ -29,7 +29,7 @@ from wosarcher.config import ScoreConfig
 from wosarcher.lexical import bm25_scores, rank
 from wosarcher.models import Candidate, Chunk, Page, Query, QueryScores, Score, ScoreResult, Skipped
 from wosarcher.ports import Scorer
-from wosarcher.stages.chunk import scoring_text
+from wosarcher.stages.chunk import text_for
 
 JEV_MAX = 3.0
 BM25_MAX_RESULTS = 25
@@ -257,12 +257,13 @@ async def score(
     scorer: Scorer | None,
     *,
     cfg: ScoreConfig,
+    context: str = "header",
     on_item: Callable[[QueryScores], None] = noop,
 ) -> ScoreResult:
     page_of = {page.source.source_id: page for page in pages}
     by_id = {
         chunk.chunk_id: chunk.model_copy(
-            update={"text": scoring_text(page_of[chunk.source_id].source.title, chunk.heading_path, chunk.text)}
+            update={"text": text_for(context, page_of[chunk.source_id].source.title, chunk.heading_path, chunk.text)}
         )
         for chunk in chunks
     }

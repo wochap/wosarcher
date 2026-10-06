@@ -62,3 +62,13 @@ set = ["prefilter.pairing=\"found\""]
 [pairing-all]
 from = "prefilter"
 set = ["prefilter.pairing=\"all\""]
+
+# Scoring text: the context line (title and heading path) before the body,
+# or the body alone.
+[context-header]
+from = "prefilter"
+set = ["prefilter.context=\"header\""]
+
+[context-body]
+from = "prefilter"
+set = ["prefilter.context=\"body\""]

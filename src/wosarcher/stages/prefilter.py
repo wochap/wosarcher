@@ -17,7 +17,7 @@ from typing import Literal, cast, get_args
 from wosarcher.lexical import bm25_scores, rank
 from wosarcher.models import Candidate, Chunk, Page, PrefilterResult, Query
 from wosarcher.ports import Embedder
-from wosarcher.stages.chunk import scoring_text
+from wosarcher.stages.chunk import text_for
 
 Method = Literal["embeddings", "bm25", "none"]
 Pairing = Literal["all", "found"]
@@ -105,6 +105,7 @@ async def prefilter(
     *,
     method: str,
     pairing: Pairing,
+    context: str = "header",
     embedder: Embedder | None,
     top_k: int,
     passthrough_chars: int,
@@ -115,7 +116,9 @@ async def prefilter(
     ran = cast(Method, method)
     titles = {page.source.source_id: page.source.title for page in pages}
     scored = [
-        chunk.model_copy(update={"text": scoring_text(titles.get(chunk.source_id, ""), chunk.heading_path, chunk.text)})
+        chunk.model_copy(
+            update={"text": text_for(context, titles.get(chunk.source_id, ""), chunk.heading_path, chunk.text)}
+        )
         for chunk in chunks
     ]
     paired = pairs(queries, pages, scored, pairing)
