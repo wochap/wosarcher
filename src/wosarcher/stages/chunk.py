@@ -18,15 +18,18 @@ from wosarcher.models import Chunk, ChunkResult, Page, chunk_id
 ANCHOR = re.compile(r"<!--\s*(page|a):\s*(.+?)\s*-->")
 MARKER = re.compile("\ue000(\\d+)\ue001")
 
-# Boilerplate: a web-page section that is mostly links, or short with no sentence punctuation.
+# Boilerplate: a web-page section that is mostly links, has no sentence punctuation, or is a rail of short lines.
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 URL = re.compile(r"<?https?://[^\s>)]+>?")
 LINK_SHARE = 0.5
 MIN_LINKS = 2
-SHORT_WORDS = 12
 SENTENCE_PUNCTUATION = set(".?!;:")
+RAIL_LINES = 5
+RAIL_SHARE = 0.8
+RAIL_WORDS = 4
 LIST_ITEM = re.compile(r"\s*(?:[-*+]|\d+[.)])\s")
+FENCE = re.compile(r"\s*(?:```|~~~)")
 
 # Scoring text: caps on the title and the whole context line.
 TITLE_CHARS = 120
@@ -76,9 +79,13 @@ def clean(text: str) -> str:
 
 
 def boilerplate(raw: str) -> bool:
-    """True for raw section markdown made mostly of two or more links, or a few unpunctuated words, not a list."""
+    """True for raw section markdown made mostly of two or more links, with no sentence punctuation, or a rail.
+
+    Lists, tables, and fenced code are content even without punctuation; menus that are lists fail the link test.
+    """
     linked = 0
-    rest = IMAGE.sub(" ", re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL))
+    raw = IMAGE.sub(" ", re.sub(r"<!--.*?-->", " ", raw, flags=re.DOTALL))
+    rest = raw
     texts = LINK.findall(rest)
     linked += sum(len("".join(text.split())) for text in texts)
     rest = LINK.sub(" ", rest)
@@ -90,10 +97,23 @@ def boilerplate(raw: str) -> bool:
         return False
     if len(texts) + len(urls) >= MIN_LINKS and linked / (linked + other) >= LINK_SHARE:
         return True
-    if all(LIST_ITEM.match(line) for line in raw.splitlines() if line.strip()):
-        return False  # a short list is content, such as a requirement; menus fail the link test above
-    visible = " ".join([*texts, rest])
-    return len(visible.split()) <= SHORT_WORDS and not SENTENCE_PUNCTUATION & set(URL.sub(" ", visible))
+    lines = [line for line in raw.splitlines() if line.strip()]
+    is_list = all(LIST_ITEM.match(line) for line in lines)
+    is_table = all(line.lstrip().startswith("|") for line in lines)
+    is_code = bool(FENCE.match(raw.lstrip("\n")))
+    if is_list or is_table or is_code:
+        return False
+    visible = [unpunctuated_words(line) for line in lines]
+    if all(words is not None for words in visible):
+        return True
+    rail = sum(1 for words in visible if words is not None and words <= RAIL_WORDS)
+    return len(lines) >= RAIL_LINES and rail / len(lines) >= RAIL_SHARE
+
+
+def unpunctuated_words(line: str) -> int | None:
+    """Word count of a line's visible text, or None when it has sentence punctuation outside URLs."""
+    visible = URL.sub(" ", LINK.sub(r" \1 ", line))
+    return None if SENTENCE_PUNCTUATION & set(visible) else len(visible.split())
 
 
 def drop_boilerplate(found: list[Section]) -> tuple[list[Section], int]:

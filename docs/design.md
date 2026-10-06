@@ -551,11 +551,14 @@ Markdown-aware, in this order:
 
 1. Split the page at headings into sections.
 2. Web pages only: drop boilerplate sections. A section is boilerplate
-   when it has at least two links or bare URLs and they make up at least
-   half of its characters,
-   or when it has at most 12 words, no `. ? ! ; :` outside URLs, and is
-   not a list (every line a list item). The
-   rule is structural, never a phrase list. A section with a heading and
+   when any of three rules holds: it has at least two links or bare URLs
+   and they make up at least half of its characters; it has no
+   `. ? ! ; :` outside URLs, whatever its length; or it is a rail, at
+   least 5 non-empty lines of which at least 80% have at most 4 words and
+   no such punctuation (a menu or video rail written one entry per line).
+   The second and third rules skip lists (every line a list item), tables
+   (every line starts with `|`), and fenced code. The rules are
+   structural, never a phrase list. A section with a heading and
    no text is not boilerplate; when every section is boilerplate, the
    longest one is kept. Attachments never lose a section. The chunk
    result counts the drops next to the near-duplicates.

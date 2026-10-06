@@ -147,6 +147,39 @@ def test_short_list_kept() -> None:
     )
 
 
+def test_long_menu() -> None:
+    menu = (
+        "Tributos Pagos en Linea Mesa de Partes Virtual Consulta tu Trámite Convocatorias Papeletas de Infraccion "
+        "Normatividad Transparencia Licencias de Funcionamiento Defensa Civil Registro Civil Matrimonio Civil "
+        "Programas Sociales Vaso de Leche Turismo Cultura Deporte Noticias Agenda Contacto Mapa Biblioteca Prensa"
+    )
+    assert len(menu.split()) >= 40
+    assert boilerplate(menu)
+    assert boilerplate(menu.replace(" Convocatorias ", "\nConvocatorias ").replace(" Turismo ", "\nTurismo "))
+
+
+def test_video_rail() -> None:
+    rail = "Video Andina\n110\nJNE: conoce las causales\n230\nVideo Andina\nElecciones 2026\n145\nVer más videos"
+    assert boilerplate(rail)
+
+
+def test_table_kept() -> None:
+    assert not boilerplate("| Producto | Precio |\n| --- | --- |\n| Arroz | S/ 4 |\n| Azúcar | S/ 3 |")
+
+
+def test_code_kept() -> None:
+    assert not boilerplate("```\nuv sync\nuv run wosarcher\nscripts/check\nscripts/check --full\npnpm install\n```")
+
+
+def test_prose_without_period_kept() -> None:
+    prose = (
+        "Para obtener la licencia de funcionamiento el ciudadano debe reunir los documentos que se indican "
+        "a continuación y presentarlos en la mesa de partes de la municipalidad con estos requisitos:"
+    )
+    assert len(prose.split()) == 30
+    assert not boilerplate(prose)
+
+
 def test_attachment_untouched() -> None:
     result = chunk(
         [page(f"Saltar a contenido principal\n\n# Trámite\n{sentences(300)}\n")], size=1800, overlap=150, min_chars=500
