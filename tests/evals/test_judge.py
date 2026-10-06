@@ -177,6 +177,28 @@ def test_claims() -> None:
     assert judge.claims(report("See [1](https://example.com)."), passages(1)) == []
 
 
+def claimed(body: str) -> list[str]:
+    return [claim for claim, _, _ in judge.claims(report(body), passages(4))]
+
+
+def test_claim_decimal_and_domain() -> None:
+    body = "Hybrid reaches 0.7497 NDCG on gob.pe data [2], a 7.4% lift [3]."
+    assert claimed(body) == ["Hybrid reaches 0.7497 NDCG on gob.pe data, a 7.4% lift"] * 2
+
+
+def test_claim_adjacent_citations() -> None:
+    assert claimed("Intro. Both say so [1][2].") == ["Both say so"] * 2
+
+
+def test_claim_list_item_and_table_row() -> None:
+    body = "Prices:\n- **Costo:** gratuito [1]\n\n| Name | Price |\n|---|---|\n| CEJ | gratis [3] |\n"
+    assert claimed(body) == ["Costo: gratuito", "CEJ gratis"]
+
+
+def test_claim_line_break() -> None:
+    assert claimed("# Heading\n\nThe CEJ changed\nits form in 2026 [4].") == ["The CEJ changed its form in 2026"]
+
+
 PAIRS = [("A is true", 1, "passage 1"), ("B and C hold", 2, "passage 2"), ("B and C hold", 3, "passage 3")]
 
 
@@ -290,6 +312,7 @@ def test_items_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         ("A", first, 1.0, "yes"),
         ("B", second, 1.0, "yes"),
     ]
+    assert all(item.short for item in pairs)
     assert pairs[0].passage == found.passages[0].text[: judge.PASSAGE_CHARS]
 
     llm.replies = ["no"]

@@ -1559,9 +1559,14 @@ inputs. It drives the public CLI only, so it measures what users run.
   time; `--force` judges them again and replaces their lines.
   For a fork replayed with `--write`, the judge also records faithfulness:
   every number of every `[n]` group in `report.json`'s `body` (links
-  excluded) pairs its claim, the text from the previous sentence end (`.`,
-  `!`, `?`, or newline) or previous citation to the marker, with passage
-  `n`. Numbers without a passage are left out, and at most 200 pairs are
+  excluded) pairs its claim, the sentence holding the marker, with passage
+  `n`. Sentences split at blank lines, at list items, table rows, and
+  headings (each its own line), and after `.`, `!`, or `?` followed by
+  whitespace, so `0.69`, `gob.pe`, and a line break inside a paragraph do
+  not split. The claim drops `[n]` markers, Markdown emphasis, heading and
+  list marks, and table pipes, and collapses whitespace; citations in one
+  sentence share it. A claim under 3 words is still judged and its item
+  records `short`. Numbers without a passage are left out, and at most 200 pairs are
   sent. One call per pair with `evals/prompts/faithfulness.md` (query only;
   claim and passage in the user message) asks whether the passage supports
   the claim, under the same rules; faithfulness is supported over readable
@@ -1569,7 +1574,8 @@ inputs. It drives the public CLI only, so it measures what users run.
   readable pair records faithfulness as missing.
   Every judged item also goes to `DIR/items.jsonl`, one line per passage
   (`kind` `precision`) and per pair (`faithfulness`): `run_id`, `variant`,
-  `index` within its kind, passage number `n`, `claim` (pairs only), the
+  `index` within its kind, passage number `n`, `claim` and `short` (pairs
+  only), the
   `passage` text as sent, `value` (the averaged value, or null when
   unreadable), and the first sample's `answer` (at most 80 characters).
   `--force` replaces a run's item lines with its judgement line; a provider
@@ -1577,7 +1583,7 @@ inputs. It drives the public CLI only, so it measures what users run.
 - `python -m evals.items --results DIR [--run ID] [--failed]` prints
   `items.jsonl` as Markdown without any model call: one section per run
   (`variant · run_id`), faithfulness items first, each as its value, `n`,
-  claim, and the first 300 characters of the passage. `--failed` keeps
+  claim (marked short when `short`), and the first 300 characters of the passage. `--failed` keeps
   items below 1 (unreadable included); a missing file prints nothing.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,

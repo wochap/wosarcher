@@ -37,7 +37,7 @@ from wosarcher.config import ConfigError, resolve
 from wosarcher.http import ProviderError, UsageLedger
 from wosarcher.models import Context, Message, Report
 from wosarcher.ports import LLM
-from wosarcher.stages.write import citations
+from wosarcher.stages.write import CITATION, citations
 
 PROMPT = Path(__file__).parent / "prompts" / "precision.md"
 FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
@@ -46,7 +46,13 @@ MAX_TOKENS = 8
 MAX_PAIRS = 200
 ANSWER_CHARS = 80
 WORD = re.compile(r"[A-Za-z]+")
-SENTENCE_END = re.compile(r"[.!?\n]")
+SENTENCE_BREAK = re.compile(r"[.!?](?=\s)")
+"""A sentence ends at `.`, `!`, or `?` followed by whitespace, so `0.69` and `gob.pe` stay whole."""
+OWN_LINE = re.compile(r"[ \t]*(?:[-*+][ \t]|\d+[.)][ \t]|\||#)")
+"""List items, table rows, and headings are their own block."""
+LINE_MARK = re.compile(r"^\s*(?:#+|[-*+]|\d+[.)])\s+")
+EMPHASIS = re.compile(r"\*+|`+|\||(?<!\w)_+|_+(?!\w)")
+SHORT_WORDS = 3
 
 
 class Judgement(BaseModel):
@@ -74,6 +80,8 @@ class JudgedItem(BaseModel):
     index: int
     n: int
     claim: str | None = None
+    short: bool = False
+    """The claim has fewer than `SHORT_WORDS` words."""
     passage: str
     value: float | None
     answer: str
@@ -129,16 +137,49 @@ async def judge_result(
     return *ratio(values), items
 
 
+def sentences(body: str) -> list[tuple[int, int]]:
+    """(start, end) spans: blocks split at blank lines and own-line items, then after sentence ends."""
+    spans: list[tuple[int, int]] = []
+
+    def split(start: int, end: int) -> None:
+        for found in SENTENCE_BREAK.finditer(body, start, end):
+            spans.append((start, found.end()))
+            start = found.end()
+        spans.append((start, end))
+
+    block: int | None = None
+    offset = 0
+    for line in body.splitlines(keepends=True):
+        start, offset = offset, offset + len(line)
+        if line.strip() and not OWN_LINE.match(line):
+            block = start if block is None else block
+            continue
+        if block is not None:
+            split(block, start)
+            block = None
+        if line.strip():
+            split(start, offset)
+    if block is not None:
+        split(block, offset)
+    return spans
+
+
+def clean(text: str) -> str:
+    """Claim text: no citations, emphasis, heading or list marks, or table pipes; whitespace collapsed."""
+    text = CITATION.sub("", LINE_MARK.sub("", text))
+    text = " ".join(EMPHASIS.sub(" ", text).split())
+    return re.sub(r"\s+([,;:.!?])", r"\1", text).rstrip(".!?;, ")
+
+
 def claims(report: Report, context: Context) -> list[tuple[str, int, str]]:
     """One (claim, n, passage text) pair per cited number; the claim is the sentence holding the citation."""
     texts = {passage.n: passage.text for passage in context.passages}
+    spans = sentences(report.body)
     pairs: list[tuple[str, int, str]] = []
-    previous = 0
-    for start, end, numbers in citations(report.body):
-        ends = [found.end() for found in SENTENCE_END.finditer(report.body, previous, start)]
-        claim = " ".join(report.body[ends[-1] if ends else previous : start].split())
+    for start, _, numbers in citations(report.body):
+        begin, end = next(((a, b) for a, b in spans if a <= start < b), (start, start))
+        claim = clean(report.body[begin:end])
         pairs.extend((claim, number, texts[number]) for number in numbers if number in texts)
-        previous = end
     return pairs
 
 
@@ -152,7 +193,16 @@ async def judge_faithfulness(
         llm, system, [f"claim: {claim}\npassage: {text}" for claim, _, text in sent], samples
     )
     items = [
-        JudgedItem(kind="faithfulness", index=index, n=n, claim=claim, passage=text, value=value, answer=answer)
+        JudgedItem(
+            kind="faithfulness",
+            index=index,
+            n=n,
+            claim=claim,
+            short=len(claim.split()) < SHORT_WORDS,
+            passage=text,
+            value=value,
+            answer=answer,
+        )
         for index, ((claim, n, text), value, answer) in enumerate(zip(sent, values, answers, strict=True))
     ]
     return *ratio(values), items

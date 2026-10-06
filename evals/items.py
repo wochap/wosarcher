@@ -37,7 +37,7 @@ def render(items: Sequence[JudgedItem]) -> str:
             excerpt = " ".join(item.passage[:EXCERPT_CHARS].split())
             out.append(f"- {item.kind} {shown(item.value)} [{item.n}]")
             if item.claim is not None:
-                out.append(f"  - claim: {item.claim}")
+                out.append(f"  - claim{' (short)' if item.short else ''}: {item.claim}")
             out.append(f"  - passage: {excerpt}")
         out.append("")
     return "\n".join(out)
