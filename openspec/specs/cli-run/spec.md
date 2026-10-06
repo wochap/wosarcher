@@ -174,7 +174,13 @@ flags, `--until`, `--profile`, `--run-id`, and `--json`, create a forked
 run as the run store defines, and run it to the end or to `--until`. With
 `--profile NAME` the fork's settings SHALL be resolved from that profile
 and the parent's overrides plus the new overrides, instead of the parent's
-saved settings, and the fork SHALL record `NAME` as its profile.
+saved settings, and the fork SHALL record `NAME` as its profile. When the
+parent's saved settings hold a key the current configuration does not
+know (a field renamed or removed since the parent ran), the fork SHALL
+drop that key before validation, print one warning line naming every
+dropped key as a dotted path, and continue; the fork's `request.json`
+SHALL hold the settings without those keys. A saved value the current
+configuration rejects (not an unknown key) SHALL still fail as before.
 
 #### Scenario: Change the tone
 - **WHEN** the user runs `wosarcher fork <id> --from write --tone critical`
@@ -187,6 +193,14 @@ saved settings, and the fork SHALL record `NAME` as its profile.
 #### Scenario: Rewrite as an answer
 - **WHEN** the user runs `wosarcher fork <id> --from write --format answer`
 - **THEN** only the write stage runs, with format `answer`, and the fork's `request.json` records the `write.format` override
+
+#### Scenario: Stale saved key
+- **WHEN** the parent's `request.json` settings hold `llm.reasoning_tokens = 4096` and the field no longer exists
+- **THEN** the fork starts, prints a warning naming `llm.reasoning_tokens`, and its `request.json` settings have no `reasoning_tokens`
+
+#### Scenario: Stale saved value
+- **WHEN** the parent's settings hold `llm.provider = "llm"` and only `openai` is accepted
+- **THEN** the fork fails with exit status 2 naming `llm.provider`
 
 ### Requirement: Runs command
 `wosarcher runs` SHALL list runs newest first with ID, creation time,
