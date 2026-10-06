@@ -95,6 +95,19 @@ JSON, SHALL record precision as missing, not zero, and the judge SHALL go
 on with the next result. Judgements SHALL be saved so a second run does not
 call the model again.
 
+For every result whose fork finished `write`, the judge SHALL also judge
+faithfulness: each citation in the report (every `[n]` group that is not a
+link, with every number it holds) pairs the sentence holding it with
+passage `n`, and the `llm` is asked which pairs are supported by their
+passage. Faithfulness SHALL be recorded as supported pairs divided by
+pairs, and the number of pairs SHALL be recorded as `citations`. Claims and
+passages SHALL be sent in a separate message from the instructions and
+never through a template; only the query goes through the template. A
+fork without a finished report, a report with no citation, or an
+unparsable answer SHALL record faithfulness as missing, not zero, and the
+judge SHALL go on. A citation number with no passage in `context.json`
+SHALL be left out of the pairs.
+
 #### Scenario: Precision
 - **WHEN** a result has 4 selected passages and the judge answers `[0, 2]`
 - **THEN** its precision is 0.5
@@ -106,6 +119,26 @@ call the model again.
 #### Scenario: Malformed list
 - **WHEN** the judge answers `[1, 2,]`
 - **THEN** the result's precision is missing, the judge continues with the next result, and it exits 0
+
+#### Scenario: Faithfulness
+- **WHEN** a report holds the sentences "A is true [1]." and "B and C hold [2, 3]." and the judge answers `[0, 2]` for the three pairs
+- **THEN** the result records `citations` 3 and faithfulness 0.67 (2 of 3)
+
+#### Scenario: Replayed without --write
+- **WHEN** a result's fork stopped at `select` and has no `report.json`
+- **THEN** its precision is judged and its faithfulness is missing
+
+#### Scenario: Report without citations
+- **WHEN** a result's report cites no passage
+- **THEN** its faithfulness is missing and `citations` is 0
+
+#### Scenario: Unparsable faithfulness answer
+- **WHEN** the faithfulness judge answers text without a JSON list
+- **THEN** the result's faithfulness is missing, its precision is kept, and the judge continues
+
+#### Scenario: Claims and passages as data
+- **WHEN** the faithfulness judge is called
+- **THEN** the system message holds only the template with the query, and the user message holds the numbered claim and passage pairs
 
 ### Requirement: Recorded-run fixture
 The repository SHALL contain, tracked in version control, a small recorded
