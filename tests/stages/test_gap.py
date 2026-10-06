@@ -17,7 +17,7 @@ CONTEXT = Context(
 CFG = ScoreConfig(provider="jev", min_score=1.5)
 
 
-def jev(query_id: str, value: float, *, kept: bool = False, dropped: str | None = None) -> Score:
+def jev(query_id: str, value: float, *, kept: bool = False, dropped: str | None = None, floor: bool = False) -> Score:
     return Score.model_validate(
         {
             "query_id": query_id,
@@ -27,6 +27,7 @@ def jev(query_id: str, value: float, *, kept: bool = False, dropped: str | None 
             "display": value / 3,
             "kept": kept,
             "dropped": None if kept else dropped or "threshold",
+            "floor": floor,
         }
     )
 
@@ -53,9 +54,11 @@ def table(scores: list[Score], cfg: ScoreConfig = CFG) -> list[str]:
 
 
 def test_jev_uncovered_query() -> None:
-    lines = table([jev("q4", 1.3), jev("q4", 0.9), jev("q1", 2.4, kept=True)])
-    assert lines[0] == "Scorers: jev (absolute 0\N{EN DASH}1 scale, kept from 0.50)"
-    assert lines[5] == "q4 · uncovered · best 0.43 · kept 0 — query 4"
+    lines = table([jev("q4", 1.3, kept=True, floor=True), jev("q4", 0.9), jev("q1", 2.4, kept=True)])
+    assert lines[0] == (
+        "Scorers: jev (absolute 0\N{EN DASH}1 scale, kept from 0.50; a query below it keeps its best pair as a floor)"
+    )
+    assert lines[5] == "q4 · uncovered · best 0.43 · kept 1 — query 4"
     assert lines[2] == "q1 · covered · best 0.80 · kept 1 — query 1"
     assert coverage(PLAN, [jev("q4", 1.3)], CFG)[1] == ["q0", "q1", "q2", "q3", "q4", "q5"]
 

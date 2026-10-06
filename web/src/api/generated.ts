@@ -160,6 +160,7 @@ export type Ts1 = string
 export type Type1 = "hit.found"
 export type ChunkId3 = string
 export type Display3 = (number | null)
+export type Floor = boolean
 export type HeadingPath2 = string[]
 export type SourceId3 = string
 export type Text5 = string
@@ -229,6 +230,7 @@ export type Kept1 = number
 export type ChunkId4 = string
 export type Display4 = (number | null)
 export type Dropped = (("threshold" | "query_cap" | "other_query") | null)
+export type Floor1 = boolean
 export type Kept2 = boolean
 export type QueryId5 = string
 export type Round5 = number
@@ -450,6 +452,7 @@ export type Method1 = ("cookie" | "token" | "none")
 export type Since = (string | null)
 export type TokenName = (string | null)
 export type ChunkId6 = string
+export type Floor2 = boolean
 export type HeadingPath3 = string[]
 export type Position2 = number
 export type Queries5 = ChunkQueryFate[]
@@ -924,6 +927,7 @@ url: Url2
 export interface KeptPassage {
 chunk_id: ChunkId3
 display: Display3
+floor?: Floor
 heading_path?: HeadingPath2
 source_id: SourceId3
 text: Text5
@@ -1124,6 +1128,7 @@ export interface Score {
 chunk_id: ChunkId4
 display?: Display4
 dropped?: Dropped
+floor?: Floor1
 kept?: Kept2
 query_id: QueryId5
 round?: Round5
@@ -1752,6 +1757,7 @@ token_name?: TokenName
 export interface SourceChunk {
 chunk_id: ChunkId6
 fate: ChunkFate
+floor?: Floor2
 heading_path?: HeadingPath3
 position: Position2
 queries: Queries5

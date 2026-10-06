@@ -106,6 +106,7 @@ function ChunkBlock(props: {
               className={css.badge}
             />
             {scored && <span className={css.chunkScore}>{fixed(fate.display ?? 0)}</span>}
+            {chunk.floor && <span className={css.floor}>best available</span>}
             {sub && <span className={css.sub}>{sub}</span>}
           </div>
           <p className={css.text}>{chunk.text}</p>
@@ -140,6 +141,7 @@ function FateBlock(props: {
             {fixed(fate.display ?? 0)}
           </span>
         )}
+        {chunk.floor && <span className={css.floor}>best available</span>}
         <span className={css.path}>{chunk.heading_path?.join(" › ")}</span>
       </div>
       <div className={css.why}>{whyLine(fate, view, cite, props.prefilterTopK)}</div>

@@ -388,6 +388,7 @@ def kept_passages(report: QueryScores, chunks: dict[str, Chunk], pages: dict[str
                 heading_path=piece.heading_path,
                 text=piece.text,
                 display=score.display,
+                floor=score.floor,
             )
         )
     return kept

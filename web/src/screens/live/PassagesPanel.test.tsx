@@ -40,7 +40,7 @@ function panel(events: RunEvent[], options: Options = {}) {
   );
 }
 
-const scored = (threshold: number | null, display: number | null, scorer = "jev") =>
+const scored = (threshold: number | null, display: number | null, scorer = "jev", floor = false) =>
   ev(
     5,
     "passages.scored",
@@ -59,6 +59,7 @@ const scored = (threshold: number | null, display: number | null, scorer = "jev"
           heading_path: ["Intro", "Scope"],
           text: "Some text.",
           display,
+          floor,
         },
       ],
     },
@@ -102,6 +103,11 @@ describe("PassagesPanel", () => {
     expect(screen.getByText("≥ 0.50")).toBeTruthy();
     expect(screen.getByText("example.org")).toBeTruthy();
     expect(screen.getByText(/Intro › Scope/)).toBeTruthy();
+  });
+
+  it("notes a floor passage as best available", () => {
+    panel([scored(0.67, 0.43, "jev", true)], { filter: "all" });
+    expect(within(screen.getByRole("article")).getByText("best available")).toBeTruthy();
   });
 
   it("shows a passthrough passage with a dash and no bar", () => {

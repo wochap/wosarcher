@@ -78,12 +78,15 @@ planner LLM for follow-ups. Its data block holds, in order:
 
 - the coverage table, built by code from `scores.jsonl` and the plan with
   no other call: a header naming each scorer that ran (`jev`: "absolute
-  0–1 scale, kept from <threshold display>"; `rerank`, `bm25`: "relative
+  0–1 scale, kept from <threshold display>; a query below it keeps its
+  best pair as a floor"; `rerank`, `bm25`: "relative
   scale; every query keeps its best pair, so judge by best"), then one
   line per query in plan order, `<ID> · <status> · best <display or —> ·
-  kept <n> — <text>`. A query is `covered` when it has a kept pair with a
-  display score or a pair dropped as `other_query`, `unscored` when its
-  only kept pairs are passthrough, and `uncovered` otherwise. The status
+  kept <n> — <text>`; `kept` counts floor pairs. A query is `covered`
+  when it has a kept pair with a display score or a pair dropped as
+  `other_query`, either not a floor pair, `unscored` when its only kept
+  pairs are passthrough, and `uncovered` otherwise, so a query with only
+  a floor pair stays a gap target. The status
   reuses the score stage's kept and dropped decisions, so each scorer's
   own rule applies; with a relative scorer any query that found a
   candidate is `covered`, and `best` shows how weak it is;
@@ -410,7 +413,11 @@ Remote endpoints:
   them.
 - Each scorer declares whether its scores are calibrated:
   - `jev`: calibrated 0 to 3; absolute threshold `score.min_score`
-    (default 1.5).
+    (default 1.5). When no pair of a query reaches it, the query keeps its
+    single best pair (earlier in page order on ties) as a floor pair,
+    `Score.floor = true`, so a strict threshold trims a query instead of
+    starving it. A floor pair is kept like any other (no drop reason, the
+    cap and best pair per chunk apply); the UI marks it "best available".
   - `rerank`: not calibrated across queries; relative threshold
     `score.relative_threshold` (keep pairs scoring at least this fraction of
     the best pair for the same query, default 0.5), applied to the mapped

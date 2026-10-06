@@ -36,9 +36,12 @@ class GapUnreadableError(Exception):
 
 def status(scores: Sequence[Score]) -> Status:
     """`covered`, `unscored`, or `uncovered` from one query's pairs, as the score stage kept or dropped them."""
-    if any((score.kept and score.display is not None) or score.dropped == "other_query" for score in scores):
+    if any(
+        not score.floor and ((score.kept and score.display is not None) or score.dropped == "other_query")
+        for score in scores
+    ):
         return "covered"
-    if any(score.kept for score in scores):
+    if any(score.kept and score.display is None for score in scores):
         return "unscored"
     return "uncovered"
 
@@ -46,7 +49,8 @@ def status(scores: Sequence[Score]) -> Status:
 def scale(scorer: str, cfg: ScoreConfig) -> str:
     if scorer == "jev":
         shown = threshold_display("jev", cfg, None) or 0.0
-        return f"jev (absolute 0\N{EN DASH}1 scale, kept from {shown:.2f})"
+        floor = "a query below it keeps its best pair as a floor"
+        return f"jev (absolute 0\N{EN DASH}1 scale, kept from {shown:.2f}; {floor})"
     if scorer == "passthrough":
         return "passthrough (no scores; small pages kept without ranking)"
     return f"{scorer} ({RELATIVE})"

@@ -53,6 +53,12 @@ set = ["prefilter.provider=embeddings", "score.provider=jev", "score.base_url=\"
 from = "prefilter"
 set = ["prefilter.provider=bm25", "score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]", "score.top_k=5"]
 
+# Jev with a strict threshold: rubric level 2 ("same topic, does not help
+# answer") is dropped; a query with nothing at 2.0 keeps its best pair as a floor.
+[jev-strict]
+from = "score"
+set = ["score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]", "score.min_score=2.0"]
+
 # Pairing rule: every query against every chunk, or only the queries that
 # found the page.
 [pairing-found]

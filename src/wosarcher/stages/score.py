@@ -14,7 +14,9 @@ Each pair goes through three rules in order: the scorer's threshold, the
 per-query cap (`score.top_k`; small-input passthrough keeps its first
 `top_k` in passthrough order, the `passthrough` fallback scorer is not
 capped), and the best pair per
-chunk across queries. A pair one rule drops records it in `dropped` and takes
+chunk across queries. A calibrated scorer with no pair of a query at
+`score.min_score` keeps that query's best pair as a floor pair (`floor`).
+A pair one rule drops records it in `dropped` and takes
 no part in the later rules.
 """
 
@@ -74,8 +76,12 @@ def mapped(name: str, scale: Scale, value: float) -> float:
     return small / (1 + small)
 
 
-def _keep_calibrated(values: Sequence[float], min_score: float) -> set[int]:
-    return {i for i, value in enumerate(values) if value >= min_score}
+def _keep_calibrated(values: Sequence[float], min_score: float) -> tuple[set[int], int | None]:
+    """Pairs at or above `min_score`; when none, the best pair (earliest on ties) as the floor."""
+    kept = {i for i, value in enumerate(values) if value >= min_score}
+    if kept or not values:
+        return kept, None
+    return kept, values.index(max(values))
 
 
 def _keep_relative(values: Sequence[float], relative_threshold: float) -> set[int]:
@@ -112,16 +118,19 @@ def threshold_display(name: str, cfg: ScoreConfig, best: float | None) -> float 
     return None if shown is None else cfg.relative_threshold * shown
 
 
-def _kept(name: str, calibrated: bool, group: Group, values: Sequence[float], cfg: ScoreConfig) -> set[int]:
+def _kept(
+    name: str, calibrated: bool, group: Group, values: Sequence[float], cfg: ScoreConfig
+) -> tuple[set[int], int | None]:
+    """Kept indexes and the floor index (calibrated scorers only)."""
     if name == "passthrough":
-        return set(range(len(values)))
+        return set(range(len(values))), None
     if name == "bm25":
         texts = [chunk.text for chunk in group.chunks]
         kept = rank(group.query.text, texts, relative_threshold=cfg.relative_threshold, max_results=BM25_MAX_RESULTS)
-        return set(kept)
+        return set(kept), None
     if calibrated:
         return _keep_calibrated(values, cfg.min_score)
-    return _keep_relative(values, cfg.relative_threshold)
+    return _keep_relative(values, cfg.relative_threshold), None
 
 
 # Running one chain entry
@@ -169,7 +178,9 @@ def scored_pairs(
 ) -> list[Score]:
     """Every pair of the group with raw value, display, and threshold result (on the mapped values)."""
     shown = [mapped(name, scale, value) for value in values]
-    kept = _kept(name, calibrated, group, shown, cfg)
+    kept, floor = _kept(name, calibrated, group, shown, cfg)
+    if floor is not None:
+        kept = {floor}
     best = max(shown, default=0.0)
     return [
         Score(
@@ -180,6 +191,7 @@ def scored_pairs(
             display=_display(name, shown[i], best),
             kept=i in kept,
             dropped=None if i in kept else "threshold",
+            floor=i == floor,
         )
         for i, chunk in enumerate(group.chunks)
     ]

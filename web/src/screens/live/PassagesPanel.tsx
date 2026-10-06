@@ -186,6 +186,7 @@ function PassageCard(props: {
       )}
       <div className={css.scoreLine}>
         <span className={css.score}>{score}</span>
+        {p.floor && <span className={css.floor}>best available</span>}
         {p.display != null && (
           <div className={css.bar}>
             <div className={css.fill} style={{ width: `${p.display * 100}%` }} />

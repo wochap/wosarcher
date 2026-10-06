@@ -12,7 +12,45 @@ from .ranking_data import chunks_of, file_page, queries, web_page
 
 
 def test_calibrated_threshold() -> None:
-    assert _keep_calibrated([2.5, 1.5, 1.0], 1.5) == {0, 1}
+    assert _keep_calibrated([2.5, 1.5, 1.0], 1.5) == ({0, 1}, None)
+
+
+async def jev_stage(values: list[float], min_score: float) -> ScoreResult:
+    pages, chunks = setup([f"c{n}" for n in range(len(values))], ["q0"])
+    qs = [Query(id="q0", text="x")]
+    jev = FakeScorer("jev", calibrated=True, values={c.chunk_id: v for c, v in zip(chunks, values, strict=True)})
+    return await score(every(qs, chunks), qs, pages, chunks, jev, cfg=ScoreConfig(provider="jev", min_score=min_score))
+
+
+async def test_calibrated_floor() -> None:
+    result = await jev_stage([1.4, 1.1, 0.3], 2.0)
+    assert [(s.kept, s.floor, s.dropped) for s in result.scores] == [
+        (True, True, None),
+        (False, False, "threshold"),
+        (False, False, "threshold"),
+    ]
+
+
+async def test_calibrated_no_floor() -> None:
+    result = await jev_stage([2.5, 1.5, 1.0], 1.5)
+    assert [(s.kept, s.floor) for s in result.scores] == [(True, False), (True, False), (False, False)]
+
+
+async def test_floor_pair_loses_to_other_query() -> None:
+    pages, chunks = setup(["shared"], ["q0", "q1"])
+    qs = [Query(id="q0", text="q0"), Query(id="q1", text="q1")]
+
+    class PerQuery(FakeScorer):
+        async def score(self, query: Query, chunks: list[Chunk]):
+            self.default = {"q0": 1.0, "q1": 2.5}[query.id]
+            return await super().score(query, chunks)
+
+    cfg = ScoreConfig(provider="jev", min_score=2.0)
+    both = await score(every(qs, chunks), qs, pages, chunks, PerQuery("jev", calibrated=True), cfg=cfg)
+    assert [(s.query_id, s.kept, s.floor, s.dropped) for s in both.scores] == [
+        ("q0", False, True, "other_query"),
+        ("q1", True, False, None),
+    ]
 
 
 def test_relative_threshold() -> None:

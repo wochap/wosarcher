@@ -145,6 +145,7 @@ def source_view(
                 removed_before=max(0, chunk.position - previous - 1),
                 queries=queries_of,
                 fate=fate(chunk, queries_of),
+                floor=any(s.kept and s.floor for q in queries if (s := by_pair.get((chunk.chunk_id, q.id)))),
             )
         )
         previous = chunk.position

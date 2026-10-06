@@ -213,6 +213,8 @@ class Score(Contract):
     kept: bool = False
     dropped: Literal["threshold", "query_cap", "other_query"] | None = None
     """Why the pair is not kept: the first rule that dropped it; None when kept."""
+    floor: bool = False
+    """Kept below `score.min_score` as its query's best pair (calibrated scorers)."""
     round: int = Field(default=1, ge=1)
 
 
@@ -337,6 +339,8 @@ class SourceChunk(Contract):
     queries: list[ChunkQueryFate]
     """One entry per sub-query, in plan order."""
     fate: ChunkFate
+    floor: bool = False
+    """Kept as its query's floor pair (best available below the threshold)."""
 
 
 class SourceView(Contract):
@@ -946,6 +950,8 @@ class KeptPassage(Contract):
     heading_path: list[str] = []
     text: str
     display: float | None
+    floor: bool = False
+    """Kept below the threshold as the query's best pair."""
 
 
 class PassagesScoredData(Contract):
