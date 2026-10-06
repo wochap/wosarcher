@@ -13,7 +13,7 @@
       "page_id": null,
       "block_ids": [],
       "scorer": "bm25",
-      "display": 0.559189564815395
+      "display": 0.5665468937919
     },
     {
       "n": 2,
@@ -45,10 +45,10 @@
     },
     {
       "n": 4,
-      "chunk_id": "38ca5b5db1dc9c4f",
+      "chunk_id": "4cf74a88e85b0cb6",
       "source_id": "e94ab9a9817e74e0",
       "query_id": "q2",
-      "text": "the cathode material and relithiates it without breaking it down to elements, which preserves the value added during cathode manufacture.\n\n3 Economics\n\nThe economics of recycling depend strongly on cathode chemistry. Cobalt-rich chemistries carry the most value, while lithium iron phosphate cells contain little that is worth recovering by conventional routes. Transport of spent packs, classified as dangerous goods, can account for a large share of the recycling cost.\n\n4 Outlook\n\nStandardised pack designs, labelling of cell chemistry and policy measures such as recycled content requirements would make battery recycling more efficient and less costly.",
+      "text": "Gavin Harper, Roberto Sommerville, Emma Kendrick, et al.\n\nAbstract. Rapid growth in the market for electric vehicles is imperative to meet global targets for reducing greenhouse gas emissions. The resulting volume of spent lithium-ion batteries presents both a waste management challenge and an opportunity to recover valuable materials. Here we outline the approaches available to recycle the batteries and the research needed to make the recycling of electric vehicle batteries economic.\n\nA single electric vehicle pack can weigh more than 250 kg and contain hundreds of cells. Disassembly is labour intensive and hazardous because packs can retain high voltage. Automated disassembly and design for recycling would lower costs.\n\nPyrometallurgical recycling smelts whole cells or modules. It is robust to variations in chemistry but consumes much energy and loses lithium and aluminium to the slag. Hydrometallurgical recycling leaches shredded black mass in acid and recovers high purity cobalt, nickel, manganese and lithium salts, at the cost of large volumes of reagents and effluent. Direct recycling recovers the cathode material and relithiates it without breaking it down to elements, which preserves the value added during cathode manufacture.\n\nThe economics of recycling depend strongly on cathode chemistry. Cobalt-rich chemistries carry the most value, while lithium iron phosphate cells contain little that is worth recovering by conventional routes. Transport of spent packs, classified as dangerous goods, can account for a large share of the recycling cost.\n\nStandardised pack designs, labelling of cell chemistry and policy measures such as recycled content requirements would make battery recycling more efficient and less costly.",
       "heading_path": [],
       "page_id": null,
       "block_ids": [],
@@ -67,7 +67,7 @@
       "page_id": null,
       "block_ids": [],
       "scorer": "bm25",
-      "display": 0.9989834265631218
+      "display": 0.9995949487786712
     },
     {
       "n": 6,
@@ -82,10 +82,24 @@
       "page_id": null,
       "block_ids": [],
       "scorer": "bm25",
-      "display": 0.9395003476593246
+      "display": 0.9399981173163942
     },
     {
       "n": 7,
+      "chunk_id": "e582787f23750a61",
+      "source_id": "571383a59a7314d6",
+      "query_id": "q2",
+      "text": "Costs and revenues\n\nThe profitability of a battery recycling plant depends on metal prices, the chemistry of the incoming batteries and the cost of collection and transport. When lithium and cobalt prices fell in 2023, margins for recyclers dropped sharply. Gate fees charged for low value chemistries help keep plants economic.\n\nPolicy\n\nExtended producer responsibility, minimum recycled content and recovery efficiency targets, such as those in the European Union battery regulation, give recyclers more certainty about feedstock and demand. Recycled supply could meet a meaningful share of lithium, nickel and cobalt demand by 2040 if collection rates improve.",
+      "heading_path": [
+        "Recycling of critical minerals"
+      ],
+      "page_id": null,
+      "block_ids": [],
+      "scorer": "bm25",
+      "display": 0.9874246981389154
+    },
+    {
+      "n": 8,
       "chunk_id": "7dd501ceb80409ad",
       "source_id": "82930979fc30e1dc",
       "query_id": "q0",
@@ -96,33 +110,7 @@
       "page_id": null,
       "block_ids": [],
       "scorer": "bm25",
-      "display": 0.968396409863512
-    },
-    {
-      "n": 8,
-      "chunk_id": "475ed7785e95379f",
-      "source_id": "e94ab9a9817e74e0",
-      "query_id": "q0",
-      "text": "Recycling lithium-ion batteries from electric vehicles\n\nGavin Harper, Roberto Sommerville, Emma Kendrick, et al.\n\nAbstract. Rapid growth in the market for electric vehicles is imperative to meet global targets for reducing greenhouse gas emissions. The resulting volume of spent lithium-ion batteries presents both a waste management challenge and an opportunity to recover valuable materials. Here we outline the approaches available to recycle the batteries and the research needed to make the recycling of electric vehicle batteries economic.\n\n1 Introduction\n\nA single electric vehicle pack can weigh more than 250 kg and contain hundreds of cells. Disassembly is labour intensive and hazardous because packs can retain high voltage. Automated disassembly and design for recycling would lower costs.\n\n2 Recycling routes\n\nPyrometallurgical recycling smelts whole cells or modules. It is robust to variations in chemistry but consumes much energy and loses lithium and aluminium to the slag. Hydrometallurgical recycling leaches shredded black mass in acid and recovers high purity cobalt, nickel, manganese and lithium salts, at the cost of large volumes of reagents and effluent. Direct recycling recovers the cathode material and relithiates it without breaking it down to elements, which preserves the value added during cathode manufacture.\n\n3 Economics",
-      "heading_path": [],
-      "page_id": null,
-      "block_ids": [],
-      "scorer": "bm25",
-      "display": 0.9518390320037925
-    },
-    {
-      "n": 9,
-      "chunk_id": "e582787f23750a61",
-      "source_id": "571383a59a7314d6",
-      "query_id": "q0",
-      "text": "Costs and revenues\n\nThe profitability of a battery recycling plant depends on metal prices, the chemistry of the incoming batteries and the cost of collection and transport. When lithium and cobalt prices fell in 2023, margins for recyclers dropped sharply. Gate fees charged for low value chemistries help keep plants economic.\n\nPolicy\n\nExtended producer responsibility, minimum recycled content and recovery efficiency targets, such as those in the European Union battery regulation, give recyclers more certainty about feedstock and demand. Recycled supply could meet a meaningful share of lithium, nickel and cobalt demand by 2040 if collection rates improve.",
-      "heading_path": [
-        "Recycling of critical minerals"
-      ],
-      "page_id": null,
-      "block_ids": [],
-      "scorer": "bm25",
-      "display": 0.8636358777327355
+      "display": 0.9699782766038523
     }
   ],
   "sources": [
@@ -168,5 +156,5 @@
     }
   ],
   "budget_tokens": 28362,
-  "used_tokens": 2370
+  "used_tokens": 2269
 }

@@ -48,6 +48,7 @@ def test_setext_heading() -> None:
 
 def test_link_and_image() -> None:
     assert clean("see [the docs](https://x.example/d) ![chart](data:image/png;base64,AAAA)") == "see the docs chart"
+    assert clean("play [](javascript: void(0);) now") == "play now"
 
 
 def test_comment_img_and_autolink_removed() -> None:
@@ -159,7 +160,7 @@ def test_long_menu() -> None:
 
 
 def test_video_rail() -> None:
-    rail = "Video Andina\n110\nJNE: conoce las causales\n230\nVideo Andina\nElecciones 2026\n145\nVer más videos"
+    rail = "Video Andina\n1:10\nJNE: conoce las causales\n2:30\nVideo Andina\nElecciones 2026\n1:45\nVer más videos"
     assert boilerplate(rail)
 
 
@@ -193,6 +194,34 @@ def test_navigation_only_page() -> None:
     result = chunk([web(text)], size=1800, overlap=150, min_chars=500)
     assert [c.text for c in result.chunks] == ["- Trámites\n- Servicios municipales"]
     assert result.boilerplate == 1
+
+
+def test_menu_inside_text_section() -> None:
+    menu = " ".join(
+        f"[![](https://x.example/{n}.png) {label}](https://x.example/{n})"
+        for n, label in enumerate(["Nuevo Tributos Pagos en Linea", "Mesa de Partes Virtual", "Consulta tu Trámite"])
+    )
+    text = f"{menu}\n\n{sentences(300, 'a')}\n\n{sentences(300, 'b')}\n"
+    result = chunk([web(text)], size=1800, overlap=150, min_chars=500)
+    joined = " ".join(c.text for c in result.chunks)
+    assert "a0000" in joined
+    assert "b0000" in joined
+    assert "Mesa de Partes" not in joined
+    assert result.boilerplate == 1
+
+
+def test_phone_link_block() -> None:
+    text = f"{sentences(300)}\n\nSeguridad Ciudadana:\n\n[993380054](tel:993380054)\n"
+    result = chunk([web(text)], size=1800, overlap=150, min_chars=500)
+    assert all("993380054" not in c.text for c in result.chunks)
+
+
+def test_time_stamp_is_not_punctuation() -> None:
+    assert boilerplate("Video Andina 1:51")
+
+
+def test_label_with_colon_kept() -> None:
+    assert not boilerplate("Central telefónica:\nAtención de lunes a viernes.")
 
 
 def test_pdf_ingest_anchors() -> None:

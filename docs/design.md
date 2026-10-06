@@ -550,18 +550,27 @@ to `context.json` and the skips to `select.jsonl`.
 Markdown-aware, in this order:
 
 1. Split the page at headings into sections.
-2. Web pages only: drop boilerplate sections. A section is boilerplate
-   when any of three rules holds: it has at least two links or bare URLs
-   and they make up at least half of its characters; it has no
-   `. ? ! ; :` outside URLs, whatever its length; or it is a rail, at
-   least 5 non-empty lines of which at least 80% have at most 4 words and
-   no such punctuation (a menu or video rail written one entry per line).
-   The second and third rules skip lists (every line a list item), tables
-   (every line starts with `|`), and fenced code. The rules are
-   structural, never a phrase list. A section with a heading and
-   no text is not boilerplate; when every section is boilerplate, the
-   longest one is kept. Attachments never lose a section. The chunk
-   result counts the drops next to the near-duplicates.
+2. Web pages only: drop boilerplate blocks. Each section is split into
+   blocks at blank lines; a fenced code block, or a run of list or table
+   blocks, is one block. A block is boilerplate when any of three rules
+   holds: it has at least two links or bare URLs and they make up at
+   least half of its characters, or it is a single link with no other
+   text; it has no sentence punctuation outside URLs, whatever its
+   length; or it is a rail, at least 5 non-empty lines of which at least
+   80% have at most 4 words and no sentence punctuation (a menu or video
+   rail written one entry per line). A link is any `[text](target)`,
+   whatever the target's scheme (`javascript:`, `tel:`, `#`), with an
+   image allowed in its text and one level of parentheses in its target;
+   cleaning keeps only its text. Sentence punctuation is `. ? ! ; :`
+   followed by whitespace or the end of the line; a `:` between digits
+   (`1:51`) never counts. The second and third rules skip lists (every
+   line a list item), tables (every line starts with `|`), and fenced
+   code. The rules are structural, never a phrase list. A section keeps
+   its other blocks and is dropped when it loses all of them; a section
+   with a heading and no text is not boilerplate. When every block of a
+   page is boilerplate, the longest one is kept. Attachments never lose a
+   block. The chunk result counts dropped blocks next to the
+   near-duplicates.
 3. Merge short sections in page order: a group below `chunk.min_chars`
    (500) takes the next section while it stays within `chunk.size_chars`
    (1800); a short last group joins the one before it when it fits; a

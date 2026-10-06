@@ -72,7 +72,7 @@
       "units": 0.0,
       "cost": 0.0
     },
-    "llm": {
+    "openai": {
       "input_tokens": 2722,
       "output_tokens": 95,
       "requests": 2,

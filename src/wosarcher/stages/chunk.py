@@ -1,4 +1,4 @@
-"""Chunk: split pages by markdown headings, drop boilerplate, merge short sections, then split by size.
+"""Chunk: split pages by markdown headings, drop boilerplate blocks, merge short sections, then split by size.
 
 pdf-ingest anchors (`<!-- page: … -->`, `<!-- a: … -->`) are swapped for
 private markers before cleaning, so their offsets survive it exactly; the
@@ -18,13 +18,15 @@ from wosarcher.models import Chunk, ChunkResult, Page, chunk_id
 ANCHOR = re.compile(r"<!--\s*(page|a):\s*(.+?)\s*-->")
 MARKER = re.compile("\ue000(\\d+)\ue001")
 
-# Boilerplate: a web-page section that is mostly links, has no sentence punctuation, or is a rail of short lines.
+# Boilerplate: a web-page block that is mostly links, has no sentence punctuation, or is a rail of short lines.
 IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
-LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# Link text may hold one image; the target, of any scheme, may hold one level of parentheses.
+LINK = re.compile(r"\[((?:[^\[\]]|!\[[^\]]*\]\([^)]*\))*)\]\((?:[^()]|\([^()]*\))*\)")
 URL = re.compile(r"<?https?://[^\s>)]+>?")
 LINK_SHARE = 0.5
 MIN_LINKS = 2
-SENTENCE_PUNCTUATION = set(".?!;:")
+PUNCTUATION_END = re.compile(r"[.?!;:](?=\s|$)")
+CLOCK = re.compile(r"(?<=\d):(?=\d)")
 RAIL_LINES = 5
 RAIL_SHARE = 0.8
 RAIL_WORDS = 4
@@ -40,7 +42,7 @@ CLEANING = [
     (re.compile(r"<!--.*?-->", re.DOTALL), ""),
     (re.compile(r"<img\b[^>]*>", re.IGNORECASE), ""),
     (re.compile(r"!\[([^\]]*)\]\([^)]*\)"), r"\1"),
-    (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),
+    (LINK, r"\1"),
     (re.compile(r"<[a-zA-Z][a-zA-Z0-9+.-]*:[^>\s]*>"), ""),
     (re.compile(r"[ \t]+"), " "),
     (re.compile(r"\n{3,}"), "\n\n"),
@@ -79,7 +81,7 @@ def clean(text: str) -> str:
 
 
 def boilerplate(raw: str) -> bool:
-    """True for raw section markdown made mostly of two or more links, with no sentence punctuation, or a rail.
+    """True for a raw markdown block made mostly of links (or one bare link), with no sentence punctuation, or a rail.
 
     Lists, tables, and fenced code are content even without punctuation; menus that are lists fail the link test.
     """
@@ -95,7 +97,8 @@ def boilerplate(raw: str) -> bool:
     other = len("".join(rest.split()))
     if not linked + other:
         return False
-    if len(texts) + len(urls) >= MIN_LINKS and linked / (linked + other) >= LINK_SHARE:
+    links = len(texts) + len(urls)
+    if (links >= MIN_LINKS and linked / (linked + other) >= LINK_SHARE) or (links == 1 and not other):
         return True
     lines = [line for line in raw.splitlines() if line.strip()]
     is_list = all(LIST_ITEM.match(line) for line in lines)
@@ -112,18 +115,58 @@ def boilerplate(raw: str) -> bool:
 
 def unpunctuated_words(line: str) -> int | None:
     """Word count of a line's visible text, or None when it has sentence punctuation outside URLs."""
-    visible = URL.sub(" ", LINK.sub(r" \1 ", line))
-    return None if SENTENCE_PUNCTUATION & set(visible) else len(visible.split())
+    visible = CLOCK.sub(" ", URL.sub(" ", LINK.sub(r" \1 ", line)))
+    return None if PUNCTUATION_END.search(visible) else len(visible.split())
+
+
+def kind(block: str) -> str:
+    """`list` or `table` when every non-empty line is a list item or a table row, else `text`."""
+    lines = [line for line in block.splitlines() if line.strip()]
+    if all(LIST_ITEM.match(line) for line in lines):
+        return "list"
+    if all(line.lstrip().startswith("|") for line in lines):
+        return "table"
+    return "text"
+
+
+def blocks(text: str) -> list[str]:
+    """Text between blank lines; a fenced code block, and a run of list or table blocks, stay one block."""
+    found: list[str] = []
+    current: list[str] = []
+    fenced = False
+    for line in [*text.splitlines(), ""]:
+        if FENCE.match(line):
+            fenced = not fenced
+        if line.strip() or fenced:
+            current.append(line)
+            continue
+        if current:
+            block = "\n".join(current)
+            if found and kind(block) != "text" and kind(block) == kind(found[-1]):
+                found[-1] += "\n\n" + block
+            else:
+                found.append(block)
+            current = []
+    return found
 
 
 def drop_boilerplate(found: list[Section]) -> tuple[list[Section], int]:
-    """Sections without boilerplate and the number dropped; a page keeps its longest section if all are."""
-    flagged = [bool(clean(section.text)) and boilerplate(section.text) for section in found]
-    if all(flagged) and found:
-        longest = max(range(len(found)), key=lambda n: len(clean(found[n].text)))
-        flagged[longest] = False
-    kept = [section for section, flag in zip(found, flagged, strict=True) if not flag]
-    return kept, sum(flagged)
+    """Sections without boilerplate blocks and the number of blocks dropped; a page keeps its longest block if all are.
+
+    A section that had text and loses every block is dropped.
+    """
+    split = [blocks(section.text) for section in found]
+    flags = [[bool(clean(block)) and boilerplate(block) for block in parts] for parts in split]
+    texted = [(n, m) for n, parts in enumerate(split) for m, block in enumerate(parts) if clean(block)]
+    if texted and all(flags[n][m] for n, m in texted):
+        n, m = max(texted, key=lambda key: len(clean(split[key[0]][key[1]])))
+        flags[n][m] = False
+    kept: list[Section] = []
+    for section, parts, flagged in zip(found, split, flags, strict=True):
+        rest = [block for block, flag in zip(parts, flagged, strict=True) if not flag]
+        if rest or not any(flagged):
+            kept.append(Section(section.level, section.path, "\n\n".join(rest)))
+    return kept, sum(map(sum, flags))
 
 
 def windows(text: str, size: int, overlap: int, min_chars: int = 0) -> list[tuple[int, int]]:
@@ -221,7 +264,7 @@ def merged(parts: list[Part], size: int, min_chars: int) -> list[Part]:
 
 
 def page_chunks(page: Page, size: int, overlap: int, min_chars: int) -> tuple[list[Chunk], int]:
-    """Chunks of one page and the number of sections dropped as boilerplate."""
+    """Chunks of one page and the number of blocks dropped as boilerplate."""
     anchors: list[tuple[str, str]] = []
     chunks: list[Chunk] = []
     page_id: str | None = None

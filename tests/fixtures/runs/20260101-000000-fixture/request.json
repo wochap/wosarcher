@@ -81,7 +81,8 @@
         "per_unit": null
       },
       "top_k": 50,
-      "pairing": "all"
+      "pairing": "all",
+      "context": "header"
     },
     "score": {
       "provider": "bm25",
@@ -101,7 +102,7 @@
         "output_per_mtok": null,
         "per_unit": null
       },
-      "min_score": 1.5,
+      "min_score": 2.0,
       "relative_threshold": 0.5,
       "top_k": 10,
       "fallback": [
@@ -132,7 +133,11 @@
       "chars_per_token": 3.5,
       "token_margin": 1.1,
       "max_tokens_field": "max_completion_tokens",
-      "reasoning": {"plan": "none", "gap": "none", "write": "none"},
+      "reasoning": {
+        "plan": "none",
+        "gap": "none",
+        "write": "none"
+      },
       "max_continuations": 2,
       "max_output_tokens": 8192
     },
