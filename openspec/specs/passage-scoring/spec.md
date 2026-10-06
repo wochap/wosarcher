@@ -10,29 +10,25 @@ mixing scorers in one run.
 ## Requirements
 
 ### Requirement: Pairing
-Pairing SHALL follow `prefilter.pairing`. With `all` (the default), a web
-chunk SHALL be paired with the main query and every sub-query. With
-`found`, a web chunk SHALL be paired with every query that found its page.
-A file chunk SHALL be paired with the main query and every sub-query under
-both rules. No other pairs SHALL be scored. Any other value of
-`prefilter.pairing` SHALL fail configuration naming the setting and the
-two values.
+A web chunk SHALL be paired with the main query and every sub-query, as a
+file chunk is. No other pairs SHALL be scored. There is no setting for a
+narrower pairing.
 
 #### Scenario: Web chunk pairs with every query
-- **WHEN** `prefilter.pairing = "all"`, a page was found by `q1` only, and the plan has `q0` to `q3`
+- **WHEN** a page was found by `q1` only and the plan has `q0` to `q3`
 - **THEN** each of its chunks is paired with `q0`, `q1`, `q2`, and `q3` before the prefilter
 
 #### Scenario: Web chunk found by two queries
-- **WHEN** `prefilter.pairing = "found"` and a page was found by `q1` and `q3` in a plan with `q0` to `q3`
-- **THEN** each of its chunks is paired with `q1` and `q3` only
+- **WHEN** a page was found by `q1` and `q3` in a plan with `q0` to `q3`
+- **THEN** each of its chunks is paired with `q0`, `q1`, `q2`, and `q3`, not only `q1` and `q3`
 
 #### Scenario: File chunk
 - **WHEN** a plan has `q0`, `q1`, and `q2` and an attachment has one chunk
-- **THEN** that chunk is paired with `q0`, `q1`, and `q2` before the prefilter, under either rule
+- **THEN** that chunk is paired with `q0`, `q1`, and `q2` before the prefilter
 
 #### Scenario: Invalid pairing
-- **WHEN** a profile sets `prefilter.pairing = "some"`
-- **THEN** configuration fails naming `prefilter.pairing` and the values `all` and `found`
+- **WHEN** a profile sets `prefilter.pairing = "found"`
+- **THEN** configuration fails naming the unknown field `pairing`
 
 ### Requirement: Small-input passthrough
 When the pages paired with a query total fewer than
