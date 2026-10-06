@@ -17,8 +17,9 @@ built-in profiles SHALL include `low-vram`, `workstation`, and `cloud`. The
 built-in profiles that use local models (`low-vram` and `workstation`)
 SHALL set `llm.timeout = 600` seconds, so prompt processing of a large
 context on a small GPU, or a model load behind llama-swap, does not time
-out before the first token. The built-in `cloud` profile, whose model is
-a reasoning model, SHALL set `llm.reasoning_tokens = 4096`.
+out before the first token. Every built-in profile SHALL set
+`llm.provider = "openai"` and no profile SHALL set a reasoning token
+allowance.
 A profile MAY set a top-level `description` string: one line that says
 what the profile is for. It SHALL NOT be a configuration setting (it is not
 part of the resolved configuration and cannot be set by environment or
@@ -43,7 +44,7 @@ only; needs API keys.".
 
 #### Scenario: Cloud reasoning allowance
 - **WHEN** the user selects the built-in `cloud` profile
-- **THEN** the resolved `llm.reasoning_tokens` is 4096
+- **THEN** the resolved `llm.provider` is `openai`, `llm.reasoning.plan`, `gap`, and `write` are `none`, and the resolved configuration has no `reasoning_tokens` key
 
 #### Scenario: Local LLM timeout
 - **WHEN** the user selects the built-in `workstation` or `low-vram` profile
@@ -118,14 +119,17 @@ SHALL accept the same fields: `provider`, `base_url`, `api_key`, `model`,
 default 300 in the `llm` block, sized for a small local model that
 processes a long prompt before its first token), `retry_budget` (seconds
 of waiting for retries, default 60, not negative), and `prices` (optional per-unit prices
-for cost recording). The `llm` block SHALL also accept `max_tokens_field`
-(`max_completion_tokens`, the default, or `max_tokens`),
-`reasoning_tokens` (an integer, default 0, not negative, added to every
-LLM request's output limit), and `max_continuations` (an integer, default
-2, not negative: how many times the writer continues a report cut at the
-output limit; 0 turns continuation off). The `score`
-block SHALL also accept `rerank_scale` (`auto`, the default, `probability`,
-or `logit`).
+for cost recording). The `llm` block's `provider` SHALL be `openai` (an
+OpenAI-compatible chat endpoint); any other value SHALL fail resolution
+naming `llm.provider` and `openai`. The `llm` block SHALL also accept
+`max_tokens_field` (`max_completion_tokens`, the default, or `max_tokens`),
+`reasoning` (a table with `plan`, `gap`, and `write`, each `none`, `low`,
+`medium`, `high`, or `default`, default `none`; any other value fails
+naming the key and the five values), and `max_continuations` (an integer,
+default 2, not negative: how many times the writer continues a report cut
+at the output limit; 0 turns continuation off). The `llm` block SHALL NOT
+accept `reasoning_tokens`. The `score` block SHALL also accept
+`rerank_scale` (`auto`, the default, `probability`, or `logit`).
 Fields a provider does not use SHALL be ignored by it, not rejected.
 
 #### Scenario: Remote endpoint
@@ -138,7 +142,7 @@ Fields a provider does not use SHALL be ignored by it, not rejected.
 
 #### Scenario: Invalid token field
 - **WHEN** a profile sets `llm.max_tokens_field = "n_predict"`
-- **THEN** loading fails with an error that names the field and the allowed values `max_completion_tokens`, `max_tokens`
+- **THEN** loading fails with an error that names the field and the allowed values
 
 #### Scenario: Continuations
 - **WHEN** no source sets `llm.max_continuations`
@@ -147,6 +151,22 @@ Fields a provider does not use SHALL be ignored by it, not rejected.
 #### Scenario: LLM timeout default
 - **WHEN** no source sets `llm.timeout` or `search.timeout`
 - **THEN** the resolved `llm.timeout` is 300 and `search.timeout` is 60
+
+#### Scenario: Thinking per step
+- **WHEN** the command runs with `--set llm.reasoning.write=high`
+- **THEN** the resolved `llm.reasoning.write` is `high` and `llm.reasoning.plan` and `gap` stay `none`
+
+#### Scenario: Invalid thinking level
+- **WHEN** a profile sets `llm.reasoning.gap = "max"`
+- **THEN** loading fails naming `llm.reasoning.gap` and the values `none`, `low`, `medium`, `high`, `default`
+
+#### Scenario: Old provider value
+- **WHEN** a profile sets `llm.provider = "llm"`
+- **THEN** resolution fails naming `llm.provider` and the value `openai`
+
+#### Scenario: Removed allowance
+- **WHEN** a profile sets `llm.reasoning_tokens = 4096`
+- **THEN** loading fails naming the unknown field `reasoning_tokens`
 
 ### Requirement: Validation
 Configuration SHALL be validated when it is resolved. An invalid value SHALL

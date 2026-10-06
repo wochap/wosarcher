@@ -89,11 +89,14 @@ table per variant with medians and write the full metrics as JSON.
 `llm` which selected passages of each result are relevant to the run's
 query, and record precision as relevant passages divided by selected
 passages. Passages SHALL be sent in a separate message from the
-instructions and never through a template. An answer that cannot be
+instructions and never through a template. Every judge call SHALL use
+effort `none`, whatever `llm.reasoning` says. An answer that cannot be
 parsed, including text without a JSON list and a list that is not valid
 JSON, SHALL record precision as missing, not zero, and the judge SHALL go
-on with the next result. Judgements SHALL be saved so a second run does not
-call the model again.
+on with the next result. A provider error on a result's call SHALL record
+that result's precision and faithfulness as missing, print the error on
+one line, and the judge SHALL go on; it SHALL never end with a traceback.
+Judgements SHALL be saved so a second run does not call the model again.
 
 For every result whose fork finished `write`, the judge SHALL also judge
 faithfulness: each citation in the report (every `[n]` group that is not a
@@ -139,6 +142,14 @@ SHALL be left out of the pairs.
 #### Scenario: Claims and passages as data
 - **WHEN** the faithfulness judge is called
 - **THEN** the system message holds only the template with the query, and the user message holds the numbered claim and passage pairs
+
+#### Scenario: Judge sends no thinking
+- **WHEN** the judge calls the LLM
+- **THEN** the request body has `reasoning_effort: "none"` and a token cap equal to the judge's limit
+
+#### Scenario: Provider error on one result
+- **WHEN** the endpoint answers 502 for the first result's precision call
+- **THEN** that result records precision and faithfulness as missing, the error is printed on one line, the next result is judged, and the judge exits 0
 
 ### Requirement: Recorded-run fixture
 The repository SHALL contain, tracked in version control, a small recorded

@@ -601,3 +601,53 @@ does not set it (the global default applies). Run summaries from
 #### Scenario: Summary rounds
 - **WHEN** a deep run stopped after round 2 with `no new sources`
 - **THEN** its summary has `rounds_planned` 3, `rounds_ran` 2, and `stop_reason` "no new sources"
+
+### Requirement: LLM options in a run request
+The request JSON of `POST /api/runs` SHALL accept an optional `llm`
+object with `model` (a non-empty string, or absent) and `reasoning` (any
+subset of `plan`, `gap`, `write`, each `none`, `low`, `medium`, `high`,
+or `default`). `model` SHALL set `llm.model` and each reasoning field
+`llm.reasoning.<step>` for this run, in the request layer of "Run request
+precedence" (layer 3, beside `research`), so the request's `set` still
+wins. An invalid level SHALL be rejected with 422 naming `llm.reasoning`
+and the field. `POST /api/runs/{id}/fork` SHALL accept the same `llm`
+object. Absent fields leave the configured values.
+
+#### Scenario: Model and thinking for one run
+- **WHEN** a client posts `request = {"query": "q", "llm": {"model": "deepseek-v4-flash", "reasoning": {"write": "high"}}}`
+- **THEN** the run resolves `llm.model` to `deepseek-v4-flash` and `llm.reasoning.write` to `high`, and `request.json` records both overrides
+
+#### Scenario: Invalid thinking level
+- **WHEN** a client posts `request = {"query": "q", "llm": {"reasoning": {"gap": "max"}}}`
+- **THEN** the response is 422, the detail names `llm.reasoning` and `gap`, and no run is queued
+
+#### Scenario: Set wins over the llm object
+- **WHEN** a client posts `request = {"query": "q", "llm": {"model": "a"}, "set": ["llm.model=\"b\""]}`
+- **THEN** the run resolves `llm.model` to `b`
+
+### Requirement: Models route
+`GET /api/models` SHALL return `{"models": [...]}`: the model IDs the
+active profile's (or `?profile=NAME`'s) LLM endpoint lists at
+`GET <base_url>/models` (`data[].id`, in the order given), through the
+block's fallback URLs and timeouts. When the request fails, the answer is
+not a list, or the list is empty, the route SHALL answer 200 with an empty
+list, never an error. The route SHALL send no other request and SHALL
+infer nothing about a model's abilities.
+
+#### Scenario: Models listed
+- **WHEN** the LLM endpoint answers `GET /models` with IDs `a` and `b`
+- **THEN** `GET /api/models` answers `{"models": ["a", "b"]}`
+
+#### Scenario: Endpoint down
+- **WHEN** the LLM endpoint refuses connections
+- **THEN** `GET /api/models` answers 200 with `{"models": []}`
+
+### Requirement: LLM options in run summaries
+Every run summary (`GET /api/runs`, `GET /api/runs/{id}`) SHALL carry
+`model` (the run's resolved `llm.model`, empty when none) and `reasoning`
+(the resolved `plan`, `gap`, and `write` levels). A run recorded before
+this field existed SHALL show `none` for every step.
+
+#### Scenario: Summary shows thinking
+- **WHEN** a run resolved `llm.reasoning.write` to `high` and `llm.model` to `m`
+- **THEN** its summary has `reasoning.write = "high"`, `reasoning.plan = "none"`, and `model = "m"`

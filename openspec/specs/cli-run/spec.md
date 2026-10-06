@@ -245,3 +245,29 @@ after each gap step. When research ends, the view SHALL print one line:
 #### Scenario: Research line
 - **WHEN** a deep run stops after round 2 with `no new sources`
 - **THEN** the view prints "research: 2 of 3 rounds · no new sources"
+
+### Requirement: Model and thinking flags
+`wosarcher run` and `wosarcher fork` SHALL accept `--model NAME`, acting as
+`--set llm.model="NAME"`, and `--plan-thinking`, `--gap-thinking`, and
+`--write-thinking`, each taking `none`, `low`, `medium`, `high`, or
+`default` and acting as `--set llm.reasoning.<step>=<value>`. Any other
+value SHALL exit 2 before a run is created, naming the flag and the five
+values. These flags SHALL take precedence over `--set` for the same field
+and SHALL be recorded in `request.json` like other overrides, so forks and
+reruns keep them. Without a flag the configured value is left unchanged.
+
+#### Scenario: Model flag
+- **WHEN** the user runs `wosarcher run "q" --model deepseek-v4-flash`
+- **THEN** the resolved `llm.model` is `deepseek-v4-flash` and `request.json` records the override
+
+#### Scenario: Thinking flags
+- **WHEN** the user runs `wosarcher run "q" --write-thinking high --gap-thinking low`
+- **THEN** the resolved `llm.reasoning.write` is `high`, `llm.reasoning.gap` is `low`, and `llm.reasoning.plan` keeps the configured value
+
+#### Scenario: Invalid thinking value
+- **WHEN** the user runs `wosarcher run "q" --plan-thinking max`
+- **THEN** the command exits with status 2 before creating a run, naming `--plan-thinking` and the values `none`, `low`, `medium`, `high`, `default`
+
+#### Scenario: Fork keeps thinking
+- **WHEN** a run was started with `--write-thinking high` and the user runs `wosarcher fork <id> --from write --tone critical`
+- **THEN** the fork's resolved `llm.reasoning.write` is `high`

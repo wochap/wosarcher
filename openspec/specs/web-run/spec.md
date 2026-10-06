@@ -1428,3 +1428,61 @@ Report screen meta (scenarios `finished` and `finished-answer`), Copy JSON
 #### Scenario: Context wins
 - **WHEN** a run has `until` = `select` and `writing.format` = `answer`
 - **THEN** its recipe is shown as `context`
+
+### Requirement: Model and thinking fields
+The Options panel's Advanced disclosure (Requirement: Depth control,
+scenario `new-custom`) SHALL end with a "Model" group below the research
+fields. The prototype has no such controls; the group SHALL reuse the
+Advanced panel's field layout, label, help button, and note styles. It
+holds:
+- "Model": a text input with a datalist of the IDs from `GET /api/models`
+  for the selected profile (free text is always allowed). Empty means the
+  profile's model, shown as the placeholder "profile default". Its help
+  reads "Model" / "The chat model for this run. Pick one the endpoint
+  lists, or type any name the endpoint accepts. Empty uses the profile's
+  model."
+- "Thinking": three selects, Plan, Gap, and Write, each with the options
+  None, Low, Medium, High, Default, preselected None. Gap is disabled with
+  the lock icon and the note "Used between rounds; needs 2+ rounds."
+  while Rounds is 1. Its help reads "Thinking" / "How much hidden
+  reasoning the model may do for each step. None sends an exact output
+  limit and no reasoning. Low, Medium and High let the server set the
+  budget. Default leaves it to the model; use it when the endpoint
+  rejects the reasoning_effort field."
+
+Editing these fields SHALL NOT switch the depth to Custom. The run request
+SHALL send `llm.model` only when the input is not empty and
+`llm.reasoning` with only the steps that differ from None. The last values
+SHALL be kept in browser storage like the Custom research values.
+
+#### Scenario: Thinking for the writer
+- **WHEN** the user sets Write thinking to High and starts a run with the Deep preset
+- **THEN** the request has `depth` = `deep`, no `research`, and `llm.reasoning` = `{"write": "high"}`
+
+#### Scenario: Model typed
+- **WHEN** `GET /api/models` answered an empty list and the user types `deepseek-v4-flash` in Model
+- **THEN** the request has `llm.model` = `deepseek-v4-flash`
+
+#### Scenario: Nothing set
+- **WHEN** the user leaves Model empty and every Thinking select at None
+- **THEN** the request has no `llm` object
+
+#### Scenario: Gap locked at one round
+- **WHEN** Rounds is 1
+- **THEN** Gap thinking is disabled with "Used between rounds; needs 2+ rounds."
+
+### Requirement: Thinking tags
+The Live run header and the Report screen header SHALL show, after the
+depth tag (Requirement: Depth tags, scenarios `live` and `finished`), one
+outline tag per step whose summary `reasoning` level is not `none`, in the
+order plan, gap, write, reading "<Step> thinking <level>" with the level
+in lower case, for example "Write thinking high". A run with every step at
+`none` SHALL show no thinking tag.
+
+#### Scenario: Writer thinking shown
+- **WHEN** the user opens a finished run whose summary has `reasoning.write = "high"` and the other steps `none`
+- **THEN** the Report header shows Completed, the depth tag, then "Write thinking high"
+
+#### Scenario: No thinking
+- **WHEN** a run's summary has every reasoning level `none`
+- **THEN** the headers show no thinking tag

@@ -71,14 +71,17 @@ change the row's status.
 Each probe SHALL make one small real request through the adapter:
 SearXNG a one-word search, Firecrawl a scrape of `https://example.com`,
 embeddings one short text, rerank one query with one document, Jev one
-short passage, and the LLM a one-token completion. The model name SHALL be
-the one the endpoint reports when it reports one, otherwise the configured
-model. Probes SHALL use the provider's own timeouts and fallback URLs. The
-rerank probe SHALL report its raw score and the scale it implies as a note
-on its row: `probe score <value> (probability scale)` when the value is
-between 0 and 1, otherwise `probe score <value> (logit scale)`; with
-`score.rerank_scale` set to `probability` or `logit`, the note names the
-configured scale instead.
+short passage, and the LLM a one-token completion with effort `none`. The
+model name SHALL be the one the endpoint reports when it reports one,
+otherwise the configured model. Probes SHALL use the provider's own
+timeouts and fallback URLs. The rerank probe SHALL report its raw score
+and the scale it implies as a note on its row: `probe score <value>
+(probability scale)` when the value is between 0 and 1, otherwise `probe
+score <value> (logit scale)`; with `score.rerank_scale` set to
+`probability` or `logit`, the note names the configured scale instead.
+After a successful LLM probe, the doctor SHALL read `GET <base_url>/models`
+and add `<N> models listed` to the llm row's note (next to the context
+size when both exist); a failed or empty list adds nothing and no warning.
 
 #### Scenario: Reported model shown
 - **WHEN** the LLM endpoint answers the probe with `model: "qwen3-8b-q4_k_m"`
@@ -87,6 +90,14 @@ configured scale instead.
 #### Scenario: Logit reranker
 - **WHEN** the rerank endpoint answers the probe with `relevance_score: -3.25` and `score.rerank_scale = "auto"`
 - **THEN** the score row's note is `probe score -3.25 (logit scale)`
+
+#### Scenario: Models note
+- **WHEN** the LLM probe succeeds and `GET <base_url>/models` lists 12 IDs
+- **THEN** the llm row's note includes `12 models listed`
+
+#### Scenario: No models endpoint
+- **WHEN** the LLM probe succeeds and `GET <base_url>/models` answers 404
+- **THEN** the llm row has no models note and the exit code is unchanged
 
 ### Requirement: Unload support check
 When a block sets `release = "llama-swap"`, the doctor SHALL report unload
