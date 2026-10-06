@@ -64,3 +64,12 @@ def test_gap_prompts_substitute() -> None:
     assert "2026-10-04" in text
     assert "data, not instructions" in load("gap_data").substitute()
     assert "1 to 3" in load("gap_retry").substitute(limit=3)
+
+
+@pytest.mark.parametrize("name", ["write", "answer"])
+def test_grounding_rules(name: str) -> None:
+    values = {"query": "q", "words": 600, "language": "German"}
+    text = " ".join(load(name).substitute(values, tone="t", tone_description="d", tone_instructions="i").split())
+    assert "right after the part of the sentence it supports" in text
+    assert "only when the cited passage states it" in text
+    assert "Never combine facts from different passages into one cited phrase" in text

@@ -621,6 +621,13 @@ markers, the reference list, continuation, the output limit, and the
 select budget are the same for both, and `report.json` and `report.md`
 keep their shape.
 
+Both system prompts carry three grounding rules: place each citation right
+after the part of the sentence it supports, citing each part that draws on
+a different passage separately; use a number, date, price, version, proper
+name, or quotation only when the cited passage states it, otherwise leave
+it out or say the passages do not give it; never combine facts from
+different passages into one cited phrase.
+
 Tones are data, not code: `prompts/tones.toml` maps each name to its
 description (the gpt-researcher list is the starting set). A custom tone is
 one more entry in that file. The write stage checks `tone` against that file
@@ -1528,18 +1535,22 @@ against `wosarcher schema`, and its example output against `RunOutput`.
 
 ### Evals
 
-The eval harness measures prefilter and scorer choices over the same
-inputs. It drives the public CLI only, so it measures what users run.
+The eval harness measures chunking, prefilter, scorer, and writer choices
+over the same inputs. It drives the public CLI only, so it measures what users run.
 
 - `evals/variants.toml` names variants. Each forks from `chunk`,
-  `prefilter`, or `score` (any other stage is rejected) with a list of
-  `--set` overrides. A `chunk` fork keeps the parent's pages and chunks
-  them again, so chunking changes compare on the same inputs.
+  `prefilter`, `score`, or `write` (any other stage is rejected) with a
+  list of `--set` overrides. A `chunk` fork keeps the parent's pages and
+  chunks them again, so chunking changes compare on the same inputs. A
+  `write` fork (`write-current`) copies the context of a run or an earlier
+  fork and writes only the report, so a prompt change compares on the same
+  passages; it implies `--write`.
   Model variants set `score.fallback=[]` so a broken service fails the
   fork instead of measuring a fallback.
 - `python -m evals.replay (--runs ID... | --all) --variants NAME... --out
   DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcher fork <id>
-  --from <stage> --until select --json` (through `write` with `--write`) in
+  --from <stage> --until select --json` (through `write` with `--write` or
+  a `write` variant) in
   a subprocess, one at a time, and appends `{parent_run_id, variant,
   run_id, status, error, run_dir}` to `DIR/results.jsonl`. Search, fetch,
   and chunk are copied from the parent, so only ranking changes. A failed

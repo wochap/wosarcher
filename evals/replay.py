@@ -1,10 +1,12 @@
-"""Replay recorded runs with ranking variants through `wosarcher fork`.
+"""Replay recorded runs with ranking or writing variants through `wosarcher fork`.
 
     python -m evals.replay (--runs ID... | --all) --variants NAME... --out DIR [--write] [--force]
 
 Each (run, variant) pair becomes one line of `<out>/results.jsonl`; pairs
 already there are skipped unless `--force` is given. Forks run one at a
-time so model variants do not compete and timings stay comparable.
+time so model variants do not compete and timings stay comparable. A
+variant that forks from `write` copies the context and writes the report
+again, so it implies `--write`.
 
 A fork that ends `done` is still recorded as `failed` when its events show
 that it did not rank with the configured scorer or prefilter: the score
@@ -28,7 +30,7 @@ from wosarcher.models import RunOutput, RunRecord, StageDone, StageFailed, parse
 from wosarcher.store import RunStore
 
 VARIANTS = Path(__file__).parent / "variants.toml"
-ForkStage = Literal["chunk", "prefilter", "score"]
+ForkStage = Literal["chunk", "prefilter", "score", "write"]
 ERROR_CHARS = 2000
 
 
@@ -79,7 +81,7 @@ def fork(
 ) -> ForkResult:
     """Run `wosarcher fork` in a subprocess; a failure is a result, not an exception."""
     args = [sys.executable, "-m", "wosarcher", "fork", run_id, "--from", variant.from_stage, "--json"]
-    if not write:
+    if not write and variant.from_stage != "write":
         args += ["--until", "select"]
     for item in [*extra, *variant.set]:
         args += ["--set", item]

@@ -2,12 +2,15 @@
 
 import subprocess
 import sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
 from evals.replay import VARIANTS, Variant, VariantError, fork, load_variants, main, read_results
 from tests.evals.helpers import eval_env
+from tests.fixtures.recorded import HTTP
 from wosarcher.models import StageDone, parse_event
 
 
@@ -16,12 +19,13 @@ def test_shipped_variants_load() -> None:
     assert {"bm25", "bm25-wide", "rerank", "jev", "prefilter-embeddings", "prefilter-bm25"} <= set(variants)
     assert variants["bm25"] == Variant(name="bm25", from_stage="score", set=["score.provider=bm25"])
     assert variants["chunk-current"] == Variant(name="chunk-current", from_stage="chunk", set=[])
+    assert variants["write-current"] == Variant(name="write-current", from_stage="write", set=[])
 
 
 def test_invalid_stage_names_variant(tmp_path: Path) -> None:
     path = tmp_path / "variants.toml"
     path.write_text('[early]\nfrom = "fetch"\nset = []\n')
-    with pytest.raises(VariantError, match=r"variant 'early'.*chunk, prefilter, score"):
+    with pytest.raises(VariantError, match=r"variant 'early'.*chunk, prefilter, score, write"):
         load_variants(path)
 
 
@@ -85,6 +89,43 @@ def test_chunk_variant_rechunks_parent_pages(tmp_path: Path) -> None:
         assert done[stage].data.copied_from == parent
     assert done["chunk"].data.copied_from is None
     assert (fork_dir / "hits.jsonl").read_bytes() == (parent_dir / "hits.jsonl").read_bytes()
+
+
+class RecordedChat(BaseHTTPRequestHandler):
+    """Answers every chat request with the recorded streamed report."""
+
+    def do_POST(self) -> None:
+        self.rfile.read(int(self.headers["Content-Length"]))
+        body = (HTTP / "llm" / "write.sse").read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+def test_write_variant_rewrites_report_only(tmp_path: Path) -> None:
+    env, parent = eval_env(tmp_path)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RecordedChat)
+    Thread(target=server.serve_forever, daemon=True).start()
+    llm = f'llm.base_url="http://127.0.0.1:{server.server_port}/v1"'
+    try:
+        result = fork(parent, load_variants(VARIANTS)["write-current"], write=False, env=env, extra=[llm])
+    finally:
+        server.shutdown()
+    assert result.status == "done", result.error
+    assert result.run_dir is not None
+    fork_dir, parent_dir = Path(result.run_dir), tmp_path / "runs" / parent
+    events = [parse_event(line) for line in (fork_dir / "events.jsonl").read_text().splitlines()]
+    done = {event.stage: event for event in events if isinstance(event, StageDone)}
+    for stage in ("search", "fetch", "chunk", "prefilter", "score", "select"):
+        assert done[stage].data.copied_from == parent
+    assert done["write"].data.copied_from is None
+    assert (fork_dir / "context.json").read_bytes() == (parent_dir / "context.json").read_bytes()
+    assert (fork_dir / "report.md").is_file()
 
 
 DEAD = "http://127.0.0.1:9"
