@@ -226,20 +226,23 @@ record no drop reason.
 - **THEN** the `q1` pair is not kept and its drop reason is `other_query`
 
 ### Requirement: Scoring text
-The prefilter and the scorer SHALL rank and score each chunk by its
-scoring text, not its body text alone. The scoring text SHALL be one
-context line, then an empty line, then the chunk text. The context line is
-the page title and every heading of the chunk's heading path, in order,
-joined by ` > `; empty parts are left out. The title is cut at 120
-characters and the whole context line at 300 characters, at a word
-boundary when one exists. A chunk with no title and an empty heading path
-SHALL have a scoring text equal to its body text. Every ranking method of a
-run (embedding similarity, BM25, rerank, Jev) SHALL use the same scoring
-text. The chunk artifact, the kept passages of `passages.scored`, the
-selected passages, the writer's passages block, and citations SHALL keep
-the body text only. Embeddings SHALL be cached by the SHA-256 of the text
-that was embedded, so a scoring text and its body text never share a
-cached vector.
+With `prefilter.context = "header"` (the default), the prefilter and the
+scorer SHALL rank and score each chunk by its scoring text, not its body
+text alone. The scoring text SHALL be one context line, then an empty
+line, then the chunk text. The context line is the page title and every
+heading of the chunk's heading path, in order, joined by ` > `; empty
+parts are left out. The title is cut at 120 characters and the whole
+context line at 300 characters, at a word boundary when one exists. A
+chunk with no title and an empty heading path SHALL have a scoring text
+equal to its body text. With `prefilter.context = "body"`, the scoring
+text SHALL be the body text for every chunk. Any other value SHALL fail
+configuration naming `prefilter.context` and the two values. Every
+ranking method of a run (embedding similarity, BM25, rerank, Jev) SHALL
+use the same scoring text. The chunk artifact, the kept passages of
+`passages.scored`, the selected passages, the writer's passages block,
+and citations SHALL keep the body text only. Embeddings SHALL be cached by
+the SHA-256 of the text that was embedded, so a scoring text and its body
+text never share a cached vector.
 
 #### Scenario: Context line
 - **WHEN** a chunk of the page "Phase 3 trial of drug X" has the heading path `["Results", "Efficacy"]` and the text "Positive in 62% of cases."
@@ -260,3 +263,11 @@ cached vector.
 #### Scenario: Long title
 - **WHEN** a page title has 200 characters
 - **THEN** the context line holds the first 120 characters of it, cut at a word boundary, before the heading path
+
+#### Scenario: Body only
+- **WHEN** `prefilter.context = "body"` and a chunk of the page "Phase 3 trial of drug X" has the heading path `["Results"]`
+- **THEN** the embedder and the scorer receive its body text only
+
+#### Scenario: Invalid context value
+- **WHEN** a profile sets `prefilter.context = "title"`
+- **THEN** configuration fails naming `prefilter.context` and the values `header` and `body`
