@@ -131,3 +131,18 @@ the call SHALL fail with a provider error that says the server rejects
 #### Scenario: Server rejects the field
 - **WHEN** the endpoint answers 400 with a body naming `reasoning_effort`
 - **THEN** the call fails with a provider error that names `reasoning_effort` and says to set `llm.reasoning.plan = "default"` for the planner's call
+
+### Requirement: Sampling temperature
+Completion and stream calls SHALL accept an optional temperature. When one
+is given, the adapter SHALL send it as `temperature` in the request body;
+when none is given, the body SHALL carry no `temperature` field, so the
+server's default applies. The pipeline stages give none; the eval judge
+gives 0.
+
+#### Scenario: Temperature sent
+- **WHEN** the judge calls with temperature 0
+- **THEN** the request body has `temperature: 0`
+
+#### Scenario: No temperature
+- **WHEN** the writer streams without a temperature
+- **THEN** the request body has no `temperature` field

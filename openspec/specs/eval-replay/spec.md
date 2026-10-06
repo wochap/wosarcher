@@ -85,46 +85,56 @@ table per variant with medians and write the full metrics as JSON.
 - **THEN** the metrics show score 1.2 seconds and no time for the copied stages
 
 ### Requirement: Judged precision
-`python -m evals.judge` SHALL, only when run explicitly, ask the configured
-`llm` which selected passages of each result are relevant to the run's
-query, and record precision as relevant passages divided by selected
-passages. Passages SHALL be sent in a separate message from the
-instructions and never through a template. Every judge call SHALL use
-effort `none`, whatever `llm.reasoning` says. An answer that cannot be
-parsed, including text without a JSON list and a list that is not valid
-JSON, SHALL record precision as missing, not zero, and the judge SHALL go
-on with the next result. A provider error on a result's call SHALL record
-that result's precision and faithfulness as missing, print the error on
-one line, and the judge SHALL go on; it SHALL never end with a traceback.
-Judgements SHALL be saved so a second run does not call the model again.
+`python -m evals.judge` SHALL, only when run explicitly, judge each
+result pointwise with the configured `llm`: one call per selected passage
+asking whether it is relevant to the run's query, answered yes or no.
+Precision is relevant passages divided by readable passages. Each call
+SHALL send the query through the prompt template as the system message
+and the passage in a separate user message, never through a template, with
+effort `none` and temperature 0, whatever `llm.reasoning` says. The answer
+is its first word, compared without case; a passage whose answer is
+neither yes nor no is unreadable: it is left out of the ratio and counted
+in the judgement's `unreadable`. A result with no readable passage
+SHALL record precision as missing, not zero. The calls of one result
+SHALL run concurrently within the LLM block's concurrency limit. A
+provider error on any call of a result SHALL record that result's
+precision and faithfulness as missing, print the error on one line, and
+the judge SHALL go on; it SHALL never end with a traceback. Judgements
+SHALL be saved so a second run does not call the model again; `--force`
+SHALL judge again every result that already has a judgement and replace
+its line.
+
+`--samples N` (default 1) SHALL ask every item N times; an item's value
+is its share of yes answers over its readable samples, and the ratios use
+these values. The judgement SHALL record `samples`.
 
 For every result whose fork finished `write`, the judge SHALL also judge
 faithfulness: each citation in the report (every `[n]` group that is not a
 link, with every number it holds) pairs the sentence holding it with
-passage `n`, and the `llm` is asked which pairs are supported by their
-passage. Faithfulness SHALL be recorded as supported pairs divided by
-pairs, and the number of pairs SHALL be recorded as `citations`. Claims and
-passages SHALL be sent in a separate message from the instructions and
-never through a template; only the query goes through the template. A
-fork without a finished report, a report with no citation, or an
-unparsable answer SHALL record faithfulness as missing, not zero, and the
-judge SHALL go on. A citation number with no passage in `context.json`
+passage `n`, and one call per pair asks whether the passage supports the
+claim, yes or no, under the same rules (template with the query only,
+claim and passage as data, effort `none`, temperature 0, first-word
+answer, unreadable items). Faithfulness SHALL be recorded as supported
+pairs divided by readable pairs, and the number of pairs SHALL be recorded
+as `citations`. A fork without a finished report, a report with no
+citation, or a result with no readable pair SHALL record faithfulness as
+missing, not zero. A citation number with no passage in `context.json`
 SHALL be left out of the pairs.
 
 #### Scenario: Precision
-- **WHEN** a result has 4 selected passages and the judge answers `[0, 2]`
-- **THEN** its precision is 0.5
+- **WHEN** a result has 4 selected passages and the judge answers yes for the first and third and no for the others
+- **THEN** its precision is 0.5 and `unreadable` is 0
 
 #### Scenario: Unparsable answer
-- **WHEN** the judge answers text without a JSON list
-- **THEN** the result's precision is missing and the judge continues with the next result
+- **WHEN** the judge answers "I cannot tell" for one of 4 passages and yes for the other three
+- **THEN** that passage is unreadable, the precision is 1.0 over 3 readable passages, and `unreadable` is 1
 
 #### Scenario: Malformed list
-- **WHEN** the judge answers `[1, 2,]`
+- **WHEN** the judge answers text that is neither yes nor no for every passage of a result
 - **THEN** the result's precision is missing, the judge continues with the next result, and it exits 0
 
 #### Scenario: Faithfulness
-- **WHEN** a report holds the sentences "A is true [1]." and "B and C hold [2, 3]." and the judge answers `[0, 2]` for the three pairs
+- **WHEN** a report holds the sentences "A is true [1]." and "B and C hold [2, 3]." and the judge answers yes, no, yes for the three pairs
 - **THEN** the result records `citations` 3 and faithfulness 0.67 (2 of 3)
 
 #### Scenario: Replayed without --write
@@ -136,20 +146,32 @@ SHALL be left out of the pairs.
 - **THEN** its faithfulness is missing and `citations` is 0
 
 #### Scenario: Unparsable faithfulness answer
-- **WHEN** the faithfulness judge answers text without a JSON list
+- **WHEN** the faithfulness judge answers neither yes nor no for every pair
 - **THEN** the result's faithfulness is missing, its precision is kept, and the judge continues
 
 #### Scenario: Claims and passages as data
-- **WHEN** the faithfulness judge is called
-- **THEN** the system message holds only the template with the query, and the user message holds the numbered claim and passage pairs
+- **WHEN** the faithfulness judge is called for a pair
+- **THEN** the system message holds only the template with the query, and the user message holds that claim and passage
 
 #### Scenario: Judge sends no thinking
 - **WHEN** the judge calls the LLM
-- **THEN** the request body has `reasoning_effort: "none"` and a token cap equal to the judge's limit
+- **THEN** the request body has `reasoning_effort: "none"`, `temperature: 0`, and a token cap equal to the judge's limit
 
 #### Scenario: Provider error on one result
-- **WHEN** the endpoint answers 502 for the first result's precision call
+- **WHEN** the endpoint answers 502 for one passage call of the first result
 - **THEN** that result records precision and faithfulness as missing, the error is printed on one line, the next result is judged, and the judge exits 0
+
+#### Scenario: Samples averaged
+- **WHEN** `--samples 3` and a passage is answered yes, yes, no
+- **THEN** its value is 0.67, the judgement records `samples` 3
+
+#### Scenario: Force re-judges
+- **WHEN** a result already has a judgement and the judge runs with `--force`
+- **THEN** the result is judged again and `judgements.jsonl` holds one line for it, the new one
+
+#### Scenario: Concurrent calls
+- **WHEN** a result has 30 passages and `llm.concurrency` is 4
+- **THEN** at most 4 judge calls are in flight at once and all 30 are made
 
 ### Requirement: Recorded-run fixture
 The repository SHALL contain, tracked in version control, a small recorded
