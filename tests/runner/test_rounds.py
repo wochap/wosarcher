@@ -1,4 +1,4 @@
-"""The research loop with fakes: rounds, stop rules, pairing across rounds, usage, resume, and fork."""
+"""The research loop with fakes: rounds, stop rules, usage, resume, and fork."""
 
 import asyncio
 import json
@@ -11,7 +11,6 @@ from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeScorer, FakeSearc
 from wosarcher.config import (
     ChunkConfig,
     FetchConfig,
-    PrefilterConfig,
     ReasoningConfig,
     ResearchConfig,
     ScoreConfig,
@@ -182,14 +181,21 @@ async def test_no_follow_ups(tmp_path: Path) -> None:
 
 
 async def test_uncovered_recorded(tmp_path: Path) -> None:
-    cfg = configured(tmp_path, prefilter=PrefilterConfig(pairing="found"))
+    class Misses(FakeScorer):
+        async def score(self, query: Query, chunks: list[Chunk]) -> list[Score]:
+            scores = await super().score(query, chunks)
+            return [score.model_copy(update={"value": 0.0}) for score in scores] if query.id == "q2" else scores
+
+    score = ScoreConfig(provider="rerank", min_score=0.5)
+    cfg = configured(tmp_path, score=score, select=SelectConfig(passthrough_chars=0))
     store = RunStore.from_settings(cfg)
     run_id = new_run(store, cfg, sources="web")
-    fakes = world(gap_reply("nothing found here"), gap_reply("lithium price"))
+    misses = Misses("rerank", calibrated=True)
+    fakes = world(gap_reply("nothing found here"), gap_reply("lithium price"), scorers={"rerank": misses})
     assert await run(cfg, run_id, fakes) == "done"
     record = research(store, run_id)
     assert [r.uncovered for r in record.rounds] == [[], ["q2"], []]
-    assert "q2 · uncovered · best — · kept 0 — nothing found here" in planner_of(fakes).calls[2][1].content
+    assert "q2 · uncovered · best 0.00 · kept 0 — nothing found here" in planner_of(fakes).calls[2][1].content
     ready = [e.data.uncovered for e in store.read_events(run_id) if isinstance(e, GapReady)]
     assert ready == [[], ["q2"]]
 

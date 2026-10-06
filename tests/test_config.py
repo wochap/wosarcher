@@ -252,7 +252,6 @@ def test_wire_format_defaults() -> None:
     assert settings.llm.reasoning.model_dump() == {"plan": "none", "gap": "none", "write": "none"}
     assert settings.llm.max_continuations == 2
     assert settings.score.rerank_scale == "auto"
-    assert settings.prefilter.pairing == "all"
 
 
 def test_invalid_max_tokens_field(env: dict[str, str]) -> None:
@@ -471,11 +470,9 @@ def test_preset_cannot_set_domains(tmp_path: Path) -> None:
         load_depth("narrow", tmp_path)
 
 
-def test_invalid_prefilter_pairing(env: dict[str, str]) -> None:
-    with pytest.raises(ConfigError) as error:
-        resolve("workstation", ['prefilter.pairing="some"'], env)
-    assert "prefilter.pairing" in str(error.value)
-    assert "'all' or 'found'" in str(error.value)
+def test_prefilter_pairing_is_unknown(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"prefilter\.pairing"):
+        resolve("workstation", ['prefilter.pairing="found"'], env)
 
 
 def test_invalid_prefilter_context_names_allowed_values(env: dict[str, str]) -> None:

@@ -253,12 +253,11 @@ async def test_prefilter_fallback_reported(tmp_path: Path) -> None:
 
 
 async def test_prefilter_passthrough_reported(tmp_path: Path) -> None:
-    cfg = embeddings_settings(tmp_path, 60)
-    cfg = cfg.model_copy(update={"prefilter": cfg.prefilter.model_copy(update={"pairing": "found"})})
+    cfg = embeddings_settings(tmp_path, 1_000_000)
     store = store_of(cfg)
     run_id = new_run(store, cfg, until="prefilter")
     assert await run(cfg, run_id) == "done"
-    assert done_of(store, run_id, "prefilter").data.passthrough == ["q1"]
+    assert done_of(store, run_id, "prefilter").data.passthrough == ["q0", "q1"]
 
 
 async def test_report_streams_into_file(tmp_path: Path) -> None:

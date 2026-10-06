@@ -356,7 +356,6 @@ async def prefilter(ctx: StepContext) -> Outcome:
         ctx.pages(),
         ctx.items("chunks.jsonl", Chunk),
         method=cfg.provider,
-        pairing=cfg.pairing,
         context=cfg.context,
         embedder=embedder,
         top_k=cfg.top_k,

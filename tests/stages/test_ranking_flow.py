@@ -29,7 +29,6 @@ async def test_ranking_flow() -> None:
         pages,
         chunks,
         method="embeddings",
-        pairing="found",
         embedder=FakeEmbedder(),
         top_k=5,
         passthrough_chars=8000,

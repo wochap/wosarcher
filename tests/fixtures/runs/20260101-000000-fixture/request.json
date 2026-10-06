@@ -81,7 +81,6 @@
         "per_unit": null
       },
       "top_k": 50,
-      "pairing": "all",
       "context": "header"
     },
     "score": {

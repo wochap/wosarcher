@@ -137,7 +137,7 @@ pure. Each round:
 - chunks its new pages, deduplicated against earlier chunks;
 - prefilters and scores only pairs of its own queries, with every chunk of
   the run so far (attached files, earlier rounds' pages, and its new
-  pages) under the pairing rule. A query of an earlier round never pairs
+  pages). A query of an earlier round never pairs
   with a later round's pages, so each (query, chunk) pair is scored at
   most once, in the query's round;
 - starts with the scorer the previous round ended on, so a fallback stays
@@ -385,12 +385,8 @@ Remote endpoints:
 ### Scoring
 
 - A score is always for a pair: `Score(query_id, chunk_id, value, scorer)`.
-- `prefilter.pairing` sets the pairing rule. With `all` (default), web
-  chunks are paired with the main query and each sub-query; with `found`,
-  only with the queries that found their page. `found` is kept for the
-  eval variants `pairing-found` and `pairing-all`.
-- File chunks are paired with the main query and each sub-query under
-  both rules. Only
+- Every chunk, web or file, is paired with the main query and each
+  sub-query; no setting narrows it. Only
   pairs that survive the prefilter (`prefilter.top_k` per query, default
   50, by embedding similarity or BM25, or all with `none`) reach the
   scorer. If the embedder fails, or returns a vector of another dimension,

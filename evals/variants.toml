@@ -59,16 +59,6 @@ set = ["prefilter.provider=bm25", "score.provider=jev", "score.base_url=\"https:
 from = "score"
 set = ["score.provider=jev", "score.base_url=\"https://api.typesafe.ai/v1\"", "score.model=\"\"", "score.concurrency=16", "score.fallback=[]", "score.min_score=1.5"]
 
-# Pairing rule: every query against every chunk, or only the queries that
-# found the page.
-[pairing-found]
-from = "prefilter"
-set = ["prefilter.pairing=\"found\""]
-
-[pairing-all]
-from = "prefilter"
-set = ["prefilter.pairing=\"all\""]
-
 # Scoring text: the context line (title and heading path) before the body,
 # or the body alone.
 [context-header]
