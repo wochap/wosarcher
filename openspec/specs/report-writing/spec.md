@@ -248,3 +248,24 @@ formats, and `report.json` and `report.md` SHALL keep the same shape.
 #### Scenario: Answer keeps references
 - **WHEN** an answer cites passages 1 and 3 from two sources
 - **THEN** `report.md` ends with the reference list of those two sources, as for a report
+
+### Requirement: Grounding rules
+The report and the answer system prompts SHALL instruct the model to:
+- place each citation right after the part of the sentence it supports,
+  and cite each part of a sentence that draws on different passages
+  separately, never one citation at the end for several facts;
+- use a number, date, price, version, proper name, or quotation only when
+  the cited passage states it, and otherwise leave it out or say the
+  passages do not give it;
+- never combine facts from different passages into one cited phrase.
+
+The rules SHALL be part of the prompt files, not Python strings, and SHALL
+not change the two-message shape, the passages block, or the writing task.
+
+#### Scenario: Rules present
+- **WHEN** the writer builds the system message for a report or an answer
+- **THEN** it holds the three grounding rules
+
+#### Scenario: Shape unchanged
+- **WHEN** the writer calls the LLM
+- **THEN** the messages are still `system` then one `user` holding the data instruction, the passages block, and the task

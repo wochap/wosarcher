@@ -10,9 +10,12 @@ proves the whole pipeline works end to end without live services.
 
 ### Requirement: Variants
 The harness SHALL read named variants from a TOML file. Each variant SHALL
-name the stage to fork from (`chunk`, `prefilter`, or `score`) and a list
-of `--set` overrides. A variant with any other fork stage SHALL be
-rejected with an error naming the variant and the allowed stages.
+name the stage to fork from (`chunk`, `prefilter`, `score`, or `write`)
+and a list of `--set` overrides. A variant with any other fork stage SHALL
+be rejected with an error naming the variant and the allowed stages. A
+`write` variant forks a run (a parent or an earlier fork) from `write`, so
+the context is copied and only the report is written again; replaying it
+implies `--write`.
 
 #### Scenario: Valid variant
 - **WHEN** the variants file defines `bm25` with `from = "score"` and `set = ["score.provider=bm25"]`
@@ -22,9 +25,13 @@ rejected with an error naming the variant and the allowed stages.
 - **WHEN** the variants file defines `chunk-current` with `from = "chunk"` and no overrides
 - **THEN** replaying with it forks each run from `chunk`, makes no search or fetch request, and chunks the parent's pages again
 
+#### Scenario: Write variant
+- **WHEN** the variants file defines `write-current` with `from = "write"` and the replay names an earlier fork's run ID
+- **THEN** the new fork copies that run's `context.json`, calls no searcher, fetcher, embedder, or scorer, and writes a report
+
 #### Scenario: Invalid stage
 - **WHEN** a variant sets `from = "fetch"`
-- **THEN** the harness fails before forking and names the variant and the allowed stages `chunk`, `prefilter`, `score`
+- **THEN** the harness fails before forking and names the variant and the allowed stages `chunk`, `prefilter`, `score`, `write`
 
 ### Requirement: Replay
 `python -m evals.replay` SHALL fork every given recorded run with every
