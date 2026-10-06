@@ -10,17 +10,21 @@ proves the whole pipeline works end to end without live services.
 
 ### Requirement: Variants
 The harness SHALL read named variants from a TOML file. Each variant SHALL
-name the stage to fork from (`prefilter` or `score`) and a list of
-`--set` overrides. A variant with any other fork stage SHALL be rejected
-with an error naming the variant.
+name the stage to fork from (`chunk`, `prefilter`, or `score`) and a list
+of `--set` overrides. A variant with any other fork stage SHALL be
+rejected with an error naming the variant and the allowed stages.
 
 #### Scenario: Valid variant
 - **WHEN** the variants file defines `bm25` with `from = "score"` and `set = ["score.provider=bm25"]`
 - **THEN** replaying with `bm25` forks each run from `score` with that override
 
+#### Scenario: Chunk variant
+- **WHEN** the variants file defines `chunk-current` with `from = "chunk"` and no overrides
+- **THEN** replaying with it forks each run from `chunk`, makes no search or fetch request, and chunks the parent's pages again
+
 #### Scenario: Invalid stage
 - **WHEN** a variant sets `from = "fetch"`
-- **THEN** the harness fails before forking and names the variant and the allowed stages
+- **THEN** the harness fails before forking and names the variant and the allowed stages `chunk`, `prefilter`, `score`
 
 ### Requirement: Replay
 `python -m evals.replay` SHALL fork every given recorded run with every
