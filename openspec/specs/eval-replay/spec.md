@@ -233,28 +233,102 @@ passage in `context.json` SHALL be left out of the pairs.
 - **WHEN** a result has 30 passages and `llm.concurrency` is 4
 - **THEN** at most 4 judge calls are in flight at once and all 30 are made
 
+### Requirement: Judged coverage
+`python -m evals.judge` SHALL judge, for every result, whether the run
+covers each part of its question.
+
+Question parts: for each parent run ID, the judge SHALL make one LLM call
+that turns the run's query (from `context.json`) into a numbered list of
+parts, the distinct things the question asks for. Only the query SHALL go
+through the parts prompt template; the call SHALL use effort `none` and
+temperature 0. The answer SHALL be a JSON list of strings, optionally
+inside a Markdown code fence; blank items SHALL be dropped and at most the
+first 20 kept. An answer that is not such a list, or a list with no item
+left, is unparsable. Parsed parts SHALL be saved in `<DIR>/parts.jsonl`,
+one line per parent run ID with `parent_run_id`, `query`, and `parts`, and
+every later result of the same parent, in this or any later judge call,
+including with `--force`, SHALL use the saved parts without calling the
+model. Unparsable parts and a provider error on the parts call SHALL save
+nothing.
+
+For each part the judge SHALL ask two pointwise yes/no questions with the
+same rules as precision (template with the query only, data in a separate
+user message never through a template, effort `none`, temperature 0,
+first-word answer, unreadable items, `--samples`, concurrent calls):
+
+- `coverage`: the user message holds the part and the report's rendered
+  Markdown (`report.json` `markdown`, never cut); the answer is yes when
+  the report answers that part.
+- `retrievable`: the user message holds the part and the text of every
+  selected passage in `context.json`, each with its number, never cut; the
+  answer is yes when the passages hold enough to answer that part.
+
+Each metric SHALL be its yes items divided by its readable items, and the
+judgement SHALL record `parts` (the number of parts), `coverage`, and
+`retrievable`; unreadable coverage and retrievable items SHALL count in
+`unreadable`. A result without `report.json` SHALL record coverage as
+missing and still judge retrievable. Unparsable parts SHALL record parts 0
+and both metrics missing, print one line, and the judge SHALL go on. A
+metric with no readable item SHALL be missing, not zero. A provider error
+on any call of a result SHALL record precision, faithfulness, coverage, and
+retrievable as missing, as for precision.
+
+#### Scenario: Parts cached per parent
+- **WHEN** two results share a parent run ID and the judge runs over both, then runs again with `--force`
+- **THEN** the parts call is made once, `parts.jsonl` holds one line for that parent, and both results are judged against the same parts
+
+#### Scenario: Coverage
+- **WHEN** a result's query yields 4 parts and the coverage judge answers yes for 2 of them and no for the others
+- **THEN** its coverage is 0.5 and `parts` is 4
+
+#### Scenario: Retrievable judged from passages only
+- **WHEN** the retrievable judge is called for a part of a result with 3 selected passages
+- **THEN** the system message holds only the template with the query, and the user message holds the part and the 3 passage texts with their numbers and no report text
+
+#### Scenario: Missing report
+- **WHEN** a result's fork stopped at `select` and has no `report.json`
+- **THEN** its coverage is missing, its retrievable is judged, and no coverage call is made
+
+#### Scenario: Unparsable parts list
+- **WHEN** the parts call answers "The question asks about several things."
+- **THEN** the result records `parts` 0 with coverage and retrievable missing, its precision and faithfulness are still judged, nothing is written to `parts.jsonl`, and the judge exits 0
+
+#### Scenario: Parts capped
+- **WHEN** the parts call answers a JSON list of 26 strings
+- **THEN** the first 20 are saved and judged
+
+#### Scenario: Fenced list
+- **WHEN** the parts call answers a JSON list inside a ```` ```json ```` code fence
+- **THEN** the list is parsed
+
 ### Requirement: Judged items
 `python -m evals.judge` SHALL append one line per judged item to
-`<DIR>/items.jsonl`: `run_id`, `variant`, `kind` (`precision` or
-`faithfulness`), `index` (the item's position in its kind for that run),
-`n` (the passage's citation number), `claim` (the sentence, faithfulness
-only, else null), `passage` (the text as sent to the judge), `value` (1,
-0, or null when unreadable), and `answer` (the first sample's answer text,
-at most 80 characters). With `--samples N` the value is the averaged
-value. `--force` SHALL remove the re-judged runs' item lines before
-appending the new ones. A result recorded as missing because of a
-provider error SHALL write no item lines.
+`<DIR>/items.jsonl`: `run_id`, `variant`, `kind` (`precision`,
+`faithfulness`, `coverage`, or `retrievable`), `index` (the item's
+position in its kind for that run), `n` (the passage's citation number;
+for `coverage` and `retrievable`, the part's number starting at 1),
+`claim` (the sentence, faithfulness only, else null), `part` (the part
+text, coverage and retrievable only, else null), `passage` (the text as
+sent to the judge for precision and faithfulness; empty for coverage and
+retrievable), `value` (1, 0, or null when unreadable), and `answer` (the
+first sample's answer text, at most 80 characters). With `--samples N` the
+value is the averaged value. `--force` SHALL remove the re-judged runs'
+item lines before appending the new ones. A result recorded as missing
+because of a provider error SHALL write no item lines.
 
 `python -m evals.items --results DIR [--run ID] [--failed]` SHALL print
 the items of `<DIR>/items.jsonl` as Markdown without any model call: one
-section per run (`variant · run_id`), faithfulness items first, each item
-as its value, `n`, the claim, and the first 300 characters of the passage.
-`--failed` SHALL print only items whose value is below 1; `--run` only one
-run. A missing items file SHALL print nothing and exit 0.
+section per run (`variant · run_id`), faithfulness items first, then
+coverage, retrievable, and precision. A faithfulness or precision item
+SHALL show its value, `n`, the claim when present, and the first 300
+characters of the passage; a coverage or retrievable item SHALL show its
+kind, value, part number, and part text. `--failed` SHALL print only items
+whose value is below 1; `--run` only one run. A missing items file SHALL
+print nothing and exit 0.
 
 #### Scenario: Items written
-- **WHEN** a result with 3 passages and 2 claim pairs is judged
-- **THEN** `items.jsonl` gains 3 `precision` lines and 2 `faithfulness` lines for its run ID, each with `n`, `passage`, `value`, and `answer`
+- **WHEN** a result with 3 passages, 2 claim pairs, and 2 question parts is judged with a report
+- **THEN** `items.jsonl` gains 3 `precision` lines, 2 `faithfulness` lines, 2 `coverage` lines, and 2 `retrievable` lines for its run ID; the coverage and retrievable lines carry `part`, `n` 1 and 2, and an empty `passage`
 
 #### Scenario: Unreadable item
 - **WHEN** the judge answers "unclear" for a passage
@@ -267,6 +341,10 @@ run. A missing items file SHALL print nothing and exit 0.
 #### Scenario: Failed pairs listed
 - **WHEN** `python -m evals.items --results DIR --failed` runs over a run with one unsupported pair and four supported ones
 - **THEN** the output shows one faithfulness item for that run, with its claim and passage excerpt, and no supported item
+
+#### Scenario: Failed parts listed
+- **WHEN** `python -m evals.items --results DIR --failed` runs over a run whose part 2 is judged 0 for coverage and 1 for retrievable
+- **THEN** the output shows one coverage item with part number 2 and its text, and no retrievable item for that part
 
 ### Requirement: Recorded-run fixture
 The repository SHALL contain, tracked in version control, a small recorded
