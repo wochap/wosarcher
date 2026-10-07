@@ -1,6 +1,6 @@
 # Nocturne design system
 
-Nocturne is a quiet, compact dark interface: a near-neutral blue-grey ground, Inter at medium weight, soft 8px radii and an accent used as a line and a glow rather than a flood. Rules fade to transparent at their ends — over 48px a side — rather than stopping cleanly; short accent marks stay solid. Contrast comes from the tonal ramps, not from saturation, and photographs blend into the page with their dark values falling away.
+Nocturne is a quiet, compact interface on the Catppuccin palette (Mocha dark, Latte light): Inter at medium weight, soft 8px radii and an accent used as a line and a glow rather than a flood. Rules fade to transparent at their ends — over 48px a side — rather than stopping cleanly; short accent marks stay solid. Contrast comes from the tonal ramps, not from saturation, and photographs blend into the page with their dark values falling away.
 
 ## How to use this
 
@@ -15,7 +15,11 @@ Left-aligned, asymmetric layouts. Flush-left headings; content hugs the left edg
 
 ## Color
 
-A dark ground (`--color-bg` #161826) with `--color-text` #e9e9ed and a single accent #9184d9 — a blurple in the product's own Pro-accent hue, at the chroma that hue carries in the app, so the accent reads as an accent against the desaturated ramps (this is a mono scheme: no second accent was chosen — the `--color-accent-2-*` variables carry a machine-derived stand-in kept only so both sets resolve; treat them as one role). Each role carries a 100–900 tonal ramp (`--color-neutral-100` … `--color-accent-2-900`) generated in OKLCH on a shared perceptual lightness scale, so the same step of any ramp has the same visual weight. On this dark ground use the dark steps (700–900) for tinted fills, hovers and subtle borders, 500 as the role's base, and the light steps (100–300) for text on those tints and for pressed states; prefer ramp steps over ad-hoc `color-mix()`. For elevation use `--shadow-sm/md/lg` (already tuned to the ground) rather than ad-hoc box-shadows.
+Catppuccin — **Mocha** is the dark default (`:root` in `styles.css`); **Latte** is the light flavor, applied by consuming pages as an override of the same tokens. Every color is a Catppuccin hex or a `color-mix()` of two; no ad-hoc values.
+
+Roles (Mocha / Latte): `--color-bg` base (#1e1e2e / #eff1f5) is the page ground; `--color-surface` surface0 (#313244) for raised surfaces — on Latte a 30% base→surface0 mix, because full surface0 can't carry colored text at 4.5:1; `--color-mantle` for sidebars and sunken panels; `--color-crust` for the deepest layer (code, terminals). `--color-text` text (#cdd6f4 / #4c4f69). `--color-accent` mauve (#cba6f7 / #8839ef) — still a line, a glow and a mark, never a flood; primary buttons stay outlined. `--color-divider` surface1. Danger is red (Latte: red mixed 20% toward text); warn is yellow on Mocha, and on Latte peach mixed 70% toward text, since neither yellow nor peach reaches 4.5:1 on the light ground. The `--color-accent-2-*` set mirrors the accent (mono scheme).
+
+The neutral ramp maps 100 → 900 from text to ground: text, subtext1, subtext0, overlay2, overlay1, overlay0, surface2, surface1, surface0 — identical names in both flavors, so it flips automatically. Catppuccin has no tonal ramps, so the accent ramp is derived: 500 is mauve, 100–400 mix it 80/60/40/20% toward text, 600–900 mix it 20/40/60/80% toward the ground. Use 700–900 for tinted fills and hovers, 500 as the base, 100–300 for text on tints and pressed states (`--color-accent-300` for accent-colored body text). Elevation (`--shadow-sm/md/lg`) is a surface1 / surface2 / overlay0 ring plus ambient shade — black on Mocha, Latte text (rgba(76,79,105)) on Latte.
 
 ## Type
 

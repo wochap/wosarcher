@@ -24,3 +24,8 @@ web/dist/
 .cache/
 
 evals/out
+
+design/**/*.png
+design/**/*.jpg
+design/**/*.webp
+.thumbnail
