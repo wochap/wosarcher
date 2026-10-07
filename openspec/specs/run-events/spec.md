@@ -39,7 +39,7 @@ The system SHALL define exactly these event types and data:
 | `page.failed` | URL, reason |
 | `passages.scored` | query ID, scorer, pair count, kept count, display threshold, kept passages |
 | `round.done` | round, query IDs, new pages, known pages, kept passages |
-| `gap.ready` | round it followed, follow-up queries (ID, text), note, uncovered query IDs, retried |
+| `gap.ready` | round it followed, follow-up queries (ID, text), note, uncovered query IDs, missing question parts, retried |
 | `research.done` | planned rounds, rounds ran, stop reason, end note |
 | `report.delta` | text |
 | `report.snapshot` | text |
@@ -108,6 +108,10 @@ reports 0.
 #### Scenario: Thin page event
 - **WHEN** a fetched page has 94 characters of text and `chunk.min_chars = 500`
 - **THEN** its `page.fetched` event carries `chars` 94 and `thin` true
+
+#### Scenario: Missing parts in events
+- **WHEN** the gap step after round 1 names the missing part "setup"
+- **THEN** `gap.ready` for round 1 carries `missing` = `["setup"]`; a gap step that sent no parts carries an empty list
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

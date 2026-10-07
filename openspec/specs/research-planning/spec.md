@@ -90,6 +90,19 @@ SHALL contain only the main query with the fallback topic and a warning
 that says why. When the answer has sub-queries but no usable topic, the
 plan SHALL keep the sub-queries, use the fallback topic, and add a warning.
 
+In the same call the planner SHALL be asked for the question parts: the
+distinct things the user's query asks for, as short phrases, at most 12.
+The answer's `parts` field SHALL be a list of strings; parts SHALL be
+trimmed, empty ones and duplicates (ignoring case and surrounding
+whitespace) dropped, and at most the first 12 kept. The plan SHALL save
+them as `parts` in `plan.json`, in the planner's order. When the answer has
+a readable query list but `parts` is missing, is not a list of strings, or
+keeps no part, the plan SHALL have an empty parts list and one warning
+that says so; the run SHALL NOT fail. A bare-list answer has no parts.
+When the planner does not run (sources `files`, or `plan.max_sub_queries =
+0`) or its answer cannot be read, the plan SHALL have an empty parts list
+and no parts warning.
+
 #### Scenario: Too many sub-queries
 - **WHEN** `plan.max_sub_queries = 3` and the planner returns five sub-queries
 - **THEN** the plan keeps the first three
@@ -105,6 +118,26 @@ plan SHALL keep the sub-queries, use the fallback topic, and add a warning.
 #### Scenario: Sub-queries without a topic
 - **WHEN** the planner answers with a bare list of two sub-queries
 - **THEN** the plan has `q0` with the fallback topic, `q1`, `q2`, and one warning
+
+#### Scenario: Parts saved
+- **WHEN** the planner answers `{"topic": "t", "queries": ["a"], "parts": ["cost", " Cost ", "setup", ""]}`
+- **THEN** `plan.json` has `parts` = `["cost", "setup"]` and no parts warning
+
+#### Scenario: Too many parts
+- **WHEN** the planner answers 15 distinct parts
+- **THEN** the plan keeps the first 12
+
+#### Scenario: Parts missing
+- **WHEN** the planner answers `{"topic": "t", "queries": ["a", "b"]}`
+- **THEN** the plan has `q0` "t", `q1`, `q2`, an empty parts list, and one warning about the parts
+
+#### Scenario: Malformed parts
+- **WHEN** the planner answers `{"topic": "t", "queries": ["a"], "parts": "cost and setup"}`
+- **THEN** the plan keeps its queries, has an empty parts list, and one warning about the parts
+
+#### Scenario: No planner, no parts
+- **WHEN** a run uses sources `files`
+- **THEN** the plan has an empty parts list and no warning
 
 ### Requirement: Sources setting
 With sources `files`, the system SHALL NOT run the initial search, SHALL NOT

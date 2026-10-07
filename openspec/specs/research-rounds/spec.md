@@ -14,7 +14,11 @@ The `research` config block SHALL have:
 - `rounds`: an integer from 1 to 8, default 1;
 - `queries_per_round`: a positive integer, default 3;
 - `gap_context_tokens`: a positive integer or the string `auto`, default
-  4000.
+  4000;
+- `gap_parts`: a boolean, default true. When true, the gap step reads the
+  plan's question parts (Requirement: Gap step); when false it does not.
+  It is a temporary switch for measuring the parts input and is removed
+  once measured.
 
 With `rounds` = 1 a run SHALL behave as before this capability: the `gap`
 stage is skipped and no round events are emitted. With `rounds` > 1 and
@@ -55,22 +59,42 @@ The gap step SHALL NOT run after the last round. A run whose sources are
 - **WHEN** a profile sets `research.gap_context_tokens = "all"`
 - **THEN** loading fails with an error naming the field
 
+#### Scenario: Gap parts default
+- **WHEN** no source sets `research.gap_parts`
+- **THEN** the resolved value is true
+
+#### Scenario: Invalid gap parts value
+- **WHEN** a profile sets `research.gap_parts = "yes"`
+- **THEN** loading fails with an error naming the field
+
 ### Requirement: Gap step
 After round k (k < `research.rounds`), the gap stage SHALL make one LLM
 call, and a second one only as described below. The first call SHALL send:
 - a system message from `prompts/gap.md`, with only the main query, the
-  maximum number of follow-ups, and the date substituted;
+  maximum number of follow-ups, and the date substituted; when parts are
+  sent (below), followed by a blank line and `prompts/gap_parts.md`, with
+  nothing substituted;
 - one user message with a data preamble and a delimited data block. The
-  block holds, in order: the coverage table (Requirement: Coverage table);
+  block holds, in order: when `research.gap_parts` is true and the plan
+  has parts, the line "Question parts:" followed by the plan's parts, one
+  per line, numbered from 1; the coverage table (Requirement: Coverage table);
   when round k fetched no new page, the line "Round <k> found only pages
   fetched in earlier rounds:" followed by round k's query IDs and texts;
   and the passages that select picks from every round's kept scores with
   the gap budget. Passage text SHALL never go through a template, and text
   that would close the block SHALL be neutralised.
 
-The system prompt SHALL tell the model to write follow-ups for `uncovered`
-queries first, then for other gaps, to try new angles for queries that
-found only known pages, and to always write at least one query.
+Parts are sent only when `research.gap_parts` is true and the plan has
+parts. The system prompt (`prompts/gap.md`) SHALL tell the model to write
+follow-ups for `uncovered` queries first, then for other gaps, to try new
+angles for queries that found only known pages, and to always write at
+least one query. `prompts/gap_parts.md` SHALL tell the model to name, in a
+`missing` field of its reply, the question parts the passages cannot
+answer yet, and to write follow-ups for those parts before the `uncovered`
+queries. When no parts are sent, the gap step's messages SHALL be exactly
+those it sends without question parts: `prompts/gap.md` alone and no
+"Question parts:" block. Question parts are planner output and SHALL go
+only in the data block, never through a template.
 
 The gap budget SHALL be `research.gap_context_tokens` when it is a number.
 When it is `auto`, the gap budget SHALL be the room `llm.context_window`
@@ -80,9 +104,17 @@ queries' text (estimated with `llm.chars_per_token` and
 `llm.token_margin`). A gap budget of 0 or less SHALL count as a failed gap
 step.
 
-The reply SHALL be JSON with `queries` (strings) and `note` (one or two
-sentences on what is still missing). Any other field, including `stop`,
+The reply SHALL be JSON with `queries` (strings), `note` (one or two
+sentences on what is still missing), and `missing` (strings: the question
+parts the passages cannot answer yet). Any other field, including `stop`,
 SHALL be ignored. An unreadable reply SHALL count as a failed gap step.
+`missing` items SHALL be trimmed, empty ones and duplicates (ignoring case)
+dropped, and at most as many kept as the data block listed parts; a
+`missing` field that is absent or not a list SHALL be read as empty and
+SHALL NOT make the reply unreadable. When no parts were sent, the step's
+missing list SHALL be empty whatever the reply says. When the step
+retries, the second reply's missing list SHALL be used when it has any
+item, else the first reply's.
 
 The gap step SHALL drop a follow-up query when it is empty, longer than 200
 characters, or contains a URL. It SHALL also drop one that duplicates an
@@ -132,6 +164,26 @@ counts as a failed gap step.
 #### Scenario: Known pages named
 - **WHEN** round 2 searched `q6` and `q7` and fetched no new page
 - **THEN** the gap call after round 2 names `q6` and `q7` under "Round 2 found only pages fetched in earlier rounds:"
+
+#### Scenario: Parts in the data block
+- **WHEN** `research.gap_parts` is true and the plan has parts "cost" and "setup"
+- **THEN** the gap call's data block starts with "Question parts:", then "1. cost" and "2. setup", then the coverage table, and the system message is `prompts/gap.md` filled in, a blank line, and `prompts/gap_parts.md`, with no part text
+
+#### Scenario: Switch off
+- **WHEN** `research.gap_parts` is false and the plan has parts
+- **THEN** the gap call's messages are identical to those of the same call with an empty parts list: the system message is `prompts/gap.md` alone, the data block holds no "Question parts:" line, and the step's missing list is empty
+
+#### Scenario: Plan without parts
+- **WHEN** `research.gap_parts` is true and the plan's parts list is empty
+- **THEN** the gap call's data block starts with the coverage table and the step's missing list is empty
+
+#### Scenario: Missing parts read
+- **WHEN** the plan has 3 parts and the gap reply is `{"queries": ["a"], "note": "n", "missing": ["setup", "Setup", " ", "cost"]}`
+- **THEN** the step's missing list is `["setup", "cost"]`
+
+#### Scenario: Malformed missing field
+- **WHEN** the gap reply is `{"queries": ["a"], "note": "n", "missing": "setup"}`
+- **THEN** follow-up "a" is kept and the step's missing list is empty
 
 ### Requirement: Stop rules
 Research SHALL stop, and select SHALL follow, at the first of these, checked
@@ -191,7 +243,9 @@ every round. A multi-round run SHALL write `research.json` with:
   `kept` (passages kept that round), the gap `note` written after it
   (empty for the last round), and `uncovered`, the IDs of the queries the
   coverage table marked `uncovered` when the gap step ran after it (empty
-  for the last round).
+  for the last round), and `missing`, the question parts the gap step
+  named as not yet answerable after it (empty for the last round, and when
+  no parts were sent).
 
 #### Scenario: Research record
 - **WHEN** a four-round run stops after round 3 with `no new sources`
@@ -200,6 +254,10 @@ every round. A multi-round run SHALL write `research.json` with:
 #### Scenario: Uncovered recorded
 - **WHEN** the coverage table after round 1 marks `q4` and `q6` uncovered
 - **THEN** round 1's entry in `research.json` has `uncovered` = `["q4", "q6"]`
+
+#### Scenario: Missing recorded
+- **WHEN** the gap step after round 1 names the missing parts "setup" and "cost"
+- **THEN** round 1's entry in `research.json` has `missing` = `["setup", "cost"]`
 
 ### Requirement: Fetch and pairing across rounds
 The fetch page cap (`fetch.max_pages`) SHALL count pages across all rounds.

@@ -1237,6 +1237,11 @@ Each round that has started shows:
     while running;
   - "0 new pages · <m> already fetched" for a round with no new pages.
 - The gap note written after it, when there is one.
+- Under the note, when the gap step after it named missing question parts
+  (`gap.ready` missing), the line "Missing: <part>; <part>" in the note's
+  muted style, every part in reply order. The prototype has no such
+  element; it follows the note's style in every `rounds-*` scenario, dark
+  and light, phone and desktop.
 - Its queries, each with its ID (`q0`, `q1`, …), text, and status:
   "queued", "searching", or "<n> results". Round 1 starts with `q0`, shown
   as in the Sub-queries panel: the muted label "Topic line" and its help
@@ -1299,6 +1304,14 @@ says the gap step can end research early.
 #### Scenario: Max rounds
 - **WHEN** all three rounds ran (scenarios `rounds-done` and `rounds-max`)
 - **THEN** the final line reads "All 3 rounds ran · max rounds" with no end note
+
+#### Scenario: Missing parts line
+- **WHEN** `gap.ready` after round 1 has the note "Setup is unclear." and missing parts "setup" and "cost" (scenario `rounds-live`)
+- **THEN** round 1 shows "Setup is unclear." and under it "Missing: setup; cost" in the note's style
+
+#### Scenario: No missing parts
+- **WHEN** `gap.ready` after round 1 has an empty missing list
+- **THEN** round 1 shows no "Missing:" line
 
 ### Requirement: Source round tags
 In a multi-round run, a source in the Live Sources panel that was fetched
