@@ -392,6 +392,17 @@ def test_invalid_gap_context_value(env: dict[str, str]) -> None:
         resolve("bad", [], env)
 
 
+def test_gap_parts_default(env: dict[str, str]) -> None:
+    assert resolve(None, [], env).research.gap_parts is True
+    assert resolve(None, ["research.gap_parts=false"], env).research.gap_parts is False
+
+
+def test_invalid_gap_parts_value(env: dict[str, str]) -> None:
+    user_profile(env, "bad", PROVIDERS + '[llm]\nprovider = "openai"\n[research]\ngap_parts = "yes"\n')
+    with pytest.raises(ConfigError, match=r"research\.gap_parts"):
+        resolve("bad", [], env)
+
+
 def test_page_cap_default(env: dict[str, str]) -> None:
     assert resolve(None, [], env).fetch.max_pages == 40
 

@@ -53,10 +53,18 @@ export function roundsLog(ending: Ending = "nofollow"): RunEvent[] {
   ];
   const next = () => (log.at(-1)?.seq ?? 0) + 1;
   type Follow = { id: string; text: string; round?: number };
-  const gap = (k: number, queries: Follow[], uncovered: string[], note: string) => {
+  const gap = (
+    k: number,
+    queries: Follow[],
+    uncovered: string[],
+    note: string,
+    missing: string[] = [],
+  ) => {
     const retried = !queries.length;
     log.push(ev(next(), "stage.started", { device: null, provider: "llm", round: k }, "gap"));
-    log.push(ev(next(), "gap.ready", { round: k, queries, note, uncovered, retried }, "gap"));
+    log.push(
+      ev(next(), "gap.ready", { round: k, queries, note, uncovered, missing, retried }, "gap"),
+    );
     log.push(stageDone(next(), "gap", { round: k, count: queries.length }));
   };
   const done = (ran: number, reason: StopReason, note: string) =>
@@ -74,22 +82,22 @@ export function roundsLog(ending: Ending = "nofollow"): RunEvent[] {
     { id: "q6", text: "f", round: 2 },
     { id: "q7", text: "g", round: 2 },
   ];
-  gap(1, second, ["q4", "q5"], "Missing: benchmarks.");
+  gap(1, second, ["q4", "q5"], "Benchmarks are thin.", ["setup", "cost"]);
   const third = [{ id: "q8", text: "h", round: 3 }];
   if (ending === "nonew") {
     log.push(...round(next(), 2, ["q6", "q7"], 0, 9));
-    gap(2, third, ["q6", "q7"], "Missing: vendor data.");
+    gap(2, third, ["q6", "q7"], "Vendor data is thin.");
     log.push(...round(next(), 3, ["q8"], 0, 3));
     done(3, "no new sources", "Follow-up searches returned only pages fetched in earlier rounds.");
     return log;
   }
   log.push(...round(next(), 2, ["q6", "q7"], 6, 0));
   if (ending === "nofollow") {
-    gap(2, [], ["q6", "q7"], "Missing: latency.");
+    gap(2, [], ["q6", "q7"], "Latency is unclear.");
     done(2, "no follow-ups", "The gap step wrote no usable follow-up query.");
     return log;
   }
-  gap(2, third, [], "Missing: latency.");
+  gap(2, third, [], "Latency is unclear.");
   log.push(...round(next(), 3, ["q8"], 4, 0));
   done(3, "max rounds", "");
   return log;

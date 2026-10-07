@@ -280,9 +280,11 @@ describe("research rounds", () => {
       [2, "done", 6, 12],
       [3, "done", 4, 8],
     ]);
-    expect(state.rounds[0].note).toBe("Missing: benchmarks.");
+    expect(state.rounds[0].note).toBe("Benchmarks are thin.");
     expect(state.rounds[0].gap).toBe(2);
     expect(state.rounds[0].uncovered).toEqual(["q4", "q5"]);
+    expect(state.rounds[0].missing).toEqual(["setup", "cost"]);
+    expect(state.rounds[1].missing).toEqual([]);
     expect(state.rounds[1].queries.map((q) => [q.id, q.results, q.searched])).toEqual([
       ["q6", 1, true],
       ["q7", 1, true],

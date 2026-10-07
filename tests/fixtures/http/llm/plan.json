@@ -8,7 +8,7 @@
    "index": 0,
    "message": {
     "role": "assistant",
-    "content": "{\"topic\": \"battery recycling\", \"queries\": [\"lithium-ion battery recycling methods\", \"battery recycling economics\"]}"
+    "content": "{\"topic\": \"battery recycling\", \"queries\": [\"lithium-ion battery recycling methods\", \"battery recycling economics\"], \"parts\": [\"recycling methods\", \"economics\"]}"
    },
    "finish_reason": "stop"
   }

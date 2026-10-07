@@ -2,7 +2,8 @@ import pytest
 
 from wosarcher.adapters.fakes import FakeLLM
 from wosarcher.config import ScoreConfig
-from wosarcher.models import Context, Passage, Query, Score, Source
+from wosarcher.models import Context, GapResult, Passage, Query, Score, Source
+from wosarcher.prompts import load
 from wosarcher.stages.gap import GapUnreadableError, coverage, gap
 
 PLAN = [Query(id=f"q{n}", text=f"query {n}") for n in range(6)]
@@ -146,3 +147,56 @@ async def test_unreadable_reply_fails() -> None:
 async def test_capped_at_queries_per_round() -> None:
     _, found = await run('Here: {"queries": ["a", "b", "c", "d", "query 1", "' + "x" * 201 + '"]}', limit=2)
     assert [item.text for item in found] == ["a", "b"]
+
+
+async def with_parts(*replies: str, parts: list[str]) -> tuple[FakeLLM, GapResult]:
+    llm = FakeLLM(list(replies))
+    result = await gap(
+        "main question",
+        PLAN,
+        CONTEXT,
+        llm,
+        effort="low",
+        scores=[],
+        score_cfg=CFG,
+        parts=parts,
+        limit=3,
+        today="2026-10-04",
+    )
+    return llm, result
+
+
+async def test_parts_in_the_data_block() -> None:
+    llm, _ = await with_parts('{"queries": ["a"], "note": ""}', parts=["cost", "setup"])
+    system, data = llm.calls[0]
+    base = load("gap").substitute(query="main question", limit=3, today="2026-10-04")
+    assert system.content == f"{base.rstrip()}\n\n{load('gap_parts').template.strip()}\n"
+    assert "cost" not in system.content
+    assert "<data>\nQuestion parts:\n1. cost\n2. setup\n\nCoverage:\n" in data.content
+
+
+async def test_switch_off_matches_no_parts() -> None:
+    off, result = await with_parts('{"queries": ["a"], "note": "", "missing": ["cost"]}', parts=[])
+    plain, _ = await run('{"queries": ["a"], "note": ""}')
+    assert off.calls == plain.calls
+    assert off.calls[0][0].content == load("gap").substitute(query="main question", limit=3, today="2026-10-04")
+    assert "Question parts:" not in off.calls[0][1].content
+    assert result.missing == []
+
+
+async def test_missing_parts_read() -> None:
+    reply = '{"queries": ["a"], "note": "n", "missing": ["setup", "Setup", " ", "cost"]}'
+    _, result = await with_parts(reply, parts=["cost", "setup", "speed"])
+    assert result.missing == ["setup", "cost"]
+
+
+async def test_malformed_missing_field() -> None:
+    _, result = await with_parts('{"queries": ["a"], "note": "n", "missing": "setup"}', parts=["setup"])
+    assert ([item.text for item in result.queries], result.missing) == (["a"], [])
+
+
+async def test_missing_after_retry() -> None:
+    first = '{"queries": [], "note": "", "missing": ["cost"]}'
+    _, kept = await with_parts(first, '{"queries": ["a"], "note": ""}', parts=["cost", "setup"])
+    _, replaced = await with_parts(first, '{"queries": ["a"], "missing": ["setup"]}', parts=["cost", "setup"])
+    assert (kept.missing, replaced.missing) == (["cost"], ["setup"])

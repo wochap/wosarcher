@@ -495,6 +495,7 @@ async def gap(ctx: StepContext) -> Outcome:
         scores=inputs[0],
         score_cfg=settings.score,
         known=known,
+        parts=plan.parts if settings.research.gap_parts else (),
         limit=settings.research.queries_per_round,
         today=date.today().isoformat(),
     )
@@ -507,6 +508,7 @@ async def gap(ctx: StepContext) -> Outcome:
         queries=result.queries,
         note=result.note,
         uncovered=result.uncovered,
+        missing=result.missing,
         retried=result.retried,
     )
     ctx.log.emit("gap.ready", "gap", data)

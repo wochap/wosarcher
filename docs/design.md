@@ -55,14 +55,14 @@ query's candidates.
 
 | Stage | Input | Output | Resource |
 |---|---|---|---|
-| plan | query, initial search snippets (short queries), attachment outlines | topic line `q0`, sub-queries | LLM |
+| plan | query, initial search snippets (short queries), attachment outlines | topic line `q0`, sub-queries, question parts | LLM |
 | search | sub-queries, and `q0` when no initial search ran | hits (URL, title, snippet, query IDs) | network |
 | fetch | hits | pages (markdown) | network |
 | load | attachment bytes | pages, outlines | CPU |
 | chunk | pages | chunks with heading path | CPU |
 | prefilter | chunks, queries | top-K (query, chunk) pairs | GPU or API |
 | score | pairs | scores | GPU or API |
-| gap | coverage table, best passages so far | follow-up queries, note, uncovered query IDs | LLM |
+| gap | question parts, coverage table, best passages so far | follow-up queries, note, uncovered query IDs, missing parts | LLM |
 | select | scores | context within a token budget | CPU |
 | write | context, query, writing options | report with citations | LLM |
 
@@ -76,6 +76,11 @@ run, not a maximum: no model ends research because coverage looks good.
 After every round but the last, the gap stage (`stages/gap.py`) asks the
 planner LLM for follow-ups. Its data block holds, in order:
 
+- when `research.gap_parts` is true and the plan has parts, "Question
+  parts:" and the plan's question parts, numbered from 1. The planner names
+  them in its one call: at most 12 short phrases, one per distinct thing
+  the query asks for, trimmed and deduplicated ignoring case; a readable
+  answer without usable parts gives an empty list and a warning;
 - the coverage table, built by code from `scores.jsonl` and the plan with
   no other call: a header naming each scorer that ran (`jev`: "absolute
   0–1 scale, kept from <threshold display>; a query below it keeps its
@@ -97,13 +102,22 @@ planner LLM for follow-ups. Its data block holds, in order:
 
 The system prompt (`prompts/gap.md`) asks for 1 to
 `research.queries_per_round` queries, `uncovered` ones first, new angles
-for queries that found only known pages. The reply is JSON
-`{"queries", "note"}`; other fields are ignored. Follow-ups that are empty,
+for queries that found only known pages. When parts are
+sent, `prompts/gap_parts.md` follows it after a blank line: name the parts
+the passages cannot answer yet in `missing`, and write follow-ups for them
+before the `uncovered` queries. Without parts the messages are exactly
+those of the parts-free step. The reply is JSON `{"queries", "note",
+"missing"}`; other fields are ignored, and a `missing` that is not a list
+reads as empty. `missing` is trimmed, deduplicated ignoring case, capped
+at the number of parts sent, and empty when none were sent; a retry's
+non-empty list replaces the first. Follow-ups that are empty,
 over 200 characters, hold a URL, or repeat an earlier query are dropped.
 When none survives, the stage asks once more: the same two messages, the
 first reply as `assistant`, and `prompts/gap_retry.md` with the dropped
 queries and their reasons (`empty`, `too long`, `URL`, `duplicate`) in a
-data block. The result records `retried` and the `uncovered` query IDs.
+data block. The result records `retried`, the `uncovered` query IDs,
+and `missing`. `research.gap_parts` (default true) is a temporary switch
+for measuring the parts input; it is set only with `--set` or a profile.
 Kept follow-ups get the next `qN` IDs, carry their `round`, and are
 appended to `plan.json`; round k+1 searches them. With `rounds = 1` the gap
 stage is skipped (`stage.done` with `skipped`) and nothing else changes.
@@ -702,7 +716,8 @@ behind each claim.
 - Fetched content never reaches the planner. Its prompt template takes
   only the query and `plan.max_sub_queries`; initial hit titles and
   snippets (short queries only) and attachment outlines go in a separate,
-  delimited data message. The topic line it returns becomes a search query,
+  delimited data message. The question parts it returns go only in the
+  gap step's data block, never through a template. The topic line it returns becomes a search query,
   so it is held to the same 200-character limit as follow-ups.
 - The gap step does read scraped passages, and its output becomes search
   queries. Only the main query, the follow-up limit, and the date go
@@ -891,8 +906,8 @@ Queries, hits, pages, and scores carry the `round` they first appeared in
 `ran`, `reason`, `note` (the end note: a fixed sentence for `no new
 sources` and `no follow-ups`, else empty), and one entry per round with
 `round`, `query_ids`, `new_pages`, `known_pages`, `kept`, and the gap
-`note` and `uncovered` query IDs written after it (empty for the last
-round).
+`note`, `uncovered` query IDs, and `missing` question parts written
+after it (empty for the last round).
 
 A stage is finished when its `stage.done` event is in `events.jsonl`; a
 half-written artifact without that event is ignored. Artifacts are written
@@ -1021,7 +1036,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `page.failed` | `url`, `reason` |
 | `passages.scored` | `query_id`, `scorer`, `scored`, `kept`, `threshold_display`, `passages` (`KeptPassage`) |
 | `round.done` | `round`, `query_ids`, `new_pages`, `known_pages`, `kept` |
-| `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `uncovered` (query IDs), `retried` |
+| `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `uncovered` (query IDs), `missing` (question parts), `retried` |
 | `research.done` | `planned`, `ran`, `reason`, `note` |
 | `report.delta`, `report.snapshot` | `text` |
 
@@ -1427,8 +1442,9 @@ the pattern. It is a shape check: a well-formed unknown code reaches
 SearXNG, which searches as `all`.
 
 The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
-(default 3), and `gap_context_tokens` (default 4000, or `auto`; see
-Research rounds). The `gap` stage
+(default 3), `gap_context_tokens` (default 4000, or `auto`; see
+Research rounds), and `gap_parts` (default true; a temporary eval switch,
+not in the CLI flags, presets, API, or web form). The `gap` stage
 timeout defaults to 360 seconds, room for a gap step that asks its model
 twice.
 
@@ -1550,7 +1566,9 @@ over the same inputs. It drives the public CLI only, so it measures what users r
   fork and writes only the report, so a prompt change compares on the same
   passages; it implies `--write`.
   Model variants set `score.fallback=[]` so a broken service fails the
-  fork instead of measuring a fallback.
+  fork instead of measuring a fallback. `gap-parts` and `gap-scores` fork
+  from `prefilter` with `research.gap_parts` true and false, comparing the
+  gap step with and without the plan's question parts on multi-round runs.
 - `python -m evals.replay (--runs ID... | --all) --variants NAME... --out
   DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcher fork <id>
   --from <stage> --until select --json` (through `write` with `--write` or
@@ -1817,7 +1835,8 @@ These override the prototype where they differ:
   rounds, and "n rounds" at the end. The Research rounds panel
   (`screens/live/ResearchRoundsPanel`) replaces Sub-queries: per round its
   queries (collapsed to 2 above 3), new and kept pages or "0 new pages · m
-  already fetched", the gap note and follow-up line ("Gap: n follow-up
+  already fetched", the gap note, "Missing: a; b" under it in the note's
+  style when the gap step named missing parts, the follow-up line ("Gap: n follow-up
   queries for round k+1" or "Gap: no usable follow-up query", plus " · u
   uncovered"), "m more rounds to go" while rounds remain, then why
   research stopped with the `r-stop` help. The reducer folds `plan.ready`,

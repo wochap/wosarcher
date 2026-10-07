@@ -1,4 +1,4 @@
-"""Plan: one LLM call turns the main query, initial hit metadata, and attachment outlines into a topic and sub-queries.
+"""Plan: one LLM call turns the query, initial hits, and attachment outlines into a topic, sub-queries, and parts.
 
 The topic line becomes `q0`: what is searched and ranked against. The user's
 query stays on the request for the planner, the gap step, and the writer.
@@ -17,9 +17,11 @@ from wosarcher.prompts import load
 from wosarcher.stages.search import MAX_SEARCH_CHARS, cut
 
 MAX_HITS = 10
-MAX_TOKENS = 512
+MAX_TOKENS = 1024
+MAX_PARTS = 12
 UNREADABLE = "planner answer had no query list"
 NO_TOPIC = "planner answer had no usable topic; the query is used as the topic"
+NO_PARTS = "planner answer had no usable question parts"
 
 
 def escape(text: str) -> str:
@@ -50,21 +52,41 @@ def json_value(text: str, start: str, end: str) -> object:
         return None
 
 
-def parse(answer: str) -> tuple[str | None, list[str]] | None:
-    """The topic and sub-queries from a `{"topic", "queries"}` object or a bare list; `None` if unreadable."""
-    value = json_value(answer, "{", "}")
-    topic: object = None
-    if isinstance(value, dict):
-        data = cast(dict[str, object], value)
-        topic, value = data.get("topic"), data.get("queries")
-    else:
-        value = json_value(answer, "[", "]")
+def string_list(value: object) -> list[str] | None:
+    """`value` as a list of strings, or `None` when it is anything else."""
     if not isinstance(value, list):
         return None
     items = cast(list[object], value)
-    if not all(isinstance(item, str) for item in items):
-        return None
-    return (topic if isinstance(topic, str) else None), cast(list[str], items)
+    return cast(list[str], items) if all(isinstance(item, str) for item in items) else None
+
+
+def parse(answer: str) -> tuple[str | None, list[str], list[str] | None] | None:
+    """The topic, sub-queries, and parts from a `{"topic", "queries", "parts"}` object or a bare list.
+
+    `None` if unreadable. Parts are `[]` when the object's `parts` is absent or not a list of
+    strings, and `None` for a bare list, which has no parts to ask about.
+    """
+    value = json_value(answer, "{", "}")
+    if isinstance(value, dict):
+        data = cast(dict[str, object], value)
+        texts = string_list(data.get("queries"))
+        if texts is None:
+            return None
+        topic = data.get("topic")
+        return (topic if isinstance(topic, str) else None), texts, string_list(data.get("parts")) or []
+    texts = string_list(json_value(answer, "[", "]"))
+    return None if texts is None else (None, texts, None)
+
+
+def question_parts(found: Sequence[str], limit: int = MAX_PARTS) -> list[str]:
+    """Trimmed, non-empty parts without case-insensitive duplicates, at most `limit`."""
+    seen: set[str] = set()
+    kept: list[str] = []
+    for text in (item.strip() for item in found):
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            kept.append(text)
+    return kept[:limit]
 
 
 def usable_topic(topic: str | None) -> str | None:
@@ -105,8 +127,10 @@ async def plan(
     found = parse(completion.text)
     if found is None:
         return Plan(queries=[fallback], warnings=[UNREADABLE])
-    topic, texts = found
+    topic, texts, found_parts = found
     usable = usable_topic(topic)
     main = fallback if usable is None else Query(id="q0", text=usable)
     queries = sub_queries(texts, [query, main.text], max_sub_queries)
-    return Plan(queries=[main, *queries], warnings=[] if usable else [NO_TOPIC])
+    parts = question_parts(found_parts or [])
+    warnings = ([] if usable else [NO_TOPIC]) + ([NO_PARTS] if found_parts is not None and not parts else [])
+    return Plan(queries=[main, *queries], parts=parts, warnings=warnings)

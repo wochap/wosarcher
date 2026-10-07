@@ -112,6 +112,7 @@ export type ReferenceStyle = (string | null)
 export type Tone = (string | null)
 export type ToneInstructions = (string | null)
 export type Words1 = (number | null)
+export type Missing = string[]
 export type Note1 = string
 export type Id = string
 export type Round1 = number
@@ -125,6 +126,7 @@ export type Seq = number
 export type Stage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts = string
 export type Type = "gap.ready"
+export type Missing1 = string[]
 export type Note2 = string
 export type Queries1 = Query1[]
 export type Retried1 = boolean
@@ -206,6 +208,7 @@ export type Seq4 = number
 export type Stage4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts4 = string
 export type Type4 = "passages.scored"
+export type Parts = string[]
 export type Queries2 = Query1[]
 export type Warnings2 = string[]
 export type Queries3 = Query1[]
@@ -288,6 +291,7 @@ export type Ran1 = number
 export type Reason3 = ("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed")
 export type Kept3 = number
 export type KnownPages = number
+export type Missing2 = string[]
 export type NewPages = number
 export type Note5 = string
 export type QueryIds3 = string[]
@@ -821,6 +825,7 @@ type?: Type
  * via the `definition` "GapReadyData".
  */
 export interface GapReadyData {
+missing?: Missing
 note: Note1
 queries: Queries
 retried: Retried
@@ -847,6 +852,7 @@ text: Text4
  * via the `definition` "GapResult".
  */
 export interface GapResult {
+missing?: Missing1
 note?: Note2
 queries: Queries1
 retried?: Retried1
@@ -1060,6 +1066,7 @@ threshold_display: ThresholdDisplay
  * via the `definition` "Plan".
  */
 export interface Plan1 {
+parts?: Parts
 queries: Queries2
 warnings?: Warnings2
 }
@@ -1268,6 +1275,7 @@ rounds: Rounds2
 export interface RoundRecord {
 kept?: Kept3
 known_pages?: KnownPages
+missing?: Missing2
 new_pages?: NewPages
 note?: Note5
 query_ids: QueryIds3

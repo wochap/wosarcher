@@ -81,3 +81,14 @@ set = []
 [write-current]
 from = "write"
 set = []
+
+# Gap input comparison: the gap step with the plan's question parts, or with
+# the coverage table alone. `research.gap_parts` is a temporary switch,
+# removed once this is measured.
+[gap-parts]
+from = "prefilter"
+set = ["research.gap_parts=true"]
+
+[gap-scores]
+from = "prefilter"
+set = ["research.gap_parts=false"]

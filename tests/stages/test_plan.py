@@ -1,4 +1,5 @@
 import inspect
+import json
 
 from wosarcher.adapters.fakes import FakeLLM
 from wosarcher.models import Hit
@@ -38,7 +39,7 @@ def test_at_most_ten_hits_in_rank_order() -> None:
 
 
 async def test_ids_in_order() -> None:
-    llm = FakeLLM(['{"topic": " t ", "queries": ["a", "b"]}'])
+    llm = FakeLLM(['{"topic": " t ", "queries": ["a", "b"], "parts": ["p"]}'])
     result = await plan("q", [], [], llm, effort="none", sources="both", max_sub_queries=3)
     assert [(query.id, query.text) for query in result.queries] == [("q0", "t"), ("q1", "a"), ("q2", "b")]
     assert result.warnings == []
@@ -73,7 +74,7 @@ async def test_sub_queries_without_a_topic() -> None:
 
 
 async def test_long_topic_is_missing() -> None:
-    reply = '{"topic": "' + "x" * 201 + '", "queries": ["a"]}'
+    reply = '{"topic": "' + "x" * 201 + '", "queries": ["a"], "parts": ["p"]}'
     result = await plan("q", [], [], FakeLLM([reply]), effort="none", sources="both", max_sub_queries=3)
     assert [query.text for query in result.queries] == ["q", "a"]
     assert len(result.warnings) == 1
@@ -127,3 +128,40 @@ async def test_web_ignores_outlines() -> None:
     await plan("q", HITS, ["# Secret outline"], llm, effort="none", sources="web", max_sub_queries=3)
     assert len(llm.calls) == 1
     assert "Secret outline" not in llm.calls[0][1].content
+
+
+async def test_parts_saved() -> None:
+    reply = '{"topic": "t", "queries": ["a"], "parts": ["cost", " Cost ", "setup", ""]}'
+    result = await plan("q", [], [], FakeLLM([reply]), effort="none", sources="both", max_sub_queries=3)
+    assert (result.parts, result.warnings) == (["cost", "setup"], [])
+
+
+async def test_too_many_parts() -> None:
+    parts = [f"part {n}" for n in range(15)]
+    reply = json.dumps({"topic": "t", "queries": ["a"], "parts": parts})
+    result = await plan("q", [], [], FakeLLM([reply]), effort="none", sources="both", max_sub_queries=3)
+    assert result.parts == parts[:12]
+
+
+async def test_parts_missing() -> None:
+    reply = '{"topic": "t", "queries": ["a", "b"]}'
+    result = await plan("q", [], [], FakeLLM([reply]), effort="none", sources="both", max_sub_queries=3)
+    assert [(query.id, query.text) for query in result.queries] == [("q0", "t"), ("q1", "a"), ("q2", "b")]
+    assert (result.parts, result.warnings) == ([], [plan_stage.NO_PARTS])
+
+
+async def test_malformed_parts() -> None:
+    reply = '{"topic": "t", "queries": ["a"], "parts": "cost and setup"}'
+    result = await plan("q", [], [], FakeLLM([reply]), effort="none", sources="both", max_sub_queries=3)
+    assert [query.text for query in result.queries] == ["t", "a"]
+    assert (result.parts, result.warnings) == ([], [plan_stage.NO_PARTS])
+
+
+async def test_no_planner_no_parts() -> None:
+    result = await plan("q", [], [], FakeLLM(), effort="none", sources="files", max_sub_queries=3)
+    assert (result.parts, result.warnings) == ([], [])
+
+
+async def test_unreadable_answer_has_no_parts_warning() -> None:
+    result = await plan("q", [], [], FakeLLM(["no"]), effort="none", sources="both", max_sub_queries=3)
+    assert (result.parts, result.warnings) == ([], [plan_stage.UNREADABLE])

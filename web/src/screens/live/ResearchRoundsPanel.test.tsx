@@ -13,7 +13,7 @@ describe("ResearchRoundsPanel", () => {
     render(<ResearchRoundsPanel run={viewOf(roundTwoFetching())} planned={3} />);
     expect(screen.getByText("round 2/3")).toBeTruthy();
     expect(round(1).textContent).toContain("16 new pages · 32 kept");
-    expect(round(1).textContent).toContain("Missing: benchmarks.");
+    expect(round(1).textContent).toContain("Benchmarks are thin.");
     expect(round(1).textContent).toContain("Gap: 2 follow-up queries for round 2 · 2 uncovered");
     expect(round(2).textContent).toContain("6 new pages · fetching");
     expect(round(2).textContent).toContain("gap follow-ups");
@@ -52,6 +52,19 @@ describe("ResearchRoundsPanel", () => {
     expect(round(2).textContent).toContain("Gap: no usable follow-up query · 2 uncovered");
     expect(screen.getByText("Stopped after round 2 of 3 · no follow-ups")).toBeTruthy();
     expect(screen.getByText("The gap step wrote no usable follow-up query.")).toBeTruthy();
+  });
+
+  it("lists the missing parts under the gap note", () => {
+    render(<ResearchRoundsPanel run={viewOf(roundTwoFetching())} planned={3} />);
+    const note = screen.getByText("Benchmarks are thin.");
+    expect(note.nextElementSibling?.textContent).toBe("Missing: setup; cost");
+    expect(note.nextElementSibling?.className).toBe(note.className);
+  });
+
+  it("shows no missing line when the gap step named no part", () => {
+    render(<ResearchRoundsPanel run={viewOf(roundsLog("max"))} planned={3} />);
+    expect(round(2).textContent).toContain("Latency is unclear.");
+    expect(round(2).textContent).not.toContain("Missing:");
   });
 
   it("ends with every round run and no end note", () => {

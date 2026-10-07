@@ -50,8 +50,8 @@ WORLD = {
 PAGES_ALL = {**PAGES, "https://d.test": "Lithium price per tonne in 2026.", "https://e.test": "Cobalt supply chains."}
 
 
-def gap_reply(*queries: str, note: str = "More on prices.") -> str:
-    return json.dumps({"queries": list(queries), "note": note})
+def gap_reply(*queries: str, note: str = "More on prices.", missing: list[str] | None = None) -> str:
+    return json.dumps({"queries": list(queries), "note": note, "missing": missing or []})
 
 
 def configured(tmp_path: Path, rounds: int = 3, **update: object) -> Settings:
@@ -198,6 +198,33 @@ async def test_uncovered_recorded(tmp_path: Path) -> None:
     assert "q2 · uncovered · best 0.00 · kept 0 — nothing found here" in planner_of(fakes).calls[2][1].content
     ready = [e.data.uncovered for e in store.read_events(run_id) if isinstance(e, GapReady)]
     assert ready == [[], ["q2"]]
+
+
+async def test_missing_recorded(tmp_path: Path) -> None:
+    cfg = configured(tmp_path)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price", missing=["methods", "cost"]), gap_reply("cobalt supply"))
+    assert await run(cfg, run_id, fakes) == "done"
+    assert store.read_artifact(run_id, "plan.json", Plan).parts == ["cost", "methods"]
+    assert [r.missing for r in research(store, run_id).rounds] == [["methods", "cost"], [], []]
+    ready = [e.data.missing for e in store.read_events(run_id) if isinstance(e, GapReady)]
+    assert ready == [["methods", "cost"], []]
+    data = planner_of(fakes).calls[1][1].content
+    assert "<data>\nQuestion parts:\n1. cost\n2. methods\n\nCoverage:" in data
+
+
+async def test_gap_parts_switch_off(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=2)
+    cfg = cfg.model_copy(update={"research": ResearchConfig(rounds=2, gap_parts=False)})
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price", missing=["cost"]))
+    assert await run(cfg, run_id, fakes) == "done"
+    system, data = planner_of(fakes).calls[1]
+    assert "Question parts:" not in data.content
+    assert "question parts" not in system.content
+    assert [r.missing for r in research(store, run_id).rounds] == [[], []]
 
 
 async def test_cap_reached_in_the_last_round(tmp_path: Path) -> None:
@@ -419,7 +446,8 @@ async def test_fork_from_score_reruns_loop(tmp_path: Path) -> None:
     assert await run(cfg, parent, world(gap_reply("lithium price"), gap_reply("cobalt supply"))) == "done"
     child = store.fork(parent, "score", [], cfg).run_id
     assert set(store.finished_stages(child)) == {"load", "plan"}
-    assert [query.id for query in store.read_artifact(child, "plan.json", Plan).queries] == ["q0", "q1"]
+    forked = store.read_artifact(child, "plan.json", Plan)
+    assert ([query.id for query in forked.queries], forked.parts) == (["q0", "q1"], ["cost", "methods"])
     planner = FakeLLM([gap_reply()])
     fakes = adapters(searcher=FakeSearcher(WORLD), fetcher=FakeFetcher(PAGES_ALL), planner=planner)
     assert await run(cfg, child, fakes) == "done"

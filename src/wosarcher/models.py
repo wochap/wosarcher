@@ -115,6 +115,8 @@ class Query(Contract):
 class Plan(Contract):
     queries: list[Query]
     """`queries[0]` is the main query `q0` (the topic line, or the fallback topic), then the sub-queries."""
+    parts: list[str] = []
+    """The question parts the planner named: the distinct things the user's query asks for."""
     warnings: list[str] = []
 
 
@@ -416,6 +418,8 @@ class GapResult(Contract):
     """True when the first reply kept no follow-up and the step asked again."""
     uncovered: list[str] = []
     """IDs of the queries the coverage table marked `uncovered`."""
+    missing: list[str] = []
+    """Question parts the model named as not yet answerable; empty when no parts were sent."""
 
 
 class RoundRecord(Contract):
@@ -427,6 +431,8 @@ class RoundRecord(Contract):
     kept: int = 0
     note: str = ""
     """The gap note written after this round; empty for the last round."""
+    missing: list[str] = []
+    """Question parts the gap step after this round named as not yet answerable; empty for the last round."""
     uncovered: list[str] = []
     """Query IDs the coverage table marked `uncovered` after this round; empty for the last round."""
 
@@ -977,6 +983,7 @@ class GapReadyData(Contract):
     queries: list[Query]
     note: str
     uncovered: list[str]
+    missing: list[str] = []
     retried: bool
 
 

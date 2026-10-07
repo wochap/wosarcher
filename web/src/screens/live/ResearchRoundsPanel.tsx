@@ -112,6 +112,9 @@ function Round({ round, next }: { round: RoundView; next: RoundView | undefined 
         </span>
       </div>
       {round.note && <div className={css.note}>{round.note}</div>}
+      {round.missing.length > 0 && (
+        <div className={css.note}>Missing: {round.missing.join("; ")}</div>
+      )}
       <ol className={css.queries}>
         {queries.map((query) => {
           const q = queryLook(round, query);

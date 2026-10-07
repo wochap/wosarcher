@@ -5,6 +5,8 @@ You plan web research. Read the research question below, then write:
   passages, so name the subject, not the format of the answer.
 - at most $max_sub_queries sub-queries: one per distinct topic of the
   question, up to that limit. A narrow question needs fewer.
+- the question parts: at most 12 short phrases, one for each distinct thing
+  the question asks for. A good report answers every part.
 
 Rules:
 - Each query is short, specific, and useful on its own in a web search engine.
@@ -16,4 +18,4 @@ Rules:
 Research question: $query
 
 Answer with JSON only, in this shape:
-{"topic": "topic line", "queries": ["first query", "second query"]}
+{"topic": "topic line", "queries": ["first query", "second query"], "parts": ["first part", "second part"]}

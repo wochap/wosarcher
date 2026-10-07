@@ -19,7 +19,7 @@ PAGES = {
     "https://b.test": "# Costs\nBattery recycling plant costs per tonne.",
     "https://c.test": "Recycling cost estimates for batteries.",
 }
-PLAN_REPLY = '{"topic": "battery recycling", "queries": ["recycling cost"]}'
+PLAN_REPLY = '{"topic": "battery recycling", "queries": ["recycling cost"], "parts": ["cost", "methods"]}'
 REPORT_REPLY = "Battery recycling recovers lithium [1]."
 
 

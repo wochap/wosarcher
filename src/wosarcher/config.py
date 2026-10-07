@@ -11,7 +11,16 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast, get_args
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    StrictBool,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 from pydantic_core import to_jsonable_python
 
 from wosarcher.models import Effort, Stage, WritingOptions, domain_list, search_language
@@ -197,6 +206,8 @@ class ResearchConfig(Block):
     """Most follow-up queries the gap step keeps per round."""
     gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = 4000
     """Passage budget of the gap step's prompt; `auto`: all the room the context window leaves."""
+    gap_parts: StrictBool = True
+    """Send the plan's question parts to the gap step; a temporary switch for measuring that input."""
 
 
 class RunConfig(Block):

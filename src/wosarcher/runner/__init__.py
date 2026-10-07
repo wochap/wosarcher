@@ -215,7 +215,9 @@ class Runner:
             if state.gap_error is not None or state.gap is None:
                 reason = "gap step failed"
             else:
-                rounds[-1] = rounds[-1].model_copy(update={"note": state.gap.note, "uncovered": state.gap.uncovered})
+                rounds[-1] = rounds[-1].model_copy(
+                    update={"note": state.gap.note, "uncovered": state.gap.uncovered, "missing": state.gap.missing}
+                )
                 if not state.gap.queries:
                     reason = "no follow-ups"
             if reason is None:

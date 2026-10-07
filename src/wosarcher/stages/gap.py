@@ -1,7 +1,7 @@
 """Gap: after a research round, the LLM reads a coverage table and the best passages so far and writes follow-ups.
 
 Only the main query, the follow-up limit, and the date go through the
-template; the coverage table, the queries, and the passage text go in a
+template; the question parts, the coverage table, the queries, and the passage text go in a
 delimited data block of the user message. Follow-ups are validated before
 they reach a search: no URLs, a length cap, no duplicates, at most `limit`.
 When none survives, the model is asked once more with the rejected queries.
@@ -78,12 +78,27 @@ def coverage(queries: Sequence[Query], scores: Sequence[Score], cfg: ScoreConfig
 
 
 def messages(
-    query: str, table: str, known: Sequence[Query], context: Context, *, limit: int, today: str
+    query: str,
+    table: str,
+    known: Sequence[Query],
+    context: Context,
+    *,
+    parts: Sequence[str] = (),
+    limit: int,
+    today: str,
 ) -> list[Message]:
-    """`known` holds the latest round's queries when that round fetched no new page, else nothing."""
+    """`known` holds the latest round's queries when that round fetched no new page, else nothing.
+
+    With `parts`, the data block starts with them and `gap_parts.md` follows the system prompt;
+    without, the messages are exactly those of the parts-free gap step.
+    """
     system = load("gap").substitute(query=query, limit=limit, today=today)
+    blocks: list[str] = []
+    if parts:
+        system = f"{system.rstrip()}\n\n{load('gap_parts').template.strip()}\n"
+        blocks.append("Question parts:\n" + "\n".join(f"{n}. {part}" for n, part in enumerate(parts, start=1)))
     titles = {source.source_id: source.title for source in context.sources}
-    blocks = [f"Coverage:\n{table}"]
+    blocks.append(f"Coverage:\n{table}")
     if known:
         lines = "\n".join(f"- {item.id} {item.text}" for item in known)
         blocks.append(f"Round {known[0].round} found only pages fetched in earlier rounds:\n{lines}")
@@ -107,8 +122,11 @@ def retry_message(rejected: Sequence[tuple[str, Rejection]], *, limit: int) -> M
     return Message(role="user", content=f"{prompt}\n\n<data>\n{escape(lines or '- no query')}\n</data>")
 
 
-def parse(answer: str) -> tuple[list[str], str]:
-    """`queries` and `note` from the JSON object in the answer, ignoring other fields; raises `GapUnreadableError`."""
+def parse(answer: str) -> tuple[list[str], str, list[str]]:
+    """`queries`, `note`, and `missing` from the JSON object in the answer; raises `GapUnreadableError`.
+
+    Other fields are ignored, and a `missing` that is not a list reads as empty.
+    """
     first, last = answer.find("{"), answer.rfind("}")
     if first < 0 or last <= first:
         raise GapUnreadableError("gap answer had no JSON object")
@@ -123,8 +141,25 @@ def parse(answer: str) -> tuple[list[str], str]:
     note = data.get("note", "")
     if not isinstance(found, list) or not isinstance(note, str):
         raise GapUnreadableError("gap answer has the wrong field types")
+    missing = data.get("missing", [])
+    named = cast(list[object], missing) if isinstance(missing, list) else []
     items = cast(list[object], found)
-    return [item for item in items if isinstance(item, str)], note.strip()
+    return (
+        [item for item in items if isinstance(item, str)],
+        note.strip(),
+        [item for item in named if isinstance(item, str)],
+    )
+
+
+def missing_parts(found: Sequence[str], parts: Sequence[str]) -> list[str]:
+    """Trimmed, non-empty missing parts without case-insensitive duplicates, at most one per sent part."""
+    seen: set[str] = set()
+    kept: list[str] = []
+    for text in (item.strip() for item in found):
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            kept.append(text)
+    return kept[: len(parts)]
 
 
 def rejection(text: str, seen: set[str]) -> Rejection | None:
@@ -170,18 +205,24 @@ async def gap(
     scores: Sequence[Score],
     score_cfg: ScoreConfig,
     known: Sequence[Query] = (),
+    parts: Sequence[str] = (),
     limit: int,
     today: str,
 ) -> GapResult:
-    """At most two calls: the second only when the first reply keeps no follow-up."""
+    """At most two calls: the second only when the first reply keeps no follow-up.
+
+    `parts` are the plan's question parts, or nothing to leave them out of the call.
+    """
     table, uncovered = coverage(queries, scores, score_cfg)
-    sent = messages(query, table, known, context, limit=limit, today=today)
+    sent = messages(query, table, known, context, parts=parts, limit=limit, today=today)
     completion: Completion = await llm.complete(sent, max_tokens=MAX_TOKENS, effort=effort)
-    found, note = parse(completion.text)
+    found, note, named = parse(completion.text)
+    missing = missing_parts(named, parts)
     kept, rejected = follow_ups(found, queries, limit)
     if kept:
-        return GapResult(queries=kept, note=note, uncovered=uncovered)
+        return GapResult(queries=kept, note=note, uncovered=uncovered, missing=missing)
     retry = [*sent, Message(role="assistant", content=completion.text), retry_message(rejected, limit=limit)]
-    found, second = parse((await llm.complete(retry, max_tokens=MAX_TOKENS, effort=effort)).text)
+    found, second, named = parse((await llm.complete(retry, max_tokens=MAX_TOKENS, effort=effort)).text)
     kept, _ = follow_ups(found, queries, limit)
-    return GapResult(queries=kept, note=second or note, retried=True, uncovered=uncovered)
+    missing = missing_parts(named, parts) or missing
+    return GapResult(queries=kept, note=second or note, retried=True, uncovered=uncovered, missing=missing)
