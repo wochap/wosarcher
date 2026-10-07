@@ -826,9 +826,10 @@ evals/
   variants.toml  # named variants: fork stage (chunk, prefilter, or score) plus --set overrides
   replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
   metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
-  judge.py       # python -m evals.judge: pointwise precision and faithfulness
+  judge.py       # python -m evals.judge: pointwise precision, faithfulness, coverage, and retrievable
+  parts.py       # question parts for coverage and retrievable, cached in parts.jsonl
   items.py       # python -m evals.items: judged items as Markdown
-  prompts/       # precision.md
+  prompts/       # precision.md, faithfulness.md, parts.md, coverage.md, retrievable.md
 tests/
   fixtures/      # recorded HTTP bodies (http/), profiles/e2e.toml, recorded.py (respx router),
                  # runs/20260101-000000-fixture/ and make_recorded_run.py that regenerates it
@@ -1582,7 +1583,8 @@ over the same inputs. It drives the public CLI only, so it measures what users r
   readable item records the metric as missing. `--samples N` (default 1)
   asks every item N times; an item's value is its share of yes over its
   readable samples, and the judgement records `samples`. A provider error
-  on any call records the result's precision and faithfulness as missing,
+  on any call records the result's precision, faithfulness, coverage, and
+  retrievable as missing,
   prints one line, and the judge goes on. Judged runs are skipped next
   time; `--force` judges them again and replaces their lines.
   For a fork replayed with `--write`, the judge also records faithfulness:
@@ -1606,18 +1608,39 @@ over the same inputs. It drives the public CLI only, so it measures what users r
   rules; faithfulness is supported over readable
   pairs and `citations` is the pair count. No report, no citation, or no
   readable pair records faithfulness as missing.
+  Coverage and retrievable judge each result per question part. For each
+  parent run ID one call with `evals/prompts/parts.md` (query only, effort
+  `none`, temperature 0, 1024-token cap) asks for the distinct things the
+  query asks for as a JSON list of strings, optionally in a code fence;
+  blank items are dropped and the first 20 kept. The parts are saved in
+  `DIR/parts.jsonl` (`parent_run_id`, `query`, `parts`) and reused by every
+  result of that parent in later calls too, `--force` included; delete the
+  file to ask again. An answer that is not such a list, or a provider error
+  on that call, saves nothing, prints one line, and records `parts` 0 with
+  both metrics missing; the other metrics are still judged. Per part, under
+  the same rules as precision, `evals/prompts/coverage.md` asks whether the
+  report's rendered `markdown` (never cut) answers it, and
+  `evals/prompts/retrievable.md` whether every selected passage, as
+  `[n] <text>`, holds enough to answer it; the user message is
+  `part: <text>` followed by `report:` or `passages:` and the data. Each
+  metric is yes over readable parts; the judgement records `parts`,
+  `coverage`, and `retrievable`, and unreadable part items count in
+  `unreadable`. No report records coverage as missing without a call.
   Every judged item also goes to `DIR/items.jsonl`, one line per passage
-  (`kind` `precision`) and per pair (`faithfulness`): `run_id`, `variant`,
-  `index` within its kind, passage number `n`, `claim` and `short` (pairs
-  only), the
-  `passage` text as sent, `value` (the averaged value, or null when
+  (`kind` `precision`), per pair (`faithfulness`), and per part (`coverage`
+  and `retrievable`): `run_id`, `variant`, `index` within its kind, `n` (the
+  passage number, or the part number from 1), `claim` and `short` (pairs
+  only), `part` (part items only), the `passage` text as sent (empty for
+  part items), `value` (the averaged value, or null when
   unreadable), and the first sample's `answer` (at most 80 characters).
   `--force` replaces a run's item lines with its judgement line; a provider
   error writes no items.
 - `python -m evals.items --results DIR [--run ID] [--failed]` prints
   `items.jsonl` as Markdown without any model call: one section per run
-  (`variant · run_id`), faithfulness items first, each as its value, `n`,
-  claim (marked short when `short`), and the first 300 characters of the passage. `--failed` keeps
+  (`variant · run_id`), faithfulness, coverage, retrievable, then precision
+  items. A passage item shows its value, `n`, claim (marked short when
+  `short`), and the first 300 characters of the passage; a part item shows
+  `<kind> <value> part <n>: <text>`. `--failed` keeps
   items below 1 (unreadable included); a missing file prints nothing.
 
 The recorded-run fixture is `tests/fixtures/runs/20260101-000000-fixture/`,

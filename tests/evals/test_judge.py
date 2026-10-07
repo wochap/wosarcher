@@ -1,14 +1,16 @@
-"""Judged precision with the fake LLM: parsing, message separation, and stored judgements."""
+"""Judged metrics with the fake LLM: parsing, message separation, and stored judgements."""
 
 import asyncio
 import json
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import pytest
 
 import evals.items as evals_items
 import evals.judge as judge
+import evals.parts as evals_parts
 import evals.replay as replay
 import wosarcher.build as building
 from tests.evals.helpers import eval_env
@@ -138,7 +140,7 @@ def test_malformed_list_continues(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     first_result, _ = replay.read_results(out / "results.jsonl")
     found = judge.context(Path(first_result.run_dir or ""))
     assert found is not None
-    llm = FakeLLM(["[1, 2,]"] * len(found.passages) + ["yes"])
+    llm = FakeLLM(['["a"]'] + ["[1, 2,]"] * len(found.passages) + ["yes"])
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)
@@ -270,13 +272,17 @@ def test_faithfulness_needs_report(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert without.precision is not None
 
 
-class FailingFirst(FakeLLM):
-    """Raises a provider error on the first call, then replies like `FakeLLM`."""
+class FailingAt(FakeLLM):
+    """Raises a provider error on call `at` (from 0), else replies like `FakeLLM`."""
+
+    def __init__(self, replies: list[str], at: int) -> None:
+        super().__init__(replies)
+        self.at = at
 
     async def complete(
         self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
     ) -> Completion:
-        if not self.calls:
+        if len(self.calls) == self.at:
             self.calls.append(list(messages))
             raise ProviderError("openai", "HTTP 502 at http://llm.test/v1/chat/completions: reasoning truncated")
         return await super().complete(messages, max_tokens=max_tokens, effort=effort, temperature=temperature)
@@ -290,7 +296,7 @@ def test_provider_error_continues(
         monkeypatch.setenv(key, value)
     out = tmp_path / "out"
     assert replay.main(["--runs", parent, "--variants", "bm25", "bm25-wide", "--out", str(out)]) == 0
-    llm = FailingFirst(["yes"])
+    llm = FailingAt(['["a"]', "yes"], at=1)
 
     def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
         return adapters(writer=llm)
@@ -298,7 +304,7 @@ def test_provider_error_continues(
     monkeypatch.setattr(building, "build", fake_build)
     assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
     first, second = judge.read_judgements(out / "judgements.jsonl")
-    assert (first.precision, first.faithfulness) == (None, None)
+    assert (first.precision, first.faithfulness, first.coverage, first.retrievable) == (None, None, None, None)
     assert second.precision is not None
     assert {item.run_id for item in judge.read_items(out / "items.jsonl")} == {second.run_id}
     assert set(llm.efforts) == {"none"}
@@ -375,3 +381,106 @@ def test_items_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
     assert "Fine" not in shown
     assert evals_items.main(["--results", str(tmp_path / "missing")]) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_parts_parsed() -> None:
+    assert evals_parts.parse_parts(json.dumps([f"part {i}" for i in range(26)])) == [f"part {i}" for i in range(20)]
+    assert evals_parts.parse_parts('```json\n["a", " ", "b"]\n```') == ["a", "b"]
+    assert evals_parts.parse_parts("The question asks about several things.") is None
+    assert evals_parts.parse_parts('[""]') is None
+    assert evals_parts.parse_parts('{"a": 1}') is None
+
+
+PARTS = ["cost", "speed", "safety", "size"]
+
+
+async def test_coverage() -> None:
+    llm = FakeLLM(["yes", "no", "yes", "no"])
+    coverage, unreadable, items = await judge.judge_coverage(llm, "q", PARTS, report("Body [1]."))
+    assert (coverage, unreadable) == (0.5, 0)
+    assert [(item.kind, item.n, item.part, item.passage) for item in items][1] == ("coverage", 2, "speed", "")
+
+
+async def test_retrievable_from_passages() -> None:
+    llm = FakeLLM(["yes"])
+    await judge.judge_retrievable(llm, "battery recycling", ["cost"], PASSAGES[:3])
+    ((system, user),) = llm.calls
+    assert system.content == judge.Template(judge.RETRIEVABLE_PROMPT.read_text(encoding="utf-8")).substitute(
+        query="battery recycling"
+    )
+    assert user.content.startswith("part: cost\npassages:\n")
+    assert all(f"[{n}] {text}" in user.content for n, text in PASSAGES[:3])
+    assert "report" not in user.content
+
+
+def judged_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, llm: FakeLLM, *variants: str) -> Path:
+    env, parent = eval_env(tmp_path)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "out"
+    assert replay.main(["--runs", parent, "--variants", *variants, "--out", str(out)]) == 0
+
+    def fake_build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
+        return adapters(writer=llm)
+
+    monkeypatch.setattr(building, "build", fake_build)
+    return out
+
+
+def parts_calls(llm: FakeLLM) -> int:
+    return sum("JSON list" in messages[0].content for messages in llm.calls)
+
+
+def test_parts_cached_per_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = FakeLLM(['["cost", "speed"]', "yes"])
+    out = judged_env(tmp_path, monkeypatch, llm, "bm25", "bm25-wide")
+    with_report, _ = replay.read_results(out / "results.jsonl")
+    (Path(with_report.run_dir or "") / "report.json").write_text(report("Cost.").model_dump_json(), encoding="utf-8")
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    llm.replies = ["yes"]
+    assert judge.main(["--results", str(out), "--profile", "e2e", "--force"]) == 0
+    assert parts_calls(llm) == 1
+    assert len(judge.lines(out / "parts.jsonl")) == 1
+    judged, without = judge.read_judgements(out / "judgements.jsonl")
+    assert (judged.parts, judged.coverage, judged.retrievable) == (2, 1.0, 1.0)
+    assert (without.parts, without.coverage, without.retrievable) == (2, None, 1.0)
+    items = [item for item in judge.read_items(out / "items.jsonl") if item.run_id == judged.run_id]
+    kinds = [item.kind for item in items]
+    assert (kinds.count("coverage"), kinds.count("retrievable")) == (2, 2)
+    assert [(item.n, item.part, item.passage) for item in items if item.kind == "coverage"] == [
+        (1, "cost", ""),
+        (2, "speed", ""),
+    ]
+    coverage_calls = [messages for messages in llm.calls if messages[1:] and "report:" in messages[1].content]
+    assert all(messages[1].content.endswith("report:\nCost.") for messages in coverage_calls)
+
+
+def test_unparsable_parts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = FakeLLM(["The question asks about several things.", "yes"])
+    out = judged_env(tmp_path, monkeypatch, llm, "bm25")
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    (judged,) = judge.read_judgements(out / "judgements.jsonl")
+    assert (judged.parts, judged.coverage, judged.retrievable, judged.precision) == (0, None, None, 1.0)
+    assert not (out / "parts.jsonl").exists()
+
+
+def test_parts_provider_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    llm = FailingAt(["yes"], at=0)
+    out = judged_env(tmp_path, monkeypatch, llm, "bm25")
+    assert judge.main(["--results", str(out), "--profile", "e2e"]) == 0
+    (judged,) = judge.read_judgements(out / "judgements.jsonl")
+    assert (judged.parts, judged.retrievable, judged.precision) == (0, None, 1.0)
+    assert not (out / "parts.jsonl").exists()
+
+
+def test_failed_parts_listed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def part(kind: Literal["coverage", "retrievable"], value: float) -> judge.JudgedItem:
+        return judge.JudgedItem(
+            run_id="r1", variant="bm25", kind=kind, index=1, n=2, part="speed", value=value, answer="no"
+        )
+
+    judge.write_lines(tmp_path / "items.jsonl", [part("retrievable", 1.0), part("coverage", 0.0)], "w")
+    assert evals_items.main(["--results", str(tmp_path), "--failed"]) == 0
+    shown = capsys.readouterr().out
+    assert "- coverage 0.00 part 2: speed" in shown
+    assert "retrievable" not in shown

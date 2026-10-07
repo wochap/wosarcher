@@ -2,8 +2,9 @@
 
     python -m evals.items --results DIR [--run ID] [--failed]
 
-One section per run (`variant · run_id`), faithfulness items first, each as
-its value, passage number, claim, and passage excerpt. `--failed` keeps only
+One section per run (`variant · run_id`): faithfulness, coverage,
+retrievable, then precision items. Passage items show their value, passage
+number, claim, and passage excerpt; part items their part number and text. `--failed` keeps only
 items whose value is below 1 (unreadable items included); `--run` keeps one
 run. A missing items file prints nothing.
 """
@@ -16,6 +17,7 @@ from pathlib import Path
 from evals.judge import JudgedItem, read_items
 
 EXCERPT_CHARS = 300
+ORDER = ["faithfulness", "coverage", "retrievable", "precision"]
 
 
 def failed(item: JudgedItem) -> bool:
@@ -33,7 +35,10 @@ def render(items: Sequence[JudgedItem]) -> str:
     out: list[str] = []
     for run_id, found in runs.items():
         out.append(f"## {found[0].variant} · {run_id}\n")
-        for item in sorted(found, key=lambda item: (item.kind != "faithfulness", item.index)):
+        for item in sorted(found, key=lambda item: (ORDER.index(item.kind), item.index)):
+            if item.part is not None:
+                out.append(f"- {item.kind} {shown(item.value)} part {item.n}: {item.part}")
+                continue
             excerpt = " ".join(item.passage[:EXCERPT_CHARS].split())
             out.append(f"- {item.kind} {shown(item.value)} [{item.n}]")
             if item.claim is not None:

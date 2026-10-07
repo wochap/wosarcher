@@ -1,4 +1,4 @@
-"""Context precision and report faithfulness judged by the configured `llm`.
+"""Context precision, report faithfulness, coverage, and retrievable judged by the configured `llm`.
 
 Pointwise: one yes/no call per selected passage (relevant to the query?) and
 one per (claim, passage) pair, one pair per cited number in `report.json`
@@ -7,6 +7,10 @@ claim is the sentence holding the citation, with that citation kept as `[n]`.
 Calls run concurrently at temperature 0. Precision and
 faithfulness are the shares of yes over readable items; an answer whose
 first word is neither yes nor no is unreadable and left out.
+
+Coverage and retrievable ask, per question part (`evals.parts`, cached per
+parent in `<DIR>/parts.jsonl`), whether the report's Markdown answers it and
+whether the selected passages hold enough to answer it.
 
     python -m evals.judge --results DIR [--profile NAME] [--set KEY=VALUE ...]
                           [--samples N] [--force]
@@ -34,6 +38,7 @@ from pydantic import BaseModel
 
 import wosarcher.build as building
 from evals.metrics import context
+from evals.parts import question_parts, read_parts, save_parts
 from evals.replay import read_results
 from wosarcher.config import ConfigError, resolve
 from wosarcher.http import ProviderError, UsageLedger
@@ -43,6 +48,8 @@ from wosarcher.stages.write import CITATION, citations
 
 PROMPT = Path(__file__).parent / "prompts" / "precision.md"
 FAITHFULNESS_PROMPT = Path(__file__).parent / "prompts" / "faithfulness.md"
+COVERAGE_PROMPT = Path(__file__).parent / "prompts" / "coverage.md"
+RETRIEVABLE_PROMPT = Path(__file__).parent / "prompts" / "retrievable.md"
 MAX_TOKENS = 8
 MAX_PAIRS = 200
 ANSWER_CHARS = 80
@@ -73,23 +80,29 @@ class Judgement(BaseModel):
     citations: int = 0
     """(claim, passage) pairs sent to the faithfulness judge."""
     faithfulness: float | None = None
+    parts: int = 0
+    """Question parts judged for coverage and retrievable."""
+    coverage: float | None = None
+    retrievable: float | None = None
     unreadable: int = 0
-    """Items (passages and pairs) whose answers were neither yes nor no."""
+    """Items (passages, pairs, and parts) whose answers were neither yes nor no."""
     samples: int = 1
 
 
 class JudgedItem(BaseModel):
-    """One line of `items.jsonl`: a passage (precision) or a claim pair (faithfulness) and its verdict."""
+    """One line of `items.jsonl`: a passage (precision), a claim pair (faithfulness), or a part, and its verdict."""
 
     run_id: str = ""
     variant: str = ""
-    kind: Literal["precision", "faithfulness"]
+    kind: Literal["precision", "faithfulness", "coverage", "retrievable"]
     index: int
     n: int
+    """The passage's citation number, or the part's number from 1."""
     claim: str | None = None
     short: bool = False
     """The claim has fewer than `SHORT_WORDS` words."""
-    passage: str
+    part: str | None = None
+    passage: str = ""
     value: float | None
     answer: str
     """The first sample's answer text, cut to `ANSWER_CHARS`."""
@@ -270,6 +283,40 @@ async def judge_faithfulness(
     return *ratio(values), items
 
 
+async def judge_parts(
+    llm: LLM,
+    kind: Literal["coverage", "retrievable"],
+    query: str,
+    parts: Sequence[str],
+    data: str,
+    samples: int = 1,
+) -> tuple[float | None, int, list[JudgedItem]]:
+    """Yes parts over readable parts, the unreadable count, and the items; `data` follows each part, never cut."""
+    prompt = COVERAGE_PROMPT if kind == "coverage" else RETRIEVABLE_PROMPT
+    system = Template(prompt.read_text(encoding="utf-8")).substitute(query=query)
+    values, answers = await judge_items(llm, system, [f"part: {part}\n{data}" for part in parts], samples)
+    items = [
+        JudgedItem(kind=kind, index=index, n=index + 1, part=part, value=value, answer=answer)
+        for index, (part, value, answer) in enumerate(zip(parts, values, answers, strict=True))
+    ]
+    return *ratio(values), items
+
+
+async def judge_coverage(
+    llm: LLM, query: str, parts: Sequence[str], report: Report, samples: int = 1
+) -> tuple[float | None, int, list[JudgedItem]]:
+    """Parts the report's rendered Markdown answers."""
+    return await judge_parts(llm, "coverage", query, parts, f"report:\n{report.markdown}", samples)
+
+
+async def judge_retrievable(
+    llm: LLM, query: str, parts: Sequence[str], passages: Sequence[tuple[int, str]], samples: int = 1
+) -> tuple[float | None, int, list[JudgedItem]]:
+    """Parts the numbered passages hold enough to answer."""
+    numbered = "\n\n".join(f"[{n}] {text}" for n, text in passages)
+    return await judge_parts(llm, "retrievable", query, parts, f"passages:\n{numbered}", samples)
+
+
 def read_report(run_dir: Path) -> Report | None:
     path = run_dir / "report.json"
     return Report.model_validate_json(path.read_text(encoding="utf-8")) if path.is_file() else None
@@ -309,6 +356,8 @@ async def judge_all(
         write_lines(items_path, [item for item in read_items(items_path) if item.run_id not in again], "w")
     judged = {item.run_id for item in kept}
     pending = [r for r in done if r.run_id not in judged]
+    parts_path = results_dir / "parts.jsonl"
+    cached = read_parts(parts_path)
     ledger = UsageLedger({settings.llm.provider: settings.llm.prices})
     async with httpx.AsyncClient() as http:
         writer = building.build(settings, http, ledger).writer
@@ -320,14 +369,39 @@ async def judge_all(
             texts = [(passage.n, passage.text) for passage in found.passages]
             report = read_report(run_dir)
             pairs = claims(report, found)[:MAX_PAIRS] if report else []
+            parts = cached.get(result.parent_run_id)
+            if parts is None:
+                try:
+                    parts = await question_parts(writer, found.query)
+                    problem = "unparsable"
+                except ProviderError as error:
+                    problem = " ".join(str(error).split())
+                if parts is None:
+                    print(f"{result.variant} {result.run_id}: parts {problem}", file=sys.stderr)
+                else:
+                    cached[result.parent_run_id] = parts
+                    save_parts(parts_path, result.parent_run_id, found.query, parts)
+            coverage = retrievable = None
             try:
                 precision, unreadable, items = await judge_result(writer, found.query, texts, samples)
                 faithfulness, unread_pairs, pair_items = await judge_faithfulness(writer, found.query, pairs, samples)
                 unreadable += unread_pairs
                 items += pair_items
+                if parts:
+                    retrievable, unread_parts, part_items = await judge_retrievable(
+                        writer, found.query, parts, texts, samples
+                    )
+                    unreadable += unread_parts
+                    items += part_items
+                if parts and report:
+                    coverage, unread_parts, part_items = await judge_coverage(
+                        writer, found.query, parts, report, samples
+                    )
+                    unreadable += unread_parts
+                    items += part_items
             except ProviderError as error:
                 print(f"{result.variant} {result.run_id}: {' '.join(str(error).split())}", file=sys.stderr)
-                precision = faithfulness = None
+                precision = faithfulness = coverage = retrievable = None
                 unreadable = 0
                 items = []
             judgement = Judgement(
@@ -338,6 +412,9 @@ async def judge_all(
                 precision=precision,
                 citations=len(pairs),
                 faithfulness=faithfulness,
+                parts=len(parts or []),
+                coverage=coverage,
+                retrievable=retrievable,
                 unreadable=unreadable,
                 samples=samples,
             )
@@ -345,7 +422,8 @@ async def judge_all(
             key = {"run_id": result.run_id, "variant": result.variant}
             write_lines(items_path, [item.model_copy(update=key) for item in items], "a")
             print(
-                f"{result.variant} {result.run_id}: precision {shown(precision)} faithfulness {shown(faithfulness)}",
+                f"{result.variant} {result.run_id}: precision {shown(precision)} faithfulness {shown(faithfulness)}"
+                f" coverage {shown(coverage)} retrievable {shown(retrievable)}",
                 file=sys.stderr,
             )
     total = ledger.total()
@@ -359,7 +437,7 @@ def shown(value: float | None) -> str:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m evals.judge", description="LLM-judged context precision and faithfulness."
+        prog="python -m evals.judge", description="LLM-judged precision, faithfulness, coverage, and retrievable."
     )
     parser.add_argument("--results", type=Path, required=True, help="Directory with results.jsonl.")
     parser.add_argument("--profile", help="Profile whose llm block judges.")
