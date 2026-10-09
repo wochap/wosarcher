@@ -236,13 +236,16 @@ describe("Export", () => {
     await screen.findByRole("heading", { level: 1, name: QUERY });
     const labels = screen.getAllByRole("button").map((b) => b.textContent);
     const start = labels.indexOf("Copy markdown");
-    expect(labels.slice(start, start + 5)).toEqual([
+    expect(labels.slice(start, start + 6)).toEqual([
       "Copy markdown",
       "Download .md",
       "Download .pdf",
       "Download .docx",
       "Copy JSON (context)",
+      "Live view",
     ]);
+    fireEvent.click(screen.getByRole("button", { name: "Live view" }));
+    expect(window.location.hash).toBe(`#/live/${RUN_ID}`);
   });
 
   it("exports a PDF on desktop with the busy state, then saves it", async () => {

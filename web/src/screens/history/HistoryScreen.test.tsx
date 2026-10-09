@@ -110,6 +110,16 @@ describe("HistoryScreen", () => {
     await screen.findByRole("heading", { name: "Run history" });
     fireEvent.click(within(rowOf("Failed")).getByRole("button", { name: "Open" }));
     expect(window.location.hash).toBe("#/live/r_7e2c");
+    expect(within(rowOf("Failed")).queryByRole("button", { name: "Live view" })).toBeNull();
+    window.location.hash = "#/history";
+    await screen.findByRole("heading", { name: "Run history" });
+    fireEvent.click(
+      within(rowOf("Rust async cancellation safety patterns with tokio::select!")).getByRole(
+        "button",
+        { name: "Live view" },
+      ),
+    );
+    expect(window.location.hash).toBe("#/live/r_7d11");
   });
 
   it("reruns through POST /api/runs/{id}/rerun and shows the new run live", async () => {

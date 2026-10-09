@@ -6,12 +6,14 @@ import {
   Copy,
   GitBranch,
   PenNib,
+  Pulse,
   Scissors,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import type { Report } from "../../api/generated";
 import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
+import { go } from "../../app/route";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
@@ -153,6 +155,14 @@ export function ReportScreen({ runId }: { runId: string }) {
             >
               <BracketsCurly aria-hidden="true" />
               Copy JSON (context)
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => go({ screen: "live", runId })}
+            >
+              <Pulse aria-hidden="true" />
+              Live view
             </button>
           </div>
         </header>

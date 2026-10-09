@@ -1,5 +1,11 @@
 // The Run history table. Every column comes from the one GET /api/runs response.
-import { ArrowClockwise, ArrowElbowDownRight, ArrowSquareOut, Trash } from "@phosphor-icons/react";
+import {
+  ArrowClockwise,
+  ArrowElbowDownRight,
+  ArrowSquareOut,
+  Pulse,
+  Trash,
+} from "@phosphor-icons/react";
 import type { RunSummary } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
@@ -16,11 +22,12 @@ type Props = {
   runs: RunSummary[];
   all: RunSummary[];
   onOpen: (run: RunSummary) => void;
+  onOpenLive: (run: RunSummary) => void;
   onRerun: (run: RunSummary) => void;
   onDelete: (run: RunSummary) => void;
 };
 
-export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
+export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete }: Props) {
   return (
     <div className={css.scroll}>
       <table className={`table ${css.table}`}>
@@ -88,6 +95,17 @@ export function HistoryTable({ runs, all, onOpen, onRerun, onDelete }: Props) {
                     >
                       <ArrowSquareOut aria-hidden="true" />
                     </button>
+                    {run.status === "done" && (
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-icon ${css.action}`}
+                        aria-label="Live view"
+                        title="Live view"
+                        onClick={() => onOpenLive(run)}
+                      >
+                        <Pulse aria-hidden="true" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={`btn btn-ghost btn-icon ${css.action}`}

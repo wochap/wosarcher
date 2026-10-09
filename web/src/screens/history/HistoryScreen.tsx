@@ -111,6 +111,7 @@ export function HistoryScreen() {
                   : { screen: "live", runId: r.run_id },
               )
             }
+            onOpenLive={(r) => go({ screen: "live", runId: r.run_id })}
             onRerun={rerun}
             onDelete={(r) => deleteRun(r.run_id)}
           />

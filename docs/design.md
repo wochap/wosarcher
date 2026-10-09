@@ -1731,6 +1731,10 @@ screen, in both themes and on phone and desktop.
 These override the prototype where they differ:
 
 - **Name:** wosarcher everywhere; no version string.
+- **Live view of a completed run:** a completed run's Live run view is
+  reachable from the History row action Live view and the Report screen's
+  Live view button (additions to the prototype); the event stream replays
+  the finished run's log.
 - **Citations:** `[n]` points to a passage; hover shows the passage text,
   source, and score. Citation chips are built from the body with `[n]`
   markers (the streamed text while writing, `report.json` `body` once
