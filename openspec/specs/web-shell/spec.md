@@ -522,7 +522,7 @@ with Alt+3) SHALL list runs from `GET /api/runs`, newest first, with the H1
 `context`), Status,
 Duration (`m:ss` from `duration_s`, "–" while it is null), Cost (`$` with
 three decimals from `cost`, "–" while it is null), and the row actions
-Open, Rerun, and Delete. A fork SHALL show under its query "↳ rewrite of
+Open, Live view (completed runs only), Rerun, and Delete. A fork SHALL show under its query "↳ rewrite of
 <parent id> · <writing changes>", where the changes are the writing
 options in which the fork's `writing` differs from its parent's. Every
 column SHALL come from the `GET /api/runs` response, with no request per
@@ -570,12 +570,25 @@ cancelled runs are kept here with their reports.", and a "New run" button.
 
 ### Requirement: History actions
 Open SHALL show the Report screen for a completed run and the Live run
-screen for any other run. Rerun SHALL start a new run with the same request and
+screen for any other run. Live view SHALL appear only on a completed
+(`done`) run's row, between Open and Rerun, as the same ghost icon button
+as the other row actions with the Live run nav icon (pulse), the
+accessible label and title "Live view"; it SHALL show the Live run screen
+for that run (`#/live/<run id>`), which replays the run's whole event log.
+This action is an addition to prototype scenario `history`. Rerun SHALL start a new run with the same request and
 attachments through `POST /api/runs/{id}/rerun` and show it on the Live
 run screen. Delete SHALL hide the row at once and
 show the toast "Run deleted" with Undo for 6 seconds; the run SHALL be
 deleted on the server only when the toast expires without Undo, and Undo
 SHALL restore the row.
+
+#### Scenario: Live view of a completed run
+- **WHEN** the user presses Live view on a completed run's row
+- **THEN** the Live run screen is shown for that run (`#/live/<run id>`) with its full phase timeline
+
+#### Scenario: No Live view on other runs
+- **WHEN** the history lists a failed run and a running run
+- **THEN** neither row has a Live view action, and Open shows each on the Live run screen
 
 #### Scenario: Rerun
 - **WHEN** the user presses Rerun on a run that had attachments

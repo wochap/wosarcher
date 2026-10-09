@@ -778,7 +778,10 @@ sent.
 The Report screen SHALL match the prototype scenario `finished`: Completed
 tag, run id, meta `date · duration · recipe · N sources · N passages`, the
 query as H1, the actions Rewrite (followed by its help button), Copy
-markdown, the downloads (Requirement: Export), and Copy JSON (context), the line "Written with
+markdown, the downloads (Requirement: Export), Copy JSON (context), and
+Live view (a secondary button with the Live run nav icon, pulse, that shows
+the Live run screen for the same run at `#/live/<run id>`; an addition to
+the prototype, offered for every recipe), the line "Written with
 <Tone> · <N> words · <Language> · <citation marker label> · <reference
 style> [· custom instructions]" (for recipe `answer`, scenario
 `finished-answer`: "Answer, at most <N> words · <Tone> · <Language> ·
@@ -805,6 +808,14 @@ viewport and 480px that scrolls inside itself.
 #### Scenario: Finished report
 - **WHEN** the user opens a completed report run
 - **THEN** the report, the sources with kept counts, and the selected passages are shown
+
+#### Scenario: Live view from the report
+- **WHEN** the user presses Live view on the Report screen of run `r_7d11`
+- **THEN** the Live run screen is shown for `r_7d11` (`#/live/r_7d11`) with its full phase timeline
+
+#### Scenario: Live view on a context run
+- **WHEN** the user opens a completed run with recipe `context`
+- **THEN** Live view is offered next to Copy JSON (context), and Rewrite, Copy markdown, and the downloads are not
 
 #### Scenario: Finished answer
 - **WHEN** the user opens a completed run with `writing.format` = `answer` and words 400 (scenario `finished-answer`)
