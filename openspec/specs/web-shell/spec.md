@@ -35,13 +35,18 @@ own origin.
 ### Requirement: Styling uses the design system
 Colors, fonts, radii, and shadows SHALL come from the vendored Nocturne
 stylesheet and the vendored prototype additions (`--wa-ring`, `--muted`,
-`--faint`, `--line`, `--mono`, `--color-danger`, `--color-warn`, the light
-theme block, the scrollbar style, and the keyframes `sx-spin`, `sx-pulse`,
-`sx-blink`, `sx-shimmer`). `--wa-ring` SHALL be `#9397ab` in the dark
-theme and `#c9cddd` in the light theme. Application stylesheets outside
-the vendored directory SHALL contain no raw hex colors and no font family
-other than a Nocturne or prototype font variable. The UI SHALL NOT use
-Tailwind or a third-party component library.
+`--faint`, `--line`, `--mono`, `--color-danger`, `--color-warn`, the
+computed accent ramp, the light theme block, the focus rules for
+`[data-chipbox]`, `[data-card]`, and `[data-chunk]`, the scrollbar style,
+and the keyframes `sx-spin`, `sx-pulse`, `sx-blink`, `sx-shimmer`). The
+palette SHALL be Catppuccin: every color is a Catppuccin Mocha (dark) or
+Latte (light) color or a `color-mix()` of two, as the bundle sets them.
+`--wa-ring` SHALL be `#6c7086` (Mocha overlay0) in the dark theme and
+`#9ca0b0` (Latte overlay0) in the light theme. The sidebar background
+SHALL be `--color-mantle`. Application stylesheets outside the vendored
+directory SHALL contain no raw hex colors and no font family other than a
+Nocturne or prototype font variable. The UI SHALL NOT use Tailwind or a
+third-party component library.
 
 #### Scenario: Token check
 - **WHEN** an application stylesheet outside `web/src/vendor/` contains a raw hex color
@@ -49,7 +54,19 @@ Tailwind or a third-party component library.
 
 #### Scenario: Help arrow ring in both themes
 - **WHEN** a help tooltip is open in the light theme (prototype `help` scenario, figure B, `theme=light`)
-- **THEN** its arrow's border uses `--wa-ring`, which resolves to `#c9cddd`
+- **THEN** its arrow's border uses `--wa-ring`, which resolves to `#9ca0b0`
+
+#### Scenario: Mocha ground
+- **WHEN** the app is shown in the dark theme (prototype scenario `new`, `theme=dark`)
+- **THEN** the page background is `#1e1e2e`, the sidebar background is `#181825`, and links use the mauve accent `#cba6f7`
+
+#### Scenario: Latte ground
+- **WHEN** the app is shown in the light theme (prototype scenario `new`, `theme=light`)
+- **THEN** the page background is `#eff1f5`, the sidebar background is `#e6e9ef`, and links use the accent `#8839ef`
+
+#### Scenario: Source passage focus ring
+- **WHEN** a passage in the source dialog receives keyboard focus (prototype scenario `source-file`)
+- **THEN** it shows a 2px accent outline inset by 2px
 
 ### Requirement: Screen URLs and API paths
 The UI SHALL be built into `web/dist`, which the server serves at `/`. All
@@ -112,11 +129,12 @@ phone values.
 - **THEN** the top bar is shown, the sidebar is not, and each nav button has an accessible label such as "History"
 
 ### Requirement: Theme
-The app SHALL offer a dark and a light theme matching the prototype's
-`theme` values. On the first visit the theme SHALL follow the browser's
-`prefers-color-scheme`. The toggle ("Light theme" with a sun icon in dark,
-"Dark theme" with a moon icon in light) SHALL switch the theme, and the
-choice SHALL be remembered in the browser and used on later visits.
+The app SHALL offer a dark theme (Catppuccin Mocha) and a light theme
+(Catppuccin Latte) matching the prototype's `theme` values. On the first
+visit the theme SHALL follow the browser's `prefers-color-scheme`. The
+toggle ("Light theme" with a sun icon in dark, "Dark theme" with a moon
+icon in light) SHALL switch the theme, and the choice SHALL be remembered
+in the browser and used on later visits.
 
 #### Scenario: First visit in a light-mode browser
 - **WHEN** a browser that prefers a light color scheme opens the app for the first time
