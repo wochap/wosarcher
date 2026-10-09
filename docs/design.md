@@ -1874,7 +1874,9 @@ The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
   token check): `nocturne.css`, the bundle's `styles.css` without its
   Google Fonts import, and `prototype.css`, the prototype's `<style>` block
   rescoped from `.sx` to `:root` (extra tokens, the light theme as
-  `:root[data-theme="light"]`, keyframes, scrollbar, links). Every other
+  `:root[data-theme="light"]`, focus rules, keyframes, scrollbar, links).
+  The palette is Catppuccin, as the bundle sets it: Mocha for the dark
+  theme and Latte for the light theme. Every other
   style is a CSS module next to its component; values the prototype
   computes in JS (status, health, alert tints) are variants selected with
   `data-state` or `data-tone`. Inter (`@fontsource/inter`) and Phosphor

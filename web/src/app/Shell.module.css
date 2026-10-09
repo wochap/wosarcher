@@ -27,7 +27,7 @@
   flex-direction: column;
   gap: 2px;
   padding: 14px 10px;
-  background: color-mix(in srgb, var(--color-surface) 45%, var(--color-bg));
+  background: var(--color-mantle);
   border-right: 1px solid var(--line);
 }
 
