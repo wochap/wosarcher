@@ -53,19 +53,23 @@ and skips a side that does not exist yet:
 
 openspec-pipeline uses it as its gate: `--gate scripts/check`.
 
-`scripts/dev-serve` runs this checkout in place of the NixOS service on
-the same host: it reads the live `wosarcher.service` unit (environment and
-secrets file) and the lazy proxy socket named by `WOSARCHER_DEV_SOCKET`
-(default `wosarcher-proxy.socket`; address and port), stops them, copies
-the Nix-managed profiles, runs, and caches into
-`~/.local/state/wosarcher-dev` (one way: dev runs never reach the service;
-and the service's `auth.json` on the first run; after that the dev server
-keeps its own password, set with
-`XDG_CONFIG_HOME=~/.local/state/wosarcher-dev/config uv run wosarcher auth
-set-password`), builds the web UI (`--no-web` skips it), and serves on the
-socket's port, so the nginx URL reaches the dev server. Exiting starts the
-socket again. You must be in the `wosarcher` group; sudo is needed for
-`systemctl` and for a secrets file the group cannot read.
+`scripts/dev-serve` runs this checkout's `wosarcherd` in place of the NixOS
+service on the same host: it reads the live `wosarcher.service` unit
+(environment and secrets file) and the lazy proxy socket named by
+`WOSARCHER_DEV_SOCKET` (default `wosarcher-proxy.socket`; address and
+port), stops them and `wosarcher.socket`, copies (with sudo, since the
+service's data is its user's alone) the Nix-managed profiles, runs, and
+caches into `~/.local/state/wosarcher-dev` (one way: dev runs never reach
+the service; and the service's `auth.json` on the first run; after that the
+dev server keeps its own password, set with
+`XDG_CONFIG_HOME=~/.local/state/wosarcher-dev/config uv run wosarcherd auth
+set-password`), builds the web UI (`--no-web` skips it), and runs `uv run
+wosarcherd serve` on the socket's port, so the nginx URL reaches the dev
+server, and on the Unix socket `~/.local/state/wosarcher-dev/api.sock`; it
+prints the `export WOSARCHER_SOCKET=...` line that points the `wosarcher`
+client at it. The secrets file reaches the dev daemon's environment only.
+Exiting starts the sockets again. sudo is needed for `systemctl`, the
+copies, and the secrets file.
 
 ## Nix package and module
 
@@ -79,7 +83,8 @@ nix build .#checks.x86_64-linux.nixos -L    # VM test (needs KVM, minutes)
 ```
 
 `scripts/check --full` does not run the VM test; run it after changing
-`nix/` or anything the service touches (file modes, `auth.py`, export).
+`nix/` or anything the service touches (file modes, `auth.py`, the socket
+listener, export).
 
 Versions are exact in `pyproject.toml` and `web/package.json`. To upgrade:
 

@@ -13,6 +13,7 @@ from tests.server.conftest import BASE_URL, WS_URL, MakeApp, create, finished
 from tests.server.test_stream import read_to_close
 from wosarcher.auth import AuthStore
 from wosarcher.config import AuthConfig
+from wosarcher.server.guard import socket_listener
 
 EVIL = "https://evil.example"
 
@@ -186,3 +187,39 @@ def test_forwarded_proto_trusted(auth_app: FastAPI, trusted: str, code: int, err
     with TestClient(proxied, base_url=BASE_URL) as client:
         response = client.post("/api/runs/missing/cancel", headers=headers)
         assert (response.status_code, response.json()["error"]) == (code, error)
+
+
+# The socket listener
+
+
+@pytest.fixture
+def socket_client(auth_app: FastAPI) -> TestClient:
+    """The password-protected app as the daemon's Unix socket listener serves it."""
+    return TestClient(socket_listener(auth_app), base_url="http://localhost")
+
+
+def test_socket_session_with_password(socket_client: TestClient, auth_client: TestClient) -> None:
+    with socket_client, auth_client:
+        assert socket_client.get("/api/runs").status_code == 200
+        assert socket_client.get("/api/session").json()["method"] == "socket"
+        assert auth_client.get("/api/runs").status_code == 401
+
+
+def test_socket_skips_host_and_origin(socket_client: TestClient) -> None:
+    with socket_client:
+        headers = {"Host": "attacker.example", "Origin": EVIL}
+        assert socket_client.put("/api/settings", json={}, headers=headers).status_code == 200
+
+
+def test_socket_may_use_token_routes(socket_client: TestClient) -> None:
+    with socket_client:
+        created = socket_client.post("/api/tokens", json={"name": "laptop"})
+        assert created.status_code == 201
+        assert [token["name"] for token in socket_client.get("/api/tokens").json()] == ["laptop"]
+
+
+def test_socket_runs_have_origin_cli(socket_client: TestClient) -> None:
+    with socket_client:
+        run_id = create(socket_client, {"query": "q"})
+        finished(socket_client, run_id)
+        assert socket_client.get(f"/api/runs/{run_id}").json()["origin"] == "cli"

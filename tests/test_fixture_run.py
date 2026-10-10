@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from tests.fixtures.recorded import FIXTURE_RUN, RUNS, config_home, copy_fixture
-from wosarcher.cli import app
+from wosarcher.daemon import app
 from wosarcher.models import (
     Candidate,
     Chunk,

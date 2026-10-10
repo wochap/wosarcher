@@ -1,4 +1,4 @@
-# wosarcher: API, CLI, and the built web UI in one image.
+# wosarcher: the daemon (API and engine), the CLI client, and the built web UI in one image.
 #
 #   docker build -t wosarcher .
 #   docker run -p 8765:8765 -v wosarcher:/data \
@@ -78,6 +78,8 @@ ENV PATH=/app/.venv/bin:$PATH \
     XDG_DATA_HOME=/data/share \
     XDG_CACHE_HOME=/data/cache \
     WOSARCHER_SERVER__STATIC_DIR=/app/web/dist \
+    WOSARCHER_SERVER__SOCKET=/tmp/wosarcher.sock \
+    WOSARCHER_SOCKET=/tmp/wosarcher.sock \
     PYTHONUNBUFFERED=1
 
 USER wosarcher
@@ -86,6 +88,7 @@ VOLUME /data
 EXPOSE 8765
 
 # Binding 0.0.0.0 inside the container needs an admin password: set
-# WOSARCHER_AUTH__PASSWORD_HASH (from `wosarcher auth set-password --print`)
-# or run `wosarcher auth set-password` in the container once.
-CMD ["wosarcher", "serve", "--host", "0.0.0.0", "--port", "8765"]
+# WOSARCHER_AUTH__PASSWORD_HASH (from `wosarcherd auth set-password --print`)
+# or run `wosarcherd auth set-password` in the container once. The client
+# (`docker exec wosarcher wosarcher runs`) uses the socket in /tmp.
+CMD ["wosarcherd", "serve", "--host", "0.0.0.0", "--port", "8765"]

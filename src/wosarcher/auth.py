@@ -1,6 +1,6 @@
 """Admin password, API tokens, session cookies, and `auth.json`; standard library cryptography only.
 
-Shared by the `wosarcher auth` commands and the server, so it never imports FastAPI.
+Shared by `wosarcherd auth` and the server, so it never imports FastAPI.
 """
 
 import base64
@@ -165,16 +165,17 @@ class AuthStore:
         return self.data
 
     def update(self, change: Callable[[AuthFile], None]) -> AuthFile:
-        """Lock, re-read, change, and write atomically with mode 0660 narrowed by the umask."""
+        """Lock, re-read, change, and write atomically with mode 0600: only the daemon's user reads it."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lock = self.path.with_name(self.path.name + ".lock")
-        with lock.open("a") as handle:
+        with os.fdopen(os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             self.mtime = None
             data = self.current().model_copy(deep=True)
             change(data)
             temporary = self.path.with_name(self.path.name + ".tmp")
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o660)
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as out:
                 out.write(data.model_dump_json(indent=2) + "\n")
             temporary.replace(self.path)

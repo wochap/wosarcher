@@ -52,7 +52,7 @@ def test_metrics_over_replay(
     env, parent = eval_env(tmp_path)
     second = "20260101-000001-second"
     args = ["fork", parent, "--from", "prefilter", "--until", "select", "--run-id", second]
-    subprocess.run([sys.executable, "-m", "wosarcher", *args], env=env, check=True, capture_output=True)
+    subprocess.run([sys.executable, "-m", "wosarcher.daemon", *args], env=env, check=True, capture_output=True)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     out = tmp_path / "out"

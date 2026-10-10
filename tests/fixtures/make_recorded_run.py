@@ -12,7 +12,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from tests.fixtures.recorded import FIXTURE_RUN, NOTES, QUERY, RUNS, config_home, recorded_router
-from wosarcher.cli import app
+from wosarcher.daemon import app
 
 
 def main() -> int:

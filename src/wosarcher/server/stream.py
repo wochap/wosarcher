@@ -8,8 +8,8 @@ whatever their `seq`.
 
 The run is looked up after the socket is accepted and subscribed to with no
 `await` in between, so a run that ends during the handshake is seen as ended.
-A run another process started is followed through `manager.follow` while its
-slot or ticket is live. A run the manager remembers as ended without a run
+A run the server did not start (a direct `wosarcherd run`) is replayed and
+closed like a finished run. A run the manager remembers as ended without a run
 directory gets its terminal event and 1000.
 """
 
@@ -52,7 +52,7 @@ async def events(socket: WebSocket, run_id: str, since: int = 0) -> None:
     active = state.manager.active(run_id)
     known = not run_id.startswith(".") and (state.runs_dir / run_id / "request.json").is_file()
     ended = state.manager.ended.get(run_id)
-    tail = active.tail if active else state.manager.follow(run_id) if known else None
+    tail = active.tail if active else None
     subscriber = tail.subscribe() if tail else None
     if active is None and not known:
         if ended is not None:

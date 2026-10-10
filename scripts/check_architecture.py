@@ -69,7 +69,9 @@ ALLOWED: dict[str, set[str]] = {
         "auth",
         "document",
     },
-    "cli": {
+    # The client reaches the daemon only through its API: no secrets, no run directories.
+    "cli": {"models", "attachments", "config"},
+    "daemon": {
         "models",
         "ports",
         "lexical",
@@ -86,6 +88,7 @@ ALLOWED: dict[str, set[str]] = {
         "attachments",
         "auth",
         "document",
+        "cli",
     },
     "__main__": {"cli"},
 }

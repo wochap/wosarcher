@@ -516,7 +516,7 @@ class DoctorReport(Contract):
 
 
 Origin = Literal["web", "api", "cli"]
-"""Where a run was started: the browser, an API token, or `wosarcher run` / `wosarcher fork`."""
+"""Where a run was started: the browser, an API token, or the daemon's socket (`wosarcher run`, `wosarcherd run`)."""
 
 
 class RunRecord(Contract):
@@ -588,7 +588,7 @@ class RunSummary(Contract):
 
 
 class SlotEntry(Contract):
-    """A run in the shared run queue or holding a slot."""
+    """A run in the server's queue or executing."""
 
     run_id: str
     origin: Origin
@@ -597,11 +597,11 @@ class SlotEntry(Contract):
 
 class SlotHolder(SlotEntry):
     started: datetime
-    """When the run took its slot."""
+    """When the server started the run's process."""
 
 
 class SlotState(Contract):
-    """`GET /api/slots`: the limit, the runs holding a slot (oldest first), and the waiting runs in queue order."""
+    """`GET /api/slots`: the limit, the runs the server executes (oldest first), and its queue in order."""
 
     limit: int
     held: list[SlotHolder] = []
@@ -614,7 +614,6 @@ class RunOutput(Contract):
     run_id: str
     status: Literal["done", "failed", "cancelled"]
     error: str | None = None
-    run_dir: str
     context: Context | None = None
     report: Report | None = None
 
@@ -734,6 +733,8 @@ class ForkCreate(Contract):
     model_config = ConfigDict(frozen=True, extra="forbid", serialize_by_alias=True)
 
     from_stage: Stage = Field(validation_alias=AliasChoices("from", "from_stage"), serialization_alias="from")
+    until: Stage | None = None
+    """The last stage to run; None runs to the end."""
     writing: WritingPatch = WritingPatch()
     llm: LLMPatch = LLMPatch()
     set: list[str] = []
@@ -761,7 +762,7 @@ class ServerSettings(Contract):
     sources: Sources = "both"
     domains: DomainDefaults = DomainDefaults()
     max_concurrent_runs: int = Field(default=1, ge=1, le=8)
-    """Runs that execute at once in the runs directory, whoever started them."""
+    """Run processes the server executes at once."""
 
 
 class ModelList(Contract):
@@ -782,6 +783,8 @@ class ProfileInfo(Contract):
     allow_domains: list[str] | None = None
     """The list the profile (or the environment) sets; None when it sets none."""
     block_domains: list[str] | None = None
+    settings: dict[str, Any] | None = None
+    """The resolved configuration, secrets as `***`; None when the profile does not resolve."""
 
 
 class DepthValues(Contract):
@@ -852,7 +855,7 @@ class LoginRequest(Contract):
 class SessionInfo(Contract):
     """`GET /api/session`: how this request is authenticated."""
 
-    method: Literal["cookie", "token", "none"]
+    method: Literal["cookie", "token", "socket", "none"]
     since: datetime | None = None
     expires: datetime | None = None
     token_name: str | None = None

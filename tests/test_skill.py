@@ -13,8 +13,8 @@ from typer.core import TyperGroup
 from typer.testing import CliRunner
 
 from wosarcher.cli import app
-from wosarcher.cli.run import writing_overrides
 from wosarcher.config import ConfigError, resolve
+from wosarcher.daemon.run import writing_overrides
 from wosarcher.models import STAGES, RunOutput, Sources, WritingOptions
 from wosarcher.prompts import tones
 from wosarcher.stages.write import style
@@ -203,3 +203,10 @@ def test_skill_schema_names() -> None:
     names = skill_schema_names(SKILL.read_text())
     assert names
     assert not names - schema_defs(), sorted(names - schema_defs())
+
+
+def test_skill_connection() -> None:
+    text = SKILL.read_text()
+    assert "`69` the daemon is not reachable" in text
+    assert "`WOSARCHER_URL`" in text
+    assert "`WOSARCHER_TOKEN`" in text

@@ -1,36 +1,33 @@
-"""`wosarcher depth list|show`: the built-in depth presets."""
+"""`wosarcher depth list|show`: the depth presets the daemon knows."""
 
-from typing import Any
+import os
 
 import typer
+from pydantic import TypeAdapter
 
-from wosarcher.cli import fail
-from wosarcher.config import ConfigError, depth_values, list_depths, read_depth
+from wosarcher.cli.api import api
+from wosarcher.cli.options import fail
+from wosarcher.models import DepthInfo
 
 depth_app = typer.Typer(no_args_is_help=True, help="List and show depth presets.")
 
 
-def preset(name: str) -> tuple[str, dict[str, Any]]:
-    try:
-        _, description, data = read_depth(name)
-    except ConfigError as error:
-        raise fail(error, 2) from None
-    return description, depth_values(data)
+def presets() -> list[DepthInfo]:
+    return TypeAdapter(list[DepthInfo]).validate_python(api(os.environ).get("/api/depths"))
 
 
 @depth_app.command("list")
 def depth_list() -> None:
     """One line per preset: its name and description."""
-    for name in list_depths():
-        description, _ = preset(name)
-        typer.echo(f"{name}  {description}")
+    for preset in presets():
+        typer.echo(f"{preset.name}  {preset.description}")
 
 
 @depth_app.command("show")
 def depth_show(name: str) -> None:
-    """The keys NAME sets, with their values."""
-    _, values = preset(name)
-    if not values:
-        typer.echo("sets nothing; uses the defaults")
-    for key, value in values.items():
+    """The values NAME runs with."""
+    found = {preset.name: preset for preset in presets()}
+    if name not in found:
+        raise fail(f"unknown depth '{name}'; available: {', '.join(found)}", 2)
+    for key, value in found[name].values.model_dump(exclude_none=True).items():
         typer.echo(f"{key} = {value}")

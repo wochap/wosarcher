@@ -1,4 +1,4 @@
-"""Replay recorded runs with ranking or writing variants through `wosarcher fork`.
+"""Replay recorded runs with ranking or writing variants through `wosarcherd fork`.
 
     python -m evals.replay (--runs ID... | --all) --variants NAME... --out DIR [--write] [--force]
 
@@ -10,7 +10,8 @@ again, so it implies `--write`.
 
 A fork that ends `done` is still recorded as `failed` when its events show
 that it did not rank with the configured scorer or prefilter: the score
-stage fell back, or the prefilter ran another method.
+stage fell back, or the prefilter ran another method. The fork's run
+directory is under the runs directory of the replay's own configuration.
 """
 
 import argparse
@@ -77,10 +78,10 @@ def load_variants(path: Path) -> dict[str, Variant]:
 
 
 def fork(
-    run_id: str, variant: Variant, *, write: bool, env: Mapping[str, str], extra: Sequence[str] = ()
+    run_id: str, variant: Variant, *, write: bool, env: Mapping[str, str], runs_dir: Path, extra: Sequence[str] = ()
 ) -> ForkResult:
-    """Run `wosarcher fork` in a subprocess; a failure is a result, not an exception."""
-    args = [sys.executable, "-m", "wosarcher", "fork", run_id, "--from", variant.from_stage, "--json"]
+    """Run `wosarcherd fork` in a subprocess; a failure is a result, not an exception."""
+    args = [sys.executable, "-m", "wosarcher.daemon", "fork", run_id, "--from", variant.from_stage, "--json"]
     if not write and variant.from_stage != "write":
         args += ["--until", "select"]
     for item in [*extra, *variant.set]:
@@ -92,8 +93,9 @@ def fork(
         error = done.stderr.strip()[-ERROR_CHARS:] or f"exit status {done.returncode}"
         return ForkResult(parent_run_id=run_id, variant=variant.name, run_id=None, status="failed", error=error)
     status, error = output.status, output.error
+    run_dir = runs_dir / output.run_id
     if status == "done":
-        error = fallback_error(Path(output.run_dir))
+        error = fallback_error(run_dir)
         status = "failed" if error else "done"
     return ForkResult(
         parent_run_id=run_id,
@@ -101,7 +103,7 @@ def fork(
         run_id=output.run_id,
         status=status,
         error=error,
-        run_dir=output.run_dir,
+        run_dir=str(run_dir),
     )
 
 
@@ -159,7 +161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         unknown = [name for name in args.variants if name not in variants]
         if unknown:
             raise VariantError(f"unknown variant {', '.join(unknown)}; known: {', '.join(variants)}")
-        runs: list[str] = args.runs or recorded_runs(RunStore.from_settings(resolve(None, args.set, os.environ)))
+        store = RunStore.from_settings(resolve(None, args.set, os.environ))
+        runs: list[str] = args.runs or recorded_runs(store)
     except (VariantError, ConfigError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
@@ -170,7 +173,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         for name in args.variants:
             if (run_id, name) in finished and not args.force:
                 continue
-            result = fork(run_id, variants[name], write=args.write, env=os.environ, extra=args.set)
+            result = fork(
+                run_id, variants[name], write=args.write, env=os.environ, runs_dir=store.runs_dir, extra=args.set
+            )
             with path.open("a", encoding="utf-8") as out:
                 out.write(result.model_dump_json() + "\n")
             print(json.dumps({"run": run_id, "variant": name, "status": result.status}), file=sys.stderr)

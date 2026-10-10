@@ -177,7 +177,7 @@ def stage_fork(
     writing = WritingOptions.model_validate(parent.settings.get("write", {}))
     staged = StagedRun(
         query=parent.request.query,
-        until=parent.request.until,
+        until=request.until,
         profile=request.profile,
         depth=parent.request.depth,
         writing=request.writing,
@@ -299,6 +299,8 @@ def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
     assert staged.parent is not None
     assert staged.from_stage is not None
     argv = [*command, "fork", staged.parent, "--from", staged.from_stage, "--run-id", staged.run_id]
+    if staged.until:
+        argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
     return argv + set_flags(staged)

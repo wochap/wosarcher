@@ -3,6 +3,11 @@
 A pure ASGI middleware, so it sees WebSocket handshakes too. Paths outside
 `/api` (the frontend build) pass untouched. The result is kept in
 `scope["state"]["auth"]` for `GET /api/session`.
+
+A request on the daemon's Unix socket (`scope["state"]["listener"] ==
+"socket"`, set by `socket_listener`) is authenticated by the socket's file
+permissions: method `socket`, no Host or Origin check (no browser reaches the
+socket), and the token routes are open to it.
 """
 
 from dataclasses import dataclass
@@ -25,7 +30,7 @@ CLOSE_POLICY = 1008
 
 @dataclass(frozen=True)
 class Auth:
-    method: Literal["cookie", "token", "none"]
+    method: Literal["cookie", "token", "socket", "none"]
     session: Session | None = None
     token: StoredToken | None = None
 
@@ -62,6 +67,10 @@ class Guard:
     def check(self, connection: HTTPConnection, scope: Scope) -> Auth:
         method = "WEBSOCKET" if scope["type"] == "websocket" else scope["method"]
         path = scope["path"]
+        if scope.get("state", {}).get("listener") == "socket":
+            if method in STATE_CHANGING and has_body(connection):
+                check_content_type(connection, method, path)
+            return Auth("socket")
         enabled = self.store.enabled()
         host = connection.headers.get("host", "")
         if not enabled and host_name(host) not in LOOPBACK_HOSTS:
@@ -77,7 +86,7 @@ class Guard:
             return Auth("none")
         auth = self.authenticate(connection) if enabled else Auth("none")
         if auth.method == "token" and (path == "/api/tokens" or path.startswith("/api/tokens/")):
-            raise RefusalError(403, "forbidden", "token routes need a browser session")
+            raise RefusalError(403, "forbidden", "token routes need the socket or a browser session")
         return auth
 
     def authenticate(self, connection: HTTPConnection) -> Auth:
@@ -115,3 +124,14 @@ def check_content_type(connection: HTTPConnection, method: str, path: str) -> No
     expected = "multipart/form-data" if method == "POST" and path == "/api/runs" else "application/json"
     if media != expected:
         raise RefusalError(415, "unsupported_media_type", f"{method} {path} needs Content-Type {expected}")
+
+
+def socket_listener(app: ASGIApp) -> ASGIApp:
+    """The app as the Unix socket listener serves it: every request marked as arriving on the socket."""
+
+    async def marked(scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket"):
+            scope = {**scope, "state": {**scope.get("state", {}), "listener": "socket"}}
+        await app(scope, receive, send)
+
+    return marked

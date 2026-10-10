@@ -1,36 +1,28 @@
-"""`wosarcher export` with the fake exporter."""
+"""`wosarcher export` against a daemon with the fake exporter."""
 
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import StartDaemon
 from tests.fixtures.recorded import copy_fixture
 from wosarcher.adapters.fakes import FakeExporter
 from wosarcher.cli import app
-from wosarcher.cli import export as export_command
 
 runner = CliRunner()
 
 
 @pytest.fixture
-def run_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
-    runs = tmp_path / "runs"
-    runs.mkdir()
-    monkeypatch.delenv("WOSARCHER_PROFILE", raising=False)
-    monkeypatch.setenv("WOSARCHER_RUN__RUNS_DIR", str(runs))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+def run_id(runs_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    runs_dir.mkdir()
     monkeypatch.chdir(tmp_path)
-    return copy_fixture(runs)
+    return copy_fixture(runs_dir)
 
 
-def use(monkeypatch: pytest.MonkeyPatch, exporter: FakeExporter) -> FakeExporter:
-    monkeypatch.setattr(export_command, "exporter", lambda: exporter)
-    return exporter
-
-
-def test_export_to_default_path(run_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    exporter = use(monkeypatch, FakeExporter())
+def test_export_to_default_path(run_id: str, tmp_path: Path, start_daemon: StartDaemon) -> None:
+    exporter = FakeExporter()
+    start_daemon(exporter=exporter)
     result = runner.invoke(app, ["export", run_id, "--format", "docx"])
     assert result.exit_code == 0, result.output
     assert result.output.strip() == f"{run_id}.docx"
@@ -38,8 +30,9 @@ def test_export_to_default_path(run_id: str, tmp_path: Path, monkeypatch: pytest
     assert exporter.inputs[0][1] == "docx"
 
 
-def test_existing_file(run_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    exporter = use(monkeypatch, FakeExporter())
+def test_existing_file(run_id: str, tmp_path: Path, start_daemon: StartDaemon) -> None:
+    exporter = FakeExporter()
+    start_daemon(exporter=exporter)
     (tmp_path / f"{run_id}.pdf").write_bytes(b"old")
     result = runner.invoke(app, ["export", run_id, "--format", "pdf"])
     assert result.exit_code == 2
@@ -60,15 +53,16 @@ def test_existing_file(run_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPa
         (["--format", "odt"], FakeExporter(), 2),
     ],
 )
-def test_exit_codes(
-    run_id: str, monkeypatch: pytest.MonkeyPatch, args: list[str], exporter: FakeExporter, code: int
-) -> None:
-    use(monkeypatch, exporter)
-    assert runner.invoke(app, ["export", run_id, *args]).exit_code == code
+def test_exit_codes(run_id: str, start_daemon: StartDaemon, args: list[str], exporter: FakeExporter, code: int) -> None:
+    start_daemon(exporter=exporter)
+    result = runner.invoke(app, ["export", run_id, *args])
+    assert result.exit_code == code
+    if exporter.absent:
+        assert "PDF export needs typst on the server" in result.output
 
 
-def test_unknown_run_and_missing_report(run_id: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    use(monkeypatch, FakeExporter())
+def test_unknown_run_and_missing_report(run_id: str, runs_dir: Path, start_daemon: StartDaemon) -> None:
+    start_daemon(exporter=FakeExporter())
     assert runner.invoke(app, ["export", "nope", "--format", "pdf"]).exit_code == 2
-    (tmp_path / "runs" / run_id / "report.json").unlink()
+    (runs_dir / run_id / "report.json").unlink()
     assert runner.invoke(app, ["export", run_id, "--format", "pdf"]).exit_code == 2

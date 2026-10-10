@@ -1,105 +1,72 @@
-"""Command line: `profile`, `doctor`, `schema`; `run`, `fork`, `runs`, `logs`, `export`, `serve`, `auth` elsewhere."""
+"""`wosarcher`: a client of the `wosarcherd` API; it holds no secret and reads no run directory.
 
-import asyncio
+Commands: `run`, `fork`, `runs`, `logs`, `cancel`, `export`, `doctor`,
+`profile list|show`, `depth list|show`, `tokens new|list|revoke`, `schema`.
+"""
+
 import json
 import os
-from typing import Annotated
+from typing import Annotated, Any
 
-import httpx
 import typer
+from pydantic import TypeAdapter
 from pydantic.json_schema import models_json_schema
 from rich.console import Console
 from rich.table import Table
 
-import wosarcher.doctor as health
-from wosarcher.build import build
-from wosarcher.config import (
-    ConfigError,
-    Settings,
-    list_profiles,
-    profile_description,
-    redact,
-    resolve,
-    select_profile,
-    store_profile,
-    to_toml,
-)
-from wosarcher.http import UsageLedger
-from wosarcher.models import CONTRACTS, DoctorReport
+from wosarcher.cli import export as export_command
+from wosarcher.cli import logs as logs_command
+from wosarcher.cli import run as run_commands
+from wosarcher.cli.api import api
+from wosarcher.cli.depth import depth_app
+from wosarcher.cli.options import ProfileOption, fail
+from wosarcher.cli.tokens import tokens_app
+from wosarcher.config import to_toml
+from wosarcher.models import CONTRACTS, HealthCheckRequest, HealthReport, ProfileInfo
 
-app = typer.Typer(no_args_is_help=True, add_completion=False)
-profile_app = typer.Typer(no_args_is_help=True, help="List, show, and choose configuration profiles.")
+app = typer.Typer(no_args_is_help=True, add_completion=False, help=__doc__)
+profile_app = typer.Typer(no_args_is_help=True, help="List and show the daemon's configuration profiles.")
 app.add_typer(profile_app, name="profile")
 
-ProfileOption = Annotated[str | None, typer.Option("--profile", help="Profile to use for this command.")]
-SetOption = Annotated[list[str] | None, typer.Option("--set", help="Override one field: dotted.key=value.")]
 
-
-def fail(error: Exception, code: int = 1) -> typer.Exit:
-    Console(stderr=True, soft_wrap=True).print(f"error: {error}", markup=False, highlight=False)
-    return typer.Exit(code)
+def profiles() -> list[ProfileInfo]:
+    return TypeAdapter(list[ProfileInfo]).validate_python(api(os.environ).get("/api/profiles"))
 
 
 @profile_app.command("list")
-def profile_list(profile: ProfileOption = None) -> None:
+def profile_list() -> None:
     """List profiles with their source and description; `*` marks the active one."""
-    env = os.environ
-    active = select_profile(profile, env)
-    for name, (_, source) in list_profiles(env).items():
-        try:
-            description = profile_description(name, env)
-        except ConfigError as error:
-            raise fail(error) from None
-        line = f"{'*' if name == active else ' '} {name}  ({source})"
-        typer.echo(f"{line}  {description}" if description else line)
+    for info in profiles():
+        line = f"{'*' if info.active else ' '} {info.name}  ({info.source})"
+        typer.echo(f"{line}  {info.description}" if info.description else line)
 
 
 @profile_app.command("show")
-def profile_show(name: Annotated[str | None, typer.Argument()] = None, set_: SetOption = None) -> None:
-    """Print the fully resolved configuration, secrets redacted."""
-    try:
-        settings = resolve(name, set_ or [], os.environ)
-    except ConfigError as error:
-        raise fail(error) from None
-    typer.echo(to_toml(redact(settings)), nl=False)
+def profile_show(name: Annotated[str | None, typer.Argument()] = None) -> None:
+    """Print the profile's resolved configuration as the daemon sees it, secrets redacted."""
+    found = profiles()
+    info = next((p for p in found if p.name == name), None) if name else next((p for p in found if p.active), None)
+    if info is None:
+        raise fail(f"unknown profile '{name}'; available: {', '.join(p.name for p in found)}", 2)
+    if info.settings is None:
+        raise fail(f"profile '{info.name}' does not resolve on the daemon", 2)
+    settings: dict[str, Any] = info.settings
+    typer.echo(to_toml(settings), nl=False)
 
 
-@profile_app.command("use")
-def profile_use(name: str) -> None:
-    """Make NAME the default profile."""
-    try:
-        store_profile(name, os.environ)
-    except ConfigError as error:
-        raise fail(error) from None
-    typer.echo(f"default profile: {name}")
-
-
-async def check_providers(settings: Settings, chosen: list[str] | None = None) -> DoctorReport:
-    async with httpx.AsyncClient() as http:
-        try:
-            adapters = build(settings, http, UsageLedger({}))
-        except ValueError as error:
-            raise ConfigError(str(error)) from None
-        return await health.check(settings, adapters.managed, chosen)
-
-
-def render(report: DoctorReport) -> None:
-    table = Table("block", "provider", "base URL", "device", "status", "model", "latency ms", "unload")
+def render(report: HealthReport) -> None:
+    table = Table("block", "provider", "URL", "device", "status", "model", "latency ms")
     for column in table.columns:
         column.overflow = "fold"
-    for row in report.providers:
-        latency = f"{row.latency_ms:.0f}" if row.latency_ms is not None else ""
-        status = "built in" if row.status == "built-in" else row.status
-        cells = [row.block, row.provider, row.base_url, row.device or "", status, row.model or "", latency, row.unload]
+    for check in report.checks:
+        latency = f"{check.latency_ms:.0f}" if check.latency_ms is not None else ""
+        cells = [check.role, check.provider, check.url, check.device or "", check.status, check.model or "", latency]
         table.add_row(*cells)
     console = Console(highlight=False)
     console.print(table)
-    for row in report.providers:
-        if row.error:
-            console.print(f"{row.block}: {row.error}", markup=False)
-    for row in report.providers:
-        if row.note:
-            console.print(f"{row.block}: {row.note}", markup=False)
+    for check in report.checks:
+        if check.detail:
+            console.print(f"{check.role}: {check.detail}", markup=False)
     for warning in report.warnings:
         console.print(f"warning: {warning}", markup=False)
 
@@ -107,29 +74,21 @@ def render(report: DoctorReport) -> None:
 @app.command()
 def doctor(
     profile: ProfileOption = None,
-    set_: SetOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the report as JSON.")] = False,
     block: Annotated[list[str] | None, typer.Option("--block", help="Check only this block; repeat for more.")] = None,
 ) -> None:
-    """Check that every configured provider answers, which model it serves, and whether it can unload.
-
-    Each remote block gets one small real request. The Firecrawl probe scrapes
-    https://example.com, which spends one credit on the cloud API.
-    Exit code 1 when any probe fails.
-    """
-    unknown = [name for name in block or [] if name not in health.BLOCKS]
-    if unknown:
-        raise fail(ValueError(f"unknown block {', '.join(unknown)}; choose from {', '.join(health.BLOCKS)}"))
-    try:
-        settings = resolve(profile, set_ or [], os.environ)
-        report = asyncio.run(check_providers(settings, block or None))
-    except ConfigError as error:
-        raise fail(error) from None
+    """Ask the daemon to check its providers and print the report; exit code 1 when any block is down."""
+    params = {"profile": profile} if profile else {}
+    body = HealthCheckRequest(blocks=block or []).model_dump()
+    response = api(os.environ).ok("POST", "/api/providers/health/check", params=params, json=body)
+    report = HealthReport.model_validate_json(response.content)
+    if block:
+        report = report.model_copy(update={"checks": [check for check in report.checks if check.role in block]})
     if as_json:
         typer.echo(report.model_dump_json(indent=2))
     else:
         render(report)
-    if any(row.status == "failed" for row in report.providers):
+    if any(check.status == "down" for check in report.checks):
         raise typer.Exit(1)
 
 
@@ -140,23 +99,15 @@ def schema() -> None:
     typer.echo(json.dumps(document, indent=2, sort_keys=True))
 
 
-def main() -> None:
-    app()
-
-
-from wosarcher.cli import export as export_command  # noqa: E402
-from wosarcher.cli import logs as logs_command  # noqa: E402
-from wosarcher.cli import run as run_commands  # noqa: E402  (registers run, fork, runs on `app`)
-from wosarcher.cli import serve as serve_command  # noqa: E402
-from wosarcher.cli.auth import auth_app  # noqa: E402
-
 app.command("run")(run_commands.run)
 app.command("fork")(run_commands.fork)
 app.command("runs")(run_commands.runs)
 app.command("logs")(logs_command.logs)
+app.command("cancel")(run_commands.cancel)
 app.command("export")(export_command.export)
-app.command("serve")(serve_command.serve)
-app.add_typer(auth_app, name="auth")
-from wosarcher.cli.depth import depth_app  # noqa: E402
-
 app.add_typer(depth_app, name="depth")
+app.add_typer(tokens_app, name="tokens")
+
+
+def main() -> None:
+    app()

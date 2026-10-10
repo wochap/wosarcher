@@ -1,6 +1,5 @@
-"""`wosarcher run`, `fork`, and `runs` with fake adapters injected in place of `build.build`."""
+"""`wosarcher run`, `fork`, `runs`, `cancel`, and `doctor` against a served daemon with the fake engine."""
 
-import io
 import json
 import os
 import signal
@@ -12,423 +11,246 @@ from pathlib import Path
 
 import httpx
 import pytest
-from pydantic import BaseModel
 from typer.testing import CliRunner
 
-import wosarcher.build as building
-from tests.runner.helpers import adapters
-from wosarcher.adapters.fakes import FakeLLM, FakeSearcher
+from tests.conftest import Daemon, create_run
+from wosarcher.auth import AuthStore
 from wosarcher.cli import app
-from wosarcher.cli.progress import ProgressView
-from wosarcher.config import Settings
-from wosarcher.http import UsageLedger
-from wosarcher.models import (
-    Event,
-    GapReadyData,
-    ResearchDoneData,
-    RunRecord,
-    Stage,
-    StageStartedData,
-    make_event,
-)
-from wosarcher.ports import Adapters
+from wosarcher.models import RunOutput
 from wosarcher.store import RunStore
 
 runner = CliRunner()
+ROOT = Path(__file__).resolve().parent.parent
 
 
-class World:
-    def __init__(self) -> None:
-        self.built: list[Settings] = []
-        self.fakes: list[Adapters] = []
-
-    def build(self, settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
-        self.built.append(settings)
-        self.fakes.append(adapters())
-        return self.fakes[-1]
+def listed(daemon: Daemon) -> list[str]:
+    return [path.name for path in daemon.runs_dir.iterdir() if not path.name.startswith(".")]
 
 
-@pytest.fixture
-def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
-    for name in ("WOSARCHER_PROFILE", "WOSARCHER_SCORE__API_KEY", "WOSARCHER_LLM__API_KEY"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    fake = World()
-    monkeypatch.setattr(building, "build", fake.build)
-    return fake
+def summary(daemon: Daemon, run_id: str) -> dict[str, object]:
+    with httpx.Client(transport=httpx.HTTPTransport(uds=str(daemon.socket)), base_url="http://localhost") as http:
+        return http.get(f"/api/runs/{run_id}").json()
 
 
-def runs_dir(tmp_path: Path) -> Path:
-    return tmp_path / "data" / "wosarcher" / "runs"
+def wait_until(condition: object, timeout: float = 15.0) -> None:
+    deadline = time.monotonic() + timeout
+    while not condition():  # pyright: ignore[reportCallIssue]
+        if time.monotonic() > deadline:
+            raise AssertionError("condition not met in time")
+        time.sleep(0.02)
 
 
-def only_run(tmp_path: Path) -> RunRecord:
-    (path,) = [path for path in runs_dir(tmp_path).iterdir() if not path.name.startswith(".")]
-    return RunRecord.model_validate_json((path / "request.json").read_text())
-
-
-def test_writing_flags(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(
-        app, ["run", "battery recycling", "--set", "write.tone=objective", "--tone", "critical", "--words", "500"]
-    )
+def test_json_done(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q", "--until", "select", "--json"])
     assert result.exit_code == 0, result.output
-    assert (world.built[0].write.tone, world.built[0].write.words) == ("critical", 500)
-    record = only_run(tmp_path)
-    assert record.overrides == ["write.tone=objective", 'write.tone="critical"', "write.words=500"]
-    assert "## References" in result.stdout
+    output = RunOutput.model_validate_json(result.stdout)
+    assert (output.status, output.error) == ("done", None)
+    assert output.context is not None
+    assert output.report is not None
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(output.run_id)
+    assert (record.origin, record.request.until) == ("cli", "select")
 
 
-def test_format_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "battery recycling", "--format", "answer"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].write.format == "answer"
-    assert only_run(tmp_path).overrides == ['write.format="answer"']
-
-
-def test_unknown_format(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--format", "summary"])
-    assert result.exit_code == 2
-    assert "--format" in result.output
-    assert "report, answer" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_rounds_flag(world: World) -> None:
-    result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--rounds", "2"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].research.rounds == 2
-
-
-def test_depth_with_research_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "battery recycling", "--depth", "deep", "--max-pages", "80"])
-    assert result.exit_code == 0, result.output
-    settings = world.built[0]
-    assert (settings.fetch.max_pages, settings.plan.max_sub_queries) == (80, 6)
-    record = only_run(tmp_path)
-    assert (record.request.depth, record.overrides) == ("deep", ["fetch.max_pages=80"])
-
-
-def test_auto_context_flag(world: World) -> None:
-    args = ["run", "q", "--set", "select.max_context_tokens=12000", "--context-tokens", "auto"]
-    result = runner.invoke(app, args)
-    assert result.exit_code == 0, result.output
-    assert world.built[0].select.max_context_tokens == "auto"
-
-
-def test_gap_context_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--depth", "deep", "--gap-context-tokens", "auto"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].research.gap_context_tokens == "auto"
-    assert only_run(tmp_path).overrides == ["research.gap_context_tokens=auto"]
-
-
-def test_domain_flags(world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("WOSARCHER_SEARCH__ALLOW_DOMAINS", '["gob.pe"]')
-    args = ["run", "q", "--until", "search", "--allow-domain", "sunat.gob.pe", "--allow-domain", "sbs.gob.pe"]
-    result = runner.invoke(app, [*args, "--block-domain", "facebook.com"])
-    assert result.exit_code == 0, result.output
-    search = world.built[0].search
-    assert (search.allow_domains, search.block_domains) == (["sunat.gob.pe", "sbs.gob.pe"], ["facebook.com"])
-    assert only_run(tmp_path).overrides == [
-        'search.allow_domains=["sunat.gob.pe", "sbs.gob.pe"]',
-        'search.block_domains=["facebook.com"]',
-    ]
-
-
-def test_invalid_domain_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--allow-domain", "https://gob.pe/x"])
-    assert result.exit_code == 2
-    assert "search.allow_domains" in result.output
-    assert "https://gob.pe/x" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_queries_per_round_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--depth", "deep", "--queries-per-round", "6"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].research.queries_per_round == 6
-    assert only_run(tmp_path).overrides == ["research.queries_per_round=6"]
-
-
-def test_search_language_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--until", "search", "--search-language", "es-PE"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].search.language == "es-PE"
-    assert only_run(tmp_path).overrides == ['search.language="es-PE"']
-
-
-def test_model_flag(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--model", "deepseek-v4-flash"])
-    assert result.exit_code == 0, result.output
-    assert world.built[0].llm.model == "deepseek-v4-flash"
-    assert only_run(tmp_path).overrides == ['llm.model="deepseek-v4-flash"']
-
-
-def test_thinking_flags(world: World, tmp_path: Path) -> None:
-    args = ["run", "q", "--set", 'llm.reasoning.write="low"', "--write-thinking", "high", "--gap-thinking", "low"]
-    result = runner.invoke(app, args)
-    assert result.exit_code == 0, result.output
-    reasoning = world.built[0].llm.reasoning
-    assert (reasoning.plan, reasoning.gap, reasoning.write) == ("none", "low", "high")
-    assert only_run(tmp_path).overrides[-2:] == ['llm.reasoning.gap="low"', 'llm.reasoning.write="high"']
-
-
-def test_invalid_thinking_level(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--plan-thinking", "max"], env={"COLUMNS": "200"})
-    assert result.exit_code == 2
-    assert "--plan-thinking" in result.output
-    assert "none, low, medium, high, default" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_invalid_search_language(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--search-language", "spanish please"])
-    assert result.exit_code == 2
-    assert "--search-language" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_invalid_language_through_set(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--set", 'search.language="spanish"'])
-    assert result.exit_code == 2
-    assert "search.language" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_token_budget_flag_rejects_words(world: World) -> None:
-    result = runner.invoke(app, ["run", "q", "--context-tokens", "all"])
-    assert result.exit_code == 2
-
-
-def test_files_without_attach(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--sources", "files"])
-    assert result.exit_code == 2
-    assert "--sources files needs --attach" in result.output
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_unknown_until(world: World) -> None:
-    result = runner.invoke(app, ["run", "q", "--until", "rank"])
-    assert result.exit_code == 2
-    assert "load, plan, search, fetch, chunk, prefilter, score, gap, select, write" in result.output
-
-
-def test_invalid_override(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "q", "--set", "score.topk=3"])
-    assert result.exit_code == 2
-    assert not runs_dir(tmp_path).exists()
-
-
-def test_json_until_select(world: World) -> None:
-    result = runner.invoke(app, ["run", "battery recycling", "--until", "select", "--json"])
-    assert result.exit_code == 0, result.output
-    document = json.loads(result.stdout)
-    assert document["status"] == "done"
-    assert document["report"] is None
-    assert document["context"]["passages"][0]["n"] == 1
-    assert document["context"]["sources"]
-
-
-def test_json_failed_fetch(world: World, monkeypatch: pytest.MonkeyPatch) -> None:
-    def no_pages(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> Adapters:
-        from wosarcher.adapters.fakes import FakeFetcher
-
-        return adapters(fetcher=FakeFetcher())
-
-    monkeypatch.setattr(building, "build", no_pages)
-    result = runner.invoke(app, ["run", "battery recycling", "--sources", "web", "--json"])
+def test_json_failed(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "crash", "--json"])
     assert result.exit_code == 1
-    document = json.loads(result.stdout)
-    assert (document["status"], document["error"]) == ("failed", "no output")
+    output = RunOutput.model_validate_json(result.stdout)
+    assert output.status == "failed"
+    assert output.error is not None
+    assert "code 1" in output.error
 
 
-def test_run_id_option(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "battery recycling", "--run-id", "20260101-120000-abcdef", "--until", "plan"])
+def test_piped_output_is_report(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q"])
     assert result.exit_code == 0, result.output
-    assert (runs_dir(tmp_path) / "20260101-120000-abcdef" / "request.json").is_file()
+    [run_id] = listed(daemon)
+    assert result.stdout == (daemon.runs_dir / run_id / "report.md").read_text()
+    lines = result.stderr.splitlines()
+    assert any(" run.started " in line for line in lines)
+    assert any(" run.done " in line for line in lines)
+    assert not any("\x1b" in line for line in lines)
 
 
-def test_run_id_exists_fails(world: World, tmp_path: Path) -> None:
-    taken = runs_dir(tmp_path) / "20260101-120000-abcdef"
-    taken.mkdir(parents=True)
-    (taken / "keep.txt").write_text("x")
+def test_flags_sent_to_the_server(daemon: Daemon) -> None:
+    args = ["run", "q", "--tone", "critical", "--words", "500", "--max-pages", "80", "--search-language", "es-PE"]
+    args += ["--allow-domain", "sunat.gob.pe", "--model", "m", "--write-thinking", "high", "--set", "score.top_k=7"]
+    assert runner.invoke(app, [*args, "--json"]).exit_code == 0
+    [run_id] = listed(daemon)
+    sent = json.loads((daemon.runs_dir / run_id / "argv.json").read_text())
+    flags = [sent[n + 1] for n, flag in enumerate(sent) if flag == "--set"]
+    assert 'write.tone="critical"' in flags
+    assert "write.words=500" in flags
+    assert "fetch.max_pages=80" in flags
+    assert 'search.allow_domains=["sunat.gob.pe"]' in flags
+    assert 'search.language="es-PE"' in flags
+    assert 'llm.model="m"' in flags
+    assert 'llm.reasoning.write="high"' in flags
+    assert flags[-1] == "score.top_k=7"
+
+
+@pytest.mark.parametrize(
+    ("args", "named"),
+    [
+        (["--format", "summary"], "--format"),
+        (["--write-thinking", "lots"], "--write-thinking"),
+        (["--search-language", "spanish please"], "--search-language"),
+        (["--allow-domain", "https://gob.pe/x"], "https://gob.pe/x"),
+        (["--sources", "files"], "--sources files needs --attach"),
+        (["--until", "rank"], "valid stages"),
+    ],
+)
+def test_checked_before_a_request(daemon: Daemon, args: list[str], named: str) -> None:
+    result = runner.invoke(app, ["run", "q", *args])
+    assert result.exit_code == 2
+    assert named in result.output
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_engine_rejects_configuration(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "early-exit", "--json"])
+    assert result.exit_code == 2
+    assert "unknown profile 'x'" in result.stdout
+
+
+def test_server_rejects_override(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q", "--set", "llm.api_key_file=/etc/shadow"])
+    assert result.exit_code == 2
+    assert "cannot be set through the API" in result.output
+
+
+def test_attachments_uploaded(daemon: Daemon, tmp_path: Path) -> None:
+    notes = tmp_path / "notes"
+    (notes / "sub").mkdir(parents=True)
+    (notes / "a.md").write_text("a")
+    (notes / "sub" / "b.md").write_text("b")
+    result = runner.invoke(app, ["run", "q", "--attach", str(notes), "--sources", "files", "--until", "load", "--json"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    assert sorted(path.name for path in (daemon.runs_dir / run_id / "attachments").iterdir()) == ["a.md", "b.md"]
+
+
+def test_missing_attachment(daemon: Daemon, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--attach", str(tmp_path / "none*.md")])
+    assert result.exit_code == 2
+    assert "no file matches" in result.output
+
+
+def test_run_id_is_not_a_client_flag(daemon: Daemon) -> None:
     result = runner.invoke(app, ["run", "q", "--run-id", "20260101-120000-abcdef"])
     assert result.exit_code == 2
-    assert [path.name for path in taken.iterdir()] == ["keep.txt"]
+    assert "--run-id" in result.output
 
 
-def test_piped_output_is_report(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "battery recycling"])
-    assert result.exit_code == 0
-    report = (runs_dir(tmp_path) / only_run(tmp_path).run_id / "report.md").read_text()
-    assert result.stdout == report
+def test_daemon_unreachable_creates_nothing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("WOSARCHER_SOCKET", str(tmp_path / "nothing.sock"))
+    result = runner.invoke(app, ["run", "q"])
+    assert result.exit_code == 69
 
 
-def test_progress_view_replays_events(world: World, tmp_path: Path) -> None:
-    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
-    store = RunStore(runs_dir(tmp_path), tmp_path / "cache")
-    from rich.console import Console
-
-    view = ProgressView(Console(file=open(os.devnull, "w"), force_terminal=True))  # noqa: SIM115
-    with view:
-        for event in store.read_events(only_run(tmp_path).run_id):
-            view(event)
-    assert view.rows["write"].state == "done"
-
-
-def round_event(event_type: str, stage: Stage, data: BaseModel) -> Event:
-    return make_event(1, "r", datetime.now(UTC), event_type, stage, data)
-
-
-def test_multi_round_progress() -> None:
-    from rich.console import Console
-
-    out = io.StringIO()
-    view = ProgressView(Console(file=out, force_terminal=False, width=200), rounds=3)
-    view.update(round_event("stage.started", "fetch", StageStartedData(device=None, provider="firecrawl", round=2)))
-    assert view.rows["fetch"].state == "running · round 2/3"
-    view.update(
-        round_event("gap.ready", "gap", GapReadyData(round=1, queries=[], note="", uncovered=["q4"], retried=True))
-    )
-    assert view.rows["gap"].counters == "0 follow-ups, 1 uncovered"
-    done = ResearchDoneData(planned=3, ran=1, reason="no follow-ups", note="")
-    view.update(round_event("research.done", "gap", done))
-    assert "research: 1 of 3 rounds · no follow-ups" in out.getvalue()
-    assert "gap" not in ProgressView(Console(file=io.StringIO())).rows
-
-
-def test_fork_rewrite_only(world: World, tmp_path: Path) -> None:
-    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
-    parent = only_run(tmp_path)
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--tone", "critical"])
+def test_remote_with_token(daemon: Daemon, password_hash: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = AuthStore(daemon.config_dir / "auth.json")
+    store.set_password(password_hash)
+    _, token = store.add_token("laptop", datetime.now(UTC))
+    monkeypatch.setenv("WOSARCHER_URL", daemon.url)
+    monkeypatch.setenv("WOSARCHER_TOKEN", token)
+    result = runner.invoke(app, ["run", "q", "--json"])
     assert result.exit_code == 0, result.output
-    fork = next(r for r in RunStore(runs_dir(tmp_path), tmp_path).list_runs() if r.run_id != parent.run_id)
-    record = RunStore(runs_dir(tmp_path), tmp_path).read_record(fork.run_id)
-    assert (record.version, record.fork_from, record.parent_run_id) == (2, "write", parent.run_id)
-    fakes = world.fakes[-1]
-    assert isinstance(fakes.planner, FakeLLM)
-    assert isinstance(fakes.writer, FakeLLM)
-    assert isinstance(fakes.searcher, FakeSearcher)
-    assert (fakes.planner.calls, fakes.searcher.calls) == ([], [])
-    assert len(fakes.writer.calls) == 1
-    assert world.built[-1].write.tone == "critical"
+    run_id = RunOutput.model_validate_json(result.stdout).run_id
+    runs = json.loads(runner.invoke(app, ["runs", "--json"]).stdout)
+    assert [(run["run_id"], run["origin"], run["token_name"]) for run in runs] == [(run_id, "api", "laptop")]
 
 
-def test_fork_keeps_thinking(world: World, tmp_path: Path) -> None:
-    assert runner.invoke(app, ["run", "battery recycling", "--write-thinking", "high"]).exit_code == 0
-    parent = only_run(tmp_path)
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--tone", "critical"])
+def test_fork(daemon: Daemon) -> None:
+    parent = RunOutput.model_validate_json(runner.invoke(app, ["run", "q", "--json"]).stdout).run_id
+    result = runner.invoke(app, ["fork", parent, "--from", "write", "--format", "answer", "--until", "write", "--json"])
     assert result.exit_code == 0, result.output
-    assert world.built[-1].llm.reasoning.write == "high"
-    writer = world.fakes[-1].writer
-    assert isinstance(writer, FakeLLM)
-    assert writer.efforts == ["high"]
+    fork = RunOutput.model_validate_json(result.stdout).run_id
+    sent = json.loads((daemon.runs_dir / fork / "argv.json").read_text())
+    assert sent[:5] == ["fork", parent, "--from", "write", "--run-id"]
+    assert sent[sent.index("--until") + 1] == "write"
+    assert 'write.format="answer"' in sent
 
 
-def test_fork_as_answer(world: World, tmp_path: Path) -> None:
-    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
-    parent = only_run(tmp_path)
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--format", "answer"])
-    assert result.exit_code == 0, result.output
-    store = RunStore(runs_dir(tmp_path), tmp_path)
-    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
-    assert store.read_record(fork.run_id).overrides == ['write.format="answer"']
-    fakes = world.fakes[-1]
-    assert isinstance(fakes.planner, FakeLLM)
-    assert isinstance(fakes.writer, FakeLLM)
-    assert (fakes.planner.calls, len(fakes.writer.calls)) == ([], 1)
-    assert world.built[-1].write.format == "answer"
-
-
-def test_fork_with_profile(world: World, tmp_path: Path) -> None:
-    assert runner.invoke(app, ["run", "battery recycling", "--until", "prefilter"]).exit_code == 0
-    parent = only_run(tmp_path)
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "score", "--profile", "cloud", "--until", "score"])
-    assert result.exit_code == 0, result.output
-    assert world.built[-1].score.provider == "jev"
-    store = RunStore(runs_dir(tmp_path), tmp_path)
-    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
-    assert store.read_record(fork.run_id).profile == "cloud"
-
-
-def stale_parent(tmp_path: Path, block: str, key: str, value: object) -> RunRecord:
-    assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
-    parent = only_run(tmp_path)
-    path = runs_dir(tmp_path) / parent.run_id / "request.json"
-    data = json.loads(path.read_text())
-    data["settings"][block][key] = value
-    path.write_text(json.dumps(data))
-    return parent
-
-
-def test_fork_drops_stale_saved_key(world: World, tmp_path: Path) -> None:
-    parent = stale_parent(tmp_path, "llm", "reasoning_tokens", 4096)
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
-    assert result.exit_code == 0, result.output
-    assert "warning: saved settings dropped: llm.reasoning_tokens" in result.stderr
-    store = RunStore(runs_dir(tmp_path), tmp_path)
-    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
-    assert "reasoning_tokens" not in store.read_record(fork.run_id).settings["llm"]
-
-
-def test_fork_fails_on_stale_saved_value(world: World, tmp_path: Path) -> None:
-    parent = stale_parent(tmp_path, "llm", "provider", "llm")
-    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
+def test_fork_running_parent(daemon: Daemon) -> None:
+    parent = create_run(daemon, "ignore-term")
+    wait_until(lambda: (daemon.runs_dir / parent / "report.md").is_file())
+    result = runner.invoke(app, ["fork", parent, "--from", "write"])
     assert result.exit_code == 2
-    assert "llm.provider" in result.output
+    assert "queued or running" in result.output
+    runner.invoke(app, ["cancel", parent])
 
 
-def test_runs_json(world: World) -> None:
-    for query in ("first", "second"):
-        assert runner.invoke(app, ["run", query, "--until", "plan"]).exit_code == 0
-    result = runner.invoke(app, ["runs", "--json"])
-    assert result.exit_code == 0
-    listed = json.loads(result.stdout)
-    assert [(item["query"], item["status"]) for item in listed] == [("second", "done"), ("first", "done")]
+def test_runs_and_cancel(daemon: Daemon) -> None:
+    running = create_run(daemon, "ignore-term")
+    queued = create_run(daemon)
+    wait_until(lambda: (daemon.runs_dir / running / "report.md").is_file())
+    assert runner.invoke(app, ["runs"]).exit_code == 0
+    rows = json.loads(runner.invoke(app, ["runs", "--json", "--limit", "1"]).stdout)
+    assert len(rows) == 1
+    cancelled = runner.invoke(app, ["cancel", queued])
+    assert cancelled.output.strip() == f"run {queued}: dequeued"
+    assert runner.invoke(app, ["cancel", running]).output.strip() == f"run {running}: signalled"
+    wait_until(lambda: summary(daemon, running).get("status") == "cancelled")
+    finished = runner.invoke(app, ["cancel", running])
+    assert finished.exit_code == 2
+    assert "status cancelled" in finished.output
+    assert runner.invoke(app, ["cancel", "nope"]).exit_code == 2
 
 
-SLOW_RUN = """
-import asyncio, sys
-import wosarcher.build as building
-from tests.runner.helpers import adapters
-from wosarcher.adapters.fakes import FakeFetcher
-
-class Slow(FakeFetcher):
-    async def fetch(self, url):
-        print("fetching", flush=True)
-        await asyncio.sleep(30)
-
-building.build = lambda settings, http, ledger: adapters(fetcher=Slow())
-from wosarcher.cli import app
-app(["run", "battery recycling", "--run-id", "20260101-120000-abcdef"])
-"""
+def test_waiting_shown(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_STEP", "0.02")
+    first = create_run(daemon, "slow")
+    result = runner.invoke(app, ["run", "q", "--json"])
+    assert result.exit_code == 0, result.output
+    assert "waiting for a free run slot (position 1)" in result.stderr
+    assert summary(daemon, first)["status"] == "done"
 
 
-def test_sigterm_exits_130(tmp_path: Path) -> None:
-    env = {key: value for key, value in os.environ.items() if not key.startswith("WOSARCHER_")}
-    env |= {"XDG_DATA_HOME": str(tmp_path / "data"), "XDG_CACHE_HOME": str(tmp_path / "cache")}
-    env["XDG_CONFIG_HOME"] = str(tmp_path / "config")
-    root = Path(__file__).resolve().parent.parent
-    process = subprocess.Popen(
-        [sys.executable, "-c", SLOW_RUN], cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-    assert process.stdout is not None
-    deadline = time.monotonic() + 20
-    while process.stdout.readline().strip() != "fetching" and time.monotonic() < deadline:
-        pass
-    process.send_signal(signal.SIGTERM)
-    assert process.wait(timeout=20) == 130
-    log = (runs_dir(tmp_path) / "20260101-120000-abcdef" / "events.jsonl").read_text().splitlines()
-    last = json.loads(log[-1])
-    assert (last["type"], last["data"]["stage"]) == ("run.cancelled", "fetch")
+def client(daemon: Daemon, *args: str) -> "subprocess.Popen[str]":
+    env = {**os.environ, "WOSARCHER_SOCKET": str(daemon.socket)}
+    argv = [sys.executable, "-m", "wosarcher", "run", *args]
+    return subprocess.Popen(argv, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
-def test_stderr_diagnostics_when_piped(world: World, tmp_path: Path) -> None:
-    result = runner.invoke(app, ["run", "battery recycling"])
-    assert result.exit_code == 0
-    lines = result.stderr.splitlines()
-    assert any(line.startswith("INFO ") and " plan stage.started " in line for line in lines)
-    assert any(line.startswith("INFO ") and " plan stage.done " in line for line in lines)
-    assert any(line.startswith("INFO ") and " run.done " in line for line in lines)
+def newest(daemon: Daemon, before: set[str]) -> str:
+    with httpx.Client(transport=httpx.HTTPTransport(uds=str(daemon.socket)), base_url="http://localhost") as http:
+        found = [run["run_id"] for run in http.get("/api/runs").json() if run["run_id"] not in before]
+    return found[0] if found else ""
+
+
+def test_ctrl_c_while_queued(daemon: Daemon) -> None:
+    holder = create_run(daemon, "ignore-term")
+    wait_until(lambda: (daemon.runs_dir / holder / "report.md").is_file())
+    process = client(daemon, "q", "--json")
+    wait_until(lambda: newest(daemon, {holder}) != "")
+    run_id = newest(daemon, {holder})
+    wait_until(lambda: summary(daemon, run_id).get("status") == "queued")
+    time.sleep(0.3)
+    process.send_signal(signal.SIGINT)
+    assert process.wait(timeout=15) == 130
+    assert summary(daemon, run_id)["status"] == "cancelled"
+    runner.invoke(app, ["cancel", holder])
+
+
+def test_ctrl_c_while_running(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_STEP", "0.2")
+    process = client(daemon, "slow", "--json")
+    wait_until(lambda: newest(daemon, set()) != "")
+    run_id = newest(daemon, set())
+    wait_until(lambda: (daemon.runs_dir / run_id / "report.md").is_file())
+    process.send_signal(signal.SIGINT)
+    assert process.wait(timeout=15) == 130
+    events = (daemon.runs_dir / run_id / "events.jsonl").read_text().splitlines()
+    assert json.loads(events[-1])["type"] == "run.cancelled"
+
+
+def test_doctor(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FAKE_DOCTOR", "failed")
+    result = runner.invoke(app, ["doctor", "--block", "score", "--json"])
+    assert result.exit_code == 1, result.output
+    checks = json.loads(result.stdout)["checks"]
+    assert [(check["role"], check["status"]) for check in checks] == [("score", "down")]
+    monkeypatch.setenv("FAKE_DOCTOR", "ok")
+    table = runner.invoke(app, ["doctor"])
+    assert table.exit_code == 0, table.output
+    assert "searxng" in table.output

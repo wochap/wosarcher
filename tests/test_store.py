@@ -216,6 +216,16 @@ def test_list_statuses(store: RunStore) -> None:
     assert len(store.list_runs(limit=2)) == 2
 
 
+def test_status_from_run_lock(store: RunStore) -> None:
+    """With no terminal event, a run whose lock is held is `running`; a terminal event wins over the lock."""
+    record = store.create(RunRequest(query="q"), "p", [], Settings(), [], lock=True)
+    assert store.status(record.run_id) == "running"
+    assert store.summary(record).status == "running"
+    store.append_event(record.run_id, "run.done", None, RunDoneData(until=None, totals=UsageTotals()))
+    assert store.status(record.run_id) == "done"
+    assert RunStore(store.runs_dir, store.cache_dir).status(create(store)) == "interrupted"
+
+
 def test_list_ignores_dot_dirs(store: RunStore) -> None:
     first, second = create(store), create(store)
     (store.runs_dir / ".queue" / "x").mkdir(parents=True)

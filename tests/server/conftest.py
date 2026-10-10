@@ -28,23 +28,6 @@ MakeApp = Callable[..., FastAPI]
 
 
 @pytest.fixture
-def runs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Children inherit the environment, so the fake writes here too."""
-    path = tmp_path / "runs"
-    monkeypatch.setenv("WOSARCHER_RUN__RUNS_DIR", str(path))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("FAKE_MODE", "ok")
-    monkeypatch.setenv("FAKE_STEP", "0.05")
-    monkeypatch.delenv("WOSARCHER_PROFILE", raising=False)
-    return path
-
-
-@pytest.fixture
-def config_dir(tmp_path: Path, runs_dir: Path) -> Path:
-    return tmp_path / "config" / "wosarcher"
-
-
-@pytest.fixture
 def make_app(runs_dir: Path, config_dir: Path, tmp_path: Path) -> MakeApp:
     def make(
         limit: int = 1,
@@ -113,5 +96,5 @@ EXTERNAL = Path(__file__).with_name("external_run.py")
 
 
 def external(run_id: str, steps: int = 20) -> "subprocess.Popen[bytes]":
-    """A CLI run started next to the server (`external_run.py`); it waits for a slot like `wosarcher run`."""
+    """A direct `wosarcherd run` next to the server (`external_run.py`), holding its run lock."""
     return subprocess.Popen([sys.executable, str(EXTERNAL), run_id, str(steps)], stderr=subprocess.DEVNULL)

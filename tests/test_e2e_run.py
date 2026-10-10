@@ -12,10 +12,10 @@ from typer.testing import CliRunner
 
 from tests.fixtures import recorded
 from tests.fixtures.recorded import NOTES, QUERY, config_home, recorded_router
-from wosarcher.cli import app
 from wosarcher.config import resolve
+from wosarcher.daemon import app
 from wosarcher.models import Context, Plan, ResearchRecord, RunOutput, parse_event
-from wosarcher.store import STAGE_ARTIFACTS
+from wosarcher.store import STAGE_ARTIFACTS, RunStore
 
 runner = CliRunner()
 RUN_ID = "20260101-120000-e2e000"
@@ -91,8 +91,7 @@ def test_quick_depth(runs: Path) -> None:
     assert record["settings"]["fetch"]["max_pages"] == 15
     events = [parse_event(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
     assert len([event for event in events if event.type == "page.fetched"]) <= 15
-    listed = runner.invoke(app, ["runs", "--json"])
-    assert json.loads(listed.stdout)[0]["depth"] == "quick"
+    assert RunStore(runs, runs).list_runs()[0].depth == "quick"
 
 
 FOLLOW_UP = "battery recycling regulation deadlines"
@@ -165,8 +164,8 @@ def test_deep_run_three_rounds(runs: Path) -> None:
     cited = {int(n) for n in re.findall(r"\[(\d+)\]", (run_dir / "report.md").read_text())}
     cited_rounds = {rounds[passage.query_id] for passage in context.passages if passage.n in cited}
     assert cited_rounds == {1, 2}
-    listed = json.loads(runner.invoke(app, ["runs", "--json"]).stdout)
-    assert (listed[0]["rounds_planned"], listed[0]["rounds_ran"]) == (3, 3)
+    listed = RunStore(runs, runs).list_runs()
+    assert (listed[0].rounds_planned, listed[0].rounds_ran) == (3, 3)
 
 
 BRIEF = (

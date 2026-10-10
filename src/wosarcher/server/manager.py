@@ -1,14 +1,11 @@
-"""Server runs in the shared run slots: one subprocess per run, FIFO with every other run, cancel by signal.
+"""The server's run queue: one subprocess per run, first in, first out, at most `max_concurrent_runs` at once.
 
-Staged runs hold a ticket in the shared queue (`store/slots.py`). A tick every
-0.25 s grants slots to them in staging order and spawns each granted run with
-the slot's descriptor (`--slot-fd`), so the child holds the slot until it
-exits. Each started run gets one coroutine that polls its tail, waits for exit,
-and finalises the log when the process ended without a terminal event.
-
-Runs another process started (`wosarcher run` from the CLI) are followed from
-their run directory while their slot or ticket is live, and cancelled with a
-cancel request in the store.
+Staged runs wait in `queued` in staging order. A tick every 0.25 s reads the
+limit from the global settings and starts the oldest staged runs while fewer
+than the limit execute. Each started run gets one coroutine that polls its
+tail, waits for exit, and finalises the log when the process ended without a
+terminal event. Runs the server did not start are not queued, counted, or
+cancelled here; their status comes from their run lock (`RunStore.is_running`).
 """
 
 import asyncio
@@ -29,12 +26,14 @@ from wosarcher.models import (
     RunQueued,
     RunQueuedData,
     SlotEntry,
+    SlotHolder,
+    SlotState,
 )
 from wosarcher.server import staging
 from wosarcher.server.staging import StagedRun
 from wosarcher.server.tail import RunTail
 from wosarcher.store import RunStore
-from wosarcher.store.slots import Held, Ticket
+from wosarcher.store import settings as global_settings
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ ENDED_LIMIT = 100
 class ActiveRun:
     staged: StagedRun
     tail: RunTail
-    ticket: Ticket | None = None
+    started: datetime | None = None
     argv: list[str] = field(default_factory=list[str])
     process: asyncio.subprocess.Process | None = None
     stderr: deque[str] = field(default_factory=lambda: deque[str](maxlen=STDERR_LINES))
@@ -68,15 +67,6 @@ class ActiveRun:
 
 
 @dataclass
-class Followed:
-    """A run another process started, followed while its slot or ticket is live."""
-
-    tail: RunTail
-    task: asyncio.Task[None] | None = None
-    queued: RunQueuedData | None = None
-
-
-@dataclass
 class EndedRun:
     """A run that ended without a run directory: cancelled while queued, or its process exited early."""
 
@@ -89,16 +79,19 @@ def cut(text: str) -> str:
 
 
 class RunManager:
-    def __init__(self, runs_dir: Path, command: list[str], store: RunStore, grace: float = GRACE_SECONDS) -> None:
+    def __init__(
+        self, runs_dir: Path, command: list[str], store: RunStore, config_dir: Path, grace: float = GRACE_SECONDS
+    ) -> None:
         self.runs_dir = runs_dir
         self.command = command
         self.store = store
-        self.slots = store.slots
+        self.config_dir = config_dir
+        """Where `server-settings.json` holds `max_concurrent_runs`."""
         self.grace = grace
         self.queued: list[ActiveRun] = []
-        """Staged runs holding a ticket, in staging order."""
+        """Staged runs, in staging order."""
         self.running: dict[str, ActiveRun] = {}
-        self.followed: dict[str, Followed] = {}
+        """Run processes this server started, oldest first."""
         self.ended: OrderedDict[str, EndedRun] = OrderedDict()
         """Runs that ended without a run directory, newest last; in memory only."""
         self.stopping = False
@@ -125,34 +118,39 @@ class RunManager:
     def active(self, run_id: str) -> ActiveRun | None:
         return self.running.get(run_id) or next((run for run in self.queued if run.run_id == run_id), None)
 
+    def limit(self) -> int:
+        return global_settings.load(self.config_dir).max_concurrent_runs
+
     def queue_position(self, run_id: str) -> int | None:
-        return self.slots.position(run_id) if self.active(run_id) in self.queued else None
+        waiting = [run.run_id for run in self.queued]
+        return waiting.index(run_id) + 1 if run_id in waiting else None
+
+    def slot_state(self) -> SlotState:
+        held = [
+            SlotHolder(
+                run_id=run.run_id,
+                origin=run.staged.origin,
+                token_name=run.staged.token_name,
+                started=run.started or run.staged.created,
+            )
+            for run in self.running.values()
+        ]
+        queued = [
+            SlotEntry(run_id=run.run_id, origin=run.staged.origin, token_name=run.staged.token_name)
+            for run in self.queued
+        ]
+        return SlotState(limit=self.limit(), held=held, queued=queued)
 
     def queued_data(self, run_id: str) -> RunQueuedData | None:
-        """`run.queued` data for a waiting run, whoever started it; None when it does not wait."""
-        state = self.slots.state()
-        waiting = [entry.run_id for entry in state.queued]
-        if run_id not in waiting:
+        """`run.queued` data for a staged run; None when it does not wait."""
+        position = self.queue_position(run_id)
+        if position is None:
             return None
-        return RunQueuedData(position=waiting.index(run_id) + 1, limit=state.limit, held=state.held)
-
-    def follow(self, run_id: str) -> RunTail | None:
-        """The shared tail of a live run another process started; None when it is not live."""
-        found = self.followed.get(run_id)
-        if found is not None:
-            return found.tail
-        if self.slots.live(run_id) is None:
-            return None
-        tail = RunTail(run_id, self.runs_dir / run_id)
-        tail.poll()
-        found = Followed(tail=tail)
-        found.task = asyncio.get_running_loop().create_task(self._follow(run_id, found))
-        self.followed[run_id] = found
-        return tail
+        state = self.slot_state()
+        return RunQueuedData(position=position, limit=state.limit, held=state.held)
 
     async def cancel(self, run_id: str) -> Literal["signalled", "dequeued"] | None:
-        """SIGTERM a running run (SIGKILL after the grace period); remove a queued one; ask another process's run
-        to stop. None: not active."""
+        """SIGTERM a running run (SIGKILL after the grace period); remove a queued one. None: not active."""
         if run_id in self.running:
             active = self.running[run_id]
             active.cancel_requested = True
@@ -161,14 +159,8 @@ class RunManager:
             return "signalled"
         active = next((run for run in self.queued if run.run_id == run_id), None)
         if active is None:
-            if self.slots.live(run_id) is None:
-                return None
-            self.slots.request_cancel(run_id)
-            log.info("run %s: cancel requested from its own process", run_id)
-            return "signalled"
+            return None
         self.queued.remove(active)
-        if active.ticket is not None:
-            active.ticket.close()
         staging.remove(self.runs_dir, run_id)
         event = RunCancelled(seq=0, run_id=run_id, ts=datetime.now(UTC), data=RunCancelledData(stage=None))
         active.tail.publish(event)
@@ -187,12 +179,6 @@ class RunManager:
         self.stopping = True
         if self.ticker is not None:
             self.ticker.cancel()
-        for active in self.queued:
-            if active.ticket is not None:
-                active.ticket.close()
-        for followed in self.followed.values():
-            if followed.task is not None:
-                followed.task.cancel()
         tasks = [run.task for run in self.running.values() if run.task is not None]
         for active in list(self.running.values()):
             active.cancel_requested = True
@@ -209,9 +195,7 @@ class RunManager:
             self.ended.popitem(last=False)
 
     def _active(self, staged: StagedRun) -> ActiveRun:
-        entry = SlotEntry(run_id=staged.run_id, origin=staged.origin, token_name=staged.token_name)
-        tail = RunTail(staged.run_id, self.runs_dir / staged.run_id)
-        return ActiveRun(staged=staged, tail=tail, ticket=self.slots.ticket(entry))
+        return ActiveRun(staged=staged, tail=RunTail(staged.run_id, self.runs_dir / staged.run_id))
 
     async def _tick(self) -> None:
         while True:
@@ -222,18 +206,16 @@ class RunManager:
                 log.exception("scheduling runs failed")
 
     def _schedule(self) -> None:
-        """Start the oldest staged runs while they are granted a slot, then tell waiting runs their new data."""
+        """Start the oldest staged runs while fewer than the limit execute, then tell waiting runs their new data."""
         if self.stopping:
             return
-        while self.queued and self.queued[0].ticket is not None:
-            held = self.slots.grant(self.queued[0].ticket)
-            if held is None:
-                break
+        limit = self.limit()
+        while self.queued and len(self.running) < limit:
             active = self.queued.pop(0)
-            active.ticket, active.queued = None, None
+            active.queued, active.started = None, datetime.now(UTC)
             active.argv = staging.build_argv(self.command, active.staged, self.runs_dir)
             self.running[active.run_id] = active
-            active.task = asyncio.get_running_loop().create_task(self._run(active, held))
+            active.task = asyncio.get_running_loop().create_task(self._run(active))
         for active in self.queued:
             active.queued = self._publish_queued(active.tail, active.queued)
 
@@ -242,24 +224,6 @@ class RunManager:
         if data is not None and data != last:
             tail.publish(RunQueued(seq=tail.last_seq, run_id=tail.run_id, ts=datetime.now(UTC), data=data))
         return data
-
-    async def _follow(self, run_id: str, followed: Followed) -> None:
-        """Poll the run's directory until its terminal event, until it is no longer live, or until nobody watches."""
-        tail = followed.tail
-        try:
-            while tail.terminal_event is None and tail.subscribers:
-                live = self.slots.live(run_id)
-                tail.poll()
-                if live is None:
-                    break
-                if live == "queued":
-                    followed.queued = self._publish_queued(tail, followed.queued)
-                await asyncio.sleep(POLL_SECONDS)
-        except Exception:
-            log.exception("run %s: following the run failed", run_id)
-        finally:
-            tail.close()
-            self.followed.pop(run_id, None)
 
     def _terminate(self, active: ActiveRun) -> None:
         assert active.process is not None
@@ -273,34 +237,27 @@ class RunManager:
             active.killed = True
             active.process.kill()
 
-    async def _run(self, active: ActiveRun, held: Held) -> None:
+    async def _run(self, active: ActiveRun) -> None:
         code: int | None = None
         try:
-            code = await self._watch(active, held)
+            code = await self._watch(active)
         except Exception:
             log.exception("run %s: watching the process failed", active.run_id)
         finally:
             self._finish(active, code)
 
-    async def _watch(self, active: ActiveRun, held: Held) -> int | None:
-        """Spawn the process holding the slot and poll its tail until it exits; its exit code, or None when it did not
-        start."""
+    async def _watch(self, active: ActiveRun) -> int | None:
+        """Spawn the process and poll its tail until it exits; its exit code, or None when it did not start."""
         try:
             process = await asyncio.create_subprocess_exec(
                 *active.argv,
-                "--slot-fd",
-                str(held.fd),
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
-                pass_fds=(held.fd,),
             )
         except OSError as error:
-            held.close()
             active.stderr.append(str(error))
             return None
-        held.set_pid(process.pid)
-        held.detach()
         active.process = process
         log.info("run %s started: %s pid %d", active.run_id, active.staged.kind.replace("rerun", "run"), process.pid)
         if active.cancel_requested:
@@ -345,7 +302,7 @@ class RunManager:
     def _finish(self, active: ActiveRun, code: int | None) -> None:
         """Log `run.failed` (or `run.cancelled` after a kill) when the process left no terminal event.
 
-        Whatever fails here is logged; the tail is closed, staging removed, the slot freed, and the queue pumped.
+        Whatever fails here is logged; the tail is closed, staging removed, the run uncounted, and the queue pumped.
         """
         if active.kill_timer is not None:
             active.kill_timer.cancel()

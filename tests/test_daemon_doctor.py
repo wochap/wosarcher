@@ -6,7 +6,7 @@ import pytest
 import respx
 from typer.testing import CliRunner
 
-from wosarcher.cli import app
+from wosarcher.daemon import app
 
 runner = CliRunner()
 PROFILE = """

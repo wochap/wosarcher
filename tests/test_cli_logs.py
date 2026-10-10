@@ -1,14 +1,13 @@
 """`wosarcher logs` and the event line format shared with the run process's standard error."""
 
 import logging
-import threading
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import Daemon, create_run
 from wosarcher.cli import app
 from wosarcher.cli.logs import event_line, stderr_listener
 from wosarcher.config import Settings
@@ -89,12 +88,8 @@ def test_stderr_listener_levels(caplog: pytest.LogCaptureFixture) -> None:
 
 
 @pytest.fixture
-def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RunStore:
-    for name in ("WOSARCHER_PROFILE", "WOSARCHER_RUN__RUNS_DIR"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    return RunStore(tmp_path / "data" / "wosarcher" / "runs", tmp_path / "cache")
+def store(daemon: Daemon) -> RunStore:
+    return RunStore(daemon.runs_dir, daemon.runs_dir)
 
 
 def started(store: RunStore) -> str:
@@ -138,17 +133,12 @@ def test_logs_skips_bad_line(store: RunStore) -> None:
     assert types(result.stdout) == ["run.started", "run.done"]
 
 
-def test_logs_follow(store: RunStore) -> None:
-    run_id = started(store)
-
-    def later() -> None:
-        time.sleep(0.2)
-        store.append_event(run_id, "stage.done", "plan", StageDoneData(count=1, seconds=0.1))
-        finish(store, run_id)
-
-    thread = threading.Thread(target=later)
-    thread.start()
+def test_logs_follow(daemon: Daemon) -> None:
+    """A run the server started, followed on the event socket until `run.done`."""
+    run_id = create_run(daemon, "slow")
     result = runner.invoke(app, ["logs", run_id, "--follow"])
-    thread.join()
-    assert result.exit_code == 0
-    assert types(result.stdout) == ["run.started", "stage.done", "run.done"]
+    assert result.exit_code == 0, result.output
+    printed = types(result.stdout)
+    assert printed[0] == "run.started"
+    assert printed[-1] == "run.done"
+    assert "stage.progress" in printed

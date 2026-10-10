@@ -20,6 +20,7 @@ from wosarcher.config import (
     own_settings,
     profile_description,
     read_depth,
+    redact,
     resolve,
     select_profile,
 )
@@ -59,7 +60,7 @@ async def put_settings(state: State, body: ServerSettings) -> ServerSettings:
 
 @router.get("/slots")
 async def get_slots(state: State) -> SlotState:
-    return state.store.slots.state()
+    return state.manager.slot_state()
 
 
 def profile_info(name: str, source: str, active: str) -> ProfileInfo:
@@ -80,6 +81,7 @@ def profile_info(name: str, source: str, active: str) -> ProfileInfo:
         "max_output_tokens": settings.llm.max_output_tokens,
         "allow_domains": settings.search.allow_domains if "search.allow_domains" in own else None,
         "block_domains": settings.search.block_domains if "search.block_domains" in own else None,
+        "settings": redact(settings),
     }
     return info.model_copy(update=values)
 

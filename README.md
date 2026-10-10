@@ -5,10 +5,14 @@ sub-queries, searches the web (and your attached Markdown files), fetches
 pages, ranks passages, and writes a report whose citations point to the exact
 passages behind each claim.
 
-It is used three ways:
+One daemon, `wosarcherd`, holds the provider secrets and the data and runs
+every run. It is used three ways, all through its API:
 
-- **CLI**: `wosarcher run "question"`, scriptable, with JSON output.
-- **Web UI**: a real-time frontend over WebSocket, served by `wosarcher serve`.
+- **CLI**: `wosarcher run "question"`, a client of the daemon, scriptable,
+  with JSON output. It holds no secret: it reaches the daemon over a local
+  Unix socket, or a remote one with `WOSARCHER_URL` and an API token in
+  `WOSARCHER_TOKEN`.
+- **Web UI**: a real-time frontend over WebSocket, served by `wosarcherd serve`.
 - **Agents**: a skill (`skill/SKILL.md`) that teaches coding agents to call
   the CLI for cited context.
 
@@ -72,17 +76,17 @@ pnpm --dir web install       # frontend dependencies
 Run the backend and the frontend dev server in two terminals:
 
 ```sh
-uv run wosarcher serve       # API on http://127.0.0.1:8765/api
+uv run wosarcherd serve      # API on http://127.0.0.1:8765/api and $XDG_RUNTIME_DIR/wosarcher.sock
 pnpm --dir web dev           # Vite dev server with hot reload
 ```
 
 The Vite dev server proxies `/api` to `http://127.0.0.1:8765`; set
 `WOSARCHER_DEV_API` to use another backend.
 
-Use the CLI directly:
+Use the CLI client against the running daemon:
 
 ```sh
-uv run wosarcher doctor                          # check every configured provider
+uv run wosarcher doctor                          # the daemon checks every configured provider
 uv run wosarcher run "What limits solid-state battery production?"
 uv run wosarcher run "..." --until select --json # cited passages only, as JSON
 uv run wosarcher run "..." --attach notes.md --sources both
@@ -91,6 +95,7 @@ uv run wosarcher run "..." --rounds 2 --queries-per-round 6  # follow-up searche
 uv run wosarcher run "..." --search-language es-PE  # SearXNG search language
 uv run wosarcher runs                            # list runs
 uv run wosarcher fork <run-id> --from write --tone critical  # rewrite only
+uv run wosarcherd run "..." --until select --json  # the engine in this process, without a daemon
 ```
 
 Checks:
@@ -112,7 +117,7 @@ with `/opsx:apply`, and archived with `/opsx:archive`.
 ## Production
 
 wosarcher is a single Python process that serves the API and the built
-frontend from the same origin. Each research run is a `wosarcher run`
+frontend from the same origin. Each research run is a `wosarcherd run`
 subprocess, so a run survives a reload of the UI.
 
 1. Build:
@@ -126,15 +131,15 @@ subprocess, so a run survives a reload of the UI.
 2. Configure providers in a profile (see Configuration) and check them:
 
    ```sh
-   uv run --no-dev wosarcher profile use <name>
-   uv run --no-dev wosarcher doctor
+   uv run --no-dev wosarcherd profile use <name>
+   uv run --no-dev wosarcherd doctor
    ```
 
 3. Set the admin password. It is required before the server may bind to
    anything other than loopback:
 
    ```sh
-   uv run --no-dev wosarcher auth set-password
+   uv run --no-dev wosarcherd auth set-password
    ```
 
 4. Start the server. Point `server.static_dir` at the absolute path of the
@@ -143,7 +148,7 @@ subprocess, so a run survives a reload of the UI.
 
    ```sh
    WOSARCHER_SERVER__STATIC_DIR="$PWD/web/dist" \
-     uv run --no-dev wosarcher serve --host 0.0.0.0 --port 8765
+     uv run --no-dev wosarcherd serve --host 0.0.0.0 --port 8765
    ```
 
    Run it under a process supervisor (for example a systemd service) with
@@ -163,15 +168,15 @@ wosarcher logs <run-id> --follow
 
 ### Docker
 
-The `Dockerfile` builds one image (about 400 MB) with the CLI, the API, the
-built web UI, and pinned pandoc and Typst binaries for PDF and Word export. Everything that changes at runtime (profiles, password
+The `Dockerfile` builds one image (about 400 MB) with the daemon, the CLI
+client, the built web UI, and pinned pandoc and Typst binaries for PDF and Word export. Everything that changes at runtime (profiles, password
 hash, tokens, runs, caches) lives under `/data`.
 
 ```sh
 docker build -t wosarcher .
 
 # Admin password hash, for WOSARCHER_AUTH__PASSWORD_HASH (keep it in your secrets):
-docker run --rm -it wosarcher wosarcher auth set-password --print
+docker run --rm -it wosarcher wosarcherd auth set-password --print
 
 docker run -d --name wosarcher \
   -p 8765:8765 \
@@ -187,7 +192,9 @@ docker run -d --name wosarcher \
   Use LAN or Tailscale addresses in profiles, or run with `--network=host`
   (then drop `-p` and bind with `--host <address>`).
 - **CLI in the container**: `docker exec wosarcher wosarcher doctor`,
-  `docker exec wosarcher wosarcher runs`.
+  `docker exec wosarcher wosarcher runs` (over the daemon's socket in
+  `/tmp`). From another machine: `WOSARCHER_URL=http://host:8765
+  WOSARCHER_TOKEN=... wosarcher runs`.
 - **Update**: rebuild (or pull) the image and recreate the container; the
   `/data` volume keeps all state.
 
@@ -195,9 +202,10 @@ On NixOS, prefer the module below.
 
 ### NixOS
 
-The flake exports `nixosModules.default`, which runs the server as the
-native `wosarcher.service` and puts a `wosarcher` CLI on the system path
-that shares the server's profiles, runs, caches, and secrets:
+The flake exports `nixosModules.default`, which runs the daemon as the
+native `wosarcher.service`, activated by `wosarcher.socket`
+(`/run/wosarcher/api.sock`), and puts on the system path a `wosarcher`
+client for that socket and a `wosarcherd` wrapper for the service user:
 
 ```nix
 {
@@ -226,30 +234,29 @@ that shares the server's profiles, runs, caches, and secrets:
 ```
 
 - **Data** lives in `/var/lib/wosarcher` (`config/`, `share/`, `cache/`),
-  owned by `wosarcher:wosarcher`, directories setgid with mode 2770.
+  owned by `wosarcher`, directories 0700 and files 0600: no one else reads
+  it.
 - **Group members** (`services.wosarcher.users`; log in again after the
-  switch) run `wosarcher ...` against the server's data. Always use the
-  wrapper: it sets the umask that keeps new files writable by the server.
-  Members can read every secret: the environment file and `auth.json`.
+  switch) may use the socket and nothing else: `wosarcher runs`,
+  `wosarcher run ...` go through the daemon, which holds the secrets.
 - **Secrets** go in `environmentFile` (API keys,
-  `WOSARCHER_AUTH__PASSWORD_HASH`), never in `environment` or `profiles`,
-  which land in the Nix store. Make the file readable by the group, for
-  example a sops template with `mode = "0440"; group = "wosarcher";`.
-- **Password**: as a member, `wosarcher auth set-password`.
-- **On demand**: with `autoStart = false` the unit starts only when
-  something (for example a socket proxy) starts it.
+  `WOSARCHER_AUTH__PASSWORD_HASH`), read by systemd alone (it may be `0400
+  root:root`), or in files named by `<x>_file` settings and readable by the
+  `wosarcher` user; never in `environment` or `profiles`, which land in the
+  Nix store.
+- **Password**: `sudo -u wosarcher wosarcherd auth set-password`.
+- **On demand**: with `autoStart = false` the unit starts on the first
+  connection to its socket, or when a socket proxy starts it.
 
 Moving from the container: the existing `/var/lib/wosarcher` is owned by
 uid 10001. Before the first start of the service, run once as root:
 
 ```sh
 chown -R wosarcher:wosarcher /var/lib/wosarcher
-find /var/lib/wosarcher -type d -exec chmod 2770 {} +
-find /var/lib/wosarcher -type f -exec chmod 0660 {} +
 ```
 
-Setting `users.users.wosarcher.uid = 10001` avoids the `chown`; the modes
-still need the fix.
+Setting `users.users.wosarcher.uid = 10001` avoids it; the service removes
+group and other access from the data on each start.
 
 **Reverse proxy.** The server trusts `X-Forwarded-For` and
 `X-Forwarded-Proto` only from the addresses in `server.forwarded_allow_ips`
@@ -278,7 +285,7 @@ wos.lan {
 
 **Security.** Single admin user, password stored as a scrypt hash, signed
 `HttpOnly` session cookie, `Origin` checks, login rate limiting, and bearer
-API tokens for scripts on other machines (`wosarcher auth new-token`). On
+API tokens for scripts on other machines (`wosarcher tokens new`). On
 plain HTTP the password and cookie can be read by anyone on the network: put
 the server behind Tailscale or a TLS reverse proxy (for example Caddy), and
 never expose it to the internet.
@@ -296,7 +303,7 @@ Settings are resolved with this precedence, lowest first:
 **Profiles** are TOML files. Built-in ones are `workstation` (default),
 `low-vram`, and `cloud`. Your own go in `$XDG_CONFIG_HOME/wosarcher/profiles/`
 (`~/.config/wosarcher/profiles/`); a file with a built-in's name replaces it.
-Select one with `--profile`, `WOSARCHER_PROFILE`, or `wosarcher profile use`.
+Select one with `--profile`, `WOSARCHER_PROFILE`, or `wosarcherd profile use`.
 Changing a profile never needs a restart: each run reads it when it starts.
 
 Example: embeddings and reranker on another machine, writer on this one.
@@ -357,8 +364,8 @@ saved.
 - `retry_budget` (every provider block): seconds a call may spend waiting
   between retries on 429/502/503/504/529, default 60; `0` disables retries.
 
-`wosarcher profile show` prints the resolved configuration;
-`wosarcher doctor` checks each endpoint, its model, latency, and whether it
+`wosarcher profile show` prints the resolved configuration the daemon uses;
+`wosarcher doctor` (or `wosarcherd doctor` locally) checks each endpoint, its model, latency, and whether it
 can unload. It warns when the LLM server's context (llama-server `-c`) is
 below `llm.context_window`.
 
@@ -385,7 +392,7 @@ context and the full-report mode.
 ## Repository layout
 
 ```
-src/wosarcher/   backend: models, ports, config, adapters, stages, runner, store, server, cli
+src/wosarcher/   backend: models, ports, config, adapters, stages, runner, store, server, daemon, cli (client)
 web/             frontend (Vite + React)
 tests/           backend tests (fakes only, no network)
 evals/           replay harness for comparing prefilters and scorers

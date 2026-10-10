@@ -127,7 +127,6 @@ def test_run_contracts_round_trip() -> None:
     output = RunOutput(
         run_id="r",
         status="done",
-        run_dir="/runs/r",
         context=Context(query="q", passages=[], sources=[], budget_tokens=10, used_tokens=0),
     )
     for value in (request, record, output):

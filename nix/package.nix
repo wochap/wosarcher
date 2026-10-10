@@ -1,6 +1,7 @@
-# The wosarcher command: a virtual environment built by uv2nix from uv.lock
-# (PyPI wheels, runtime dependencies only), with pandoc and typst on PATH for
-# report export and the built web UI as the default static directory.
+# The wosarcher client and the wosarcherd daemon: a virtual environment built
+# by uv2nix from uv.lock (PyPI wheels, runtime dependencies only). The daemon
+# gets pandoc and typst on PATH for report export and the built web UI as the
+# default static directory.
 {
   lib,
   callPackage,
@@ -37,7 +38,8 @@ runCommand "wosarcher-0.1.0"
     meta.mainProgram = "wosarcher";
   }
   ''
-    makeWrapper ${venv}/bin/wosarcher $out/bin/wosarcher \
+    makeWrapper ${venv}/bin/wosarcher $out/bin/wosarcher
+    makeWrapper ${venv}/bin/wosarcherd $out/bin/wosarcherd \
       --prefix PATH : ${
         lib.makeBinPath [
           pandoc

@@ -1,14 +1,15 @@
 """`wosarcher logs`, and the one-line event format it shares with the run process's standard error."""
 
+import asyncio
 import logging
 import os
-import time
+from collections.abc import Callable
 from typing import Annotated
 
 import typer
 
-from wosarcher.cli import ProfileOption, SetOption, fail
-from wosarcher.config import ConfigError, resolve
+from wosarcher.cli.api import Api, api
+from wosarcher.cli.options import fail
 from wosarcher.models import (
     Event,
     HitFound,
@@ -26,12 +27,12 @@ from wosarcher.models import (
     StageFailed,
     StageProgress,
     StageStarted,
+    parse_event,
 )
-from wosarcher.runner.events import Listener
-from wosarcher.store import RunStore
 
+Listener = Callable[[Event], None]
 SUMMARY_MAX_CHARS = 160
-FOLLOW_SECONDS = 0.5
+LIVE_ONLY = {"report.delta", "report.snapshot", "run.queued"}
 TERMINAL = {"run.done", "run.failed", "run.cancelled"}
 LOGGED = {
     "run.started",
@@ -119,24 +120,27 @@ def stderr_listener(logger: logging.Logger) -> Listener:
 def logs(
     run_id: Annotated[str, typer.Argument(help="The run to show.")],
     follow: Annotated[bool, typer.Option("--follow", help="Keep printing new events until the run ends.")] = False,
-    profile: ProfileOption = None,
-    set_: SetOption = None,
 ) -> None:
     """Print a run's logged events, one line each."""
-    try:
-        settings = resolve(profile, set_ or [], os.environ)
-    except ConfigError as error:
-        raise fail(error, 2) from None
-    store = RunStore.from_settings(settings)
-    if not (store.run_dir(run_id) / "request.json").is_file():
-        raise fail(ValueError(f"no run {run_id} in {store.runs_dir}"), 2)
-    last = 0
-    while True:
-        for event in store.read_events(run_id, since=last):
+    client = api(os.environ)
+    if client.request("GET", f"/api/runs/{run_id}").status_code == 404:
+        raise fail(f"no run {run_id}", 2)
+    if follow:
+        asyncio.run(follow_events(client, run_id))
+        return
+    response = client.request("GET", f"/api/runs/{run_id}/artifacts/events.jsonl")
+    if not response.is_success:
+        return
+    for line in response.text.splitlines():
+        try:
+            typer.echo(event_line(parse_event(line)))
+        except ValueError:
+            continue
+
+
+async def follow_events(client: Api, run_id: str) -> None:
+    async for event in client.events(run_id):
+        if event.type not in LIVE_ONLY:
             typer.echo(event_line(event))
-            last = event.seq
-            if event.type in TERMINAL:
-                return
-        if not follow:
+        if event.type in TERMINAL:
             return
-        time.sleep(FOLLOW_SECONDS)

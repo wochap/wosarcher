@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run this checkout's wosarcher in place of the NixOS service, with the
+# Run this checkout's wosarcherd in place of the NixOS service, with the
 # service's own configuration, so a change can be tried without a push, a
 # rebuild, and a service restart.
 #
@@ -8,20 +8,22 @@
 #
 # It reads the live wosarcher.service unit (environment and secrets file)
 # and the lazy proxy socket named by $WOSARCHER_DEV_SOCKET (default
-# wosarcher-proxy.socket; its address and port), stops the socket and the
-# service, copies the Nix-managed profiles and auth.json into a dev data
-# directory (auth.json on the first run only; the dev server keeps its own
-# password after that), and runs `uv run wosarcher serve` on the socket's
-# address and port, so https://wosarcher.<domain> reaches the dev server
-# through nginx. On exit the socket is started again and the service comes
-# back on the next request.
+# wosarcher-proxy.socket; its address and port), stops that socket,
+# wosarcher.socket, and the service, copies the Nix-managed profiles and
+# auth.json into a dev data directory (auth.json on the first run only; the
+# dev server keeps its own password after that), and runs
+# `uv run wosarcherd serve` on the proxy socket's address and port, so
+# https://wosarcher.<domain> reaches the dev server through nginx, and on
+# the Unix socket <data>/api.sock for the `wosarcher` client (the export
+# line to use it is printed). On exit the sockets are started again and the
+# service comes back on the next request.
 #
 # The dev server works in $WOSARCHER_DEV_DATA (default
 # ~/.local/state/wosarcher-dev), not in /var/lib/wosarcher. The service's
 # runs and caches are copied in at every start, so the history is there;
-# dev runs are not copied back. The developer must be in the wosarcher
-# group (services.wosarcher.users) to read the service's files; sudo is
-# needed only for systemctl and a secrets file the group cannot read.
+# dev runs are not copied back. The service's data directory is readable by
+# the service user alone, so the copies and a secrets file are read with
+# sudo; the secrets reach the dev daemon's environment only.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -39,8 +41,6 @@ for arg in "$@"; do
   esac
 done
 
-[[ -r "$service_data/config" ]] || { echo "cannot read $service_data; add your user to services.wosarcher.users" >&2; exit 1; }
-
 # `sudo` may be a doas shim, so no `sudo -v`.
 sudo true
 
@@ -57,20 +57,22 @@ port=${listen##*:}
 # --- Dev data directory ------------------------------------------------------
 mkdir -p "$data/config/wosarcher/profiles" "$data/share" "$data/cache"
 chmod 700 "$data"
+owner="$(id -u):$(id -g)"
 rm -f "$data"/config/wosarcher/profiles/*.toml
-cp "$service_data"/config/wosarcher/profiles/*.toml "$data/config/wosarcher/profiles/" 2>/dev/null || true
+sudo rsync -a --chown="$owner" --include='*.toml' --exclude='*' \
+  "$service_data/config/wosarcher/profiles/" "$data/config/wosarcher/profiles/"
 # The service's runs (history) and caches (pages, embeddings), copied in one
 # way: dev runs stay in the dev directory and never reach the service.
-rsync -a --no-group "$service_data/share/" "$data/share/"
-rsync -a --no-group "$service_data/cache/" "$data/cache/"
+sudo rsync -a --chown="$owner" "$service_data/share/" "$data/share/"
+sudo rsync -a --chown="$owner" "$service_data/cache/" "$data/cache/"
 
 # auth.json (password hash, session secret, tokens) is the dev server's own
 # once it exists: set a dev password with
-#   XDG_CONFIG_HOME=<data>/config uv run wosarcher auth set-password
+#   XDG_CONFIG_HOME=<data>/config uv run wosarcherd auth set-password
 # The service's file seeds it on the first run only.
 auth="$data/config/wosarcher/auth.json"
-if [[ ! -f "$auth" && -f "$service_data/config/wosarcher/auth.json" ]]; then
-  (umask 077; cat "$service_data/config/wosarcher/auth.json" > "$auth")
+if [[ ! -f "$auth" ]] && sudo test -f "$service_data/config/wosarcher/auth.json"; then
+  (umask 077; sudo cat "$service_data/config/wosarcher/auth.json" > "$auth")
 fi
 
 # --- Web UI ------------------------------------------------------------------
@@ -80,17 +82,24 @@ fi
 [[ -f web/dist/index.html ]] || { echo "web/dist/index.html missing; run without --no-web" >&2; exit 1; }
 
 # --- Swap the service for this checkout --------------------------------------
+# The service's own Unix socket would start the service on a connection.
+api_socket=wosarcher.socket
+sockets=("$socket")
+if systemctl cat "$api_socket" >/dev/null 2>&1; then
+  sockets+=("$api_socket")
+fi
+
 restore() {
-  echo "dev-serve: starting $socket again" >&2
-  sudo systemctl start "$socket" || true
+  echo "dev-serve: starting ${sockets[*]} again" >&2
+  sudo systemctl start "${sockets[@]}" || true
 }
 trap restore EXIT
 
-echo "dev-serve: stopping $socket, $proxy, $service" >&2
-sudo systemctl stop "$socket" "$proxy" "$service"
+echo "dev-serve: stopping ${sockets[*]}, $proxy, $service" >&2
+sudo systemctl stop "${sockets[@]}" "$proxy" "$service"
 
 # The service's environment, then the secrets file. Secrets stay in this
-# process; nothing is written to disk.
+# process and the daemon it starts; nothing is written to disk.
 set -a
 eval "export $env_line"
 if [[ -n "$env_file" ]]; then
@@ -107,4 +116,5 @@ export WOSARCHER_SERVER__STATIC_DIR="$PWD/web/dist" PYTHONUNBUFFERED=1
 set +a
 
 echo "dev-serve: profile ${WOSARCHER_PROFILE:-<default>}, data $data, serving http://$host:$port" >&2
-uv run wosarcher serve --host "$host" --port "$port"
+echo "dev-serve: for the client, run: export WOSARCHER_SOCKET=$data/api.sock" >&2
+uv run wosarcherd serve --host "$host" --port "$port" --socket "$data/api.sock"

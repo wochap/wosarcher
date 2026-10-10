@@ -72,4 +72,6 @@ async def session(request: Request) -> SessionInfo:
         return SessionInfo(method="cookie", since=auth.session.issued, expires=auth.session.expires)
     if auth.token is not None:
         return SessionInfo(method="token", token_name=auth.token.name)
+    if auth.method == "socket":
+        return SessionInfo(method="socket")
     return SessionInfo(method="none")

@@ -1,6 +1,6 @@
 ---
 name: wosarcher
-description: Research a question on the web and/or in local Markdown files and get cited passages or a cited report, using the local `wosarcher` CLI. Use when you need sourced evidence for an answer, a literature-style summary with references, or to search a folder of notes alongside the web.
+description: Research a question on the web and/or in local Markdown files and get cited passages or a cited report, using the `wosarcher` CLI (a client of a running `wosarcherd`). Use when you need sourced evidence for an answer, a literature-style summary with references, or to search a folder of notes alongside the web.
 ---
 <!-- Install: copy or symlink this `skill/` directory into your agent's skills directory as `wosarcher/`. -->
 
@@ -9,6 +9,12 @@ description: Research a question on the web and/or in local Markdown files and g
 `wosarcher` plans sub-queries, searches, fetches pages, ranks passages, and
 optionally writes a cited report. Read only stdout: progress goes to stderr.
 Every flag is listed by `wosarcher <command> --help`.
+
+The commands talk to a running `wosarcherd`, which holds the providers'
+secrets and runs the research: over the local socket
+(`$XDG_RUNTIME_DIR/wosarcher.sock`, `/run/wosarcher/api.sock`, or
+`WOSARCHER_SOCKET`), or a remote daemon at `WOSARCHER_URL` with an API
+token in `WOSARCHER_TOKEN`.
 
 ## 1. Cited context (default)
 
@@ -112,29 +118,29 @@ provider answers; run it when a run fails with a provider error.
 
 `--json` prints one `RunOutput` document when the run ends:
 
-- `run_id`, `status` (`done`, `failed`, `cancelled`), `error`, `run_dir`.
+- `run_id`, `status` (`done`, `failed`, `cancelled`), `error`.
 - `context.passages[]`: `n` (citation number), `source_id`, `heading_path`,
   `text`, and `display` (score, 0 to 1).
 - `context.sources[]`: `source_id`, `kind` (`web` or `file`), `uri`, `title`.
 - `report` (null with `--until select`): `markdown`, `cited`, `references`.
 
 Cite a passage as `[n]` and resolve its source through `source_id`. A long
-run can be followed in `<run_dir>/events.jsonl`.
+run can be followed with `wosarcher logs <run_id> --follow`.
 
 Runs share one queue with the web UI: when every run slot is in use, the
 command waits and prints `waiting for a free run slot (position <n>)` to
-standard error. Add `--no-wait` to fail at once instead.
+standard error.
 
 Exit codes: `0` done, `1` failed (read `error`), `2` invalid arguments or
-configuration (fix the command), `75` no free run slot with `--no-wait`
-(try again later), `130` cancelled (also from the web UI).
+configuration (fix the command), `69` the daemon is not reachable (start
+`wosarcherd serve`, or check `WOSARCHER_SOCKET`, `WOSARCHER_URL`, and
+`WOSARCHER_TOKEN`), `130` cancelled (also from the web UI).
 
 ```json
 {
   "run_id": "20260101-120000-a1b2c3",
   "status": "done",
   "error": null,
-  "run_dir": "runs/20260101-120000-a1b2c3",
   "context": {
     "query": "battery recycling",
     "passages": [

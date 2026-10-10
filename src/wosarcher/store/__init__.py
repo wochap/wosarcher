@@ -4,6 +4,7 @@ Every JSON artifact is written to `<name>.tmp` and renamed. A stage counts as
 finished only when its `stage.done` event is logged.
 """
 
+import fcntl
 import glob
 import os
 import secrets
@@ -15,7 +16,7 @@ from typing import cast
 
 from pydantic import BaseModel
 
-from wosarcher.config import Settings, config_dir, redact
+from wosarcher.config import Settings, redact
 from wosarcher.models import (
     LOOP_STAGES,
     STAGES,
@@ -37,7 +38,6 @@ from wosarcher.models import (
     make_event,
     parse_event,
 )
-from wosarcher.store.slots import Slots
 
 STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "load": ("files.jsonl",),
@@ -52,6 +52,8 @@ STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "write": ("report.md", "report.json"),
 }
 END_STATUS: dict[str, RunStatus] = {"run.done": "done", "run.failed": "failed", "run.cancelled": "cancelled"}
+LOCK = ".lock"
+"""`<run>/.lock`: the run process holds `LOCK_EX` on it until it exits; the kernel drops it even on SIGKILL."""
 
 
 TAIL_BLOCK = 8192
@@ -121,30 +123,53 @@ def free_name(name: Path, taken: set[Path]) -> Path:
 
 
 class RunStore:
-    def __init__(self, runs_dir: Path, cache_dir: Path, config: Path | None = None) -> None:
-        """`config`: the directory of `server-settings.json`, which holds the run slot limit."""
+    def __init__(self, runs_dir: Path, cache_dir: Path) -> None:
         self.runs_dir = runs_dir
         self.cache_dir = cache_dir
-        self.slots = Slots(runs_dir, config)
+        self.locks: dict[str, int] = {}
+        """Run locks this process holds, by run ID; never released before exit."""
 
     @classmethod
     def from_settings(cls, settings: Settings, env: Mapping[str, str] = os.environ) -> "RunStore":
         runs = settings.run.runs_dir or xdg(env, "XDG_DATA_HOME", ".local/share") / "wosarcher" / "runs"
         cache = settings.run.cache_dir or xdg(env, "XDG_CACHE_HOME", ".cache") / "wosarcher"
-        return cls(runs, cache, config_dir(env))
+        return cls(runs, cache)
 
     def run_dir(self, run_id: str) -> Path:
         return self.runs_dir / run_id
 
     # Creation
 
-    def new_dir(self, run_id: str | None) -> tuple[str, Path]:
+    def new_dir(self, run_id: str | None, lock: bool) -> tuple[str, Path]:
+        """Create the run directory; with `lock`, hold its run lock before anything else is written."""
         run_id = run_id or new_run_id()
         path = self.run_dir(run_id)
         if path.exists():
             raise RunStoreError(f"run directory {path} already exists")
         path.mkdir(parents=True)
+        if lock:
+            self.lock(run_id)
         return run_id, path
+
+    def lock(self, run_id: str) -> None:
+        """Hold `LOCK_EX` on the run lock for the life of this process."""
+        fd = os.open(self.run_dir(run_id) / LOCK, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.locks[run_id] = fd
+
+    def is_running(self, run_id: str) -> bool:
+        """Whether a process holds the run's lock."""
+        try:
+            fd = os.open(self.run_dir(run_id) / LOCK, os.O_RDONLY | os.O_CLOEXEC)
+        except OSError:
+            return False
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            os.close(fd)
+        return False
 
     def create(
         self,
@@ -156,7 +181,9 @@ class RunStore:
         run_id: str | None = None,
         origin: Origin = "cli",
         token_name: str | None = None,
+        lock: bool = False,
     ) -> RunRecord:
+        """With `lock`, this process holds the run lock (the engine); tests create runs without it."""
         copies: list[tuple[Path, Path]] = []
         taken: set[Path] = set()
         for path in attachments:
@@ -164,7 +191,7 @@ class RunStore:
             if not found:
                 raise RunStoreError(f"--attach {path}: no file matches")
             copies.extend((file, free_name(name, taken)) for file, name in found)
-        run_id, path = self.new_dir(run_id)
+        run_id, path = self.new_dir(run_id, lock)
         for file, name in copies:
             (path / "attachments" / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, path / "attachments" / name)
@@ -193,6 +220,7 @@ class RunStore:
         run_id: str | None = None,
         origin: Origin = "cli",
         token_name: str | None = None,
+        lock: bool = False,
     ) -> RunRecord:
         parent = self.read_record(parent_id)
         done = self.done_events(parent_id)
@@ -201,7 +229,7 @@ class RunStore:
             raise RunStoreError(f"cannot fork {parent_id} from {from_stage}: stage {missing[0]} is not finished")
         rerun_loop = from_stage in LOOP_STAGES and self.planned_rounds(parent) > 1
         earlier = STAGES[: STAGES.index("search" if rerun_loop else from_stage)]
-        run_id, path = self.new_dir(run_id)
+        run_id, path = self.new_dir(run_id, lock)
         source = self.run_dir(parent_id)
         if (source / "attachments").is_dir():
             shutil.copytree(source / "attachments", path / "attachments")
@@ -392,9 +420,12 @@ class RunStore:
     # Listing
 
     def status(self, run_id: str) -> RunStatus:
-        """From the last `run.*` event; with no terminal event, from the run slots."""
+        """From the last `run.*` event; with no terminal event, `running` while the run lock is held."""
         runs = [event.type for event in self.read_events(run_id) if event.type.startswith("run.")]
-        return END_STATUS.get(runs[-1] if runs else "") or self.slots.live(run_id) or "interrupted"
+        return END_STATUS.get(runs[-1] if runs else "") or self.live(run_id)
+
+    def live(self, run_id: str) -> RunStatus:
+        return "running" if self.is_running(run_id) else "interrupted"
 
     def read_costs(self, run_id: str) -> RunCosts | None:
         path = self.run_dir(run_id) / "costs.json"
@@ -404,7 +435,7 @@ class RunStore:
         """The run as listed: status and duration from the log, cost from `costs.json`."""
         events = [event for event in self.read_events(record.run_id) if event.type.startswith("run.")]
         ended_status = END_STATUS.get(events[-1].type) if events else None
-        status = ended_status or self.slots.live(record.run_id) or "interrupted"
+        status = ended_status or self.live(record.run_id)
         started = next((event.ts for event in events if event.type == "run.started"), None)
         duration = (events[-1].ts - started).total_seconds() if started and ended_status else None
         costs = self.read_costs(record.run_id)
@@ -436,13 +467,12 @@ class RunStore:
             stop_reason=research.data.reason if research else None,
             model=model,
             reasoning=reasoning,
-            queue_position=self.slots.position(record.run_id) if status == "queued" else None,
             origin=record.origin,
             token_name=record.token_name,
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:
-        """Every run, newest first; directories starting with `.` (`.queue/`, `.slots/`) are skipped."""
+        """Every run, newest first; directories starting with `.` (`.queue/`) are skipped."""
         if not self.runs_dir.is_dir():
             return []
         found = [

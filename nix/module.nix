@@ -1,6 +1,7 @@
-# services.wosarcher: the server as a native systemd unit, plus a host
-# `wosarcher` CLI that shares its profiles, runs, caches, and secrets with
-# the members of the `wosarcher` group.
+# services.wosarcher: the daemon as a native systemd unit with a Unix socket
+# for the members of the `wosarcher` group, a host `wosarcher` client that
+# talks to that socket, and a `wosarcherd` wrapper for administration as the
+# service user. Only the service user can read the data directory.
 self:
 {
   config,
@@ -16,8 +17,10 @@ let
   dataDir = "/var/lib/wosarcher";
   configDir = "${dataDir}/config/wosarcher";
   profilesDir = "${configDir}/profiles";
+  runtimeDir = "/run/wosarcher";
+  socketPath = "${runtimeDir}/api.sock";
 
-  # One set feeds the unit and the CLI wrapper, so they cannot drift.
+  # One set feeds the unit and the `wosarcherd` wrapper, so they cannot drift.
   sharedEnvironment = {
     XDG_CONFIG_HOME = "${dataDir}/config";
     XDG_DATA_HOME = "${dataDir}/share";
@@ -32,7 +35,7 @@ let
   hooksFile = toml.generate "wosarcher-hooks.toml" cfg.hooks;
 
   install = file: target: ''
-    install -m 0640 -o wosarcher -g wosarcher ${file} ${lib.escapeShellArg target}
+    install -m 0600 -o wosarcher -g wosarcher ${file} ${lib.escapeShellArg target}
   '';
 
   # Declared files are copied, never linked into the Nix store. The manifest
@@ -41,6 +44,8 @@ let
   # left alone.
   syncFiles = pkgs.writeShellScript "wosarcher-sync-files" ''
     set -euo pipefail
+    # Data written by older versions was group-readable; it is the service user's alone.
+    chmod -R go-rwx ${lib.escapeShellArg dataDir}
     manifest=${lib.escapeShellArg "${profilesDir}/.nix-managed"}
     if [ -f "$manifest" ]; then
       while IFS= read -r name; do
@@ -59,30 +64,29 @@ let
       echo ../hooks.toml >> "$manifest"
     ''}
     chown wosarcher:wosarcher "$manifest"
-    chmod 0660 "$manifest"
+    chmod 0600 "$manifest"
   '';
 
-  wrapper = pkgs.writeShellApplication {
+  # The client holds no secret: it only needs the socket.
+  client = pkgs.writeShellApplication {
     name = "wosarcher";
+    text = ''
+      export WOSARCHER_SOCKET=${lib.escapeShellArg socketPath}
+      exec ${lib.getExe' cfg.package "wosarcher"} "$@"
+    '';
+  };
+
+  # For the service user: `sudo -u wosarcher wosarcherd auth set-password`.
+  daemon = pkgs.writeShellApplication {
+    name = "wosarcherd";
     text = ''
       ${lib.concatStrings (
         lib.mapAttrsToList (name: value: ''
           export ${name}=${lib.escapeShellArg value}
         '') sharedEnvironment
       )}
-      ${lib.optionalString (cfg.environmentFile != null) ''
-        env_file=${lib.escapeShellArg (toString cfg.environmentFile)}
-        if [ ! -r "$env_file" ]; then
-          echo "wosarcher: cannot read $env_file; add your user to services.wosarcher.users (group wosarcher)" >&2
-          exit 2
-        fi
-        set -a
-        # shellcheck disable=SC1090
-        . "$env_file"
-        set +a
-      ''}
-      umask 0007
-      exec ${lib.getExe cfg.package} "$@"
+      umask 0077
+      exec ${lib.getExe' cfg.package "wosarcherd"} "$@"
     '';
   };
 in
@@ -127,9 +131,9 @@ in
         WOSARCHER_PROFILE = "lan";
       };
       description = ''
-        Extra environment variables for the service and the CLI wrapper.
-        Never put secrets here: the values land in the Nix store. Use
-        environmentFile instead.
+        Extra environment variables for the service and the `wosarcherd`
+        wrapper. Never put secrets here: the values land in the Nix store.
+        Use environmentFile instead.
       '';
     };
 
@@ -138,13 +142,12 @@ in
       default = null;
       example = "/run/secrets/wosarcher.env";
       description = ''
-        File of NAME=value lines read at service start and by the CLI
-        wrapper, for variables that must not land in the Nix store. Give it a
-        path outside the Nix store. For secrets prefer the <x>_file settings
-        in a profile (for example llm.api_key_file = "/run/secrets/llm").
-        The wrapper runs as the calling user, so the file must be readable by
-        the wosarcher group (for example 0440 root:wosarcher); every member of
-        the group can then read everything in it.
+        File of NAME=value lines systemd reads at service start, for
+        variables that must not land in the Nix store. Give it a path outside
+        the Nix store; it may be readable by root alone (for example 0400
+        root:root). No wrapper reads it. For secrets prefer the <x>_file
+        settings in a profile (for example llm.api_key_file =
+        "/run/secrets/llm"), with the file readable by the wosarcher user.
       '';
     };
 
@@ -156,7 +159,7 @@ in
         before the service starts. A profile removed from this option is
         removed from the directory; hand-made profiles are kept. Never put
         secret values here: they land in the Nix store. Pass a secret as the
-        path of a file readable by the wosarcher group, for example
+        path of a file readable by the wosarcher user, for example
         llm.api_key_file = "/run/secrets/llm" or auth.password_hash_file.
       '';
     };
@@ -175,10 +178,10 @@ in
       type = lib.types.listOf lib.types.str;
       default = [ ];
       description = ''
-        Users added to the wosarcher group. Members can use the host
-        `wosarcher` CLI against the server's profiles, runs, and caches, and
-        can read every secret: the environment file and the session secret
-        and password hash in auth.json.
+        Users added to the wosarcher group, which grants access to the
+        daemon's socket (${socketPath}) and nothing else: members run the host
+        `wosarcher` client against the daemon, and cannot read its data
+        directory, profiles, or secrets.
       '';
     };
 
@@ -186,8 +189,9 @@ in
       type = lib.types.bool;
       default = true;
       description = ''
-        Start the service at boot. Set to false when a socket proxy starts it
-        on demand.
+        Start the service at boot. When false, the service starts on the
+        first connection to its socket (wosarcher.socket) or through a socket
+        proxy.
       '';
     };
   };
@@ -207,8 +211,12 @@ in
     ];
     users.groups.wosarcher = { };
 
-    # setgid: directories created later inherit the group.
-    systemd.tmpfiles.rules = map (dir: "d ${dir} 2770 wosarcher wosarcher -") [
+    # The runtime directory lets the group reach the socket; the data
+    # directories are the service user's alone.
+    systemd.tmpfiles.rules = [
+      "d ${runtimeDir} 0750 wosarcher wosarcher -"
+    ]
+    ++ map (dir: "d ${dir} 0700 wosarcher wosarcher -") [
       dataDir
       "${dataDir}/config"
       configDir
@@ -217,19 +225,37 @@ in
       "${dataDir}/cache"
     ];
 
-    environment.systemPackages = [ wrapper ];
+    environment.systemPackages = [
+      client
+      daemon
+    ];
+
+    systemd.sockets.wosarcher = {
+      description = "wosarcher API socket";
+      wantedBy = [ "sockets.target" ];
+      listenStreams = [ socketPath ];
+      socketConfig = {
+        SocketMode = "0660";
+        SocketUser = "wosarcher";
+        SocketGroup = "wosarcher";
+      };
+    };
 
     systemd.services.wosarcher = {
       description = "wosarcher research server";
       wantedBy = lib.mkIf cfg.autoStart [ "multi-user.target" ];
-      after = [ "network.target" ];
+      requires = [ "wosarcher.socket" ];
+      after = [
+        "network.target"
+        "wosarcher.socket"
+      ];
       environment = sharedEnvironment // {
         PYTHONUNBUFFERED = "1";
       };
       serviceConfig = {
         ExecStartPre = "+${syncFiles}";
         ExecStart = lib.escapeShellArgs [
-          (lib.getExe cfg.package)
+          (lib.getExe' cfg.package "wosarcherd")
           "serve"
           "--host"
           cfg.host
@@ -240,8 +266,8 @@ in
         User = "wosarcher";
         Group = "wosarcher";
         StateDirectory = "wosarcher";
-        StateDirectoryMode = "2770";
-        UMask = "0007";
+        StateDirectoryMode = "0700";
+        UMask = "0077";
         WorkingDirectory = dataDir;
         Restart = "on-failure";
         RestartSec = 2;
@@ -253,7 +279,10 @@ in
         AmbientCapabilities = "";
         TasksMax = 512;
         ProtectSystem = "strict";
-        ReadWritePaths = [ dataDir ];
+        ReadWritePaths = [
+          dataDir
+          runtimeDir
+        ];
         ProtectHome = true;
         PrivateTmp = true;
         PrivateDevices = true;

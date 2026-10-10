@@ -105,6 +105,7 @@ export type Plan = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Write = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Profile = (string | null)
 export type Set = string[]
+export type Until = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type CitationMarker = (("numeric" | "superscript" | "author-year") | null)
 export type Format1 = (("report" | "answer") | null)
 export type Language = (string | null)
@@ -228,6 +229,9 @@ export type Description1 = string
 export type MaxOutputTokens = (number | null)
 export type Name2 = string
 export type PromptReserveTokens = (number | null)
+export type Settings = ({
+[k: string]: unknown
+} | null)
 export type Source1 = ("builtin" | "user")
 export type Kept1 = number
 export type ChunkId4 = string
@@ -337,7 +341,7 @@ export type Query2 = string
 export type SearchLanguage = (string | null)
 export type Set1 = string[]
 export type Sources1 = (("both" | "web" | "files") | null)
-export type Until = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId13 = string
 export type Status2 = ("queued" | "running")
 export type Cost1 = (number | null)
@@ -365,7 +369,7 @@ export type Attachments = string[]
 export type Depth2 = (string | null)
 export type Query4 = string
 export type Sources2 = ("both" | "web" | "files")
-export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId14 = string
 export type TokenName = (string | null)
 export type Version = number
@@ -376,7 +380,7 @@ export type Sources3 = ("both" | "web" | "files")
 export type Status3 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type TokenName1 = (string | null)
-export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
 export type Format2 = ("report" | "answer")
@@ -385,7 +389,7 @@ export type ReferenceStyle1 = string
 export type Tone1 = string
 export type ToneInstructions1 = string
 export type Words2 = number
-export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId16 = string
 export type Seq13 = number
 export type Stage14 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -403,7 +407,6 @@ export type Error5 = string
 export type RunId18 = string
 export type Status4 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type Error6 = (string | null)
-export type RunDir = string
 export type RunId19 = string
 export type Status5 = ("done" | "failed" | "cancelled")
 export type Origin2 = ("web" | "api" | "cli")
@@ -421,7 +424,7 @@ export type Type15 = "run.queued"
 export type ParentRunId2 = (string | null)
 export type Profile5 = string
 export type Query5 = string
-export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version2 = number
 export type RunId22 = string
 export type Seq16 = number
@@ -448,7 +451,7 @@ export type Sources4 = ("both" | "web" | "files")
 export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type TokenName3 = (string | null)
-export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Until6 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version3 = number
 export type Failed = Skipped[]
 export type Queries4 = QueryScores[]
@@ -465,7 +468,7 @@ export type TokensNeeded1 = (number | null)
 export type MaxConcurrentRuns = number
 export type Sources5 = ("both" | "web" | "files")
 export type Expires = (string | null)
-export type Method1 = ("cookie" | "token" | "none")
+export type Method1 = ("cookie" | "token" | "socket" | "none")
 export type Since = (string | null)
 export type TokenName4 = (string | null)
 export type Origin4 = ("web" | "api" | "cli")
@@ -798,6 +801,7 @@ from: From
 llm?: LLMPatch
 profile?: Profile
 set?: Set
+until?: Until
 writing?: WritingPatch
 }
 /**
@@ -1130,6 +1134,7 @@ description?: Description1
 max_output_tokens?: MaxOutputTokens
 name: Name2
 prompt_reserve_tokens?: PromptReserveTokens
+settings?: Settings
 source: Source1
 }
 /**
@@ -1419,7 +1424,7 @@ research?: ResearchPatch1
 search_language?: SearchLanguage
 set?: Set1
 sources?: Sources1
-until?: Until
+until?: Until1
 writing?: WritingPatch1
 }
 /**
@@ -1500,7 +1505,7 @@ sources?: Sources3
 status: Status3
 stop_reason?: StopReason
 token_name?: TokenName1
-until?: Until2
+until?: Until3
 version?: Version1
 writing?: WritingOptions
 }
@@ -1528,7 +1533,7 @@ parent_run_id?: ParentRunId1
 profile: Profile4
 request: RunRequest
 run_id: RunId14
-settings: Settings
+settings: Settings1
 token_name?: TokenName
 version?: Version
 }
@@ -1541,9 +1546,9 @@ attachments?: Attachments
 depth?: Depth2
 query: Query4
 sources?: Sources2
-until?: Until1
+until?: Until2
 }
-export interface Settings {
+export interface Settings1 {
 [k: string]: unknown
 }
 export interface WritingOptions {
@@ -1573,7 +1578,7 @@ type?: Type13
  */
 export interface RunDoneData {
 totals: UsageTotals
-until: Until3
+until: Until4
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1617,7 +1622,6 @@ export interface RunOutput {
 context?: (Context | null)
 error?: Error6
 report?: (Report | null)
-run_dir: RunDir
 run_id: RunId19
 status: Status5
 }
@@ -1672,7 +1676,7 @@ export interface RunStartedData {
 parent_run_id: ParentRunId2
 profile: Profile5
 query: Query5
-until: Until4
+until: Until5
 version: Version2
 }
 /**
@@ -1703,7 +1707,7 @@ sources?: Sources4
 status: Status6
 stop_reason?: StopReason1
 token_name?: TokenName3
-until?: Until5
+until?: Until6
 version?: Version3
 writing?: WritingOptions1
 }
@@ -1797,7 +1801,7 @@ since?: Since
 token_name?: TokenName4
 }
 /**
- * A run in the shared run queue or holding a slot.
+ * A run in the server's queue or executing.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "SlotEntry".
@@ -1808,7 +1812,7 @@ run_id: RunId24
 token_name?: TokenName5
 }
 /**
- * `GET /api/slots`: the limit, the runs holding a slot (oldest first), and the waiting runs in queue order.
+ * `GET /api/slots`: the limit, the runs the server executes (oldest first), and its queue in order.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "SlotState".

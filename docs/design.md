@@ -1,10 +1,13 @@
 # wosarcher: design
 
 A modular, scriptable research tool, inspired by gpt-researcher but split into
-small parts with clear contracts. It is used three ways: from the CLI, from a
+small parts with clear contracts. One daemon, `wosarcherd`, holds the
+provider secrets and the data and runs every run. It is used three ways,
+all through the daemon's HTTP API: from the `wosarcher` CLI, from a
 real-time WebSocket frontend, and by AI agents through a skill.
 
-The CLI is `wosarcher`.
+`wosarcherd` is the daemon (`serve`) and the engine it spawns per run;
+`wosarcher` is a client of its API that holds no secret.
 
 This document is the reference design. OpenSpec changes implement it one
 capability at a time and may refine it; when they do, update this file.
@@ -347,7 +350,7 @@ URL and each fallback URL.
   (`GET <root>/unload`, which unloads every model on that server) or Ollama
   (`POST <root>/api/generate` with the block's `model` and `keep_alive: 0`;
   `release = "ollama"` requires `model`). Plain llama-server has no unload
-  endpoint; `wosarcher doctor` warns when a block that cannot unload shares
+  endpoint; `wosarcherd doctor` warns when a block that cannot unload shares
   its device with another block.
 
 There is no separate scheduler: stage order already serialises GPU use, and
@@ -386,7 +389,7 @@ Remote endpoints:
   runner reads model and dimension from `embedder.describe()` once before
   the prefilter stage; when that fails it passes no cache. Vectors live in
   `<cache_dir>/embeddings/<model>/<dim>/<sha[:2]>/<sha>.f32` (raw float32).
-- **Health.** `wosarcher doctor` checks each endpoint: reachable, model name,
+- **Health.** `wosarcherd doctor` (or `wosarcher doctor` through the daemon) checks each endpoint: reachable, model name,
   latency of one small request, unload support (llama-swap answers
   `GET <root>/running`, Ollama `GET <root>/api/version`). Checks run only on
   request (the CLI, a Check click in Settings, or `run.preflight`), because
@@ -798,8 +801,8 @@ Ports and adapters. Stages are pure functions over models and ports. The
 runner owns persistence and events. Interfaces sit at the edge.
 
 ```
-cli/ ── server/ (spawns `wosarcher run`, tails events.jsonl and report.md) ── skill (CLI + SKILL.md)
-   │
+cli/ (client: HTTP + WebSocket) ──► server/ (in `wosarcherd serve`) ◄── web UI, skill (CLI + SKILL.md)
+                                       │ spawns `wosarcherd run` (daemon/run.py), tails events.jsonl and report.md
 runner/  ── store/ (runs/<id>/) ── events.jsonl
    │
 stages/  plan search fetch load chunk prefilter score select write   (pure)
@@ -828,9 +831,13 @@ src/wosarcher/
   stages/        # one file per stage
   adapters/      # one file per adapter (pandoc.py: report export), plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
-  cli/           # __init__.py: typer app (profile, doctor, schema); run.py: run, fork, runs; logs.py: logs, event lines, stderr listener;
-                 # export.py: export; serve.py: serve; auth.py: auth; progress.py: rich Live view
-  __main__.py    # python -m wosarcher
+  cli/           # the `wosarcher` client, imports models, attachments, and config only:
+                 # __init__.py: typer app (profile list|show, doctor, schema); api.py: connection (socket or URL), httpx, websockets;
+                 # run.py: run, fork, runs, cancel; logs.py: logs, event lines, stderr listener; export.py: export;
+                 # depth.py: depth; tokens.py: tokens; options.py: options and checks shared with daemon/; progress.py: rich Live view
+  daemon/        # `wosarcherd`: __init__.py: typer app (doctor, profile use); run.py: the engine `run` and `fork`;
+                 # serve.py: serve (TCP and Unix socket listeners); auth.py: auth set-password; __main__.py: python -m wosarcher.daemon
+  __main__.py    # python -m wosarcher (the client)
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
                  # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
                  # health.py: HealthCache (stored provider checks); stream.py: event socket;
@@ -839,7 +846,7 @@ src/wosarcher/
 skill/SKILL.md
 evals/
   variants.toml  # named variants: fork stage (chunk, prefilter, or score) plus --set overrides
-  replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcher fork`
+  replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcherd fork`
   metrics.py     # python -m evals.metrics: passages, context size, stage seconds, Jaccard overlap
   judge.py       # python -m evals.judge: pointwise precision, faithfulness, coverage, and retrievable
   parts.py       # question parts for coverage and retrievable, cached in parts.jsonl
@@ -876,6 +883,7 @@ trusted values (query, options). Scraped text never goes through templates.
 
 ```
 runs/<id>/
+  .lock              # held with LOCK_EX by the run process until it exits
   request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage, origin
   attachments/       # copies of --attach files, directories, and globs
   files.jsonl        # load: attachment pages
@@ -899,41 +907,24 @@ runs/<id>/
 caches live in `$XDG_CACHE_HOME/wosarcher` (`run.cache_dir`): fetched pages
 by normalised URL for `run.page_cache_ttl_hours` (24; 0 disables) and
 embeddings. Run IDs are `YYYYMMDD-HHMMSS-xxxxxx` and sort by creation time.
-Directories starting with `.` (the server's `.queue/` and the shared
-`.slots/`) are not runs.
+Directories starting with `.` (the server's `.queue/`) are not runs.
 
 `request.json` records the run's `origin`: `web` (started in the browser),
-`api` (started with an API token, with `token_name`), or `cli` (`wosarcher
-run` or `wosarcher fork`). A fork, rerun, or rewrite records the origin of
+`api` (started with an API token, with `token_name`), or `cli` (created
+over the daemon's Unix socket, by `wosarcher run` or `wosarcher fork`, or a
+direct `wosarcherd run`). A fork, rerun, or rewrite records the origin of
 the request that started it; a record without the field reads as `web`.
 
-Run slots: every run that uses a runs directory, whoever started it, takes
-a slot in one first-in, first-out queue before its first stage, and at most
-`max_concurrent_runs` (from `server-settings.json`, see Configuration) hold
-a slot at once. The queue lives next to the runs (`store/slots.py`):
-
-```
-runs/.slots/
-  lock                                   flock mutex for every slot decision
-  queue/<created_ns>-<run_id>.json       ticket: run_id, origin, token_name, pid, time
-  held/<run_id>.json                     slot: the same, the time it was taken
-  cancel/<run_id>                        empty: a cancel request for that run
-```
-
-A ticket or slot file is live while some process holds `LOCK_EX` on it;
-the kernel drops the lock when the process exits, even on SIGKILL, so a
-dead process frees its slot and its place with no cleanup step. Files are
-created under a temporary name, locked, written, and renamed into place.
-Only a process holding the `lock` mutex removes dead entries or changes
-`queue/` and `held/`; readers only test locks. A ticket is granted a slot
-when it is the oldest live ticket and fewer than the limit are held; the
-limit is read from the settings file at each decision, so a raised limit
-starts waiting runs at once and a lowered one lets running runs finish.
-Slots are valid on one host only (`flock` on a local file system).
-
-A run with no terminal event has status `queued` while a live ticket names
-it, `running` while a live slot names it, and `interrupted` otherwise, the
-same for the server, `wosarcher runs`, and the server after a restart.
+Run lock: the run process opens `<run>/.lock` with `LOCK_EX | LOCK_NB`
+right after it creates the run directory, before `request.json` is
+written, and holds it until it exits; the kernel drops the lock on any
+exit, even SIGKILL. `RunStore.is_running(run_id)` tries `LOCK_SH |
+LOCK_NB` on it and releases at once. A run with no terminal event has
+status `queued` while the server has it staged, `running` while its lock
+is held, and `interrupted` otherwise, the same for every reader and for
+the server after a restart. Only the server queues runs (see Server); a
+direct `wosarcherd run` is not queued or counted, but shows as `running`
+through its lock.
 
 Queries, hits, pages, and scores carry the `round` they first appeared in
 (1 for single-round runs and files). `research.json` holds `planned`,
@@ -951,61 +942,126 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--run-id ID] [--no-wait] [--json]`:
-  writing flags act as `--set write.<field>=...` and research flags as
-  `--set` on `plan.max_sub_queries`, `search.max_results`,
-  `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
+Two commands share the run options. `wosarcherd` reads the configuration
+(profiles, secrets, `auth.json`) and writes run directories. `wosarcher`
+does every action through the daemon's API (see Server) and never reads a
+profile, a secret, or a run directory.
+
+The client connects, in this order, to `WOSARCHER_URL` (an `http://` or
+`https://` base URL, with `Authorization: Bearer $WOSARCHER_TOKEN` when
+that is set), else the Unix socket at `WOSARCHER_SOCKET`, else
+`$XDG_RUNTIME_DIR/wosarcher.sock`, else `/run/wosarcher/api.sock`; event
+streams use the same connection as a WebSocket. The three names are not
+settings (`config.CLIENT_ENV`). When the connection fails every command
+prints one error naming the socket path or URL and `wosarcherd`, and exits
+69 (`EX_UNAVAILABLE`); a 401 exits 2 naming `WOSARCHER_TOKEN`.
+
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--profile NAME] [--depth NAME] [--set k=v]... [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--json]`:
+  creates the run with `POST /api/runs`: the writing flags as `writing`,
+  the research flags as `research`, the domain flags as `domains`,
+  `--search-language` as `search_language`, `--model` and the thinking
+  flags as `llm`, and `--set` as `set`, so the server's precedence applies
+  (see Server). `--attach` paths (files, directories, globs) are expanded
+  by the client and uploaded. Values the client can check (`--format`, the
+  thinking levels, `--search-language`, the domain entries, `--until`,
+  `--sources files` without `--attach`) exit 2 before a request; a 4xx
+  answer exits 2 printing its detail. The command then follows the run on
+  its event socket from `since=0`: on a terminal the progress view (rows per
+  stage; a `gap` row only for multi-round runs, "round k/N" on running loop
+  rows, and one final line "research: <ran> of <planned> rounds ·
+  <reason>"), otherwise one diagnostic line per run and stage event on
+  standard error. While the run is queued it writes `waiting for a free run
+  slot (position <n>)` when it starts waiting and when `run.queued` reports
+  a new position (above the stage rows on a terminal). SIGINT or SIGTERM
+  sends `POST /api/runs/{id}/cancel` and keeps reading until the terminal
+  event. When the run ends it fetches `context.json` and `report.json`
+  (when select and write finished) and prints one `RunOutput` document with
+  `--json` (run ID, status, error, context, report), else the report
+  Markdown (rendered on a terminal), or the context summary when the run
+  stopped at `select`. Exit status: 0 done, 1 failed, 130 cancelled, 2
+  invalid arguments, a request the server rejects, or a run the engine
+  rejected before its first stage (an invalid override), 69 no daemon.
+- `wosarcher fork <id> --from <stage> [--set k=v]... [writing flags] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--json]`:
+  creates the fork with `POST /api/runs/{id}/fork` and follows it like
+  `run`; a queued or running parent exits 2 printing the server's 409
+  detail, and a fork that fails before its first stage exits 1.
+- `wosarcher runs [--limit N] [--json]`: the runs `GET /api/runs` lists,
+  newest first, as `RunSummary` rows: status (`queued`, `running`, `done`,
+  `failed`, `cancelled`, `interrupted`), the origin (`web`, `cli`, or `api ·
+  <token>`), version, parent, and query.
+- `wosarcher logs <id> [--follow]`: prints the run's logged events, one
+  line each: `<HH:MM:SS> <stage or -> <type> <summary>` (local time; the
+  summary on one line, at most 160 characters), from `events.jsonl` through
+  the artifacts route; unreadable lines are skipped. `--follow` reads the
+  event socket from `since=0` instead, prints each logged event (not the
+  live-only ones), and exits 0 after a terminal event. An unknown run exits
+  2.
+- `wosarcher cancel <id>`: `POST /api/runs/{id}/cancel`; prints `run <id>:
+  signalled` or `dequeued`; a run that is not active exits 2 with the
+  detail.
+- `wosarcher export <id> --format pdf|docx [--output PATH] [--force]`:
+  downloads `GET /api/runs/{id}/export` (see Report export) to `PATH`, by
+  default `<id>.<format>` in the current directory, and prints the path. An
+  existing file needs `--force`. Exit status: 0 written; 1
+  `export_unavailable` or `export_failed` (the route's detail); 2 an unknown
+  run, a run without a report, an unknown format, or an existing file
+  without `--force`.
+- `wosarcher doctor [--profile NAME] [--block NAME]... [--json]`: asks the
+  daemon to check its providers (`POST /api/providers/health/check`) and
+  prints the report's rows (only the chosen blocks with `--block`); exit 1
+  when a block is `down`.
+- `wosarcher profile list` and `wosarcher profile show [NAME]`: the
+  profiles `GET /api/profiles` returns (source, description, `*` for the
+  active one) and one profile's resolved configuration, secrets as `***`.
+- `wosarcher depth list` and `wosarcher depth show NAME`: the presets from
+  `GET /api/depths` and the values a preset runs with; an unknown name exits
+  2 with the known names.
+- `wosarcher tokens new <name>` (prints the token once), `tokens list` (ID,
+  name, masked last 4 characters, creation, last use), and `tokens revoke
+  <id>`: the token routes, which need the socket or a browser session; over
+  a token URL they exit 2.
+- `wosarcher schema`: the JSON Schema of every contract, from the installed
+  package, without a connection.
+
+`wosarcherd`:
+
+- `wosarcherd serve [--host H] [--port P] [--socket PATH] [--no-socket]`:
+  the HTTP server (see Server) on TCP (`server.host` and `server.port`,
+  `127.0.0.1:8765`) and on a Unix socket.
+- `wosarcherd run "q" [the run options] [--run-id ID]` and `wosarcherd fork
+  <id> --from <stage> [the fork options] [--run-id ID]`: the engine. They
+  resolve the configuration (secrets included), run in this process, and
+  write the run directory, holding its run lock. Writing flags act as `--set
+  write.<field>=...` and research flags as `--set` on
+  `plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`,
+  `score.top_k`, `select.max_context_tokens`,
   `research.gap_context_tokens`, `research.rounds`, and
-  `research.queries_per_round`, after the `--set` values. The repeatable `--allow-domain` and `--block-domain` values
-  together set `search.allow_domains` and `search.block_domains` (as JSON
-  lists, after the research flags), replacing the configured list; a list
-  whose flag is not given is left alone. `--search-language` sets
-  `search.language` as a quoted string, next to the domain lists; a value
-  that breaks the search language rule (see Configuration) exits 2 naming
-  the flag. `--model` acts as `--set llm.model="NAME"` and the thinking
-  flags as `--set llm.reasoning.<step>=<level>` (`none`, `low`, `medium`,
-  `high`, `default`; another value exits 2 naming the flag), after the
-  domain lists, so forks and reruns keep them. The two token flags take a positive integer or `auto`. `--until` on a loop stage
-  stops after that stage in round 1. The progress view shows a `gap` row
-  only for multi-round runs, "round k/N" on running loop rows, and one
-  final line "research: <ran> of <planned> rounds · <reason>". `--depth` applies a depth preset below all of them
-  and is recorded in `request.json` (`request.depth`); forks keep it.
-  `--run-id` lets a caller (the server) choose the ID; an existing directory
-  exits 2. `--json` prints one `RunOutput` document (status, error, run
-  directory, context when select finished, report when write finished). On a
-  terminal, progress goes to standard error; piped output is the report
-  Markdown. After creating the run directory the command waits for a run
-  slot, writing `waiting for a free run slot (position <n>)` to standard
-  error when it starts waiting and when its position changes (on a
-  terminal the progress view shows it above the stage rows). SIGINT,
-  SIGTERM, or a cancel request while waiting logs `run.cancelled` and exits
-  130; a cancel request while running (polled every 0.5 s) cancels the run
-  like SIGTERM. `--no-wait` takes a slot before creating anything and,
-  when none is free or a run already waits, prints `error: no free run
-  slot (<held> of <limit> in use)` and exits 75 (`EX_TEMPFAIL`) with no
-  run directory. Hidden options for the server: `--slot-fd N` (the slot
-  is already held through inherited descriptor N), `--origin`, and
-  `--token-name`. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM,
-  SIGINT, cancel request), 2 invalid arguments or configuration, 75 no free
-  run slot with `--no-wait`.
-- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--run-id ID] [--no-wait] [--json]`:
+  `research.queries_per_round`, after the `--set` values; the domain flags
+  set `search.allow_domains` and `search.block_domains` as JSON lists, and
+  `--search-language` sets `search.language` as a quoted string, next to
+  them; `--model` and the thinking flags act as `--set llm.model="NAME"`
+  and `--set llm.reasoning.<step>=<level>` after the domain lists, so forks
+  and reruns keep them. `--until` on a loop stage stops after that stage in
+  round 1. `--depth` applies a depth preset below all of them and is
+  recorded in `request.json`; forks keep it. `--attach` paths are read by
+  the engine process. `--run-id` lets the server choose the ID; an existing
+  directory exits 2 and changes nothing. Hidden options for the server:
+  `--origin` and `--token-name`; a direct run records origin `cli` and is
+  not queued, counted, or cancelled by any server. `--json` prints the same
+  `RunOutput` as the client. SIGTERM and SIGINT cancel the run. A fork
   copies `attachments/` and the artifacts before `<stage>` into a new run
   (version: the highest version in the parent's lineage plus one), logs a
   copied `stage.done` per earlier stage whose `copied_from` names the run
-  that executed the stage (the parent's own `copied_from` when it copied the
-  stage too, else the parent), and continues with the saved config (secrets taken from the current
-  environment) plus the overrides. With `--profile`, settings come from that
-  profile plus the parent's and the new overrides. Saved keys the current
-  configuration does not know (renamed or removed fields) are dropped
-  before validation, with one stderr line `warning: saved settings
-  dropped: llm.reasoning_tokens, ...`, and the fork's `request.json` omits
-  them; a saved value the configuration rejects still fails with exit 2.
-  It waits for a run slot like `run` and takes `--no-wait`. Used for
-  resume, for changing writing options, and by the eval harness.
-- `wosarcher depth list` (each preset with its description) and `wosarcher
-  depth show NAME` (the keys it sets, or "sets nothing; uses the
-  defaults"); an unknown name exits 2 with the known names.
-- `wosarcher doctor [--profile <name>] [--set k=v] [--block <name>...] [--json]`:
+  that executed the stage (the parent's own `copied_from` when it copied
+  the stage too, else the parent), and continues with the saved config
+  (secrets taken from the current environment) plus the overrides. With
+  `--profile`, settings come from that profile plus the parent's and the
+  new overrides. Saved keys the current configuration does not know are
+  dropped before validation, with one stderr line `warning: saved settings
+  dropped: llm.reasoning_tokens, ...`; a saved value the configuration
+  rejects still fails with exit 2. Exit status: 0 done, 1 failed, 130
+  cancelled, 2 invalid arguments or configuration.
+- `wosarcherd doctor [--profile <name>] [--set k=v] [--block <name>...] [--json]`:
   `--block` (repeatable) limits the check, its rows, and its warnings to the
   named blocks; an unknown name fails before any request. One row per
   block (provider, base URL, device, status, model, latency, unload support;
@@ -1021,34 +1077,15 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   and its scale (`probe score -3.25 (logit scale)`). Warnings and notes do
   not change the exit code. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
-- `wosarcher runs [--limit N] [--json]`: lists runs newest first as
-  `RunSummary` rows, with status from the last `run.*` event (`done`,
-  `failed`, `cancelled`) or, with no terminal event, from the run slots
-  (`queued`, `running`, else `interrupted`), the origin (`web`, `cli`, or
-  `api · <token>`), plus
-  `until`, `fork_from`, the resolved writing options, `duration_s`
-  (`run.started` to the terminal event), and `cost` (from `costs.json`).
-- `wosarcher logs <id> [--follow] [--profile NAME] [--set k=v]`: prints the
-  run's logged events, one line each: `<HH:MM:SS> <stage or -> <type>
-  <summary>` (local time; the summary on one line, at most 160 characters).
-  Unreadable lines are skipped. `--follow` polls every 0.5 s and exits 0
-  after a terminal event. An unknown run exits 2.
-- `wosarcher export <id> --format pdf|docx [--output PATH] [--force] [--profile NAME]`:
-  writes a finished report or answer as a document (see Report export) to
-  `PATH`, by default `<id>.<format>` in the current directory, and prints
-  the path. An existing file needs `--force`. Exit status: 0 written; 1 a
-  converter missing or the conversion failed (the route's messages); 2 an
-  unknown run, a run without `report.json`, an unknown format, or an
-  existing file without `--force`. `--profile` only picks the runs
-  directory.
-- `wosarcher serve [--host H] [--port P]`: the HTTP server (see Server);
-  binds `server.host` and `server.port` (`127.0.0.1:8765`).
+- `wosarcherd auth set-password [--print]` (see Authentication).
+- `wosarcherd profile use NAME`: stores the default profile in the
+  daemon's config directory; an unknown name exits 2 listing the profiles.
 
 ### Events
 
 - Run: `run.queued` (live only, never logged: `position`, 1 for the next
   run to start; `limit`, the current `max_concurrent_runs`; `held`, the
-  runs holding a slot with `run_id`, `origin`, `token_name`, and
+  runs the server executes with `run_id`, `origin`, `token_name`, and
   `started`), `run.started`, `run.done`, `run.failed` (stage and
   error text), `run.cancelled`.
 - Stage: `stage.started`, `stage.progress` (counters), `stage.done` (with
@@ -1147,10 +1184,25 @@ each a `UsageTotals` with `cost` in dollars.
 
 ### Server
 
-The server spawns `wosarcher run` (or `wosarcher fork`) as a subprocess per
-run with a server-chosen `--run-id` and tails `events.jsonl` and
-`report.md` every 100 ms, so the CLI, the server, and the skill share one
-code path. It never runs stages itself. Every JSON route and the event
+`wosarcherd serve` is the only process that starts counted runs. It spawns
+`wosarcherd run` (or `wosarcherd fork`; `[python, -m, wosarcher.daemon]`)
+as a subprocess per run with a server-chosen `--run-id` and tails
+`events.jsonl` and `report.md` every 100 ms, so the web UI, the CLI client,
+and the skill share one engine. It never runs stages itself.
+
+It listens on TCP (`server.host`, `server.port`, or `--host`, `--port`) and
+on a Unix socket: the descriptor systemd passes (`LISTEN_FDS`; the
+`LISTEN_*` variables are then removed so run processes do not see them),
+else `--socket PATH` or `server.socket`, by default
+`$XDG_RUNTIME_DIR/wosarcher.sock` when `XDG_RUNTIME_DIR` is set and none
+otherwise; `--no-socket` turns it off. A socket the daemon binds gets mode
+0660, replaces a stale socket file nobody listens on, and is removed on
+exit. Both listeners are `uvicorn.Server` instances on one event loop over
+the same app; the TCP one runs the lifespan (the run manager), and one
+SIGTERM or SIGINT handler stops both. The socket listener's app is wrapped
+by `guard.socket_listener`, which marks every request with
+`scope["state"]["listener"] = "socket"` for the guard (see
+Authentication). Every JSON route and the event
 socket live under `/api`, so frontend routes like `/runs/<id>` never
 collide with them. Errors are `{"error": code, "detail": text}`; an unknown
 run is 404 `run_not_found`, an invalid body 422 naming each field.
@@ -1247,11 +1299,10 @@ filter replaces images with their alt text, so no file or URL is read.
   |---|---|---|
   | running (started by the server) | 202 | `{"run_id", "result": "signalled"}`; SIGKILL after 10 s, then the server logs `run.cancelled` |
   | queued (staged by the server) | 200 | `{"run_id", "result": "dequeued"}`; connected clients get `run.cancelled` |
-  | queued or running in another process (CLI) | 202 | `{"run_id", "result": "signalled"}`; a cancel request in `.slots/cancel/`, which that process handles like SIGTERM (logged at `info`) |
-  | done, failed, cancelled, interrupted | 409 | `RunNotActive`: `{"error": "run_not_active", "detail", "run_id", "status"}` |
+  | done, failed, cancelled, interrupted, or a direct `wosarcherd run` the server did not start | 409 | `RunNotActive`: `{"error": "run_not_active", "detail", "run_id", "status"}` |
   | unknown | 404 | `run_not_found` |
-- `POST /api/runs/{id}/fork` (`from`, optional `writing`, `set`,
-  `profile`): `wosarcher fork` through the queue. A fork keeps the parent's
+- `POST /api/runs/{id}/fork` (`from`, optional `until`, `writing`, `set`,
+  `profile`): `wosarcherd fork` through the queue. A fork keeps the parent's
   configuration: only the request's writing fields and `set` are passed,
   not the global settings. 409 for a queued or running parent or an
   unfinished earlier stage; 422 for an unknown stage.
@@ -1265,12 +1316,8 @@ filter replaces images with their alt text, so no file or URL is read.
   `run.queued` while queued, then live events and `report.delta` until a
   terminal event, and closes with 1000. Unknown runs close with 4404; a
   client more than 1000 events behind is closed with 4408 and reconnects
-  with `since`. A queued or running run another process started (the CLI)
-  is followed through `manager.follow`: one shared `RunTail` polled every
-  100 ms while its slot or ticket is live, publishing `run.queued` while it
-  waits and closing at the terminal event or when the process exits
-  without one (1000). Finished and interrupted runs are replayed and
-  closed. The run is looked up after
+  with `since`. Finished and interrupted runs, and a direct `wosarcherd
+  run` the server did not start, are replayed and closed. The run is looked up after
   the socket is accepted, so a run that ends during the handshake is
   treated as ended; a run that ended without a run directory gets its
   terminal event (`seq` 0) and 1000.
@@ -1281,11 +1328,12 @@ filter replaces images with their alt text, so no file or URL is read.
   stored in `<config dir>/server-settings.json` (`store/settings.py`). The
   run defaults apply only to runs started by the server, as `--set
   write.*` values after the profile and before the request's `writing` and
-  `set` (request wins); CLI runs use the profile. `max_concurrent_runs` is
-  the run slot limit for every run (see Run directory).
-- `GET /api/slots`: `SlotState`: `limit`, `held` (oldest first: `run_id`,
-  `origin`, `token_name`, `started`), and `queued` (queue order: `run_id`,
-  `origin`, `token_name`).
+  `set` (request wins); a direct `wosarcherd run` uses the profile.
+  `max_concurrent_runs` limits the run processes the server executes.
+- `GET /api/slots`: `SlotState` from the server's own queue: `limit`, `held`
+  (the run processes it executes, oldest first: `run_id`, `origin`,
+  `token_name`, `started`), and `queued` (staged runs in queue order:
+  `run_id`, `origin`, `token_name`).
 - `DELETE /api/runs/{id}`: 204 for a finished run, a queued one, or one
   that ended without a run directory (forgotten), 409 `run_active` for a
   running one.
@@ -1296,7 +1344,9 @@ filter replaces images with their alt text, so no file or URL is read.
   run form can show the effective context budget; `allow_domains` and
   `block_domains`, the list the profile (or the environment) sets, or null
   when it sets none, so a client can tell a profile's list from the global
-  default.
+  default; and `settings`, the resolved configuration with secrets as
+  `***` (null when it does not resolve), which `wosarcher profile show`
+  prints.
 - `GET /api/models[?profile=P]`: `{"models": [...]}`, the IDs the
   profile's LLM endpoint lists at `GET <base_url>/models`, in order; an
   empty list (still 200) when the request fails, the answer is not a list,
@@ -1319,7 +1369,7 @@ filter replaces images with their alt text, so no file or URL is read.
   `ServerState.health` (`server/health.py`) until the server restarts.
 - `POST /api/providers/health/check[?profile=P]` with optional
   `{"blocks": [...]}` (`HealthCheckRequest`; none means every block): 400
-  `invalid_block` for an unknown name, else runs `wosarcher doctor --json
+  `invalid_block` for an unknown name, else runs `wosarcherd doctor --json
   [--block ...]` under a lock (one check at a time; 60 s timeout; 502 when
   it times out or prints no report, stored checks unchanged), stores each
   row with the time of the check, and returns the merged report. Mapping:
@@ -1331,8 +1381,8 @@ filter replaces images with their alt text, so no file or URL is read.
   created, last used; never the token or its hash), `POST /api/tokens`
   with `{"name"}` (201 `TokenCreated`, the only time the token is shown),
   `DELETE /api/tokens/{id}` (204, or 404 `token_not_found`). They need a
-  browser session (or disabled authentication); a request authenticated by
-  a token gets 403.
+  browser session, the socket listener, or disabled authentication; a
+  request authenticated by a token gets 403.
 - When `server.static_dir` (`web/dist`) exists, the frontend build is
   served at `/`, and any other `GET` outside `/api` answers `index.html`.
 
@@ -1350,23 +1400,25 @@ from), which the Versions screen shows. Rerun is a new run (version 1, no
 parent) with the same request and attachments; "Retry from Score" is a
 fork from the score stage.
 
-Server runs use the shared run slots (see Run directory). A queued run is
-staged in `runs/.queue/<id>/` (request and attachments) and holds a ticket
-until its process starts; staged runs get new tickets in creation order
-when the server starts, behind runs already waiting. A tick every 0.25 s
-grants slots to the staged runs in order and spawns each granted run with
-the slot's descriptor (`pass_fds`, `--slot-fd`), writes the child's PID
-into the slot file, and closes its own copy, so the child holds the slot
-until it exits. Waiting runs get `run.queued` whenever their position, the
-limit, or the holders change. Origin comes from the guard's `Auth`: an API
-token gives `api` and its name, a cookie or no auth gives `web`; it is
-passed to the child as `--origin` and `--token-name`. When a process exits without a terminal
+The server's queue is the only queue. A queued run is staged in
+`runs/.queue/<id>/` (request and attachments) until its process starts;
+staged runs are queued again in creation order when the server starts.
+`RunManager` keeps the staged runs and an in-memory list of the processes
+it spawned; a tick every 0.25 s reads `max_concurrent_runs` from the global
+settings and starts the oldest staged runs while fewer than the limit
+execute, so a raised limit starts waiting runs at once and a lowered one
+lets running runs finish. Waiting runs get `run.queued` whenever their
+position, the limit, or the executing runs change. Origin comes from the
+guard's `Auth`: an API token gives `api` and its name, the socket listener
+gives `cli`, a cookie or no auth gives `web`; it is passed to the child as
+`--origin` and `--token-name`. When a process exits without a terminal
 event, the server appends `run.failed` with the exit code and the last 20
 lines of standard error. Whatever fails while the server watches or
 finishes a run (an unreadable event line, a standard-error line of any
 length, a failed write), the error is logged and the run is still
-finalised: the tail closed, staging removed, the slot freed, and the next
-run started. A queued run that is cancelled, or a process that exits before
+finalised: the tail closed, staging removed, the process uncounted, and the
+next run started. A run process outlives a server restart: its lock keeps
+it `running` for the next server, which does not count it. A queued run that is cancelled, or a process that exits before
 creating its run directory, is remembered in memory (at most 100) with its
 terminal event and staged request: `GET` and the list show it as
 `cancelled` or `failed` (`last_seq` 0) until it is deleted or the server
@@ -1376,31 +1428,46 @@ every run process and waits up to 10 s; queued runs stay staged.
 The server logs to standard error with stdlib `logging` at
 `server.log_level` (`debug`, `info`, `warning`, `error`; also uvicorn's
 level): per run `queued (position n)`, `started: run|fork pid <pid>`,
-`done`, `cancelled`, `cancelled while queued`, `cancel requested from its
-own process` (a CLI run), and `failed in <stage>:
+`done`, `cancelled`, `cancelled while queued`, and `failed in <stage>:
 <first line>` (warning), each with the run ID, and every standard-error
 line of a run process as `run <id>: <line>` (cut to 4000 characters plus
 `…`). Settings: `server.host`, `server.port`,
-`server.static_dir`, `server.log_level`, `server.forwarded_allow_ips`.
+`server.static_dir`, `server.log_level`, `server.forwarded_allow_ips`,
+`server.socket`.
 
 #### NixOS service
 
-The module runs `wosarcher serve` as `wosarcher.service`, user and group
+The module runs `wosarcherd serve` as `wosarcher.service`, user and group
 `wosarcher`, with the `XDG_*` variables pointing at `/var/lib/wosarcher`,
-`UMask=0007`, `Restart=on-failure`, and `TimeoutStopSec=45` (the 10-second
-run grace plus shutdown). With `autoStart` it is wanted by
-`multi-user.target`. Declared profiles and hooks are copied by an
-`ExecStartPre=+` step that runs as root to set ownership. systemd
+`UMask=0077`, `Restart=on-failure`, and `TimeoutStopSec=45` (the 10-second
+run grace plus shutdown). `wosarcher.socket` listens on
+`/run/wosarcher/api.sock` (`SocketMode=0660`, owner `wosarcher`, group
+`wosarcher`, wanted by `sockets.target`) and passes it to the service,
+which `Requires` it and starts on the first connection; with `autoStart`
+the service is also wanted by `multi-user.target`. tmpfiles creates
+`/run/wosarcher` 0750 `wosarcher:wosarcher` (a `RuntimeDirectory` would be
+removed with the socket when the service stops) and the data directories
+0700; `StateDirectoryMode=0700`. Declared profiles and hooks are copied
+0600 by an `ExecStartPre=+` step that runs as root to set ownership; it
+also removes group and other access from everything under
+`/var/lib/wosarcher`. Only the service user reads the data: members of the
+`wosarcher` group (`services.wosarcher.users`) reach the socket and
+nothing else. The `wosarcher` wrapper on the system path exports
+`WOSARCHER_SOCKET=/run/wosarcher/api.sock` and runs the client; the
+`wosarcherd` wrapper exports the service's `XDG_*` and
+`services.wosarcher.environment` and runs the daemon with umask 0077, for
+`sudo -u wosarcher wosarcherd auth set-password`. `environmentFile` is read
+by systemd alone (it may be `0400 root:root`); no wrapper reads it. systemd
 hardening stands in for container isolation: no capabilities and
 `NoNewPrivileges`, `TasksMax=512`, `ProtectSystem=strict` with only
-`/var/lib/wosarcher` writable, `ProtectHome` (the server never reads
-attachment paths; the CLI copies attachments and the API receives
-uploads), private `/tmp` and devices, the kernel, clock, hostname, and
-control-group protections, `RestrictNamespaces`, `RestrictRealtime`,
+`/var/lib/wosarcher` and `/run/wosarcher` writable, `ProtectHome` (the
+server never reads attachment paths; the client uploads them), private
+`/tmp` and devices, the kernel, clock, hostname, and control-group
+protections, `RestrictNamespaces`, `RestrictRealtime`,
 `RestrictSUIDSGID`, `LockPersonality`, only `AF_INET`, `AF_INET6`, and
 `AF_UNIX` sockets, and `SystemCallFilter=@system-service`.
 `MemoryDenyWriteExecute` is off: compiled wheels and typst are not known to
-work with it. `DynamicUser` is not used, because the shared group needs a
+work with it. `DynamicUser` is not used, because the socket group needs a
 stable uid and gid.
 
 ### Authentication
@@ -1409,12 +1476,15 @@ One admin user, for local use: it keeps everyone but the owner out when the
 server is reachable from other devices. No accounts, roles, or sign-up.
 Authentication is enabled when a password hash is configured; without one,
 every request counts as authenticated (`method = "none"`) and the server
-stays loopback only.
+stays loopback only. A request on the daemon's Unix socket is
+authenticated by the socket's file permissions (`method = "socket"`)
+whether or not a password is set; no peer credentials are read, so its
+runs have origin `cli` and no user name.
 
-- **Bind.** The server binds to `127.0.0.1` by default. `wosarcher serve`
+- **Bind.** The server binds to `127.0.0.1` by default. `wosarcherd serve`
   refuses (exit code 2) any host that is not loopback (`127.0.0.0/8`,
   `::1`, `localhost`) unless a password is set.
-- **Password.** `wosarcher auth set-password` prompts twice for a password of
+- **Password.** `wosarcherd auth set-password` prompts twice for a password of
   at least 8 characters and stores only its scrypt hash
   (`hashlib.scrypt`, n = 2^15, r = 8, p = 1, 32-byte key, 16-byte salt, as
   `scrypt$15$8$1$<salt>$<key>`) with a new session secret.
@@ -1424,16 +1494,13 @@ stays loopback only.
   `auth.password_hash_command` in a profile) wins over the stored hash, and
   `set-password` warns when it is set. The plain password is never stored
   or logged.
-- **`auth.json`** in the config directory (mode 0660 less the umask: 0660
-  under the NixOS module's shared umask 0007, 0600 under a personal 0077)
-  holds the password
-  hash, the session secret, and the API tokens (ID, name, SHA-256 hash,
-  last 4 characters, created, last used). The server reloads it when its
-  modification time changes, so CLI changes apply without a restart;
-  writers lock `auth.json.lock` and replace the file atomically. The file
-  is group-writable so the service user and a group member's CLI can both
-  update it: the server rewrites it on each token use, so a file owned by
-  one side alone would lock the other out.
+- **`auth.json`** in the config directory (mode 0600, as is its lock file)
+  holds the password hash, the session secret, and the API tokens (ID,
+  name, SHA-256 hash, last 4 characters, created, last used). Only the
+  daemon's user writes it: the server and `wosarcherd auth`. The server
+  reloads it when its modification time changes, so a new password applies
+  without a restart; writers lock `auth.json.lock` and replace the file
+  atomically.
 - **Browser session.** `POST /api/login` with `{"password"}` sets the
   `wosarcher_session` cookie and answers 200 with the session; a wrong
   password answers 401 `wrong_password` with `attempts_left`; 409
@@ -1443,7 +1510,8 @@ stays loopback only.
   `SameSite=Strict`, `Path=/`, `Secure` when the request arrived over
   HTTPS, and lasts `auth.session_days` (30). `POST /api/logout` clears it
   (204). `GET /api/session` says how the request is authenticated
-  (`cookie` with `since` and `expires`, `token` with its name, or `none`).
+  (`cookie` with `since` and `expires`, `token` with its name, `socket`, or
+  `none`).
   Changing the password ends every session; API tokens stay valid.
 - **Brute force.** Failed logins are counted per client IP: the fifth
   failure within 60 seconds pauses logins from that IP for 30 seconds, and
@@ -1454,12 +1522,15 @@ stays loopback only.
   is logged with the client IP. The limiter lives in memory.
 - **Scripts and agents on other machines.** `Authorization: Bearer <token>`
   with a token (`wosarcher_` plus 36 base62 characters) from
-  `wosarcher auth new-token <name>` or `POST /api/tokens`, stored as a
-  SHA-256 hash; `wosarcher auth list-tokens` and `revoke-token <id>`. Each
-  use updates the token's last-used time at most once a minute. The local
-  CLI and the skill run `wosarcher` directly and need no auth.
+  `wosarcher tokens new <name>` (over the socket) or `POST /api/tokens`,
+  stored as a SHA-256 hash; `wosarcher tokens list` and `tokens revoke
+  <id>`. Each use updates the token's last-used time at most once a minute.
+  The client uses it with `WOSARCHER_URL` and `WOSARCHER_TOKEN`; on the
+  daemon's host the client and the skill use the socket and need no token.
 - **Request guard.** One ASGI middleware checks every `/api` request and
-  the event WebSocket, in order:
+  the event WebSocket. A request on the socket listener gets only the
+  content type check, then `Auth("socket")`, and may use the token routes.
+  Any other request is checked in order:
   1. **Host**: without a password, the `Host` name must be `localhost`,
      `127.0.0.1`, or `[::1]` (any port), else 403 `bad_host`, so a
      DNS-rebound page cannot reach the open API.
@@ -1474,7 +1545,8 @@ stays loopback only.
      415 `unsupported_media_type`.
   4. **Authentication**: a valid bearer token or session cookie, except
      for `POST /api/login`, else 401 `unauthenticated`.
-  5. **Token routes**: `/api/tokens` with a token gets 403.
+  5. **Token routes**: `/api/tokens` with a token gets 403 ("token routes
+     need the socket or a browser session").
 
   A refused WebSocket handshake is closed with 1008 before it is accepted.
   The frontend build (including `/login`) is served without
@@ -1506,8 +1578,8 @@ of the bad value (profile file, environment variable, depth preset file, or
 The run slot limit is not a profile key: `max_concurrent_runs` (1 to 8,
 default 1) lives in the global settings file
 `$XDG_CONFIG_HOME/wosarcher/server-settings.json`, edited through `PUT
-/api/settings` and the Settings "Run slots" section. The server and the CLI
-read it at each slot decision; a missing file means 1, and an invalid one
+/api/settings` and the Settings "Run slots" section. The server reads it
+each time it decides whether to start a queued run; a missing file means 1, and an invalid one
 means 1 with a warning naming the file. `server.max_concurrent_runs` does
 not exist, so setting it in a profile, the environment, or `--set` fails as
 an unknown key.
@@ -1627,7 +1699,7 @@ commands, the server's profile and model routes, run and doctor children)
 sees a loaded value; a server run is a fresh child, so a rotated secret is
 picked up by the next run. An unreadable file, a command that cannot
 start, exits non-zero, or times out, or output that is not UTF-8 fails
-resolution (CLI exit 2, before any run directory exists) with an error
+resolution (engine exit 2, before any run directory exists) with an error
 naming the setting and the path or the command's first word, never the
 output. Paths and commands are not secret and print as plain values. Fork
 and rerun ignore `*_file` and `*_command` keys saved in the parent's
@@ -1645,50 +1717,56 @@ not contain provider URLs or model names.
 
 - Options: `enable`, `package`, `host` and `port` (default `127.0.0.1:8765`),
   `allowedOrigins` (as `auth.allowed_origins`), `environment` (extra
-  variables), `environmentFile` (variables that must not land in the Nix
-  store; nothing secret goes through an option whose value does), `profiles`, `hooks`, `users`,
-  and `autoStart` (false for a socket proxy that starts the unit on
-  demand). Anything else goes through `environment` or a profile.
+  variables for the service and the `wosarcherd` wrapper),
+  `environmentFile` (variables that must not land in the Nix store, read by
+  systemd alone; nothing secret goes through an option whose value does),
+  `profiles`, `hooks`, `users` (socket access only), and `autoStart` (false:
+  the unit starts on the first connection to `wosarcher.socket` or through
+  a socket proxy). Anything else goes through `environment` or a profile.
 - Declared `profiles` are copied (never linked into the store) to
   `profiles/<name>.toml` before the service starts, and `hooks` to
   `hooks.toml`. A manifest (`profiles/.nix-managed`) names what the module
   wrote, so a dropped profile or emptied hooks is removed and hand-made
   profiles are kept.
 - Data lives in `/var/lib/wosarcher` (`config/`, `share/`, `cache/` as the
-  XDG directories), owned by the `wosarcher` system user and group, every
-  directory mode `2770` (setgid, so new directories keep the group). The
-  service and the CLI wrapper both use umask `0007`, so every file stays
-  group-readable and group-writable and closed to others.
-- Users in `services.wosarcher.users` join the group. The module puts a
-  `wosarcher` wrapper on the system path that exports the service's `XDG_*`
-  and `environment` values (one attribute set feeds both), loads
-  `environmentFile` (which must be readable by the group, for example
-  `0440 root:wosarcher`; an unreadable file exits 2 naming the file and the
-  group), sets umask `0007`, and runs the package. A member's CLI thus uses
-  the server's profiles, runs, caches, and secrets; every member can read
-  every secret, which is the accepted trade-off.
+  XDG directories), owned by the `wosarcher` system user, directories
+  0700 and files 0600 (service umask `0077`), closed to the group and to
+  others.
+- Users in `services.wosarcher.users` join the `wosarcher` group, which
+  grants `/run/wosarcher/api.sock` and nothing else. The `wosarcher`
+  wrapper on the system path only exports
+  `WOSARCHER_SOCKET=/run/wosarcher/api.sock` and runs the client, so a
+  member uses the daemon's profiles, runs, and secrets without reading
+  them. The `wosarcherd` wrapper exports the service's `XDG_*` and
+  `environment` values (one attribute set feeds it and the unit) for
+  administration as the service user (`sudo -u wosarcher wosarcherd auth
+  set-password`, `wosarcherd profile use`). Neither wrapper reads
+  `environmentFile`.
 - Secrets reach the service as files: a declared profile sets
   `llm.api_key_file = "/run/secrets/llm"` (for example a sops-nix secret
-  path readable by the `wosarcher` group), so the profile in the Nix store
+  path readable by the `wosarcher` user), so the profile in the Nix store
   holds only the path.
 
-**Client side (wosarcher).**
+**Daemon side (wosarcherd).**
 
-- Profiles are TOML files in `$XDG_CONFIG_HOME/wosarcher/profiles/`, a
-  mutable directory, not the Nix store. Built-in profiles ship with the
-  package; a user file with the same name overrides one.
-- Select a profile per command (`wosarcher run --profile desktop "q"`), per shell
-  (`WOSARCHER_PROFILE=desktop`), or as the default (`wosarcher profile use desktop`, which
+- Profiles are TOML files in the daemon's
+  `$XDG_CONFIG_HOME/wosarcher/profiles/`, a mutable directory, not the Nix
+  store. Built-in profiles ship with the package; a user file with the same
+  name overrides one. The `wosarcher` client never reads them; it names a
+  profile and the daemon resolves it.
+- Select a profile per command (`wosarcher run --profile desktop "q"`), per
+  daemon (`WOSARCHER_PROFILE=desktop` in its environment), or as the
+  default (`wosarcherd profile use desktop` as the service user, which
   writes `$XDG_CONFIG_HOME/wosarcher/current`).
 - Override a single field without a new profile:
   `wosarcher run --set score.provider=jev --set prefilter.base_url=http://desktop.lan:8002/v1 "q"`.
 - The server reads the profile when each run starts (each run is a fresh
-  `wosarcher run` subprocess), so changing a profile file or the default never needs
+  `wosarcherd run` subprocess), so changing a profile file or the default never needs
   a server restart. The frontend's New run screen lists profiles and accepts
   per-run overrides.
 - `wosarcher profile list` (with each profile's `description`),
-  `wosarcher profile show <name>` (resolved, secrets redacted; `*_file`
-  paths and `*_command` lists shown as written), and
+  `wosarcher profile show <name>` (resolved by the daemon, secrets
+  redacted; `*_file` paths and `*_command` lists shown as written), and
   `wosarcher doctor --profile <name>` make switching safe.
 
 **Model host side (each GPU machine).** One llama-swap service per machine,
@@ -1709,7 +1787,9 @@ to a machine is a config edit on that machine.
 ### Agent skill
 
 The skill documents the CLI and the JSON schema of `context.json` and the
-report. Agents usually want cited context: `wosarcher run "q" --until select
+report, that the commands talk to a running `wosarcherd` (the local socket,
+or `WOSARCHER_URL` with `WOSARCHER_TOKEN`), and exit code 69 for a daemon
+that is not reachable. Agents usually want cited context: `wosarcher run "q" --until select
 --json` returns passages with sources and scores. A full report is the
 default `wosarcher run`; `wosarcher run "q" --format answer --json` gives a
 short cited answer.
@@ -1736,11 +1816,12 @@ over the same inputs. It drives the public CLI only, so it measures what users r
   from `prefilter` with `research.gap_parts` true and false, comparing the
   gap step with and without the plan's question parts on multi-round runs.
 - `python -m evals.replay (--runs ID... | --all) --variants NAME... --out
-  DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcher fork <id>
+  DIR [--write] [--force] [--set KEY=VALUE]` runs `wosarcherd fork <id>
   --from <stage> --until select --json` (through `write` with `--write` or
   a `write` variant) in
   a subprocess, one at a time, and appends `{parent_run_id, variant,
-  run_id, status, error, run_dir}` to `DIR/results.jsonl`. Search, fetch,
+  run_id, status, error, run_dir}` to `DIR/results.jsonl` (`run_dir` under
+  the runs directory of the replay's own configuration). Search, fetch,
   and chunk are copied from the parent, so only ranking changes. A failed
   fork is recorded and the replay continues; finished pairs are skipped
   unless `--force`. `--all` takes every run with `version == 1` that
@@ -2108,7 +2189,7 @@ The flake also builds the package and a NixOS module (`nix/`):
 - `packages.<system>.wosarcher` (and `default`): a uv2nix virtual
   environment from `uv.lock` (PyPI wheels, runtime group only), wrapped
   with pandoc and typst on `PATH` and `WOSARCHER_SERVER__STATIC_DIR`
-  defaulting to the web build, so `wosarcher serve` serves the UI with no
+  defaulting to the web build for `wosarcherd`, so `wosarcherd serve` serves the UI with no
   settings. The pinned nixpkgs is too old for the locked FastAPI and
   uvicorn, and overriding them cascades; uv2nix needs no compile step.
   Dependencies rebuild only when `uv.lock` changes.

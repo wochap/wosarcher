@@ -1,9 +1,9 @@
-"""A stand-in for `python -m wosarcher` that the server tests start as a real subprocess.
+"""A stand-in for `python -m wosarcher.daemon` that the server tests start as a real subprocess.
 
 Accepts the `run`, `fork`, and `doctor --json` argv the server builds and writes
 a run directory like the real runner: `request.json`, `attachments/`,
 `events.jsonl` with increasing `seq`, and `report.md` appended in chunks and
-then rewritten with the final text. It also writes `argv.json`.
+then rewritten with the final text, then `context.json` and `report.json`. It also writes `argv.json`.
 
 The runs directory is `WOSARCHER_RUN__RUNS_DIR`. The behaviour is the query
 when it names a mode, else `FAKE_MODE`:
@@ -36,8 +36,10 @@ from pathlib import Path
 from wosarcher.config import redact, resolve
 from wosarcher.models import (
     STAGES,
+    Context,
     DoctorReport,
     ProviderHealth,
+    Report,
     RunCancelledData,
     RunDoneData,
     RunRecord,
@@ -70,7 +72,6 @@ def parse(argv: list[str]) -> argparse.Namespace:
         command.add_argument("--until")
         command.add_argument("--profile")
         command.add_argument("--set", action="append", default=[])
-        command.add_argument("--slot-fd")
         command.add_argument("--origin")
         command.add_argument("--token-name")
     run.add_argument("--depth")
@@ -109,6 +110,7 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
     if run_dir.exists():
         sys.exit(2)
     run_dir.mkdir(parents=True)
+    store.lock(args.run_id)
     names: list[str] = []
     for path in map(Path, getattr(args, "attach", [])):
         (run_dir / "attachments").mkdir(exist_ok=True)
@@ -135,6 +137,8 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
             "profile": profile,
             "overrides": overrides,
             "settings": redact(resolve("workstation", overrides, {}, request.depth)),
+            "origin": args.origin or "cli",
+            "token_name": args.token_name,
             **lineage,
         }
     )
@@ -203,6 +207,10 @@ def main(argv: list[str]) -> int:
     while waits:
         time.sleep(step)
     store.write_text(run_id, "report.md", streamed + FINAL_SUFFIX)
+    context = Context(query=record.request.query, passages=[], sources=[], budget_tokens=100, used_tokens=0)
+    store.write_artifact(run_id, "context.json", context)
+    report = Report(body=streamed, markdown=streamed + FINAL_SUFFIX, cited=[], references=[])
+    store.write_artifact(run_id, "report.json", report)
     store.append_event(run_id, "stage.done", "write", StageDoneData(count=1, seconds=0.1))
     store.append_event(run_id, "run.done", None, RunDoneData(until=record.request.until, totals=UsageTotals()))
     return 0

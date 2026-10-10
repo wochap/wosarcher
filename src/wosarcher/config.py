@@ -28,6 +28,8 @@ from wosarcher.models import Effort, Stage, WritingOptions, domain_list, search_
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
+CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET")
+"""How the `wosarcher` client reaches the daemon; not settings."""
 BUILTIN_PROFILES = Path(__file__).parent / "profiles"
 BUILTIN_DEPTHS = Path(__file__).parent / "depths"
 DEPTH_ORDER = ("quick", "standard", "deep", "exhaustive")
@@ -252,6 +254,8 @@ class ServerConfig(Block):
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     forwarded_allow_ips: list[str] = ["127.0.0.1"]
     """Peers whose `X-Forwarded-For` and `X-Forwarded-Proto` are trusted: addresses, networks, or `*`."""
+    socket: Path | None = None
+    """The Unix socket `wosarcherd serve` listens on; None: `$XDG_RUNTIME_DIR/wosarcher.sock`, or none without it."""
 
 
 class AuthConfig(Block):
@@ -332,7 +336,7 @@ def store_profile(name: str, env: Mapping[str, str]) -> None:
 
 
 def select_profile(option: str | None, env: Mapping[str, str]) -> str:
-    """`--profile`, then `WOSARCHER_PROFILE`, then `wosarcher profile use`, then the default."""
+    """`--profile`, then `WOSARCHER_PROFILE`, then `wosarcherd profile use`, then the default."""
     return option or env.get(ENV_PREFIX + "PROFILE") or stored_profile(env) or DEFAULT_PROFILE
 
 
@@ -406,7 +410,7 @@ def env_layer(env: Mapping[str, str]) -> Layer:
     tree: dict[str, Any] = {}
     sources: dict[str, str] = {}
     for name, raw in sorted(env.items()):
-        if not name.startswith(ENV_PREFIX) or name == ENV_PREFIX + "PROFILE":
+        if not name.startswith(ENV_PREFIX) or name == ENV_PREFIX + "PROFILE" or name in CLIENT_ENV:
             continue
         path = name.removeprefix(ENV_PREFIX).lower().split("__")
         set_path(tree, path, parse_value(raw) if raw.startswith("[") else raw)

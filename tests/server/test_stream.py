@@ -1,4 +1,3 @@
-import time
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +8,6 @@ from starlette.websockets import WebSocketDisconnect
 
 from tests.server.conftest import WS_URL, create, events, external, finished, wait_until
 from tests.server.test_runs import on_disk
-from wosarcher.models import SlotEntry
-from wosarcher.store import RunStore
 
 Message = dict[str, Any]
 
@@ -122,44 +119,16 @@ def test_early_exit_socket(client: TestClient) -> None:
     assert "unknown profile 'x'" in messages[0]["data"]["error"]
 
 
-def test_follow_cli_run(client: TestClient, runs_dir: Path) -> None:
-    cli = external("cli-run", steps=20)
-    wait_until(lambda: (runs_dir / "cli-run" / "events.jsonl").is_file())
-    with client.websocket_connect(f"{WS_URL}/api/runs/cli-run/events?since=0") as socket:
-        messages, code = read_to_close(socket)
-    assert cli.wait(timeout=5) == 0
-    assert (messages[-1]["type"], code) == ("run.done", 1000)
-    assert logged(messages) == list(range(1, len(events(runs_dir, "cli-run")) + 1))
-    assert any(m["type"] == "report.delta" for m in messages)
-    assert rebuilt(messages) == (runs_dir / "cli-run" / "report.md").read_text()
-
-
-def test_queued_cli_run(client: TestClient, runs_dir: Path, config_dir: Path) -> None:
-    held = RunStore(runs_dir, runs_dir, config_dir).slots.try_take(SlotEntry(run_id="holder", origin="web"))
-    assert held is not None
-    cli = external("cli-run", steps=2)
-    wait_until(lambda: client.get("/api/runs/cli-run").json().get("status") == "queued")
-    with client.websocket_connect(f"{WS_URL}/api/runs/cli-run/events?since=0") as socket:
-        queued = socket.receive_json()
-        held.close()
-        messages, code = read_to_close(socket)
-    assert cli.wait(timeout=5) == 0
-    assert queued["type"] == "run.queued"
-    assert queued["data"]["position"] == 1
-    assert queued["data"]["limit"] == 1
-    assert [(h["run_id"], h["origin"]) for h in queued["data"]["held"]] == [("holder", "web")]
-    assert (messages[-1]["type"], code) == ("run.done", 1000)
-
-
-def test_killed_cli_run_closes(client: TestClient, runs_dir: Path) -> None:
-    cli = external("cli-run", steps=500)
-    wait_until(lambda: (runs_dir / "cli-run" / "report.md").is_file())
-    with client.websocket_connect(f"{WS_URL}/api/runs/cli-run/events?since=0") as socket:
-        socket.receive_json()
+def test_direct_engine_run_replayed(client: TestClient, runs_dir: Path) -> None:
+    """A run the server did not start is replayed and closed, even while it runs."""
+    cli = external("cli-run", steps=200)
+    try:
+        wait_until(lambda: (runs_dir / "cli-run" / "report.md").is_file())
+        with client.websocket_connect(f"{WS_URL}/api/runs/cli-run/events?since=0") as socket:
+            messages, code = read_to_close(socket)
+        assert code == 1000
+        assert messages[0]["type"] == "run.started"
+        assert messages[-1]["type"] == "report.snapshot"
+    finally:
         cli.kill()
-        killed = time.monotonic()
-        _, code = read_to_close(socket)
-    cli.wait()
-    assert code == 1000
-    assert time.monotonic() - killed < 2
-    assert client.get("/api/runs/cli-run").json()["status"] == "interrupted"
+        cli.wait()

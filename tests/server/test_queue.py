@@ -9,11 +9,9 @@ from fastapi.testclient import TestClient
 
 from tests.server.conftest import BASE_URL, MakeApp, argv, create, events, external, finished, status, wait_until
 from wosarcher.auth import AuthStore
-from wosarcher.models import SlotEntry
 from wosarcher.server import staging
 from wosarcher.server.manager import ENDED_LIMIT
 from wosarcher.store import RunStore
-from wosarcher.store.slots import Held
 
 
 @pytest.fixture
@@ -207,24 +205,6 @@ def seen(client: TestClient, run_id: str) -> str | None:
     return client.get(f"/api/runs/{run_id}").json().get("status")
 
 
-def hold(runs_dir: Path, config_dir: Path, run_id: str = "cli-run") -> Held:
-    held = RunStore(runs_dir, runs_dir, config_dir).slots.try_take(SlotEntry(run_id=run_id, origin="cli"))
-    assert held is not None
-    return held
-
-
-@pytest.mark.usefixtures("slow")
-def test_waits_behind_a_slot_held_elsewhere(client: TestClient, runs_dir: Path, config_dir: Path) -> None:
-    held = hold(runs_dir, config_dir)
-    run_id = create(client, {"query": "q"})
-    time.sleep(0.6)
-    assert (status(client, run_id), position(client, run_id)) == ("queued", 1)
-    assert not (runs_dir / run_id).exists()
-    held.close()
-    wait_until(lambda: status(client, run_id) == "running", timeout=2)
-    finished(client, run_id)
-
-
 @pytest.mark.usefixtures("slow")
 def test_raising_the_limit_starts_a_queued_run(client: TestClient) -> None:
     first, second = create(client, {"query": "q"}), create(client, {"query": "q"})
@@ -251,69 +231,57 @@ def test_lowering_the_limit_keeps_running_runs(
     assert events(runs_dir, runs[2])[0]["ts"] >= max(ends)
 
 
-def test_restart_queues_behind_a_cli_ticket(make_app: MakeApp, runs_dir: Path, config_dir: Path) -> None:
-    held = hold(runs_dir, config_dir, "holder")
-    with TestClient(make_app(), base_url=BASE_URL) as client:
-        staged = create(client, {"query": "q"})
-    cli = external("cli-run", steps=2)
+def test_direct_engine_run_not_counted(client: TestClient) -> None:
+    cli = external("cli-run", steps=200)
     try:
-        wait_until(lambda: RunStore(runs_dir, runs_dir, config_dir).slots.live("cli-run") == "queued")
-        with TestClient(make_app(), base_url=BASE_URL) as client:
-            assert (position(client, "cli-run"), position(client, staged)) == (1, 2)
-            held.close()
-            wait_until(lambda: seen(client, "cli-run") == "done")
-            finished(client, staged)
-            assert status(client, staged) == "done"
+        wait_until(lambda: seen(client, "cli-run") == "running")
+        run_id = create(client, {"query": "q"})
+        assert status(client, run_id) == "running"
+        assert client.get("/api/slots").json()["held"] == [
+            {"run_id": run_id, "origin": "web", "token_name": None, "started": ANY}
+        ]
+        finished(client, run_id)
     finally:
         cli.kill()
+        cli.wait()
 
 
-def test_cancel_cli_run(client: TestClient, runs_dir: Path, caplog: pytest.LogCaptureFixture) -> None:
-    caplog.set_level(logging.INFO, logger="wosarcher.server.manager")
+def test_cancel_direct_engine_run(client: TestClient, runs_dir: Path) -> None:
     cli = external("cli-run", steps=200)
-    wait_until(lambda: seen(client, "cli-run") == "running")
-    response = client.post("/api/runs/cli-run/cancel")
-    assert (response.status_code, response.json()) == (202, {"run_id": "cli-run", "result": "signalled"})
-    assert cli.wait(timeout=5) == 130
-    assert events(runs_dir, "cli-run")[-1]["type"] == "run.cancelled"
-    assert status(client, "cli-run") == "cancelled"
-    assert "cli-run" in caplog.text
-
-
-def test_cancel_waiting_cli_run(client: TestClient, runs_dir: Path, config_dir: Path) -> None:
-    held = hold(runs_dir, config_dir, "holder")
-    cli = external("cli-run")
-    wait_until(lambda: seen(client, "cli-run") == "queued")
-    assert client.post("/api/runs/cli-run/cancel").status_code == 202
-    assert cli.wait(timeout=5) == 130
-    held.close()
-    assert [event["type"] for event in events(runs_dir, "cli-run")] == ["run.cancelled"]
+    try:
+        wait_until(lambda: seen(client, "cli-run") == "running")
+        response = client.post("/api/runs/cli-run/cancel")
+        assert response.status_code == 409
+        assert response.json() | {"detail": ""} == {
+            "error": "run_not_active",
+            "detail": "",
+            "run_id": "cli-run",
+            "status": "running",
+        }
+    finally:
+        cli.kill()
+        cli.wait()
 
 
 @pytest.mark.usefixtures("slow")
 def test_slot_state(make_app: MakeApp, runs_dir: Path, config_dir: Path, password_hash: str) -> None:
     AuthStore(config_dir / "auth.json").set_password(password_hash)
     _, token = AuthStore(config_dir / "auth.json").add_token("ci-runner", datetime.now(UTC))
-    held = hold(runs_dir, config_dir)
     with TestClient(make_app(limit=2), base_url=BASE_URL, headers={"Authorization": f"Bearer {token}"}) as client:
-        assert client.get("/api/slots").json() == {
-            "limit": 2,
-            "held": [{"run_id": "cli-run", "origin": "cli", "token_name": None, "started": ANY}],
-            "queued": [],
-        }
-        first = create(client, {"query": "q"})
-        api = create(client, {"query": "q"})
+        assert client.get("/api/slots").json() == {"limit": 2, "held": [], "queued": []}
+        runs = [create(client, {"query": "q"}) for _ in range(3)]
         state = client.get("/api/slots").json()
-        assert [(h["run_id"], h["origin"]) for h in state["held"]] == [("cli-run", "cli"), (first, "api")]
-        assert state["queued"] == [{"run_id": api, "origin": "api", "token_name": "ci-runner"}]
-        assert client.get(f"/api/runs/{api}").json()["token_name"] == "ci-runner"
-        held.close()
-        finished(client, first)
-        finished(client, api)
-    args = argv(runs_dir, api)
+        assert [(h["run_id"], h["origin"], h["token_name"]) for h in state["held"]] == [
+            (runs[0], "api", "ci-runner"),
+            (runs[1], "api", "ci-runner"),
+        ]
+        assert state["queued"] == [{"run_id": runs[2], "origin": "api", "token_name": "ci-runner"}]
+        assert client.get(f"/api/runs/{runs[2]}").json()["token_name"] == "ci-runner"
+        for run_id in runs:
+            finished(client, run_id)
+    args = argv(runs_dir, runs[2])
     at = args.index("--origin")
-    assert args[at : at + 4] == ["--origin", "api", "--token-name", "ci-runner"]
-    assert args[-2] == "--slot-fd"
+    assert args[at:] == ["--origin", "api", "--token-name", "ci-runner"]
 
 
 def test_cli_run_listed_as_running(client: TestClient, runs_dir: Path) -> None:
@@ -325,7 +293,7 @@ def test_cli_run_listed_as_running(client: TestClient, runs_dir: Path) -> None:
     finally:
         cli.kill()
         cli.wait()
-    assert status(client, "cli-run") == "interrupted"
+    wait_until(lambda: status(client, "cli-run") == "interrupted", timeout=1)
 
 
 def test_cli_run_cannot_be_deleted_or_forked(client: TestClient, runs_dir: Path) -> None:
@@ -335,6 +303,20 @@ def test_cli_run_cannot_be_deleted_or_forked(client: TestClient, runs_dir: Path)
         assert client.delete("/api/runs/cli-run").status_code == 409
         assert client.post("/api/runs/cli-run/fork", json={"from": "write"}).status_code == 409
         assert (runs_dir / "cli-run").is_dir()
+    finally:
+        cli.kill()
+        cli.wait()
+
+
+@pytest.mark.usefixtures("slow")
+def test_running_after_restart(make_app: MakeApp, runs_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A run process outlives the server that spawned it; its lock keeps it `running` for the next server."""
+    cli = external("cli-run", steps=200)
+    try:
+        with TestClient(make_app(), base_url=BASE_URL) as client:
+            wait_until(lambda: seen(client, "cli-run") == "running")
+        with TestClient(make_app(), base_url=BASE_URL) as client:
+            assert seen(client, "cli-run") == "running"
     finally:
         cli.kill()
         cli.wait()

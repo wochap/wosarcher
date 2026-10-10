@@ -2,7 +2,7 @@
 
 The guard (`guard.py`) checks every `/api` request: Host, Origin, content type, and login.
 
-Every run is a subprocess of `command` (`[python, -m, wosarcher]` in production).
+Every run is a subprocess of `command` (`[python, -m, wosarcher.daemon]` in production).
 """
 
 from collections.abc import AsyncGenerator
@@ -34,8 +34,8 @@ def create_app(
     exporter: Exporter | None = None,
 ) -> FastAPI:
     # The server never uses the caches; the store only reads and appends run logs.
-    store = RunStore(runs_dir, runs_dir, config_dir)
-    manager = RunManager(runs_dir, command, store, grace)
+    store = RunStore(runs_dir, runs_dir)
+    manager = RunManager(runs_dir, command, store, config_dir, grace)
     auth = AuthStore.from_settings(settings, config_dir)
     state = ServerState(
         settings,
