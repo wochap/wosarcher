@@ -31,3 +31,6 @@ design/**/*.webp
 design/project/.thumbnail
 
 result
+
+# Agent handoffs
+handoff-*.md

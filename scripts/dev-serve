@@ -9,9 +9,9 @@
 # It reads the live wosarcher.service unit (environment and secrets file)
 # and the lazy proxy socket named by $WOSARCHER_DEV_SOCKET (default
 # wosarcher-proxy.socket; its address and port), stops that socket,
-# wosarcher.socket, and the service, copies the Nix-managed profiles and
-# auth.json into a dev data directory (auth.json on the first run only; the
-# dev server keeps its own password after that), and runs
+# wosarcher.socket, and the service, copies the Nix-managed profiles,
+# hooks.toml, and auth.json into a dev data directory (auth.json on the
+# first run only; the dev server keeps its own password after that), and runs
 # `uv run wosarcherd serve` on the proxy socket's address and port, so
 # https://wosarcher.<domain> reaches the dev server through nginx, and on
 # the Unix socket <data>/api.sock for the `wosarcher` client (the export
@@ -65,6 +65,13 @@ sudo rsync -a --chown="$owner" --include='*.toml' --exclude='*' \
 # way: dev runs stay in the dev directory and never reach the service.
 sudo rsync -a --chown="$owner" "$service_data/share/" "$data/share/"
 sudo rsync -a --chown="$owner" "$service_data/cache/" "$data/cache/"
+# hooks.toml (run-end webhooks and commands) follows the service's on every
+# start; none there means none here.
+hooks="$data/config/wosarcher/hooks.toml"
+rm -f "$hooks"
+if sudo test -f "$service_data/config/wosarcher/hooks.toml"; then
+  (umask 077; sudo cat "$service_data/config/wosarcher/hooks.toml" > "$hooks")
+fi
 
 # auth.json (password hash, session secret, tokens) is the dev server's own
 # once it exists: set a dev password with

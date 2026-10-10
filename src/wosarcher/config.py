@@ -11,6 +11,7 @@ import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast, get_args
+from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -24,7 +25,7 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
-from wosarcher.models import Effort, Stage, WritingOptions, domain_list, search_language
+from wosarcher.models import Effort, FinishedStatus, Stage, WritingOptions, domain_list, search_language
 
 DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
@@ -607,6 +608,113 @@ def drop_sources(tree: Mapping[str, Any]) -> dict[str, Any]:
             continue
         out[key] = drop_sources(value) if isinstance(value, Mapping) else value  # pyright: ignore[reportUnknownArgumentType]
     return out
+
+
+# Hooks: `hooks.toml` next to the profiles; never part of `Settings`, so no override reaches it.
+
+HOOKS_FILE = "hooks.toml"
+
+
+class HeaderValue(Block):
+    """A webhook header: a string, or a table with one of `value`, `value_file`, `value_command`."""
+
+    value: SecretStr | None = None
+    value_file: str | None = None
+    value_command: list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def from_string(cls, data: object) -> object:
+        return {"value": data} if isinstance(data, str) else data
+
+    @model_validator(mode="after")
+    def check_value(self) -> "HeaderValue":
+        check_one_source(self, "value")
+        if self.value is None and self.value_file is None and self.value_command is None:
+            raise ValueError("set one of value, value_file, value_command")
+        return self
+
+
+class HookEntry(Block):
+    """One `[[on_finish]]` table: a webhook (`url`) or a command (`command`)."""
+
+    url: str | None = None
+    command: list[str] | None = None
+    status: list[FinishedStatus] = Field(default=["done", "failed", "cancelled"], min_length=1)
+    timeout: float = Field(default=10.0, gt=0)
+    headers: dict[str, HeaderValue] = {}
+    secret: SecretStr | None = None
+    secret_file: str | None = None
+    secret_command: list[str] | None = None
+
+    @property
+    def kind(self) -> Literal["webhook", "command"]:
+        return "webhook" if self.url is not None else "command"
+
+    @field_validator("url")
+    @classmethod
+    def check_url(cls, value: str | None) -> str | None:
+        if value is not None:
+            parts = urlsplit(value)
+            if parts.scheme not in ("http", "https") or not parts.netloc:
+                raise ValueError("url must be an http or https URL")
+        return value
+
+    @field_validator("command")
+    @classmethod
+    def check_command(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and not value:
+            raise ValueError("command must not be empty")
+        return value
+
+    @model_validator(mode="after")
+    def check_kind(self) -> "HookEntry":
+        if (self.url is None) == (self.command is None):
+            raise ValueError("set exactly one of url, command")
+        if self.command is not None:
+            webhook_only = ["headers"] if self.headers else []
+            webhook_only += [key for key in ("secret", "secret_file", "secret_command") if getattr(self, key)]
+            if webhook_only:
+                raise ValueError(f"{', '.join(webhook_only)}: only a url hook may set this")
+        check_one_source(self, "secret")
+        return self
+
+
+class HooksFile(Block):
+    on_finish: list[HookEntry] = []
+
+
+def load_hooks(env: Mapping[str, str]) -> list[HookEntry]:
+    """Every `[[on_finish]]` entry of `hooks.toml`, validated; none when the file is missing."""
+    path = config_dir(env) / HOOKS_FILE
+    if not path.is_file():
+        return []
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise ConfigError(f"{path}: {error}") from None
+    try:
+        return HooksFile.model_validate(data).on_finish
+    except ValidationError as error:
+        lines: list[str] = []
+        for problem in error.errors():
+            loc = list(problem["loc"])
+            where = ".".join(str(part) for part in loc)
+            if len(loc) >= 2 and loc[0] == "on_finish" and isinstance(loc[1], int):
+                key = ".".join(str(part) for part in loc[2:])
+                where = f"entry {loc[1] + 1}" + (f", {key}" if key else "")
+            lines.append(f"{where}: {problem['msg']}")
+        raise ConfigError(f"{path}: invalid hooks:\n" + "\n".join(lines)) from None
+
+
+def resolve_hook(index: int, entry: HookEntry) -> HookEntry:
+    """`entry` with its secret and header values read from their files or commands."""
+    prefix = f"{HOOKS_FILE} entry {index}: "
+    headers = {
+        name: cast(HeaderValue, load_block(f"{prefix}headers.{name}.", value)) for name, value in entry.headers.items()
+    }
+    loaded = cast(HookEntry, load_block(prefix, entry))
+    return loaded.model_copy(update={"headers": headers})
 
 
 # Redaction

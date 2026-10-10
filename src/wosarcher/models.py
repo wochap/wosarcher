@@ -545,6 +545,30 @@ RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interru
 """`queued` and `running` come from the server; a run with no terminal event and no process is `interrupted`."""
 
 
+FinishedStatus = Literal["done", "failed", "cancelled"]
+
+
+class RunFinished(Contract):
+    """What a hook receives when a server run ends; paths are absolute on the server."""
+
+    event: Literal["run.finished"] = "run.finished"
+    run_id: str
+    status: FinishedStatus
+    query: str
+    kind: Literal["run", "fork", "rerun"]
+    origin: Origin
+    parent_run_id: str | None = None
+    version: int
+    profile: str
+    created: datetime
+    finished: datetime
+    """The terminal event's time."""
+    error: str | None = None
+    """The `run.failed` error text."""
+    run_dir: str | None = None
+    report_path: str | None = None
+
+
 class RunSummary(Contract):
     """One run as `wosarcher runs --json` and `GET /api/runs` list it."""
 

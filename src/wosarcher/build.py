@@ -1,10 +1,11 @@
 """Composition root: settings in, adapters out. The dicts below are data, not a registry."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import httpx
 
 from wosarcher.adapters.bm25 import Bm25Scorer
+from wosarcher.adapters.command import CommandHook
 from wosarcher.adapters.embeddings import OpenAIEmbedder
 from wosarcher.adapters.firecrawl import FirecrawlFetcher
 from wosarcher.adapters.jev import JevScorer
@@ -13,9 +14,10 @@ from wosarcher.adapters.pandoc import PandocExporter
 from wosarcher.adapters.passthrough import PassthroughScorer
 from wosarcher.adapters.rerank import RerankScorer
 from wosarcher.adapters.searxng import SearxngSearcher
-from wosarcher.config import Provider, ScoreConfig, Settings
+from wosarcher.adapters.webhook import WebhookHook
+from wosarcher.config import HookEntry, Provider, ScoreConfig, Settings
 from wosarcher.http import ProviderClient, UsageLedger
-from wosarcher.ports import Adapters, Embedder, Exporter, Managed, Scorer
+from wosarcher.ports import Adapters, Embedder, Exporter, Hook, Managed, Scorer
 
 ScorerFactory = Callable[[ScoreConfig, ProviderClient | None, UsageLedger], Scorer]
 
@@ -102,3 +104,14 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
 def exporter() -> Exporter:
     """Report export; it needs no profile settings, so runs do not build it."""
     return PandocExporter()
+
+
+HOOKS: dict[str, Callable[[HookEntry, Mapping[str, str]], Hook]] = {
+    "webhook": lambda entry, env: WebhookHook(entry),
+    "command": CommandHook,
+}
+
+
+def hooks(entries: list[HookEntry], env: Mapping[str, str]) -> list[tuple[HookEntry, Hook]]:
+    """A hook per resolved entry (`config.resolve_hook`); `env` is the server's environment."""
+    return [(entry, HOOKS[entry.kind](entry, env)) for entry in entries]

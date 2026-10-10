@@ -815,8 +815,8 @@ adapters/  searxng firecrawl embeddings rerank jev llm  ── http.py
 ```
 src/wosarcher/
   models.py      # Pydantic contracts (Stage, RunRequest, Query, Plan, Hit, Source, Page, Chunk, Attachment, Skipped, stage results, Score, Context, Report, WritingOptions, Message, Completion, EmbedderInfo, ProviderHealth, DoctorReport, RunRecord, RunSummary, RunOutput, RunCosts, server API bodies, events) and ID helpers
-  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed, Exporter (and ExportError); the Adapters bundle
-  config.py      # settings, profiles, precedence, secret redaction
+  ports.py       # Protocols: Searcher, Fetcher, Embedder, Scorer, LLM, Managed, Exporter (and ExportError), Hook (and HookError); the Adapters bundle
+  config.py      # settings, profiles, precedence, secret redaction; hooks.toml (HookEntry, load_hooks, resolve_hook)
   auth.py        # password hashing, API tokens, session signing, auth.json (AuthStore); stdlib only, no FastAPI
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
   profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
@@ -829,7 +829,7 @@ src/wosarcher/
   document.py    # export Markdown: title, date and run ID, "Question" block, report (pure)
   attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
   stages/        # one file per stage
-  adapters/      # one file per adapter (pandoc.py: report export), plus fakes.py
+  adapters/      # one file per adapter (pandoc.py: report export; webhook.py, command.py: run-end hooks), plus fakes.py
   prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
   cli/           # the `wosarcher` client, imports models, attachments, and config only:
                  # __init__.py: typer app (profile list|show, doctor, schema); api.py: connection (socket or URL), httpx, websockets;
@@ -839,7 +839,7 @@ src/wosarcher/
                  # serve.py: serve (TCP and Unix socket listeners); auth.py: auth set-password; __main__.py: python -m wosarcher.daemon
   __main__.py    # python -m wosarcher (the client)
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
-                 # tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
+                 # hooks.py: fire_hooks (run-end hooks); tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
                  # health.py: HealthCache (stored provider checks); stream.py: event socket;
                  # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState;
                  # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
@@ -1265,6 +1265,31 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `export_failed` with the converter's last error line, also after the
   60-second timeout. At most 2 conversions run at once; nothing is cached.
 
+#### Run-end hooks
+
+When a run the server started ends, `RunManager` fires the `hooks.toml`
+hooks (see Hooks under Configuration) for it, in a tracked task: from
+`_finish`, once the run's terminal event is recorded (the child's own, or
+the `run.failed` or `run.cancelled` the server appends after a crash, a
+spawn failure, or a kill past the grace period), and from the queued
+branch of a cancel. A running run's cancel only signals it, so no ending
+reaches both places and a hook fires at most once. If recording the
+terminal event fails, nothing fires. Interrupted runs and direct
+`wosarcherd run` processes never fire; neither the engine nor the client
+has any hook code.
+
+`RunFinished` is built from the staged request and the terminal event:
+`event` (`run.finished`), `run_id`, `status` (`done`, `failed`,
+`cancelled`), `query`, `kind`, `origin`, `parent_run_id`, `version`,
+`profile`, `created`, `finished` (the terminal event's time), `error` (the
+`run.failed` text), `run_dir` (absolute, null without a directory), and
+`report_path` (absolute, null without `report.md`).
+
+On shutdown, after the run wait (grace + 1 s), the server waits for hook
+tasks still running, including those of runs the shutdown cancelled, for
+at most 20 seconds in total (`HOOK_SHUTDOWN_SECONDS`), then cancels and
+logs the rest. A fixed cap, because a sum of hook timeouts has no bound.
+
 #### Report export
 
 `document.py` builds the export Markdown: the title (the report's leading
@@ -1469,6 +1494,13 @@ protections, `RestrictNamespaces`, `RestrictRealtime`,
 `MemoryDenyWriteExecute` is off: compiled wheels and typst are not known to
 work with it. `DynamicUser` is not used, because the socket group needs a
 stable uid and gid.
+
+Hooks run as `wosarcher` inside that sandbox: a command hook sees a
+read-only system, no home directories, and only `/var/lib/wosarcher` and
+`/run/wosarcher` writable, and it can read the files the service user owns
+(provider key files included), so it is trusted like the service.
+Webhooks are the main use. Stop budget: 10 s run grace + 1 s + 20 s hook
+cap = 31 s, under `TimeoutStopSec=45`.
 
 ### Authentication
 
@@ -1707,6 +1739,70 @@ configuration and take secrets from the current process. The HTTP API
 refuses any `set` override whose key ends in `_file` or `_command` (422
 `invalid_override`), so a client cannot run a command as the server user
 or send a server-readable file to a `base_url` of its choice.
+
+#### Hooks
+
+Other programs learn that a server run ended through
+`$XDG_CONFIG_HOME/wosarcher/hooks.toml` (`~/.config/wosarcher/hooks.toml`
+without `XDG_CONFIG_HOME`), read by the server only; a missing file means
+no hooks. Each `[[on_finish]]` table has exactly one of `url` (an `http` or
+`https` URL) or `command` (a non-empty argv list, run without a shell), and
+optionally:
+
+- `status`: a non-empty list of `done`, `failed`, `cancelled`; default all
+  three.
+- `timeout`: positive seconds, default 10.
+- `headers` (only with `url`): header names to values. A value is a string
+  (shorthand for `{ value = "..." }`) or a table with exactly one of
+  `value`, `value_file`, `value_command`.
+- one of `secret`, `secret_file`, `secret_command` (only with `url`).
+
+```toml
+[[on_finish]]
+url = "https://ntfy.example/wosarcher"
+status = ["done", "failed"]
+secret_file = "/run/secrets/hook"
+headers = { Authorization = { value_command = ["pass", "ntfy"] } }
+
+[[on_finish]]
+command = ["notify-send", "wosarcher run ended"]
+```
+
+The `_file` and `_command` forms follow the secret-source rules above. Any
+other key, both or neither of `url` and `command`, two secret sources, a
+header table with zero or several sources, or a wrong type makes the file
+invalid; the error names the file, the entry (`entry 1`), and the key.
+
+The server reads and validates the file, then resolves each hook's secrets,
+every time a run ends, in a thread off the event loop, so edits, NixOS
+module rewrites, and rotated secrets apply to the next run end without a
+restart. Keep `secret_command` and `value_command` fast; they run on every
+run end. An invalid file is logged and fires nothing for that run; a secret
+source that fails skips only its hook. Matching entries fire one after
+another in file order, one attempt each with `timeout`; a failure (non-2xx,
+network error, non-zero exit, timeout, a program that cannot start, a
+failed secret source) is logged with the entry's position, its kind, and
+the reason (HTTP status, exit code, or error type; never headers, secrets,
+the body, or the URL), and the next hook fires. Hook results never change
+the run's events or status. Delivery is at most once: a server killed
+between a child's exit and its `_finish` fires nothing.
+
+A webhook POSTs the `RunFinished` JSON (see Run-end hooks under Server)
+with `Content-Type: application/json` and the configured headers; with a
+secret it adds `X-Wosarcher-Signature: sha256=<hex>`, the HMAC-SHA256 of
+the exact body bytes. Redirects are not followed; 2xx is delivered. A
+command gets standard input closed, output discarded, and the server's
+environment without any `WOSARCHER_*` variable except `WOSARCHER_PROFILE`,
+`WOSARCHER_SOCKET`, and `WOSARCHER_URL`, plus `WA_HOOK_RUN_ID`,
+`WA_HOOK_STATUS`, `WA_HOOK_QUERY`, `WA_HOOK_RUN_DIR` and `WA_HOOK_REPORT`
+(empty when there is none), and `WA_HOOK_PAYLOAD` (the JSON). The query
+reaches it only as a variable, never in the argv. Exit 0 is success; past
+its timeout the command is killed.
+
+Hooks are not settings: profiles, `server-settings.json`, `--set`,
+`RunCreate.set`, and `PUT /api/settings` cannot reach them, because any
+API caller can change those, and a hook there would let it run commands or
+send run data elsewhere. No endpoint reads or writes `hooks.toml`.
 
 ### Switching providers without a rebuild
 

@@ -15,6 +15,7 @@ from wosarcher.models import (
     Page,
     ProviderHealth,
     Query,
+    RunFinished,
     Score,
 )
 
@@ -82,6 +83,18 @@ class Exporter(Protocol):
 
     def missing(self, fmt: ExportFormat) -> list[str]:
         """The programs `fmt` needs that are not installed."""
+        ...
+
+
+class HookError(Exception):
+    """A hook that ran and failed; the message is safe to log (status or exit code, no secrets)."""
+
+
+class Hook(Protocol):
+    """Tells another program that a server run ended."""
+
+    async def fire(self, finished: RunFinished) -> None:
+        """Raises on failure."""
         ...
 
 

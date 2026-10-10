@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 from datetime import UTC, datetime
@@ -8,8 +9,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.server.conftest import BASE_URL, MakeApp, argv, create, events, external, finished, status, wait_until
+from wosarcher.adapters.fakes import FakeHook
 from wosarcher.auth import AuthStore
+from wosarcher.config import ConfigError, HookEntry
+from wosarcher.models import FinishedStatus, RunFinished
+from wosarcher.ports import HookError
 from wosarcher.server import staging
+from wosarcher.server.hooks import HookLoader
 from wosarcher.server.manager import ENDED_LIMIT
 from wosarcher.store import RunStore
 
@@ -320,3 +326,128 @@ def test_running_after_restart(make_app: MakeApp, runs_dir: Path, monkeypatch: p
     finally:
         cli.kill()
         cli.wait()
+
+
+# Hooks
+
+
+def fake_hooks(*hooks: FakeHook, status: list[FinishedStatus] | None = None) -> HookLoader:
+    """One command entry per fake; the entry's argv is the fake's index, and `build` returns the fake."""
+    entries = [HookEntry(command=[str(n)], status=status or ["done", "failed", "cancelled"]) for n in range(len(hooks))]
+    return HookLoader(load=lambda: entries, build=lambda entry: hooks[int((entry.command or ["0"])[0])])
+
+
+def fired(hook: FakeHook) -> list[str]:
+    return [finished.status for finished in hook.fired]
+
+
+def test_done_fires_once(make_app: MakeApp, runs_dir: Path) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook)), base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "q"})
+        finished(client, run_id)
+        wait_until(lambda: hook.fired)
+    assert fired(hook) == ["done"]
+    payload = hook.fired[0]
+    assert (payload.run_id, payload.query, payload.kind, payload.error) == (run_id, "q", "run", None)
+    assert payload.run_dir == str((runs_dir / run_id).absolute())
+    assert payload.report_path == str((runs_dir / run_id / "report.md").absolute())
+
+
+def test_crash_fires_failed(make_app: MakeApp) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook)), base_url=BASE_URL) as client:
+        finished(client, create(client, {"query": "crash"}))
+        wait_until(lambda: hook.fired)
+    assert fired(hook) == ["failed"]
+    assert "code 1" in (hook.fired[0].error or "")
+
+
+def test_kill_after_grace_fires_cancelled(make_app: MakeApp, runs_dir: Path) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook)), base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "ignore-term"})
+        wait_until(lambda: (runs_dir / run_id / "report.md").is_file())
+        client.post(f"/api/runs/{run_id}/cancel")
+        finished(client, run_id)
+        wait_until(lambda: hook.fired)
+    assert fired(hook) == ["cancelled"]
+
+
+@pytest.mark.usefixtures("slow")
+def test_queued_cancel_fires_cancelled(make_app: MakeApp) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook)), base_url=BASE_URL) as client:
+        first, second = create(client, {"query": "q"}), create(client, {"query": "q"})
+        client.post(f"/api/runs/{second}/cancel")
+        wait_until(lambda: hook.fired)
+        assert [(f.run_id, f.status, f.run_dir) for f in hook.fired] == [(second, "cancelled", None)]
+        finished(client, first)
+        wait_until(lambda: len(hook.fired) == 2)
+    assert fired(hook) == ["cancelled", "done"]
+
+
+def test_status_filter_skips(make_app: MakeApp) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook, status=["failed"])), base_url=BASE_URL) as client:
+        finished(client, create(client, {"query": "q"}))
+    assert hook.fired == []
+
+
+def test_failing_hook_logged_and_next_fires(make_app: MakeApp, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+    failing, after = FakeHook(error=HookError("HTTP 500")), FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(failing, after)), base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "q"})
+        finished(client, run_id)
+        wait_until(lambda: after.fired)
+        assert status(client, run_id) == "done"
+    assert fired(failing) == ["done"]
+    assert f"hook 1 (command) failed for run {run_id}: HTTP 500" in caplog.text
+
+
+def test_invalid_file_fires_nothing(make_app: MakeApp, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+
+    def invalid() -> list[HookEntry]:
+        raise ConfigError("hooks.toml: invalid hooks")
+
+    hook = FakeHook()
+    loader = HookLoader(load=invalid, build=lambda entry: hook)
+    with TestClient(make_app(hooks=loader), base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "q"})
+        finished(client, run_id)
+        wait_until(lambda: "hooks.toml is invalid" in caplog.text)
+        assert status(client, run_id) == "done"
+    assert hook.fired == []
+
+
+@pytest.mark.usefixtures("slow")
+def test_shutdown_fires_cancelled(make_app: MakeApp, runs_dir: Path) -> None:
+    hook = FakeHook()
+    with TestClient(make_app(hooks=fake_hooks(hook)), base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "q"})
+        wait_until(lambda: (runs_dir / run_id / "report.md").is_file())
+    assert fired(hook) == ["cancelled"]
+
+
+class SlowHook(FakeHook):
+    async def fire(self, finished: RunFinished) -> None:
+        self.fired.append(finished)
+        await asyncio.sleep(60)
+
+
+@pytest.mark.usefixtures("slow")
+def test_slow_hook_stopped_at_shutdown(make_app: MakeApp, runs_dir: Path, caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING)
+    hook = SlowHook()
+    loader = HookLoader(load=lambda: [HookEntry(command=["x"], timeout=120)], build=lambda entry: hook)
+    app = make_app(hooks=loader)
+    app.state.server.manager.hook_wait = 0.2
+    started = time.monotonic()
+    with TestClient(app, base_url=BASE_URL) as client:
+        run_id = create(client, {"query": "q"})
+        wait_until(lambda: (runs_dir / run_id / "report.md").is_file())
+    assert time.monotonic() - started < 30
+    assert fired(hook) == ["cancelled"]
+    assert "stopped 1 hook task(s)" in caplog.text

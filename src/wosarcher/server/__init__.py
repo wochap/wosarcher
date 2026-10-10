@@ -2,9 +2,11 @@
 
 The guard (`guard.py`) checks every `/api` request: Host, Origin, content type, and login.
 
-Every run is a subprocess of `command` (`[python, -m, wosarcher.daemon]` in production).
+Every run is a subprocess of `command` (`[python, -m, wosarcher.daemon]` in production). When a run ends,
+the manager fires the `hooks.toml` hooks (`hooks.py`) with the server's environment.
 """
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -19,6 +21,7 @@ from wosarcher.ports import Exporter
 from wosarcher.server import errors, login, meta, routes, sources, stream, tokens
 from wosarcher.server.guard import Guard
 from wosarcher.server.health import HealthCache
+from wosarcher.server.hooks import HookLoader, default_loader
 from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import GRACE_SECONDS, RunManager
 from wosarcher.server.state import ServerState
@@ -32,10 +35,11 @@ def create_app(
     command: list[str],
     grace: float = GRACE_SECONDS,
     exporter: Exporter | None = None,
+    hooks: HookLoader | None = None,
 ) -> FastAPI:
     # The server never uses the caches; the store only reads and appends run logs.
     store = RunStore(runs_dir, runs_dir)
-    manager = RunManager(runs_dir, command, store, config_dir, grace)
+    manager = RunManager(runs_dir, command, store, config_dir, grace, hooks or default_loader(os.environ))
     auth = AuthStore.from_settings(settings, config_dir)
     state = ServerState(
         settings,

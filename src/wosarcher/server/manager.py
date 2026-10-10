@@ -21,8 +21,10 @@ from wosarcher.models import (
     Event,
     RunCancelled,
     RunCancelledData,
+    RunDone,
     RunFailed,
     RunFailedData,
+    RunFinished,
     RunQueued,
     RunQueuedData,
     SlotEntry,
@@ -30,6 +32,7 @@ from wosarcher.models import (
     SlotState,
 )
 from wosarcher.server import staging
+from wosarcher.server.hooks import HookLoader, fire_hooks
 from wosarcher.server.staging import StagedRun
 from wosarcher.server.tail import RunTail
 from wosarcher.store import RunStore
@@ -44,6 +47,8 @@ STDERR_LINES = 20
 STDERR_MAX_CHARS = 4000
 STDERR_CHUNK = 65536
 ENDED_LIMIT = 100
+HOOK_SHUTDOWN_SECONDS = 20.0
+"""How long shutdown waits for hooks in total; 10 s grace + 1 + 20 fits `TimeoutStopSec = 45`."""
 
 
 @dataclass
@@ -80,7 +85,13 @@ def cut(text: str) -> str:
 
 class RunManager:
     def __init__(
-        self, runs_dir: Path, command: list[str], store: RunStore, config_dir: Path, grace: float = GRACE_SECONDS
+        self,
+        runs_dir: Path,
+        command: list[str],
+        store: RunStore,
+        config_dir: Path,
+        grace: float = GRACE_SECONDS,
+        hooks: HookLoader | None = None,
     ) -> None:
         self.runs_dir = runs_dir
         self.command = command
@@ -94,6 +105,10 @@ class RunManager:
         """Run processes this server started, oldest first."""
         self.ended: OrderedDict[str, EndedRun] = OrderedDict()
         """Runs that ended without a run directory, newest last; in memory only."""
+        self.hooks = hooks
+        self.hook_tasks: set[asyncio.Task[None]] = set()
+        """Hooks firing for ended runs; shutdown waits for them up to `hook_wait`."""
+        self.hook_wait = HOOK_SHUTDOWN_SECONDS
         self.stopping = False
         self.ticker: asyncio.Task[None] | None = None
 
@@ -167,6 +182,7 @@ class RunManager:
         active.tail.close()
         self._remember(active.staged, event)
         log.info("run %s cancelled while queued", run_id)
+        self._fire(active.staged, event)
         self._schedule()
         return "dequeued"
 
@@ -175,7 +191,7 @@ class RunManager:
         return self.ended.pop(run_id, None) is not None
 
     async def shutdown(self) -> None:
-        """SIGTERM every running run and wait up to the grace period; queued runs stay staged."""
+        """SIGTERM every running run and wait up to the grace period, then for hooks; queued runs stay staged."""
         self.stopping = True
         if self.ticker is not None:
             self.ticker.cancel()
@@ -186,6 +202,13 @@ class RunManager:
                 self._terminate(active)
         if tasks:
             await asyncio.wait(tasks, timeout=self.grace + 1)
+        if self.hook_tasks:
+            _, pending = await asyncio.wait(set(self.hook_tasks), timeout=self.hook_wait)
+            for task in pending:
+                task.cancel()
+            if pending:
+                log.warning("stopped %d hook task(s) still running %g s into shutdown", len(pending), self.hook_wait)
+                await asyncio.wait(pending)
 
     # Internals
 
@@ -312,6 +335,7 @@ class RunManager:
         except Exception:
             log.exception("run %s: finishing the run failed", active.run_id)
         self._log_end(active.run_id, tail.terminal_event)
+        self._fire(active.staged, tail.terminal_event)
         tail.close()
         staging.remove(self.runs_dir, active.run_id)
         self.running.pop(active.run_id, None)
@@ -348,3 +372,38 @@ class RunManager:
             log.info("run %s cancelled", run_id)
         elif event is not None:
             log.info("run %s done", run_id)
+
+    def _fire(self, staged: StagedRun, event: Event | None) -> None:
+        """Start the hooks for a run's terminal event in a tracked task; nothing without one."""
+        if self.hooks is None or not isinstance(event, RunDone | RunFailed | RunCancelled):
+            return
+        try:
+            finished = self._finished(staged, event)
+            task = asyncio.get_running_loop().create_task(fire_hooks(self.hooks, finished))
+        except Exception:
+            log.exception("run %s: starting its hooks failed", staged.run_id)
+            return
+        self.hook_tasks.add(task)
+        task.add_done_callback(self.hook_tasks.discard)
+
+    def _finished(self, staged: StagedRun, event: RunDone | RunFailed | RunCancelled) -> RunFinished:
+        run_dir = (self.runs_dir / staged.run_id).absolute()
+        report = run_dir / "report.md"
+        status: Literal["done", "failed", "cancelled"] = (
+            "done" if isinstance(event, RunDone) else "failed" if isinstance(event, RunFailed) else "cancelled"
+        )
+        return RunFinished(
+            run_id=staged.run_id,
+            status=status,
+            query=staged.query,
+            kind=staged.kind,
+            origin=staged.origin,
+            parent_run_id=staged.parent,
+            version=staged.version,
+            profile=staged.resolved_profile,
+            created=staged.created,
+            finished=event.ts,
+            error=event.data.error if isinstance(event, RunFailed) else None,
+            run_dir=str(run_dir) if run_dir.is_dir() else None,
+            report_path=str(report) if report.is_file() else None,
+        )

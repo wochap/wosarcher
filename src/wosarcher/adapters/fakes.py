@@ -14,6 +14,7 @@ from wosarcher.models import (
     Page,
     ProviderHealth,
     Query,
+    RunFinished,
     Score,
     Source,
     web_source_id,
@@ -189,3 +190,16 @@ class FakeExporter:
         if self.failure is not None:
             raise ExportError(self.failure)
         return FAKE_EXPORTS[fmt]
+
+
+class FakeHook:
+    """Records every `RunFinished` it gets; raises `error` after recording when one is set."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.fired: list[RunFinished] = []
+
+    async def fire(self, finished: RunFinished) -> None:
+        self.fired.append(finished)
+        if self.error is not None:
+            raise self.error
