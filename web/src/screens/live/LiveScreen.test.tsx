@@ -6,6 +6,7 @@ import { callsTo, fakeApi } from "../../test/fakeApi";
 import { failure } from "../../test/fixtures/failure";
 import { live } from "../../test/fixtures/live";
 import { loading } from "../../test/fixtures/loading";
+import { liveApi, liveCli, queued } from "../../test/fixtures/origins";
 import { otherRuns, RUN_ID, upTo } from "../../test/fixtures/sample";
 import { renderApp } from "../../test/renderApp";
 import { openScenario, play, socketsFor } from "../../test/scenario";
@@ -26,14 +27,59 @@ describe("LiveScreen", () => {
   it("shows the queued state", async () => {
     await openScenario(loading);
     expect(screen.getByText("Connecting")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(
-      /^Connecting to ws:\/\/.+ · queued, waiting for a free worker…$/,
-    );
+    expect(screen.getByRole("status").textContent).toMatch(/^Connecting to ws:\/\/.+…$/);
     expect(screen.getAllByTestId("skeleton")).toHaveLength(6);
     expect(screen.getByText("Waiting for the planner…")).toBeTruthy();
     expect(screen.getByText("Waiting for the run to start.")).toBeTruthy();
     const phases = within(screen.getByRole("list", { name: "Phases" })).getAllByRole("listitem");
     expect(phases.every((p) => p.dataset.state === "pending")).toBe(true);
+  });
+
+  it("shows Queued and the slot holders while waiting for a slot (scenario queued)", async () => {
+    await openScenario(queued);
+    expect(screen.getByText("Queued")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Waiting for a free slot: 2 of 2 in use (1 web, 1 CLI). Next in line.",
+    );
+    expect(screen.getAllByTestId("skeleton")).toHaveLength(6);
+  });
+
+  it("asks before cancelling a CLI run and sends nothing until confirmed", async () => {
+    const { api } = await openScenario(liveCli);
+    expect(screen.getByTitle("Started from the wosarcher CLI on this machine")).toBeTruthy();
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    const dialog = screen.getByRole("alertdialog");
+    expect(within(dialog).getByText("Cancel this CLI run?")).toBeTruthy();
+    expect(within(dialog).getByText("Completed stages are kept. Nothing is written.")).toBeTruthy();
+    expect(callsTo(api, "cancelRun")).toEqual([]);
+    act(() => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Keep running" }));
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(callsTo(api, "cancelRun")).toEqual([]);
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel run" }));
+    });
+    expect(callsTo(api, "cancelRun")).toEqual([[RUN_ID]]);
+  });
+
+  it("names the token of an API run in the cancel dialog", async () => {
+    await openScenario(liveApi);
+    expect(screen.getByText("api · ci-runner")).toBeTruthy();
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+    expect(screen.getByText("Cancel this API run?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "It was started through the API with token “ci-runner”. The caller gets the run back as cancelled.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows the empty state with no followed run", async () => {

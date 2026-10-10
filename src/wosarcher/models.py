@@ -515,6 +515,10 @@ class DoctorReport(Contract):
 # Runs
 
 
+Origin = Literal["web", "api", "cli"]
+"""Where a run was started: the browser, an API token, or `wosarcher run` / `wosarcher fork`."""
+
+
 class RunRecord(Contract):
     """`request.json`: what a run was asked, with which configuration, and where it came from."""
 
@@ -531,6 +535,10 @@ class RunRecord(Contract):
     parent_run_id: str | None = None
     fork_from: Stage | None = None
     version: int = Field(default=1, ge=1)
+    origin: Origin = "web"
+    """Who started the run; records written before origins existed read as `web`."""
+    token_name: str | None = None
+    """The API token's name for origin `api`."""
 
 
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interrupted"]
@@ -574,6 +582,30 @@ class RunSummary(Contract):
     """The resolved `llm.model`; empty when none is set."""
     reasoning: ReasoningOptions = ReasoningOptions()
     """The resolved `llm.reasoning`; `none` for every step on older runs."""
+    origin: Origin = "web"
+    token_name: str | None = None
+    """The API token's name for origin `api`; None otherwise."""
+
+
+class SlotEntry(Contract):
+    """A run in the shared run queue or holding a slot."""
+
+    run_id: str
+    origin: Origin
+    token_name: str | None = None
+
+
+class SlotHolder(SlotEntry):
+    started: datetime
+    """When the run took its slot."""
+
+
+class SlotState(Contract):
+    """`GET /api/slots`: the limit, the runs holding a slot (oldest first), and the waiting runs in queue order."""
+
+    limit: int
+    held: list[SlotHolder] = []
+    queued: list[SlotEntry] = []
 
 
 class RunOutput(Contract):
@@ -728,6 +760,8 @@ class ServerSettings(Contract):
     writing: WritingOptions = WritingOptions()
     sources: Sources = "both"
     domains: DomainDefaults = DomainDefaults()
+    max_concurrent_runs: int = Field(default=1, ge=1, le=8)
+    """Runs that execute at once in the runs directory, whoever started them."""
 
 
 class ModelList(Contract):
@@ -858,6 +892,10 @@ class LoginError(Contract):
 
 class RunQueuedData(Contract):
     position: int
+    """1 for the next run to start."""
+    limit: int
+    """The current `max_concurrent_runs`."""
+    held: list[SlotHolder] = []
 
 
 class RunStartedData(Contract):
@@ -1231,6 +1269,9 @@ CONTRACTS: tuple[type[Contract], ...] = (
     RunCreated,
     RunDetail,
     ServerSettings,
+    SlotEntry,
+    SlotHolder,
+    SlotState,
     ModelList,
     ProfileInfo,
     DepthValues,

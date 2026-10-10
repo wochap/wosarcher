@@ -2,15 +2,20 @@
 // cancelled > connecting or queued > rewrite. A banner, never a modal: the screen stays usable.
 import {
   ArrowsClockwise,
+  Browser,
   CheckCircle,
+  Circle,
   CircleNotch,
+  HourglassMedium,
   type Icon,
   Recycle,
   StopCircle,
+  TerminalWindow,
   WifiSlash,
 } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import type { Conn } from "../../api/events";
+import type { RunQueuedData, SlotHolder } from "../../api/types";
 import { fmtElapsed } from "../../run/format";
 import type { RunView } from "../../run/reducer";
 import { stageLabel, stoppedAt } from "./model";
@@ -41,11 +46,54 @@ function useReconnected(conn: Conn): boolean {
   return shown;
 }
 
-type Banner = { tone: "warn" | "accent" | "muted"; icon: Icon; spin?: boolean; text: string };
+/** "Next in line.", "2nd in line.", "3rd in line.", then "<n>th in line.". */
+function place(position: number): string {
+  if (position === 1) return "Next in line.";
+  const suffix = position === 2 ? "nd" : position === 3 ? "rd" : "th";
+  return `${position}${suffix} in line.`;
+}
 
-type Props = { run: RunView; conn: Conn; elapsed: number; rewriteOf?: string | null };
+/** Why a queued run waits, from its latest `run.queued` data; every run not from the CLI counts as web. */
+export function queuedText(queued: RunQueuedData): string {
+  const held = queued.held ?? [];
+  const n = held.length;
+  const cli = held.filter((h) => h.origin === "cli").length;
+  const web = n - cli;
+  const where = place(queued.position);
+  if (cli === n) {
+    return `Waiting for a free slot: ${n} of ${queued.limit} in use, all by CLI runs an agent started on this machine. ${where} This run starts as soon as one of them finishes or is cancelled.`;
+  }
+  const mix = [web && `${web} web`, cli && `${cli} CLI`].filter(Boolean).join(", ");
+  return `Waiting for a free slot: ${n} of ${queued.limit} in use (${mix}). ${where}`;
+}
 
-export function StatusBanner({ run, conn, elapsed, rewriteOf }: Props) {
+function Holder({ holder, now }: { holder: SlotHolder; now: number }) {
+  const cli = holder.origin === "cli";
+  const Glyph = cli ? TerminalWindow : Browser;
+  return (
+    <span className={css.holder}>
+      <Circle weight="fill" className={css.holderDot} aria-hidden="true" />
+      <span className={css.holderId}>{holder.run_id}</span>
+      <span className={css.holderOrigin}>
+        <Glyph aria-hidden="true" className={css.holderIcon} />
+        {cli ? "CLI" : "web"}
+      </span>
+      <span>· running {fmtElapsed((now - Date.parse(holder.started)) / 1000)}</span>
+    </span>
+  );
+}
+
+type Banner = {
+  tone: "warn" | "accent" | "muted";
+  icon: Icon;
+  spin?: boolean;
+  text: string;
+  holders?: SlotHolder[];
+};
+
+type Props = { run: RunView; conn: Conn; elapsed: number; now: number; rewriteOf?: string | null };
+
+export function StatusBanner({ run, conn, elapsed, now, rewriteOf }: Props) {
   const reconnected = useReconnected(conn);
   let banner: Banner | null = null;
   if (conn.state === "reconnecting") {
@@ -80,13 +128,19 @@ export function StatusBanner({ run, conn, elapsed, rewriteOf }: Props) {
       icon: StopCircle,
       text: `Cancelled at ${stage ? stageLabel(stage) : "start"} after ${fmtElapsed(elapsed)}. Completed stages are kept; nothing was written.`,
     };
+  } else if (run.status === "queued" && run.queued) {
+    banner = {
+      tone: "muted",
+      icon: HourglassMedium,
+      text: queuedText(run.queued),
+      holders: run.queued.held ?? [],
+    };
   } else if (run.status === "queued") {
-    const queued = run.queuePosition !== undefined ? " · queued, waiting for a free worker" : "";
     banner = {
       tone: "accent",
       icon: CircleNotch,
       spin: true,
-      text: `Connecting to ${socketOrigin()}${queued}…`,
+      text: `Connecting to ${socketOrigin()}…`,
     };
   } else if (
     rewriteOf &&
@@ -104,7 +158,16 @@ export function StatusBanner({ run, conn, elapsed, rewriteOf }: Props) {
   return (
     <div role="status" className={css.banner} data-tone={banner.tone}>
       <Glyph className={`${css.icon} ${banner.spin ? "spin" : ""}`} aria-hidden="true" />
-      <span className={css.text}>{banner.text}</span>
+      <span className={css.text}>
+        <span>{banner.text}</span>
+        {banner.holders && (
+          <span className={css.holders}>
+            {banner.holders.map((holder) => (
+              <Holder key={holder.run_id} holder={holder} now={now} />
+            ))}
+          </span>
+        )}
+      </span>
     </div>
   );
 }

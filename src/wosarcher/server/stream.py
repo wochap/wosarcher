@@ -8,8 +8,9 @@ whatever their `seq`.
 
 The run is looked up after the socket is accepted and subscribed to with no
 `await` in between, so a run that ends during the handshake is seen as ended.
-A run the manager remembers as ended without a run directory gets its
-terminal event and 1000.
+A run another process started is followed through `manager.follow` while its
+slot or ticket is live. A run the manager remembers as ended without a run
+directory gets its terminal event and 1000.
 """
 
 from datetime import UTC, datetime
@@ -51,7 +52,8 @@ async def events(socket: WebSocket, run_id: str, since: int = 0) -> None:
     active = state.manager.active(run_id)
     known = not run_id.startswith(".") and (state.runs_dir / run_id / "request.json").is_file()
     ended = state.manager.ended.get(run_id)
-    subscriber = active.tail.subscribe() if active else None
+    tail = active.tail if active else state.manager.follow(run_id) if known else None
+    subscriber = tail.subscribe() if tail else None
     if active is None and not known:
         if ended is not None:
             await Client(socket, since).send(ended.event)
@@ -60,16 +62,16 @@ async def events(socket: WebSocket, run_id: str, since: int = 0) -> None:
             await socket.close(CLOSE_UNKNOWN)
         return
     try:
-        await stream(socket, run_id, since, subscriber, state.manager.queue_position(run_id))
+        await stream(socket, run_id, since, subscriber, state.manager.queued_data(run_id) if tail else None)
     except WebSocketDisconnect:
         pass
     finally:
-        if active and subscriber:
-            active.tail.unsubscribe(subscriber)
+        if tail and subscriber:
+            tail.unsubscribe(subscriber)
 
 
 async def stream(
-    socket: WebSocket, run_id: str, since: int, subscriber: Subscriber | None, position: int | None
+    socket: WebSocket, run_id: str, since: int, subscriber: Subscriber | None, queued: RunQueuedData | None
 ) -> None:
     state = get_state(socket)
     client = Client(socket, since)
@@ -87,8 +89,8 @@ async def stream(
     now = datetime.now(UTC)
     if text:
         await client.send(ReportSnapshot(seq=0, run_id=run_id, ts=now, stage="write", data=ReportTextData(text=text)))
-    if position is not None:
-        await client.send(RunQueued(seq=0, run_id=run_id, ts=now, data=RunQueuedData(position=position)))
+    if queued is not None:
+        await client.send(RunQueued(seq=0, run_id=run_id, ts=now, data=queued))
     if subscriber is None or ended:
         await socket.close(1000)
         return

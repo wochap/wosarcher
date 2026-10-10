@@ -30,7 +30,13 @@ describe("FakeWebSocket", () => {
       code = c.code;
     };
     socket.open();
-    socket.emit({ type: "run.queued", seq: 0, run_id: "r1", ts: "", data: { position: 1 } });
+    socket.emit({
+      type: "run.queued",
+      seq: 0,
+      run_id: "r1",
+      ts: "",
+      data: { position: 1, limit: 1 },
+    });
     socket.serverClose(1000);
     expect(FakeWebSocket.last()).toBe(socket);
     expect(JSON.parse(seen[0]).type).toBe("run.queued");

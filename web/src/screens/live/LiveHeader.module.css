@@ -46,6 +46,11 @@
   animation: sx-pulse 1.6s infinite;
 }
 
+/* Waiting for a run slot: Queued, with no pulse. */
+.status[data-queued="true"] .dot {
+  animation: none;
+}
+
 .status[data-state="failed"],
 .status[data-state="interrupted"] {
   background: color-mix(in srgb, var(--color-danger) 22%, transparent);

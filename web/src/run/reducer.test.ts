@@ -25,8 +25,8 @@ describe("runReducer", () => {
 
   it("applies live-only events without moving lastSeq", () => {
     let state = fold([started]);
-    state = runReducer(state, ev(1, "run.queued", { position: 2 }));
-    expect(state.queuePosition).toBe(2);
+    state = runReducer(state, ev(1, "run.queued", { position: 2, limit: 1 }));
+    expect(state.queued?.position).toBe(2);
     state = runReducer(state, ev(1, "report.delta", { text: "Hello" }));
     state = runReducer(state, ev(1, "report.delta", { text: " there" }));
     expect(state.report).toBe("Hello there");

@@ -1,0 +1,14 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.danger {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}

@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
@@ -11,8 +12,10 @@ from fastapi.testclient import TestClient
 
 from wosarcher.auth import AuthStore
 from wosarcher.config import AuthConfig, ServerConfig, Settings
+from wosarcher.models import ServerSettings
 from wosarcher.ports import Exporter
 from wosarcher.server import create_app
+from wosarcher.store import settings as settings_file
 
 FAKE = Path(__file__).with_name("fake_wosarcher.py")
 # A loopback Host, so the guard's DNS-rebinding check passes without a password.
@@ -50,7 +53,9 @@ def make_app(runs_dir: Path, config_dir: Path, tmp_path: Path) -> MakeApp:
         auth: AuthConfig | None = None,
         exporter: Exporter | None = None,
     ) -> FastAPI:
-        server = ServerConfig(max_concurrent_runs=limit, static_dir=static_dir or tmp_path / "no-build")
+        if limit != 1:
+            settings_file.save(config_dir, ServerSettings(max_concurrent_runs=limit))
+        server = ServerConfig(static_dir=static_dir or tmp_path / "no-build")
         settings = Settings(server=server, auth=auth or AuthConfig())
         return create_app(settings, runs_dir, config_dir, COMMAND, grace=grace, exporter=exporter)
 
@@ -102,3 +107,11 @@ def events(runs_dir: Path, run_id: str) -> list[dict[str, Any]]:
 
 def argv(runs_dir: Path, run_id: str) -> list[str]:
     return json.loads((runs_dir / run_id / "argv.json").read_text())
+
+
+EXTERNAL = Path(__file__).with_name("external_run.py")
+
+
+def external(run_id: str, steps: int = 20) -> "subprocess.Popen[bytes]":
+    """A CLI run started next to the server (`external_run.py`); it waits for a slot like `wosarcher run`."""
+    return subprocess.Popen([sys.executable, str(EXTERNAL), run_id, str(steps)], stderr=subprocess.DEVNULL)

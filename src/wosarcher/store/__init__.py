@@ -15,11 +15,12 @@ from typing import cast
 
 from pydantic import BaseModel
 
-from wosarcher.config import Settings, redact
+from wosarcher.config import Settings, config_dir, redact
 from wosarcher.models import (
     LOOP_STAGES,
     STAGES,
     Event,
+    Origin,
     Plan,
     ReasoningOptions,
     ResearchDone,
@@ -36,6 +37,7 @@ from wosarcher.models import (
     make_event,
     parse_event,
 )
+from wosarcher.store.slots import Slots
 
 STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "load": ("files.jsonl",),
@@ -119,15 +121,17 @@ def free_name(name: Path, taken: set[Path]) -> Path:
 
 
 class RunStore:
-    def __init__(self, runs_dir: Path, cache_dir: Path) -> None:
+    def __init__(self, runs_dir: Path, cache_dir: Path, config: Path | None = None) -> None:
+        """`config`: the directory of `server-settings.json`, which holds the run slot limit."""
         self.runs_dir = runs_dir
         self.cache_dir = cache_dir
+        self.slots = Slots(runs_dir, config)
 
     @classmethod
     def from_settings(cls, settings: Settings, env: Mapping[str, str] = os.environ) -> "RunStore":
         runs = settings.run.runs_dir or xdg(env, "XDG_DATA_HOME", ".local/share") / "wosarcher" / "runs"
         cache = settings.run.cache_dir or xdg(env, "XDG_CACHE_HOME", ".cache") / "wosarcher"
-        return cls(runs, cache)
+        return cls(runs, cache, config_dir(env))
 
     def run_dir(self, run_id: str) -> Path:
         return self.runs_dir / run_id
@@ -150,6 +154,8 @@ class RunStore:
         settings: Settings,
         attachments: Sequence[str],
         run_id: str | None = None,
+        origin: Origin = "cli",
+        token_name: str | None = None,
     ) -> RunRecord:
         copies: list[tuple[Path, Path]] = []
         taken: set[Path] = set()
@@ -169,6 +175,8 @@ class RunStore:
             profile=profile,
             overrides=list(overrides),
             settings=redact(settings),
+            origin=origin,
+            token_name=token_name,
         )
         self.write_artifact(run_id, "request.json", record)
         return record
@@ -183,6 +191,8 @@ class RunStore:
         profile: str | None = None,
         until: Stage | None = None,
         run_id: str | None = None,
+        origin: Origin = "cli",
+        token_name: str | None = None,
     ) -> RunRecord:
         parent = self.read_record(parent_id)
         done = self.done_events(parent_id)
@@ -206,6 +216,8 @@ class RunStore:
             parent_run_id=parent_id,
             fork_from=from_stage,
             version=max(self.lineage_versions(parent_id)) + 1,
+            origin=origin,
+            token_name=token_name,
         )
         self.write_artifact(run_id, "request.json", record)
         for stage in earlier:
@@ -380,9 +392,9 @@ class RunStore:
     # Listing
 
     def status(self, run_id: str) -> RunStatus:
-        """From the last `run.*` event: started or queued without an end is `interrupted`."""
+        """From the last `run.*` event; with no terminal event, from the run slots."""
         runs = [event.type for event in self.read_events(run_id) if event.type.startswith("run.")]
-        return END_STATUS.get(runs[-1], "interrupted") if runs else "interrupted"
+        return END_STATUS.get(runs[-1] if runs else "") or self.slots.live(run_id) or "interrupted"
 
     def read_costs(self, run_id: str) -> RunCosts | None:
         path = self.run_dir(run_id) / "costs.json"
@@ -391,9 +403,10 @@ class RunStore:
     def summary(self, record: RunRecord) -> RunSummary:
         """The run as listed: status and duration from the log, cost from `costs.json`."""
         events = [event for event in self.read_events(record.run_id) if event.type.startswith("run.")]
-        status = END_STATUS.get(events[-1].type, "interrupted") if events else "interrupted"
+        ended_status = END_STATUS.get(events[-1].type) if events else None
+        status = ended_status or self.slots.live(record.run_id) or "interrupted"
         started = next((event.ts for event in events if event.type == "run.started"), None)
-        duration = (events[-1].ts - started).total_seconds() if started and status != "interrupted" else None
+        duration = (events[-1].ts - started).total_seconds() if started and ended_status else None
         costs = self.read_costs(record.run_id)
         research = self.research_done(record.run_id)
         gap_done = "gap" in self.done_events(record.run_id)
@@ -423,10 +436,13 @@ class RunStore:
             stop_reason=research.data.reason if research else None,
             model=model,
             reasoning=reasoning,
+            queue_position=self.slots.position(record.run_id) if status == "queued" else None,
+            origin=record.origin,
+            token_name=record.token_name,
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:
-        """Every run, newest first; directories starting with `.` (the server's `.queue/`) are skipped."""
+        """Every run, newest first; directories starting with `.` (`.queue/`, `.slots/`) are skipped."""
         if not self.runs_dir.is_dir():
             return []
         found = [

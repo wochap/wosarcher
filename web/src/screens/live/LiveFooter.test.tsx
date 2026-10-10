@@ -62,7 +62,7 @@ describe("StatusBanner", () => {
       ),
       lastSeq: 351,
     };
-    const banner = (c: Conn) => <StatusBanner run={run} conn={c} elapsed={30} />;
+    const banner = (c: Conn) => <StatusBanner run={run} conn={c} elapsed={30} now={0} />;
     const { rerender, container } = render(banner(conn("connected")));
     expect(container.textContent).toBe("");
     rerender(banner(conn("reconnecting", 1)));
@@ -83,14 +83,55 @@ describe("StatusBanner", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("names the queue and the page's socket origin while queued", () => {
-    const run = viewOf(
-      [{ seq: 0, type: "run.queued", data: { position: 1 }, run_id: RUN_ID, ts: "", stage: null }],
+  const queued = (origins: ("web" | "cli")[]) =>
+    viewOf(
+      [
+        {
+          seq: 0,
+          type: "run.queued",
+          data: {
+            position: 1,
+            limit: 2,
+            held: origins.map((origin, n) => ({
+              run_id: `r_8b9${n}`,
+              origin,
+              token_name: null,
+              started: "2026-01-01T10:00:00Z",
+            })),
+          },
+          run_id: RUN_ID,
+          ts: "",
+          stage: null,
+        },
+      ],
       RUN_ID,
     );
-    render(<StatusBanner run={run} conn={conn("connected")} elapsed={0} />);
+
+  it("explains the wait behind web and CLI runs (scenario queued)", () => {
+    const now = Date.parse("2026-01-01T10:01:05Z");
+    render(
+      <StatusBanner run={queued(["web", "cli"])} conn={conn("connected")} elapsed={0} now={now} />,
+    );
+    const text = screen.getByRole("status").textContent;
+    expect(text).toContain("Waiting for a free slot: 2 of 2 in use (1 web, 1 CLI). Next in line.");
+    expect(text).toContain("r_8b90web· running 1:05");
+    expect(text).toContain("r_8b91CLI· running 1:05");
+  });
+
+  it("explains the wait behind CLI runs only (scenario queued-cli)", () => {
+    render(
+      <StatusBanner run={queued(["cli", "cli"])} conn={conn("connected")} elapsed={0} now={0} />,
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "Waiting for a free slot: 2 of 2 in use, all by CLI runs an agent started on this machine. Next in line. This run starts as soon as one of them finishes or is cancelled.",
+    );
+  });
+
+  it("names the page's socket origin while connecting", () => {
+    const run = { ...viewOf([], RUN_ID), status: "queued" as const };
+    render(<StatusBanner run={run} conn={conn("connected")} elapsed={0} now={0} />);
     expect(screen.getByRole("status").textContent).toBe(
-      `Connecting to ws://${window.location.host} · queued, waiting for a free worker…`,
+      `Connecting to ws://${window.location.host}…`,
     );
   });
 
@@ -99,7 +140,9 @@ describe("StatusBanner", () => {
       upTo(all, (e) => e.type === "stage.started" && e.stage === "plan"),
       RUN_ID,
     );
-    render(<StatusBanner run={run} conn={conn("connected")} elapsed={0} rewriteOf="r_8c21" />);
+    render(
+      <StatusBanner run={run} conn={conn("connected")} elapsed={0} now={0} rewriteOf="r_8c21" />,
+    );
     expect(screen.getByRole("status").textContent).toBe(
       "Rewrite of r_8c21: sources and passages are reused, only the write stage runs.",
     );

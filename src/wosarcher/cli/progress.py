@@ -42,6 +42,8 @@ class ProgressView:
         self.rows: dict[Stage, Row] = {stage: Row() for stage in STAGES if rounds > 1 or stage != "gap"}
         self.fetched = 0
         self.failed = 0
+        self.notice = ""
+        """A line above the stage rows (the wait for a run slot)."""
         self.live = Live(self.table(), console=console, transient=False, auto_refresh=False)
 
     def __enter__(self) -> "ProgressView":
@@ -53,6 +55,10 @@ class ProgressView:
 
     def __call__(self, event: Event) -> None:
         self.update(event)
+        self.live.update(self.table(), refresh=True)
+
+    def show_notice(self, text: str) -> None:
+        self.notice = text
         self.live.update(self.table(), refresh=True)
 
     def update(self, event: Event) -> None:
@@ -100,7 +106,7 @@ class ProgressView:
                 pass
 
     def table(self) -> Table:
-        table = Table("stage", "state", "counters", "device", "provider")
+        table = Table("stage", "state", "counters", "device", "provider", title=self.notice or None)
         for stage, row in self.rows.items():
             table.add_row(stage, row.state, row.counters, row.device, row.provider)
         return table

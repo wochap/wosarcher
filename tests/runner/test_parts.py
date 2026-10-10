@@ -51,7 +51,7 @@ def test_log_before_publish(run: tuple[RunStore, str]) -> None:
 
     log = EventLog(store, run_id, [listener])
     for _ in range(3):
-        log.emit("run.queued", None, RunQueuedData(position=0))
+        log.emit("run.queued", None, RunQueuedData(position=0, limit=1))
     assert [e.seq for e in store.read_events(run_id)] == [1, 2, 3]
     assert seen == [1, 2, 3]
 
@@ -60,7 +60,7 @@ def test_deltas_not_logged(run: tuple[RunStore, str]) -> None:
     store, run_id = run
     received: list[object] = []
     log = EventLog(store, run_id, [received.append])
-    log.emit("run.queued", None, RunQueuedData(position=0))
+    log.emit("run.queued", None, RunQueuedData(position=0, limit=1))
     deltas = [log.live("report.delta", "write", ReportTextData(text=str(n))) for n in range(40)]
     assert len(received) == 41
     assert all(delta.seq == 1 for delta in deltas)
@@ -81,7 +81,7 @@ def test_progress_throttled(run: tuple[RunStore, str]) -> None:
 
 def test_snapshot(run: tuple[RunStore, str]) -> None:
     store, run_id = run
-    EventLog(store, run_id).emit("run.queued", None, RunQueuedData(position=0))
+    EventLog(store, run_id).emit("run.queued", None, RunQueuedData(position=0, limit=1))
     store.append_report(run_id, "Intro")
     snapshot = snapshot_event(store, run_id)
     assert (snapshot.data.text, snapshot.seq, snapshot.type) == ("Intro", 1, "report.snapshot")

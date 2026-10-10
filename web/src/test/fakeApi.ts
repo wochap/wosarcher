@@ -11,6 +11,7 @@ import type {
   RunSummary,
   ServerSettings,
   SessionInfo,
+  SlotState,
   SourceView,
   TokenInfo,
 } from "../api/types";
@@ -26,6 +27,7 @@ export type FakeData = {
   /** Source views by run id and source id; a missing one answers 404. */
   sources: Record<string, Record<string, SourceView>>;
   settings: ServerSettings;
+  slots: SlotState;
   profiles: ProfileInfo[];
   depths: DepthInfo[];
   /** What `listModels` answers. */
@@ -48,6 +50,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     artifacts: {},
     sources: {},
     settings: fixtures.settings,
+    slots: fixtures.slots,
     profiles: fixtures.profiles,
     depths: fixtures.depths,
     models: [],
@@ -145,6 +148,10 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       record("putSettings", settings);
       data.settings = structuredClone(settings);
       return settings;
+    },
+    async getSlots() {
+      record("getSlots");
+      return structuredClone({ ...data.slots, limit: data.settings.max_concurrent_runs });
     },
     async listProfiles() {
       record("listProfiles");

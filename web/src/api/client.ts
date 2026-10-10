@@ -11,6 +11,7 @@ import type {
   RunSummary,
   ServerSettings,
   SessionInfo,
+  SlotState,
   SourceView,
   TokenCreated,
   TokenInfo,
@@ -41,6 +42,7 @@ export interface ApiClient {
   source(runId: string, sourceId: string): Promise<SourceView>;
   getSettings(): Promise<ServerSettings>;
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
+  getSlots(): Promise<SlotState>;
   listProfiles(): Promise<ProfileInfo[]>;
   listDepths(): Promise<DepthInfo[]>;
   /** The model IDs the profile's LLM endpoint lists; empty when it lists none. */
@@ -159,6 +161,7 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     source: (id, sourceId) => json("GET", `${run(id)}/sources/${encodeURIComponent(sourceId)}`),
     getSettings: () => json("GET", "/settings"),
     putSettings: (settings) => json("PUT", "/settings", settings),
+    getSlots: () => json("GET", "/slots"),
     listProfiles: () => json("GET", "/profiles"),
     listDepths: () => json("GET", "/depths"),
     listModels: async (profile) =>

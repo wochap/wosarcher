@@ -13,6 +13,7 @@ import { failure } from "../test/fixtures/failure";
 import { finished } from "../test/fixtures/finished";
 import { live } from "../test/fixtures/live";
 import { loading } from "../test/fixtures/loading";
+import { liveApi, liveCli, queued, queuedCli } from "../test/fixtures/origins";
 import { reconnecting } from "../test/fixtures/reconnecting";
 import { type Fixture, otherRuns, sourceViews, TRUNCATED_SOURCE } from "../test/fixtures/sample";
 import { versions } from "../test/fixtures/versions";
@@ -31,6 +32,8 @@ type Scenario = {
    * of the card's (`loading` never answers).
    */
   source?: string;
+  /** Presses the button with this exact text once it is shown. */
+  press?: string;
 };
 
 const SCENARIOS: Record<string, Scenario> = {
@@ -47,6 +50,11 @@ const SCENARIOS: Record<string, Scenario> = {
   empty: { screen: "live", data: { runs: otherRuns } },
   live,
   loading,
+  queued,
+  "queued-cli": queuedCli,
+  "live-cli": liveCli,
+  "cancel-cli": { ...liveCli, press: "Cancel" },
+  "live-api": liveApi,
   reconnecting,
   failure,
   cancelled,
@@ -69,6 +77,22 @@ function useOpenSource(scenario: Scenario | undefined) {
       if (!card) return;
       clearInterval(timer);
       card.click();
+    }, 100);
+    return () => clearInterval(timer);
+  }, [scenario]);
+}
+
+/** Presses the scenario's button once it is shown. */
+function usePress(scenario: Scenario | undefined) {
+  useEffect(() => {
+    if (!scenario?.press) return;
+    const timer = setInterval(() => {
+      const button = [...document.querySelectorAll("button")].find(
+        (b) => b.textContent === scenario.press,
+      );
+      if (!button) return;
+      clearInterval(timer);
+      button.click();
     }, 100);
     return () => clearInterval(timer);
   }, [scenario]);
@@ -173,6 +197,7 @@ export function Preview({ name }: { name: string }) {
     };
   });
   useOpenSource(scenario);
+  usePress(scenario);
   if (!setup) {
     return (
       <p>

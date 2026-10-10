@@ -20,6 +20,19 @@ async function open(api = fakeApi()) {
 }
 
 describe("HistoryScreen", () => {
+  it("labels CLI and API runs before the query, and web runs not at all", async () => {
+    await open();
+    const cli = within(
+      rowOf("What changed in the Python 3.13 free-threaded build for C extensions?"),
+    ).getByTitle("Started from the wosarcher CLI on this machine");
+    expect(cli.textContent).toBe("cli");
+    const api = within(
+      rowOf("Embedding models under 500M params ranked on MTEB retrieval"),
+    ).getByTitle("Started through the API with token “ci-runner”");
+    expect(api.textContent).toBe("api · ci-runner");
+    expect(within(rowOf("Running")).queryByTitle(/^Started/)).toBeNull();
+  });
+
   it("lists runs newest first from one GET /api/runs", async () => {
     const api = await open();
     expect(screen.getByText("8")).toBeTruthy();

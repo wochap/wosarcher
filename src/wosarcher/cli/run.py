@@ -1,6 +1,12 @@
 """`wosarcher run`, `wosarcher fork`, and `wosarcher runs`.
 
-Exit status: 0 done, 1 failed, 130 cancelled, 2 invalid arguments or configuration.
+Exit status: 0 done, 1 failed, 130 cancelled, 2 invalid arguments or configuration, 75 no free run
+slot with `--no-wait`.
+
+A run takes a slot in the shared run queue (`store/slots.py`) after its
+directory exists and before its first stage. The server starts its runs with
+the slot already held (`--slot-fd`) and with their origin (`--origin`,
+`--token-name`).
 """
 
 import asyncio
@@ -10,7 +16,7 @@ import os
 import signal
 import sys
 from collections.abc import Callable
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from typing import Annotated, Literal, get_args
 
 import httpx
@@ -30,22 +36,29 @@ from wosarcher.models import (
     STAGES,
     Context,
     Effort,
+    Origin,
     Report,
+    RunCancelledData,
     RunFailed,
     RunOutput,
     RunRecord,
     RunRequest,
     RunSummary,
+    SlotEntry,
     Sources,
     Stage,
     search_language,
 )
 from wosarcher.runner import Runner
 from wosarcher.runner.events import Listener
-from wosarcher.store import RunStore, RunStoreError
+from wosarcher.store import RunStore, RunStoreError, new_run_id
+from wosarcher.store.slots import Held
 
 Status = Literal["done", "failed", "cancelled"]
 EXIT: dict[Status, int] = {"done": 0, "failed": 1, "cancelled": 130}
+NO_SLOT = 75
+"""`EX_TEMPFAIL`: try again later."""
+SLOT_POLL = 0.5
 BLOCKS = ("search", "fetch", "prefilter", "score", "llm")
 
 UntilOption = Annotated[str | None, typer.Option("--until", help=f"Stop after this stage: {', '.join(STAGES)}.")]
@@ -58,6 +71,12 @@ LanguageOption = Annotated[str | None, typer.Option("--language", help="Report l
 MarkerOption = Annotated[str | None, typer.Option("--citation-marker", help="numeric, superscript, or author-year.")]
 StyleOption = Annotated[str | None, typer.Option("--reference-style", help="APA, MLA, Chicago, or IEEE.")]
 FORMATS = ("report", "answer")
+NoWaitOption = Annotated[
+    bool, typer.Option("--no-wait", help=f"Exit with {NO_SLOT} instead of waiting when no run slot is free.")
+]
+SlotFdOption = Annotated[int | None, typer.Option("--slot-fd", hidden=True)]
+OriginOption = Annotated[str, typer.Option("--origin", hidden=True)]
+TokenNameOption = Annotated[str | None, typer.Option("--token-name", hidden=True)]
 
 
 def format_option(value: str | None) -> str | None:
@@ -179,14 +198,24 @@ def ledger_for(settings: Settings) -> UsageLedger:
     return UsageLedger(prices)
 
 
+async def watch_cancel(store: RunStore, run_id: str, task: asyncio.Task[Status]) -> None:
+    """Cancel the run when another process asks for it (the server cannot signal this process)."""
+    while True:
+        await asyncio.sleep(SLOT_POLL)
+        if store.slots.cancel_requested(run_id):
+            task.cancel()
+            return
+
+
 async def execute(
     store: RunStore, settings: Settings, run_id: str, until: Stage | None, listeners: list[Listener]
 ) -> Status:
-    """Run in a task that SIGTERM and SIGINT cancel; return the run's status."""
+    """Run in a task that SIGTERM, SIGINT, and a cancel request cancel; return the run's status."""
     async with httpx.AsyncClient() as http:
         ledger = ledger_for(settings)
         runner = Runner(store, settings, building.build(settings, http, ledger), ledger, listeners)
         task = asyncio.create_task(runner.run(run_id, until))
+        watcher = asyncio.create_task(watch_cancel(store, run_id, task))
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, task.cancel)
@@ -195,8 +224,65 @@ async def execute(
         except asyncio.CancelledError:
             return "cancelled"
         finally:
+            watcher.cancel()
             for sig in (signal.SIGTERM, signal.SIGINT):
                 loop.remove_signal_handler(sig)
+
+
+async def wait_for_slot(store: RunStore, entry: SlotEntry, notify: Callable[[str], None]) -> Held | None:
+    """Hold a queue place until a slot is granted; None when SIGINT, SIGTERM, or a cancel request ends the wait."""
+    ticket = store.slots.ticket(entry)
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+    try:
+        position: int | None = None
+        while (held := store.slots.grant(ticket)) is None:
+            if stop.is_set() or store.slots.cancel_requested(entry.run_id):
+                ticket.close()
+                return None
+            now = store.slots.position(entry.run_id)
+            if now is not None and now != position:
+                position = now
+                notify(f"waiting for a free run slot (position {position})")
+            with suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), SLOT_POLL)
+        notify("")
+        return held
+    except BaseException:
+        ticket.close()
+        raise
+    finally:
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.remove_signal_handler(sig)
+
+
+async def wait_and_execute(
+    store: RunStore,
+    settings: Settings,
+    record: RunRecord,
+    until: Stage | None,
+    held: Held | None,
+    view: ProgressView | None,
+    listeners: list[Listener],
+) -> Status:
+    def notify(text: str) -> None:
+        if view is not None:
+            view.show_notice(text)
+        elif text:
+            typer.echo(text, err=True)
+
+    if held is None:
+        entry = SlotEntry(run_id=record.run_id, origin=record.origin, token_name=record.token_name)
+        held = await wait_for_slot(store, entry, notify)
+    if held is None:
+        store.append_event(record.run_id, "run.cancelled", None, RunCancelledData(stage=None))
+        return "cancelled"
+    try:
+        return await execute(store, settings, record.run_id, until, listeners)
+    finally:
+        held.close()
 
 
 def diagnostics(view_shown: bool) -> list[Listener]:
@@ -214,14 +300,41 @@ def diagnostics(view_shown: bool) -> list[Listener]:
     return [stderr_listener(logger)]
 
 
-def start(store: RunStore, settings: Settings, record: RunRecord, until: Stage | None, as_json: bool) -> None:
+def take_slot(
+    store: RunStore, run_id: str | None, no_wait: bool, slot_fd: int | None
+) -> tuple[str | None, Held | None]:
+    """The run ID and the slot to run in: inherited from the server, taken at once (`--no-wait`), or None to wait."""
+    if slot_fd is not None:
+        assert run_id is not None
+        return run_id, Held.inherit(store.slots, run_id, slot_fd)
+    if not no_wait:
+        return run_id, None
+    run_id = run_id or new_run_id()
+    held = store.slots.try_take(SlotEntry(run_id=run_id, origin="cli"))
+    if held is None:
+        state = store.slots.state()
+        raise fail(RuntimeError(f"no free run slot ({len(state.held)} of {state.limit} in use)"), NO_SLOT)
+    return run_id, held
+
+
+def origin_option(origin: str, token_name: str | None) -> tuple[Origin, str | None]:
+    if origin not in get_args(Origin):
+        raise fail(ValueError(f"--origin must be one of: {', '.join(get_args(Origin))}"), 2)
+    return origin, token_name if origin == "api" else None  # pyright: ignore[reportReturnType]
+
+
+def start(
+    store: RunStore, settings: Settings, record: RunRecord, until: Stage | None, as_json: bool, held: Held | None
+) -> None:
     err = Console(stderr=True)
     with ExitStack() as stack:
         listeners: list[Listener] = []
+        view = None
         if err.is_terminal and not as_json:
-            listeners.append(stack.enter_context(ProgressView(err, settings.research.rounds)))
+            view = stack.enter_context(ProgressView(err, settings.research.rounds))
+            listeners.append(view)
         listeners.extend(diagnostics(view_shown=bool(listeners)))
-        status = asyncio.run(execute(store, settings, record.run_id, until, listeners))
+        status = asyncio.run(wait_and_execute(store, settings, record, until, held, view, listeners))
     output(store, record.run_id, status, as_json)
     raise typer.Exit(EXIT[status])
 
@@ -305,6 +418,10 @@ def run(
     write_thinking: WriteThinkingOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
+    no_wait: NoWaitOption = False,
+    slot_fd: SlotFdOption = None,
+    origin: OriginOption = "cli",
+    token_name: TokenNameOption = None,
 ) -> None:
     """Research QUERY and write a report (or stop early with --until)."""
     stop = stage_option(until)
@@ -336,13 +453,22 @@ def run(
     overrides = [*(set_ or []), *flags, *research, *domains, *thinking]
     env = os.environ
     settings = checked(lambda: resolve(profile, overrides, env, depth))
+    source, token = origin_option(origin, token_name)
     store = RunStore.from_settings(settings)
     try:
         request = RunRequest(query=query, sources=sources, until=stop, depth=depth)  # pyright: ignore[reportArgumentType]
-        record = store.create(request, select_profile(profile, env), overrides, settings, attach or [], run_id)
-    except (ValidationError, RunStoreError) as error:
+    except ValidationError as error:
         raise fail(error, 2) from None
-    start(store, settings, record, stop, as_json)
+    run_id, held = take_slot(store, run_id, no_wait, slot_fd)
+    try:
+        record = store.create(
+            request, select_profile(profile, env), overrides, settings, attach or [], run_id, source, token
+        )
+    except RunStoreError as error:
+        if held is not None:
+            held.close()
+        raise fail(error, 2) from None
+    start(store, settings, record, stop, as_json, held)
 
 
 def fork(
@@ -365,11 +491,16 @@ def fork(
     write_thinking: WriteThinkingOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
+    no_wait: NoWaitOption = False,
+    slot_fd: SlotFdOption = None,
+    origin: OriginOption = "cli",
+    token_name: TokenNameOption = None,
 ) -> None:
     """Copy a run up to --from and run the rest with the saved configuration plus new overrides."""
     first = stage_option(from_)
     assert first is not None
     stop = stage_option(until)
+    source, token = origin_option(origin, token_name)
     flags = writing_overrides(
         tone=tone,
         tone_instructions=tone_instructions,
@@ -404,11 +535,16 @@ def fork(
             typer.echo(f"warning: saved settings dropped: {', '.join(dropped)}", err=True)
     place = {"runs_dir": here.run.runs_dir, "cache_dir": here.run.cache_dir}
     settings = settings.model_copy(update={"run": settings.run.model_copy(update=place)})
+    run_id, held = take_slot(store, run_id, no_wait, slot_fd)
     try:
-        record = store.fork(parent_id, first, new, settings, profile=profile, until=stop, run_id=run_id)
+        record = store.fork(
+            parent_id, first, new, settings, profile=profile, until=stop, run_id=run_id, origin=source, token_name=token
+        )
     except RunStoreError as error:
+        if held is not None:
+            held.close()
         raise fail(error, 2) from None
-    start(store, settings, record, stop, as_json)
+    start(store, settings, record, stop, as_json, held)
 
 
 def runs(
@@ -423,8 +559,10 @@ def runs(
     if as_json:
         typer.echo(TypeAdapter(list[RunSummary]).dump_json(found, indent=2).decode())
         return
-    table = Table("run", "created", "status", "version", "parent", "query")
+    table = Table("run", "created", "status", "origin", "version", "parent", "query")
     for item in found:
         created = f"{item.created:%Y-%m-%d %H:%M}"
-        table.add_row(item.run_id, created, item.status, str(item.version), item.parent_run_id or "", item.query)
+        origin = f"api · {item.token_name}" if item.origin == "api" and item.token_name else item.origin
+        row = (item.run_id, created, item.status, origin, str(item.version), item.parent_run_id or "", item.query)
+        table.add_row(*row)
     Console(highlight=False).print(table)

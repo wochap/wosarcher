@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { RunDetail, RunEvent } from "../../api/types";
 import { ev } from "../../test/events";
@@ -71,6 +71,31 @@ describe("LiveHeader", () => {
   it("shows no toggle for a short question", () => {
     header(asking(120).events);
     expect(screen.queryByRole("button", { name: /Show full question/ })).toBeNull();
+  });
+
+  it("shows the origin label after the depth tag for CLI and API runs", () => {
+    const events = upTo(all, (e) => e.type === "stage.started");
+    header(events, false, { ...summary({ origin: "cli" }), last_seq: 1 } as RunDetail);
+    const cli = screen.getByTitle("Started from the wosarcher CLI on this machine");
+    expect(cli.textContent).toBe("cli");
+    cleanup();
+    header(events, false, {
+      ...summary({ origin: "api", token_name: "ci-runner" }),
+      last_seq: 1,
+    } as RunDetail);
+    expect(screen.getByTitle("Started through the API with token “ci-runner”").textContent).toBe(
+      "api · ci-runner",
+    );
+    cleanup();
+    header(events, false, { ...summary({ origin: "web" }), last_seq: 1 } as RunDetail);
+    expect(screen.queryByTitle(/^Started/)).toBeNull();
+  });
+
+  it("shows Queued without a pulse once run.queued arrives", () => {
+    const queued = ev(0, "run.queued", { position: 1, limit: 1, held: [] });
+    header([{ ...queued, run_id: RUN_ID }]);
+    const tag = screen.getByText("Queued");
+    expect(tag.dataset.queued).toBe("true");
   });
 
   it("shows Connecting with Cancel while queued", () => {

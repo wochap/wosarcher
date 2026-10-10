@@ -50,7 +50,7 @@ PASSAGE = KeptPassage(
     chunk_id="c", source_id="s", title="T", uri="https://x.test", heading_path=["A"], text="t", display=0.8
 )
 DATA: dict[str, BaseModel] = {
-    "run.queued": RunQueuedData(position=2),
+    "run.queued": RunQueuedData(position=2, limit=1),
     "run.started": RunStartedData(query="q", profile="p", parent_run_id=None, version=1, until="select"),
     "run.done": RunDoneData(until=None, totals=UsageTotals(input_tokens=3, cost=0.5)),
     "run.failed": RunFailedData(stage="plan", error="boom"),
@@ -121,6 +121,8 @@ def test_run_contracts_round_trip() -> None:
         parent_run_id="p",
         fork_from="write",
         version=2,
+        origin="api",
+        token_name="ci-runner",
     )
     output = RunOutput(
         run_id="r",
@@ -130,6 +132,12 @@ def test_run_contracts_round_trip() -> None:
     )
     for value in (request, record, output):
         assert type(value).model_validate_json(value.model_dump_json()) == value
+
+
+def test_record_without_origin_reads_as_web() -> None:
+    data = {"run_id": "r", "created_at": TS.isoformat(), "request": {"query": "q"}, "profile": "p", "settings": {}}
+    record = RunRecord.model_validate(data)
+    assert (record.origin, record.token_name) == ("web", None)
 
 
 def test_empty_query_rejected() -> None:

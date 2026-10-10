@@ -116,7 +116,7 @@ def test_items_with_unicode_line_separators(store: RunStore, separator: str) -> 
 def test_seq_continues_in_new_store(store: RunStore) -> None:
     run_id = create(store)
     for _ in range(41):
-        store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+        store.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1))
     other = RunStore(store.runs_dir, store.cache_dir)
     event = other.append_event(run_id, "run.failed", None, RunFailedData(stage=None, error="crashed"))
     assert event.seq == 42
@@ -277,17 +277,17 @@ def append_raw(store: RunStore, run_id: str, text: str) -> None:
 
 def test_read_events_skips_bad_lines(store: RunStore) -> None:
     run_id = create(store)
-    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1))
     append_raw(store, run_id, "not json\n")
     append_raw(store, run_id, '{"seq": 2, "run_id": "r", "ts": "2026-01-01T00:00:00Z", "type": "stage.paused"}\n')
-    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1))
     assert [e.seq for e in store.read_events(run_id)] == [1, 2]
 
 
 def nine_and_half(store: RunStore) -> str:
     run_id = create(store)
     for _ in range(9):
-        store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+        store.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1))
     append_raw(store, run_id, '{"seq": 10, "run_id": "r", "ts": "2026-01')
     return run_id
 
@@ -298,7 +298,7 @@ def test_tail_seq_ignores_partial_line(store: RunStore) -> None:
 
 def test_tail_seq_long_line(store: RunStore) -> None:
     run_id = create(store)
-    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0))
+    store.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1))
     store.append_event(run_id, "run.failed", None, RunFailedData(stage=None, error="x" * 21000))
     assert store.tail_seq(run_id) == 2
 
@@ -306,7 +306,10 @@ def test_tail_seq_long_line(store: RunStore) -> None:
 def test_seq_across_two_stores(store: RunStore) -> None:
     run_id = create(store)
     other = RunStore(store.runs_dir, store.cache_dir)
-    seqs = [s.append_event(run_id, "run.queued", None, RunQueuedData(position=0)).seq for s in (store, other, store)]
+    seqs = [
+        s.append_event(run_id, "run.queued", None, RunQueuedData(position=0, limit=1)).seq
+        for s in (store, other, store)
+    ]
     assert seqs == [1, 2, 3]
 
 

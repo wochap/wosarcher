@@ -17,6 +17,7 @@ from wosarcher.config import CUSTOM_DEPTH, RESEARCH_KEYS, depth_values, load_dep
 from wosarcher.models import (
     Attachment,
     ForkCreate,
+    Origin,
     RunCreate,
     RunRecord,
     ServerSettings,
@@ -54,6 +55,8 @@ class StagedRun(RunCreate):
     parent: str | None = None
     from_stage: Stage | None = None
     version: int = 1
+    origin: Origin = "web"
+    token_name: str | None = None
 
 
 def queue_dir(runs_dir: Path) -> Path:
@@ -127,6 +130,8 @@ def stage_run(
     defaults: ServerSettings,
     profile: str,
     own: Collection[str] = (),
+    origin: Origin = "web",
+    token_name: str | None = None,
 ) -> StagedRun:
     """A new run: global settings, then the depth preset's words, below the request's sources and writing.
 
@@ -145,11 +150,15 @@ def stage_run(
         writing_options=writing,
         writing_flags=writing.model_dump(),
         domain_flags=domain_lists(request, defaults, own),
+        origin=origin,
+        token_name=token_name,
     )
     return write(runs_dir, staged, uploads)
 
 
-def stage_fork(runs_dir: Path, parent: RunRecord, request: ForkCreate) -> StagedRun:
+def stage_fork(
+    runs_dir: Path, parent: RunRecord, request: ForkCreate, origin: Origin = "web", token_name: str | None = None
+) -> StagedRun:
     """A fork keeps the parent's configuration; only the request's writing and `set` change it."""
     writing = WritingOptions.model_validate(parent.settings.get("write", {}))
     staged = StagedRun(
@@ -170,11 +179,15 @@ def stage_fork(runs_dir: Path, parent: RunRecord, request: ForkCreate) -> Staged
         parent=parent.run_id,
         from_stage=request.from_stage,
         version=parent.version + 1,
+        origin=origin,
+        token_name=token_name,
     )
     return write(runs_dir, staged, [])
 
 
-def stage_rerun(runs_dir: Path, original: RunRecord) -> StagedRun:
+def stage_rerun(
+    runs_dir: Path, original: RunRecord, origin: Origin = "web", token_name: str | None = None
+) -> StagedRun:
     """The original request and saved overrides, and a copy of its attachments; no global settings."""
     staged = StagedRun(
         query=original.request.query,
@@ -189,6 +202,8 @@ def stage_rerun(runs_dir: Path, original: RunRecord) -> StagedRun:
         resolved_sources=original.request.sources,
         resolved_profile=original.profile,
         writing_options=WritingOptions.model_validate(original.settings.get("write", {})),
+        origin=origin,
+        token_name=token_name,
     )
     path = staging_dir(runs_dir, staged.run_id)
     attachments = runs_dir / original.run_id / "attachments"
@@ -282,10 +297,17 @@ def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[
     return argv + attach_flags(path) + [flag for value in staged.set for flag in ("--set", value)]
 
 
+def origin_flags(staged: StagedRun) -> list[str]:
+    token = ["--token-name", staged.token_name] if staged.token_name else []
+    return ["--origin", staged.origin, *token]
+
+
 def build_argv(command: list[str], staged: StagedRun, runs_dir: Path) -> list[str]:
     path = staging_dir(runs_dir, staged.run_id)
     if staged.kind == "fork":
-        return build_fork_argv(command, staged)
-    if staged.kind == "rerun":
-        return build_rerun_argv(command, staged, path)
-    return build_run_argv(command, staged, path)
+        argv = build_fork_argv(command, staged)
+    elif staged.kind == "rerun":
+        argv = build_rerun_argv(command, staged, path)
+    else:
+        argv = build_run_argv(command, staged, path)
+    return argv + origin_flags(staged)

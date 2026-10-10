@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { RunDetail, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
+import { OriginLabel } from "../../components/OriginLabel";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { ThinkingTag } from "../../components/ThinkingTag";
 import { recipeOf } from "../../run/format";
@@ -61,9 +62,9 @@ export function LiveHeader({
     <header className={css.header}>
       <div className={css.main}>
         <div className={css.line}>
-          <span className={`tag ${css.status}`} data-state={status}>
+          <span className={`tag ${css.status}`} data-state={status} data-queued={!!run.queued}>
             <Circle weight="fill" className={css.dot} aria-hidden="true" />
-            {LABELS[status]}
+            {status === "queued" && run.queued ? "Queued" : LABELS[status]}
           </span>
           <DepthTag depth={detail?.depth} />
           <ThinkingTag reasoning={detail?.reasoning} />
@@ -73,6 +74,7 @@ export function LiveHeader({
               rewrite of {parent}
             </span>
           )}
+          <OriginLabel origin={detail?.origin} tokenName={detail?.token_name} />
           <span className={css.id}>{run.runId}</span>
           <span>{meta.join(" · ")}</span>
         </div>

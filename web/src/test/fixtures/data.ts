@@ -8,6 +8,7 @@ import type {
   RunSummary,
   ServerSettings,
   SessionInfo,
+  SlotState,
   TokenInfo,
   WritingOptions,
 } from "../../api/types";
@@ -26,6 +27,17 @@ export const settings: ServerSettings = {
   writing,
   sources: "both",
   domains: { allow: [], block: [] },
+  max_concurrent_runs: 2,
+};
+
+/** Slots as in prototype scenario `settings`: a web run and a CLI run hold both, one waits. */
+export const slots: SlotState = {
+  limit: 2,
+  held: [
+    { run_id: "r_8b91", origin: "web", token_name: null, started: "2026-01-01T10:00:00Z" },
+    { run_id: "r_8b90", origin: "cli", token_name: null, started: "2026-01-01T10:01:00Z" },
+  ],
+  queued: [{ run_id: "r_8b92", origin: "api", token_name: "ci-runner" }],
 };
 
 function run(
@@ -83,7 +95,7 @@ export const runs: RunSummary[] = [
     "What changed in the Python 3.13 free-threaded build for C extensions?",
     "2026-10-02T16:40:00Z",
     "done",
-    { until: "select", duration_s: 108, cost: 0.003 },
+    { until: "select", duration_s: 108, cost: 0.003, origin: "cli" },
   ),
   run(
     "r_7e2c",
@@ -111,7 +123,7 @@ export const runs: RunSummary[] = [
     "Embedding models under 500M params ranked on MTEB retrieval",
     "2026-09-25T18:20:00Z",
     "interrupted",
-    { until: "select", duration_s: 65, cost: 0.002 },
+    { until: "select", duration_s: 65, cost: 0.002, origin: "api", token_name: "ci-runner" },
   ),
 ];
 

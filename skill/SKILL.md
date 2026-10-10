@@ -121,8 +121,13 @@ provider answers; run it when a run fails with a provider error.
 Cite a passage as `[n]` and resolve its source through `source_id`. A long
 run can be followed in `<run_dir>/events.jsonl`.
 
+Runs share one queue with the web UI: when every run slot is in use, the
+command waits and prints `waiting for a free run slot (position <n>)` to
+standard error. Add `--no-wait` to fail at once instead.
+
 Exit codes: `0` done, `1` failed (read `error`), `2` invalid arguments or
-configuration (fix the command), `130` cancelled.
+configuration (fix the command), `75` no free run slot with `--no-wait`
+(try again later), `130` cancelled (also from the web UI).
 
 ```json
 {

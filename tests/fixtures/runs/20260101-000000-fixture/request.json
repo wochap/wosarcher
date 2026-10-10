@@ -194,7 +194,6 @@
     "server": {
       "host": "127.0.0.1",
       "port": 8765,
-      "max_concurrent_runs": 1,
       "static_dir": "web/dist",
       "log_level": "info",
       "forwarded_allow_ips": [

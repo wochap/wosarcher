@@ -4,7 +4,7 @@ import os
 import shutil
 from typing import Annotated, get_args
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import ValidationError
 
@@ -14,6 +14,7 @@ from wosarcher.models import (
     Attachment,
     ExportFormat,
     ForkCreate,
+    Origin,
     ReasoningOptions,
     Report,
     RunCreate,
@@ -25,12 +26,13 @@ from wosarcher.models import (
     RunSummary,
 )
 from wosarcher.ports import ExportError
-from wosarcher.server import settings as global_settings
 from wosarcher.server import staging
 from wosarcher.server.errors import RouteError, invalid, not_found
+from wosarcher.server.guard import Auth
 from wosarcher.server.manager import ActiveRun
 from wosarcher.server.staging import StagedRun, StagingError
 from wosarcher.server.state import ServerState, get_state
+from wosarcher.store import settings as global_settings
 
 router = APIRouter(prefix="/api/runs")
 State = Annotated[ServerState, Depends(get_state)]
@@ -60,6 +62,14 @@ EXPORT_TYPES: dict[ExportFormat, str] = {
 }
 
 
+def origin_of(request: Request) -> tuple[Origin, str | None]:
+    """`api` with the token's name for a request with an API token, else `web`."""
+    auth: Auth | None = getattr(request.state, "auth", None)
+    if auth is not None and auth.method == "token" and auth.token is not None:
+        return "api", auth.token.name
+    return "web", None
+
+
 def record_of(state: ServerState, run_id: str) -> RunRecord | None:
     path = state.runs_dir / run_id / "request.json"
     return state.store.read_record(run_id) if run_id and not run_id.startswith(".") and path.is_file() else None
@@ -83,6 +93,8 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         queue_position=state.manager.queue_position(staged.run_id),
         model=staged.llm.model or "",
         reasoning=ReasoningOptions.model_validate(staged.llm.reasoning.model_dump(exclude_none=True)),
+        origin=staged.origin,
+        token_name=staged.token_name,
     )
 
 
@@ -115,7 +127,7 @@ def summary(state: ServerState, run_id: str) -> RunSummary | None:
 
 def require_finished(state: ServerState, run_id: str) -> RunRecord:
     """The record of a run that is neither queued nor running."""
-    if state.manager.active(run_id) is not None:
+    if state.manager.active(run_id) is not None or state.store.slots.live(run_id) is not None:
         raise RouteError(409, "run_active", f"run {run_id} is queued or running")
     record = record_of(state, run_id)
     if record is None:
@@ -133,6 +145,7 @@ async def submit(state: ServerState, staged: StagedRun) -> JSONResponse:
 @router.post("", status_code=201, response_model=RunCreated)
 async def create_run(
     state: State,
+    http: Request,
     request: Annotated[str, Form(description="RunCreate as JSON")],
     attachments: Annotated[list[UploadFile] | None, File()] = None,
 ) -> JSONResponse:
@@ -151,7 +164,9 @@ async def create_run(
     except ConfigError:
         own = {}
     try:
-        staged = staging.stage_run(state.runs_dir, body, uploads, defaults, select_profile(None, os.environ), own)
+        origin, token_name = origin_of(http)
+        default_profile = select_profile(None, os.environ)
+        staged = staging.stage_run(state.runs_dir, body, uploads, defaults, default_profile, own, origin, token_name)
     except StagingError as error:
         raise RouteError(422, "invalid_attachment", str(error)) from None
     return await submit(state, staged)
@@ -180,7 +195,8 @@ async def show_run(state: State, run_id: str) -> RunDetail:
 
 @router.delete("/{run_id}", status_code=204)
 async def delete_run(state: State, run_id: str) -> Response:
-    if run_id in state.manager.running:
+    external = state.manager.active(run_id) is None and state.store.slots.live(run_id) is not None
+    if run_id in state.manager.running or external:
         raise RouteError(409, "run_active", f"run {run_id} is running; cancel it first")
     if state.manager.queue_position(run_id) is not None:
         await state.manager.cancel(run_id)
@@ -241,24 +257,24 @@ async def cancel_run(state: State, run_id: str) -> JSONResponse:
 
 
 @router.post("/{run_id}/fork", status_code=201, response_model=RunCreated)
-async def fork_run(state: State, run_id: str, body: ForkCreate) -> JSONResponse:
+async def fork_run(state: State, http: Request, run_id: str, body: ForkCreate) -> JSONResponse:
     parent = require_finished(state, run_id)
     missing = state.store.missing_stages(run_id, body.from_stage)
     if missing:
         detail = f"cannot fork {run_id} from {body.from_stage}: stage {missing[0]} is not finished"
         raise RouteError(409, "stage_not_finished", detail)
-    return await submit(state, staging.stage_fork(state.runs_dir, parent, body))
+    return await submit(state, staging.stage_fork(state.runs_dir, parent, body, *origin_of(http)))
 
 
 @router.post("/{run_id}/rerun", status_code=201, response_model=RunCreated)
-async def rerun_run(state: State, run_id: str) -> JSONResponse:
-    if state.manager.queue_position(run_id) is not None:
+async def rerun_run(state: State, http: Request, run_id: str) -> JSONResponse:
+    if state.manager.queue_position(run_id) is not None or state.store.slots.live(run_id) == "queued":
         raise RouteError(409, "run_queued", f"run {run_id} has not started yet")
     original = record_of(state, run_id)
     if original is None:
         raise not_found(run_id)
     try:
-        staged = staging.stage_rerun(state.runs_dir, original)
+        staged = staging.stage_rerun(state.runs_dir, original, *origin_of(http))
     except StagingError as error:
         raise RouteError(422, "invalid_attachment", str(error)) from None
     return await submit(state, staged)

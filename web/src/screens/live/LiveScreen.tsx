@@ -6,6 +6,7 @@ import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
 import { useRunData } from "../../run/useRunData";
+import { CancelDialog } from "./CancelDialog";
 import { EmptyLive } from "./EmptyLive";
 import { LiveFooter } from "./LiveFooter";
 import { LiveHeader } from "./LiveHeader";
@@ -64,6 +65,8 @@ export function LiveScreen() {
   const data = useRunData(followed, live.view);
   const [filter, setFilter] = useState<PassageFilter>("kept");
   const [cancelling, setCancelling] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const keepRunning = useCallback(() => setConfirming(false), []);
   const [source, setSource] = useState<OpenSource | null>(null);
   const { cite, onCite, onLeave } = useCitation();
   const { loadNotKept } = data;
@@ -102,7 +105,7 @@ export function LiveScreen() {
 
   const view = data.view ?? live.view;
   const running = view?.status === "running";
-  const now = useNow(running);
+  const now = useNow(running || view?.status === "queued");
   if (followed && (live.conn.notFound || data.notFound)) return <NotFound runId={followed} />;
   if (!followed || !view) return <EmptyLive />;
 
@@ -164,14 +167,30 @@ export function LiveScreen() {
         files={attachments}
         isPhone={isPhone}
         cancelling={cancelling}
-        onCancel={() => void attempt(cancel)}
+        onCancel={() =>
+          detail?.origin === "cli" || detail?.origin === "api"
+            ? setConfirming(true)
+            : void attempt(cancel)
+        }
         onOpenReport={() => go({ screen: "report", runId: run.runId })}
         onRerun={() => void attempt(rerun)}
       />
+      {confirming && (detail?.origin === "cli" || detail?.origin === "api") && (
+        <CancelDialog
+          origin={detail.origin}
+          tokenName={detail.token_name}
+          onKeep={keepRunning}
+          onCancel={() => {
+            setConfirming(false);
+            void attempt(cancel);
+          }}
+        />
+      )}
       <StatusBanner
         run={run}
         conn={live.conn}
         elapsed={elapsed}
+        now={now}
         rewriteOf={detail?.fork_from === "write" ? detail.parent_run_id : null}
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}

@@ -233,7 +233,6 @@ class RunConfig(Block):
 class ServerConfig(Block):
     host: str = "127.0.0.1"
     port: int = Field(default=8765, gt=0, lt=65536)
-    max_concurrent_runs: int = Field(default=1, gt=0)
     static_dir: Path = Path("web/dist")
     log_level: Literal["debug", "info", "warning", "error"] = "info"
     forwarded_allow_ips: list[str] = ["127.0.0.1"]

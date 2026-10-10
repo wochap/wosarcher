@@ -2,7 +2,14 @@
 // reconnects, and finished runs (a finished run is its replayed event log).
 import { ENDED, LIVE_ONLY, TERMINAL } from "../api/events";
 import type * as G from "../api/generated";
-import type { KeptPassage, RunDetail, RunEvent, RunStatus, Stage } from "../api/types";
+import type {
+  KeptPassage,
+  RunDetail,
+  RunEvent,
+  RunQueuedData,
+  RunStatus,
+  Stage,
+} from "../api/types";
 
 /** The prototype's phases, in display order. The initial search runs inside `plan`; `gap` shows
  * only for multi-round runs. */
@@ -122,7 +129,8 @@ export type RunView = {
   parentRunId?: string | null;
   version?: number;
   until?: Stage | null;
-  queuePosition?: number;
+  /** The latest `run.queued` data, until `run.started`. */
+  queued?: RunQueuedData;
   startedAt?: string;
   endedAt?: string;
   failure?: { stage: string; error: string };
@@ -258,7 +266,7 @@ function roundStarted(state: RunView, stage: PhaseId, round: number): RunView {
 function apply(state: RunView, event: RunEvent): RunView {
   switch (event.type) {
     case "run.queued":
-      return { ...state, status: "queued", queuePosition: event.data.position };
+      return { ...state, status: "queued", queued: event.data };
     case "run.started": {
       const d = event.data;
       return {
@@ -270,7 +278,7 @@ function apply(state: RunView, event: RunEvent): RunView {
         parentRunId: d.parent_run_id,
         version: d.version,
         until: d.until,
-        queuePosition: undefined,
+        queued: undefined,
       };
     }
     case "run.done":

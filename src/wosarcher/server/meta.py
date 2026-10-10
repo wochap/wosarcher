@@ -34,10 +34,11 @@ from wosarcher.models import (
     ModelList,
     ProfileInfo,
     ServerSettings,
+    SlotState,
 )
-from wosarcher.server import settings as global_settings
 from wosarcher.server.errors import RouteError
 from wosarcher.server.state import ServerState, get_state
+from wosarcher.store import settings as global_settings
 
 router = APIRouter(prefix="/api")
 State = Annotated[ServerState, Depends(get_state)]
@@ -54,6 +55,11 @@ async def get_settings(state: State) -> ServerSettings:
 async def put_settings(state: State, body: ServerSettings) -> ServerSettings:
     global_settings.save(state.config_dir, body)
     return body
+
+
+@router.get("/slots")
+async def get_slots(state: State) -> SlotState:
+    return state.store.slots.state()
 
 
 def profile_info(name: str, source: str, active: str) -> ProfileInfo:

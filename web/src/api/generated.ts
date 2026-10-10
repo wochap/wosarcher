@@ -349,6 +349,7 @@ export type Error3 = (string | null)
 export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type LastSeq = number
 export type Model4 = string
+export type Origin = ("web" | "api" | "cli")
 export type ParentRunId = (string | null)
 export type Profile3 = string
 export type Query3 = string
@@ -356,6 +357,7 @@ export type QueuePosition = (number | null)
 export type Changes = string[]
 export type CreatedAt = string
 export type ForkFrom1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Origin1 = ("web" | "api" | "cli")
 export type Overrides = string[]
 export type ParentRunId1 = (string | null)
 export type Profile4 = string
@@ -365,6 +367,7 @@ export type Query4 = string
 export type Sources2 = ("both" | "web" | "files")
 export type Until1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId14 = string
+export type TokenName = (string | null)
 export type Version = number
 export type RoundsPlanned = number
 export type RoundsRan = (number | null)
@@ -372,6 +375,7 @@ export type RunId15 = string
 export type Sources3 = ("both" | "web" | "files")
 export type Status3 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
+export type TokenName1 = (string | null)
 export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
@@ -402,8 +406,14 @@ export type Error6 = (string | null)
 export type RunDir = string
 export type RunId19 = string
 export type Status5 = ("done" | "failed" | "cancelled")
-export type Position1 = number
+export type Origin2 = ("web" | "api" | "cli")
 export type RunId20 = string
+export type Started = string
+export type TokenName2 = (string | null)
+export type Held = SlotHolder[]
+export type Limit = number
+export type Position1 = number
+export type RunId21 = string
 export type Seq15 = number
 export type Stage17 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts15 = string
@@ -413,7 +423,7 @@ export type Profile5 = string
 export type Query5 = string
 export type Until4 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version2 = number
-export type RunId21 = string
+export type RunId22 = string
 export type Seq16 = number
 export type Stage18 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts16 = string
@@ -426,16 +436,18 @@ export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "pref
 export type Error7 = (string | null)
 export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Model5 = string
+export type Origin3 = ("web" | "api" | "cli")
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
 export type Query6 = string
 export type QueuePosition1 = (number | null)
 export type RoundsPlanned1 = number
 export type RoundsRan1 = (number | null)
-export type RunId22 = string
+export type RunId23 = string
 export type Sources4 = ("both" | "web" | "files")
 export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
 export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
+export type TokenName3 = (string | null)
 export type Until5 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Version3 = number
 export type Failed = Skipped[]
@@ -450,11 +462,18 @@ export type QueryId7 = string
 export type Reason4 = ("source_cap" | "budget")
 export type TokensLeft1 = (number | null)
 export type TokensNeeded1 = (number | null)
+export type MaxConcurrentRuns = number
 export type Sources5 = ("both" | "web" | "files")
 export type Expires = (string | null)
 export type Method1 = ("cookie" | "token" | "none")
 export type Since = (string | null)
-export type TokenName = (string | null)
+export type TokenName4 = (string | null)
+export type Origin4 = ("web" | "api" | "cli")
+export type RunId24 = string
+export type TokenName5 = (string | null)
+export type Held1 = SlotHolder[]
+export type Limit1 = number
+export type Queued = SlotEntry[]
 export type ChunkId6 = string
 export type Floor2 = boolean
 export type HeadingPath3 = string[]
@@ -478,14 +497,14 @@ export type Seconds = number
 export type Skipped2 = boolean
 export type Unfetched1 = number
 export type Warnings5 = string[]
-export type RunId23 = string
+export type RunId25 = string
 export type Seq17 = number
 export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts17 = string
 export type Type17 = "stage.done"
 export type Error8 = string
 export type Next = string
-export type RunId24 = string
+export type RunId26 = string
 export type Seq18 = number
 export type Stage20 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts18 = string
@@ -494,7 +513,7 @@ export type Done = number
 export type Failed1 = number
 export type Round9 = number
 export type Total = number
-export type RunId25 = string
+export type RunId27 = string
 export type Seq19 = number
 export type Stage21 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts19 = string
@@ -502,7 +521,7 @@ export type Type19 = "stage.progress"
 export type Device3 = (string | null)
 export type Provider3 = string
 export type Round10 = number
-export type RunId26 = string
+export type RunId28 = string
 export type Seq20 = number
 export type Stage22 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts20 = string
@@ -1467,6 +1486,7 @@ error?: Error3
 fork_from?: ForkFrom
 last_seq?: LastSeq
 model?: Model4
+origin?: Origin
 parent_run_id?: ParentRunId
 profile: Profile3
 query: Query3
@@ -1479,6 +1499,7 @@ run_id: RunId15
 sources?: Sources3
 status: Status3
 stop_reason?: StopReason
+token_name?: TokenName1
 until?: Until2
 version?: Version1
 writing?: WritingOptions
@@ -1501,12 +1522,14 @@ export interface RunRecord {
 changes?: Changes
 created_at: CreatedAt
 fork_from?: ForkFrom1
+origin?: Origin1
 overrides?: Overrides
 parent_run_id?: ParentRunId1
 profile: Profile4
 request: RunRequest
 run_id: RunId14
 settings: Settings
+token_name?: TokenName
 version?: Version
 }
 /**
@@ -1604,7 +1627,7 @@ status: Status5
  */
 export interface RunQueued {
 data: RunQueuedData
-run_id: RunId20
+run_id: RunId21
 seq: Seq15
 stage?: Stage17
 ts: Ts15
@@ -1615,7 +1638,19 @@ type?: Type15
  * via the `definition` "RunQueuedData".
  */
 export interface RunQueuedData {
+held?: Held
+limit: Limit
 position: Position1
+}
+/**
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SlotHolder".
+ */
+export interface SlotHolder {
+origin: Origin2
+run_id: RunId20
+started: Started
+token_name?: TokenName2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1623,7 +1658,7 @@ position: Position1
  */
 export interface RunStarted {
 data: RunStartedData
-run_id: RunId21
+run_id: RunId22
 seq: Seq16
 stage?: Stage18
 ts: Ts16
@@ -1655,6 +1690,7 @@ end_stage?: EndStage1
 error?: Error7
 fork_from?: ForkFrom2
 model?: Model5
+origin?: Origin3
 parent_run_id?: ParentRunId3
 profile: Profile6
 query: Query6
@@ -1662,10 +1698,11 @@ queue_position?: QueuePosition1
 reasoning?: ReasoningOptions2
 rounds_planned?: RoundsPlanned1
 rounds_ran?: RoundsRan1
-run_id: RunId22
+run_id: RunId23
 sources?: Sources4
 status: Status6
 stop_reason?: StopReason1
+token_name?: TokenName3
 until?: Until5
 version?: Version3
 writing?: WritingOptions1
@@ -1727,6 +1764,7 @@ tokens_needed?: TokensNeeded1
  */
 export interface ServerSettings {
 domains?: DomainDefaults1
+max_concurrent_runs?: MaxConcurrentRuns
 sources?: Sources5
 writing?: WritingOptions2
 }
@@ -1756,7 +1794,29 @@ export interface SessionInfo {
 expires?: Expires
 method: Method1
 since?: Since
-token_name?: TokenName
+token_name?: TokenName4
+}
+/**
+ * A run in the shared run queue or holding a slot.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SlotEntry".
+ */
+export interface SlotEntry {
+origin: Origin4
+run_id: RunId24
+token_name?: TokenName5
+}
+/**
+ * `GET /api/slots`: the limit, the runs holding a slot (oldest first), and the waiting runs in queue order.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "SlotState".
+ */
+export interface SlotState {
+held?: Held1
+limit: Limit1
+queued?: Queued
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1793,7 +1853,7 @@ truncated?: Truncated2
  */
 export interface StageDone {
 data: StageDoneData
-run_id: RunId23
+run_id: RunId25
 seq: Seq17
 stage?: Stage19
 ts: Ts17
@@ -1829,7 +1889,7 @@ units?: Units
  */
 export interface StageFailed {
 data: StageFailedData
-run_id: RunId24
+run_id: RunId26
 seq: Seq18
 stage?: Stage20
 ts: Ts18
@@ -1849,7 +1909,7 @@ next: Next
  */
 export interface StageProgress {
 data: StageProgressData
-run_id: RunId25
+run_id: RunId27
 seq: Seq19
 stage?: Stage21
 ts: Ts19
@@ -1871,7 +1931,7 @@ total: Total
  */
 export interface StageStarted {
 data: StageStartedData
-run_id: RunId26
+run_id: RunId28
 seq: Seq20
 stage?: Stage22
 ts: Ts20

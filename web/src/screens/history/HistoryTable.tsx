@@ -9,6 +9,7 @@ import {
 import type { RunSummary } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
+import { OriginLabel } from "../../components/OriginLabel";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime, minSec } from "../../format";
 import { recipeOf, wDiff } from "../../run/format";
@@ -62,9 +63,12 @@ export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete 
             return (
               <tr key={run.run_id}>
                 <td className={css.queryCell}>
-                  <button type="button" className={css.open} onClick={() => onOpen(run)}>
-                    {run.query}
-                  </button>
+                  <div className={css.queryLine}>
+                    <OriginLabel origin={run.origin} tokenName={run.token_name} />
+                    <button type="button" className={css.open} onClick={() => onOpen(run)}>
+                      {run.query}
+                    </button>
+                  </div>
                   {run.parent_run_id && (
                     <div className={css.rewrite}>
                       <ArrowElbowDownRight aria-hidden="true" />

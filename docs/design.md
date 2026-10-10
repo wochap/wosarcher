@@ -876,7 +876,7 @@ trusted values (query, options). Scraped text never goes through templates.
 
 ```
 runs/<id>/
-  request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage
+  request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage, origin
   attachments/       # copies of --attach files, directories, and globs
   files.jsonl        # load: attachment pages
   plan.json          # plan, then each round's follow-up queries
@@ -899,7 +899,41 @@ runs/<id>/
 caches live in `$XDG_CACHE_HOME/wosarcher` (`run.cache_dir`): fetched pages
 by normalised URL for `run.page_cache_ttl_hours` (24; 0 disables) and
 embeddings. Run IDs are `YYYYMMDD-HHMMSS-xxxxxx` and sort by creation time.
-Directories starting with `.` (the server's `.queue/`) are not runs.
+Directories starting with `.` (the server's `.queue/` and the shared
+`.slots/`) are not runs.
+
+`request.json` records the run's `origin`: `web` (started in the browser),
+`api` (started with an API token, with `token_name`), or `cli` (`wosarcher
+run` or `wosarcher fork`). A fork, rerun, or rewrite records the origin of
+the request that started it; a record without the field reads as `web`.
+
+Run slots: every run that uses a runs directory, whoever started it, takes
+a slot in one first-in, first-out queue before its first stage, and at most
+`max_concurrent_runs` (from `server-settings.json`, see Configuration) hold
+a slot at once. The queue lives next to the runs (`store/slots.py`):
+
+```
+runs/.slots/
+  lock                                   flock mutex for every slot decision
+  queue/<created_ns>-<run_id>.json       ticket: run_id, origin, token_name, pid, time
+  held/<run_id>.json                     slot: the same, the time it was taken
+  cancel/<run_id>                        empty: a cancel request for that run
+```
+
+A ticket or slot file is live while some process holds `LOCK_EX` on it;
+the kernel drops the lock when the process exits, even on SIGKILL, so a
+dead process frees its slot and its place with no cleanup step. Files are
+created under a temporary name, locked, written, and renamed into place.
+Only a process holding the `lock` mutex removes dead entries or changes
+`queue/` and `held/`; readers only test locks. A ticket is granted a slot
+when it is the oldest live ticket and fewer than the limit are held; the
+limit is read from the settings file at each decision, so a raised limit
+starts waiting runs at once and a lowered one lets running runs finish.
+Slots are valid on one host only (`flock` on a local file system).
+
+A run with no terminal event has status `queued` while a live ticket names
+it, `running` while a live slot names it, and `interrupted` otherwise, the
+same for the server, `wosarcher runs`, and the server after a restart.
 
 Queries, hits, pages, and scores carry the `round` they first appeared in
 (1 for single-round runs and files). `research.json` holds `planned`,
@@ -917,7 +951,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Commands
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--run-id ID] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--depth NAME] [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--run-id ID] [--no-wait] [--json]`:
   writing flags act as `--set write.<field>=...` and research flags as
   `--set` on `plan.max_sub_queries`, `search.max_results`,
   `fetch.max_pages`, `score.top_k`, `select.max_context_tokens`,
@@ -940,9 +974,21 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   exits 2. `--json` prints one `RunOutput` document (status, error, run
   directory, context when select finished, report when write finished). On a
   terminal, progress goes to standard error; piped output is the report
-  Markdown. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM, SIGINT),
-  2 invalid arguments or configuration.
-- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--run-id ID] [--json]`:
+  Markdown. After creating the run directory the command waits for a run
+  slot, writing `waiting for a free run slot (position <n>)` to standard
+  error when it starts waiting and when its position changes (on a
+  terminal the progress view shows it above the stage rows). SIGINT,
+  SIGTERM, or a cancel request while waiting logs `run.cancelled` and exits
+  130; a cancel request while running (polled every 0.5 s) cancels the run
+  like SIGTERM. `--no-wait` takes a slot before creating anything and,
+  when none is free or a run already waits, prints `error: no free run
+  slot (<held> of <limit> in use)` and exits 75 (`EX_TEMPFAIL`) with no
+  run directory. Hidden options for the server: `--slot-fd N` (the slot
+  is already held through inherited descriptor N), `--origin`, and
+  `--token-name`. Exit status: 0 done, 1 failed, 130 cancelled (SIGTERM,
+  SIGINT, cancel request), 2 invalid arguments or configuration, 75 no free
+  run slot with `--no-wait`.
+- `wosarcher fork <id> --from <stage> [overrides] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--run-id ID] [--no-wait] [--json]`:
   copies `attachments/` and the artifacts before `<stage>` into a new run
   (version: the highest version in the parent's lineage plus one), logs a
   copied `stage.done` per earlier stage whose `copied_from` names the run
@@ -954,7 +1000,8 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   before validation, with one stderr line `warning: saved settings
   dropped: llm.reasoning_tokens, ...`, and the fork's `request.json` omits
   them; a saved value the configuration rejects still fails with exit 2.
-  Used for resume, for changing writing options, and by the eval harness.
+  It waits for a run slot like `run` and takes `--no-wait`. Used for
+  resume, for changing writing options, and by the eval harness.
 - `wosarcher depth list` (each preset with its description) and `wosarcher
   depth show NAME` (the keys it sets, or "sets nothing; uses the
   defaults"); an unknown name exits 2 with the known names.
@@ -975,8 +1022,10 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
   not change the exit code. Exit code 1 when any probe fails. The Firecrawl probe
   scrapes `https://example.com`, which spends one credit on the cloud API.
 - `wosarcher runs [--limit N] [--json]`: lists runs newest first as
-  `RunSummary` rows, with status from the last `run.*` event: `done`,
-  `failed`, `cancelled`, or `interrupted` (started without an end), plus
+  `RunSummary` rows, with status from the last `run.*` event (`done`,
+  `failed`, `cancelled`) or, with no terminal event, from the run slots
+  (`queued`, `running`, else `interrupted`), the origin (`web`, `cli`, or
+  `api · <token>`), plus
   `until`, `fork_from`, the resolved writing options, `duration_s`
   (`run.started` to the terminal event), and `cost` (from `costs.json`).
 - `wosarcher logs <id> [--follow] [--profile NAME] [--set k=v]`: prints the
@@ -997,7 +1046,10 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 
 ### Events
 
-- Run: `run.queued` (server only, live), `run.started`, `run.done`, `run.failed` (stage and
+- Run: `run.queued` (live only, never logged: `position`, 1 for the next
+  run to start; `limit`, the current `max_concurrent_runs`; `held`, the
+  runs holding a slot with `run_id`, `origin`, `token_name`, and
+  `started`), `run.started`, `run.done`, `run.failed` (stage and
   error text), `run.cancelled`.
 - Stage: `stage.started`, `stage.progress` (counters), `stage.done` (with
   cost), `stage.failed` (error text).
@@ -1137,6 +1189,7 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `until`; `depth`, null for older runs; resolved writing options; `duration_s`; `cost`;
   `queue_position`; `error`, the `run.failed` text when failed; `end_stage`,
   the stage named by a final `run.failed` or `run.cancelled`;
+  `origin` and `token_name` (see Run directory);
   `rounds_planned`, the resolved `research.rounds`; `rounds_ran`, from
   `research.done`, 1 for a single-round run past the loop, else null;
   `stop_reason`, null for single-round runs; `model`, the resolved
@@ -1192,8 +1245,9 @@ filter replaces images with their alt text, so no file or URL is read.
 
   | Run state | Status | Body |
   |---|---|---|
-  | running | 202 | `{"run_id", "result": "signalled"}`; SIGKILL after 10 s, then the server logs `run.cancelled` |
-  | queued | 200 | `{"run_id", "result": "dequeued"}`; connected clients get `run.cancelled` |
+  | running (started by the server) | 202 | `{"run_id", "result": "signalled"}`; SIGKILL after 10 s, then the server logs `run.cancelled` |
+  | queued (staged by the server) | 200 | `{"run_id", "result": "dequeued"}`; connected clients get `run.cancelled` |
+  | queued or running in another process (CLI) | 202 | `{"run_id", "result": "signalled"}`; a cancel request in `.slots/cancel/`, which that process handles like SIGTERM (logged at `info`) |
   | done, failed, cancelled, interrupted | 409 | `RunNotActive`: `{"error": "run_not_active", "detail", "run_id", "status"}` |
   | unknown | 404 | `run_not_found` |
 - `POST /api/runs/{id}/fork` (`from`, optional `writing`, `set`,
@@ -1211,18 +1265,27 @@ filter replaces images with their alt text, so no file or URL is read.
   `run.queued` while queued, then live events and `report.delta` until a
   terminal event, and closes with 1000. Unknown runs close with 4404; a
   client more than 1000 events behind is closed with 4408 and reconnects
-  with `since`. Runs not owned by this server (finished, interrupted, or
-  started by the CLI) are replayed and closed. The run is looked up after
+  with `since`. A queued or running run another process started (the CLI)
+  is followed through `manager.follow`: one shared `RunTail` polled every
+  100 ms while its slot or ticket is live, publishing `run.queued` while it
+  waits and closing at the terminal event or when the process exits
+  without one (1000). Finished and interrupted runs are replayed and
+  closed. The run is looked up after
   the socket is accepted, so a run that ends during the handshake is
   treated as ended; a run that ended without a run directory gets its
   terminal event (`seq` 0) and 1000.
 - `GET /api/settings` and `PUT /api/settings`: global defaults
-  (`ServerSettings`: all writing options, `sources`, and `domains` with
+  (`ServerSettings`: all writing options, `sources`, `domains` with
   `allow` and `block`, empty by default and validated like
-  `search.allow_domains`), stored in
-  `<config dir>/server-settings.json`. They apply only to runs started by
-  the server, as `--set write.*` values after the profile and before the
-  request's `writing` and `set` (request wins). CLI runs use the profile.
+  `search.allow_domains`, and `max_concurrent_runs`, 1 to 8, default 1),
+  stored in `<config dir>/server-settings.json` (`store/settings.py`). The
+  run defaults apply only to runs started by the server, as `--set
+  write.*` values after the profile and before the request's `writing` and
+  `set` (request wins); CLI runs use the profile. `max_concurrent_runs` is
+  the run slot limit for every run (see Run directory).
+- `GET /api/slots`: `SlotState`: `limit`, `held` (oldest first: `run_id`,
+  `origin`, `token_name`, `started`), and `queued` (queue order: `run_id`,
+  `origin`, `token_name`).
 - `DELETE /api/runs/{id}`: 204 for a finished run, a queued one, or one
   that ended without a run directory (forgotten), 409 `run_active` for a
   running one.
@@ -1287,11 +1350,17 @@ from), which the Versions screen shows. Rerun is a new run (version 1, no
 parent) with the same request and attachments; "Retry from Score" is a
 fork from the score stage.
 
-`server.max_concurrent_runs` (default 1) limits run processes; further runs
-wait in FIFO order and get `run.queued` with their position (1 is next).
-A queued run is staged in `runs/.queue/<id>/` (request and attachments)
-until its process starts, and staged runs are queued again in creation
-order when the server starts. When a process exits without a terminal
+Server runs use the shared run slots (see Run directory). A queued run is
+staged in `runs/.queue/<id>/` (request and attachments) and holds a ticket
+until its process starts; staged runs get new tickets in creation order
+when the server starts, behind runs already waiting. A tick every 0.25 s
+grants slots to the staged runs in order and spawns each granted run with
+the slot's descriptor (`pass_fds`, `--slot-fd`), writes the child's PID
+into the slot file, and closes its own copy, so the child holds the slot
+until it exits. Waiting runs get `run.queued` whenever their position, the
+limit, or the holders change. Origin comes from the guard's `Auth`: an API
+token gives `api` and its name, a cookie or no auth gives `web`; it is
+passed to the child as `--origin` and `--token-name`. When a process exits without a terminal
 event, the server appends `run.failed` with the exit code and the last 20
 lines of standard error. Whatever fails while the server watches or
 finishes a run (an unreadable event line, a standard-error line of any
@@ -1307,10 +1376,11 @@ every run process and waits up to 10 s; queued runs stay staged.
 The server logs to standard error with stdlib `logging` at
 `server.log_level` (`debug`, `info`, `warning`, `error`; also uvicorn's
 level): per run `queued (position n)`, `started: run|fork pid <pid>`,
-`done`, `cancelled`, `cancelled while queued`, and `failed in <stage>:
+`done`, `cancelled`, `cancelled while queued`, `cancel requested from its
+own process` (a CLI run), and `failed in <stage>:
 <first line>` (warning), each with the run ID, and every standard-error
 line of a run process as `run <id>: <line>` (cut to 4000 characters plus
-`…`). Settings: `server.host`, `server.port`, `server.max_concurrent_runs`,
+`…`). Settings: `server.host`, `server.port`,
 `server.static_dir`, `server.log_level`, `server.forwarded_allow_ips`.
 
 #### NixOS service
@@ -1431,6 +1501,15 @@ profile loads. `config.resolve(profile, overrides, env, depth)` does the
 whole resolution in one function and validates once; errors name the source
 of the bad value (profile file, environment variable, depth preset file, or
 `--set` override).
+
+The run slot limit is not a profile key: `max_concurrent_runs` (1 to 8,
+default 1) lives in the global settings file
+`$XDG_CONFIG_HOME/wosarcher/server-settings.json`, edited through `PUT
+/api/settings` and the Settings "Run slots" section. The server and the CLI
+read it at each slot decision; a missing file means 1, and an invalid one
+means 1 with a warning naming the file. `server.max_concurrent_runs` does
+not exist, so setting it in a profile, the environment, or `--set` fails as
+an unknown key.
 
 Depth presets are a per-run axis, separate from profiles:
 `src/wosarcher/depths/{quick,standard,deep,exhaustive}.toml`, each with a
@@ -1758,8 +1837,9 @@ the source of truth for the frontend: the built UI matches it screen by
 screen, in both themes and on phone and desktop.
 
 - Primary file: `design/project/wosarcher.dc.html`. Its `scenario`
-  values (live, loading, reconnecting, failure, cancelled, finished,
-  versions, empty, new, login, login-wrong, login-limited) are the states the
+  values (live, loading, queued, queued-cli, live-cli, cancel-cli,
+  live-api, reconnecting, failure, cancelled, finished, versions, empty,
+  new, login, login-wrong, login-limited) are the states the
   frontend must implement. The `help` scenario specifies the inline help
   component (the `?` button and its tooltip); it is not a screen.
 - Styling uses the bundle's Nocturne design system directly:
@@ -1780,6 +1860,18 @@ screen, in both themes and on phone and desktop.
 #### Frontend decisions
 
 These override the prototype where they differ:
+
+- **Run origin and slots:** History rows and the Live run header show the
+  origin label (`OriginLabel`: terminal window and `cli`, or key and `api ·
+  <token>`; none for `web`). While connecting the Live run screen shows
+  scenario `loading`; after `run.queued` it shows tag "Queued" (no pulse)
+  and the hourglass banner built from `position`, `limit`, and `held`
+  (scenarios `queued` and `queued-cli`), listing each holder with its
+  running time. Cancel on a `cli` or `api` run first opens the confirm
+  dialog of scenario `cancel-cli`; a `web` run cancels at once. Settings
+  has a "Run slots" section above "Run defaults" that saves
+  `max_concurrent_runs` (1 to 8) and reads `GET /api/slots` on open and
+  every 5 s.
 
 - **Name:** wosarcher everywhere; no version string.
 - **Live view of a completed run:** a completed run's Live run view is

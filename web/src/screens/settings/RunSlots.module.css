@@ -1,0 +1,79 @@
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.label {
+  font-size: 12.5px;
+  padding-top: 7px;
+}
+
+.control {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.input {
+  width: 80px;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.bars {
+  display: flex;
+  gap: 3px;
+}
+
+.bar {
+  width: 18px;
+  height: 6px;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+}
+
+.bar[data-held="true"] {
+  background: var(--color-accent);
+  box-shadow: none;
+}
+
+.mix {
+  color: var(--muted);
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.noteIcon {
+  font-size: 13px;
+  margin-top: 2px;
+  flex: none;
+}

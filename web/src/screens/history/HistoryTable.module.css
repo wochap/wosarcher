@@ -15,9 +15,17 @@
   max-width: 0;
 }
 
+.queryLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .open {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   padding: 0;

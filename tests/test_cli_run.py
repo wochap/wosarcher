@@ -65,7 +65,7 @@ def runs_dir(tmp_path: Path) -> Path:
 
 
 def only_run(tmp_path: Path) -> RunRecord:
-    (path,) = runs_dir(tmp_path).iterdir()
+    (path,) = [path for path in runs_dir(tmp_path).iterdir() if not path.name.startswith(".")]
     return RunRecord.model_validate_json((path / "request.json").read_text())
 
 

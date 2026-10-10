@@ -18,7 +18,17 @@ export type ForkCreate = G.ForkCreate;
 export type RunCreated = G.RunCreated;
 /** Domain lists: entries are bare domains, matched with their subdomains. */
 export type DomainLists = { allow: string[]; block: string[] };
-export type ServerSettings = { writing: WritingOptions; sources: string; domains: DomainLists };
+export type ServerSettings = {
+  writing: WritingOptions;
+  sources: string;
+  domains: DomainLists;
+  max_concurrent_runs: number;
+};
+/** Where a run was started: the browser, an API token, or the `wosarcher` CLI. */
+export type Origin = G.Origin;
+export type SlotHolder = G.SlotHolder;
+export type SlotState = Required<G.SlotState>;
+export type RunQueuedData = G.RunQueuedData;
 export type ProfileInfo = G.ProfileInfo;
 export type DepthInfo = G.DepthInfo;
 /** A token budget: a number, or "auto" for all the room the model window leaves. */

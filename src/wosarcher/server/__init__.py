@@ -34,8 +34,8 @@ def create_app(
     exporter: Exporter | None = None,
 ) -> FastAPI:
     # The server never uses the caches; the store only reads and appends run logs.
-    store = RunStore(runs_dir, runs_dir)
-    manager = RunManager(runs_dir, command, settings.server.max_concurrent_runs, store, grace)
+    store = RunStore(runs_dir, runs_dir, config_dir)
+    manager = RunManager(runs_dir, command, store, grace)
     auth = AuthStore.from_settings(settings, config_dir)
     state = ServerState(
         settings,
