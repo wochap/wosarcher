@@ -1,32 +1,34 @@
 #!/usr/bin/env bash
-# Run this checkout's wosarcher in place of the NixOS container, with the
-# container's own configuration, so a change can be tried without a push,
-# a rebuild, and a service restart.
+# Run this checkout's wosarcher in place of the NixOS service, with the
+# service's own configuration, so a change can be tried without a push, a
+# rebuild, and a service restart.
 #
 #   scripts/dev-serve            build the web UI, then serve
 #   scripts/dev-serve --no-web   serve with the web UI already in web/dist
 #
-# It reads the live podman unit (profile name, allowed origins, secrets
-# file, bind address) and the lazy proxy socket (public port), stops the
-# socket and the container, copies the Nix-managed profiles and auth.json
-# into a dev data directory (auth.json on the first run only; the dev
-# server keeps its own password after that), and runs `uv run wosarcher serve` on the
-# socket's address and port, so https://wosarcher.<domain> reaches the dev
-# server through nginx. On exit the socket is started again and the
-# container comes back on the next request.
+# It reads the live wosarcher.service unit (environment and secrets file)
+# and the lazy proxy socket named by $WOSARCHER_DEV_SOCKET (default
+# wosarcher-proxy.socket; its address and port), stops the socket and the
+# service, copies the Nix-managed profiles and auth.json into a dev data
+# directory (auth.json on the first run only; the dev server keeps its own
+# password after that), and runs `uv run wosarcher serve` on the socket's
+# address and port, so https://wosarcher.<domain> reaches the dev server
+# through nginx. On exit the socket is started again and the service comes
+# back on the next request.
 #
 # The dev server works in $WOSARCHER_DEV_DATA (default
-# ~/.local/state/wosarcher-dev), not in /var/lib/wosarcher, so the
-# container's files stay owned by its user. The container's runs and caches
-# are copied in at every start, so the history is there; dev runs are not
-# copied back. Needs sudo (systemctl, reading root-only files).
+# ~/.local/state/wosarcher-dev), not in /var/lib/wosarcher. The service's
+# runs and caches are copied in at every start, so the history is there;
+# dev runs are not copied back. The developer must be in the wosarcher
+# group (services.wosarcher.users) to read the service's files; sudo is
+# needed only for systemctl and a secrets file the group cannot read.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-service=podman-wosarcher.service
-socket=podman-wosarcher-proxy.socket
-proxy=podman-wosarcher-proxy.service
-container_data=/var/lib/wosarcher
+service=wosarcher.service
+socket=${WOSARCHER_DEV_SOCKET:-wosarcher-proxy.socket}
+proxy=${socket%.socket}.service
+service_data=/var/lib/wosarcher
 data=${WOSARCHER_DEV_DATA:-"${XDG_STATE_HOME:-$HOME/.local/state}/wosarcher-dev"}
 
 build_web=true
@@ -37,17 +39,16 @@ for arg in "$@"; do
   esac
 done
 
+[[ -r "$service_data/config" ]] || { echo "cannot read $service_data; add your user to services.wosarcher.users" >&2; exit 1; }
+
 # `sudo` may be a doas shim, so no `sudo -v`.
 sudo true
 
-# --- What the container runs with -------------------------------------------
-start_script=$(systemctl show "$service" -p ExecStart --value | sed -n 's/^{ path=\([^ ;]*\).*/\1/p')
-[[ -n "$start_script" ]] || { echo "no ExecStart on $service" >&2; exit 1; }
-start=$(sudo cat "$start_script")
-
-# `-e NAME=value` lines of the podman run command.
-env_lines=$(printf '%s\n' "$start" | sed -n "s/^[[:space:]]*-e \(.*\) \\\\\$/\1/p")
-env_file=$(printf '%s\n' "$start" | sed -n 's/^[[:space:]]*--env-file \([^ ]*\).*/\1/p')
+# --- What the service runs with ----------------------------------------------
+# Environment=NAME=value NAME=value ... (values with spaces are quoted).
+env_line=$(systemctl show "$service" -p Environment --value)
+# EnvironmentFiles=/path (ignore_errors=no)
+env_file=$(systemctl show "$service" -p EnvironmentFiles --value | sed -n 's/^\([^ ]*\) (.*$/\1/p' | head -n 1)
 listen=$(systemctl show "$socket" -p Listen --value | sed -n 's/^\([^ ]*\) (Stream)$/\1/p')
 [[ -n "$listen" ]] || { echo "no Listen on $socket" >&2; exit 1; }
 host=${listen%:*}
@@ -57,22 +58,19 @@ port=${listen##*:}
 mkdir -p "$data/config/wosarcher/profiles" "$data/share" "$data/cache"
 chmod 700 "$data"
 rm -f "$data"/config/wosarcher/profiles/*.toml
-for file in $(sudo find "$container_data/config/wosarcher/profiles" -maxdepth 1 -name '*.toml'); do
-  sudo cat "$file" > "$data/config/wosarcher/profiles/$(basename "$file")"
-done
-# The container's runs (history) and caches (pages, embeddings), copied in
-# one way: dev runs stay in the dev directory and never reach the container.
-sudo rsync -a --chown="$(id -u):$(id -g)" "$container_data/share/" "$data/share/"
-sudo rsync -a --chown="$(id -u):$(id -g)" "$container_data/cache/" "$data/cache/"
+cp "$service_data"/config/wosarcher/profiles/*.toml "$data/config/wosarcher/profiles/" 2>/dev/null || true
+# The service's runs (history) and caches (pages, embeddings), copied in one
+# way: dev runs stay in the dev directory and never reach the service.
+rsync -a --no-group "$service_data/share/" "$data/share/"
+rsync -a --no-group "$service_data/cache/" "$data/cache/"
 
 # auth.json (password hash, session secret, tokens) is the dev server's own
 # once it exists: set a dev password with
 #   XDG_CONFIG_HOME=<data>/config uv run wosarcher auth set-password
-# The container's file seeds it on the first run only.
+# The service's file seeds it on the first run only.
 auth="$data/config/wosarcher/auth.json"
-if [[ ! -f "$auth" ]] && sudo test -f "$container_data/config/wosarcher/auth.json"; then
-  sudo cat "$container_data/config/wosarcher/auth.json" > "$auth"
-  chmod 600 "$auth"
+if [[ ! -f "$auth" && -f "$service_data/config/wosarcher/auth.json" ]]; then
+  (umask 077; cat "$service_data/config/wosarcher/auth.json" > "$auth")
 fi
 
 # --- Web UI ------------------------------------------------------------------
@@ -81,7 +79,7 @@ if $build_web; then
 fi
 [[ -f web/dist/index.html ]] || { echo "web/dist/index.html missing; run without --no-web" >&2; exit 1; }
 
-# --- Swap the container for this checkout -----------------------------------
+# --- Swap the service for this checkout --------------------------------------
 restore() {
   echo "dev-serve: starting $socket again" >&2
   sudo systemctl start "$socket" || true
@@ -91,15 +89,18 @@ trap restore EXIT
 echo "dev-serve: stopping $socket, $proxy, $service" >&2
 sudo systemctl stop "$socket" "$proxy" "$service"
 
-# The container's environment: -e values, then the secrets file. Secrets stay
-# in this process; nothing is written to disk.
+# The service's environment, then the secrets file. Secrets stay in this
+# process; nothing is written to disk.
 set -a
-while IFS= read -r line; do
-  [[ -n "$line" ]] && eval "export $line"
-done <<< "$env_lines"
+eval "export $env_line"
 if [[ -n "$env_file" ]]; then
-  # shellcheck disable=SC1090
-  source <(sudo cat "$env_file")
+  if [[ -r "$env_file" ]]; then
+    # shellcheck disable=SC1090
+    source "$env_file"
+  else
+    # shellcheck disable=SC1090
+    source <(sudo cat "$env_file")
+  fi
 fi
 export XDG_CONFIG_HOME="$data/config" XDG_DATA_HOME="$data/share" XDG_CACHE_HOME="$data/cache"
 export WOSARCHER_SERVER__STATIC_DIR="$PWD/web/dist" PYTHONUNBUFFERED=1

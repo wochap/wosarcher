@@ -5,14 +5,14 @@ description = "Modular, scriptable research pipeline"
 readme = "docs/design.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.142.2",
-    "httpx>=0.28",
-    "markdown-it-py>=3",
-    "pydantic>=2.11",
-    "python-multipart>=0.0.32",
-    "rich>=14",
-    "typer>=0.16",
-    "uvicorn[standard]>=0.54.0",
+    "fastapi==0.142.2",
+    "httpx==0.28.1",
+    "markdown-it-py==4.2.0",
+    "pydantic==2.13.5",
+    "python-multipart==0.0.32",
+    "rich==15.0.0",
+    "typer==0.27.2",
+    "uvicorn[standard]==0.54.0",
 ]
 
 [project.scripts]
@@ -20,12 +20,12 @@ wosarcher = "wosarcher.cli:main"
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.29",
-    "pytest>=8.4",
-    "pytest-asyncio>=1.0",
-    "respx>=0.22",
-    "ruff>=0.12",
-    "httpx2>=2.13.1",
+    "basedpyright==1.40.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "respx==0.23.1",
+    "ruff==0.16.10",
+    "httpx2==2.13.1",
 ]
 
 [build-system]

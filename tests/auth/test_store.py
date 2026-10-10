@@ -7,11 +7,18 @@ from wosarcher.auth import AuthStore
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def test_mode_0600(tmp_path: Path) -> None:
-    store = AuthStore(tmp_path / "auth.json")
-    store.set_password("scrypt$a")
-    assert (tmp_path / "auth.json").stat().st_mode & 0o777 == 0o600
-    assert store.password_hash() == "scrypt$a"
+def test_mode_follows_umask(tmp_path: Path) -> None:
+    previous = os.umask(0o007)
+    try:
+        store = AuthStore(tmp_path / "auth.json")
+        store.set_password("scrypt$a")
+        assert (tmp_path / "auth.json").stat().st_mode & 0o777 == 0o660
+        os.umask(0o077)
+        store.set_password("scrypt$b")
+        assert (tmp_path / "auth.json").stat().st_mode & 0o777 == 0o600
+    finally:
+        os.umask(previous)
+    assert store.password_hash() == "scrypt$b"
 
 
 def test_reload_on_change(tmp_path: Path) -> None:

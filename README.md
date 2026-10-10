@@ -191,8 +191,65 @@ docker run -d --name wosarcher \
 - **Update**: rebuild (or pull) the image and recreate the container; the
   `/data` volume keeps all state.
 
-On NixOS, the image fits `virtualisation.oci-containers` (podman) with the
-password hash and API keys in a sops environment file.
+On NixOS, prefer the module below.
+
+### NixOS
+
+The flake exports `nixosModules.default`, which runs the server as the
+native `wosarcher.service` and puts a `wosarcher` CLI on the system path
+that shares the server's profiles, runs, caches, and secrets:
+
+```nix
+{
+  inputs.wosarcher.url = "github:wochap/wosarcher";
+
+  outputs = { nixpkgs, wosarcher, ... }: {
+    nixosConfigurations.host = nixpkgs.lib.nixosSystem {
+      modules = [
+        wosarcher.nixosModules.default
+        {
+          services.wosarcher = {
+            enable = true;
+            users = [ "alice" ];                  # joins the wosarcher group
+            environmentFile = "/run/secrets/wosarcher.env";
+            environment.WOSARCHER_PROFILE = "lan";
+            profiles.lan = {
+              llm.base_url = "http://desktop.lan:8080/v1";
+            };
+            # allowedOrigins = [ "https://wosarcher.example" ];
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
+- **Data** lives in `/var/lib/wosarcher` (`config/`, `share/`, `cache/`),
+  owned by `wosarcher:wosarcher`, directories setgid with mode 2770.
+- **Group members** (`services.wosarcher.users`; log in again after the
+  switch) run `wosarcher ...` against the server's data. Always use the
+  wrapper: it sets the umask that keeps new files writable by the server.
+  Members can read every secret: the environment file and `auth.json`.
+- **Secrets** go in `environmentFile` (API keys,
+  `WOSARCHER_AUTH__PASSWORD_HASH`), never in `environment` or `profiles`,
+  which land in the Nix store. Make the file readable by the group, for
+  example a sops template with `mode = "0440"; group = "wosarcher";`.
+- **Password**: as a member, `wosarcher auth set-password`.
+- **On demand**: with `autoStart = false` the unit starts only when
+  something (for example a socket proxy) starts it.
+
+Moving from the container: the existing `/var/lib/wosarcher` is owned by
+uid 10001. Before the first start of the service, run once as root:
+
+```sh
+chown -R wosarcher:wosarcher /var/lib/wosarcher
+find /var/lib/wosarcher -type d -exec chmod 2770 {} +
+find /var/lib/wosarcher -type f -exec chmod 0660 {} +
+```
+
+Setting `users.users.wosarcher.uid = 10001` avoids the `chown`; the modes
+still need the fix.
 
 **Reverse proxy.** The server trusts `X-Forwarded-For` and
 `X-Forwarded-Proto` only from the addresses in `server.forwarded_allow_ips`

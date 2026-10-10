@@ -165,7 +165,7 @@ class AuthStore:
         return self.data
 
     def update(self, change: Callable[[AuthFile], None]) -> AuthFile:
-        """Lock, re-read, change, and write atomically with mode 0600."""
+        """Lock, re-read, change, and write atomically with mode 0660 narrowed by the umask."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         lock = self.path.with_name(self.path.name + ".lock")
         with lock.open("a") as handle:
@@ -174,10 +174,9 @@ class AuthStore:
             data = self.current().model_copy(deep=True)
             change(data)
             temporary = self.path.with_name(self.path.name + ".tmp")
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o660)
             with os.fdopen(descriptor, "w", encoding="utf-8") as out:
                 out.write(data.model_dump_json(indent=2) + "\n")
-            os.chmod(temporary, 0o600)
             temporary.replace(self.path)
         return data
 

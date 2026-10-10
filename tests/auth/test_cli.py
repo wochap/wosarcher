@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -22,14 +23,18 @@ def invoke(*args: str, entered: str = "") -> tuple[int, str]:
 
 
 def test_set_password_stores_hash(auth_file: Path) -> None:
-    code, _ = invoke("set-password", entered="hunter22\nhunter22\n")
+    previous = os.umask(0o007)
+    try:
+        code, _ = invoke("set-password", entered="hunter22\nhunter22\n")
+    finally:
+        os.umask(previous)
     assert code == 0
     text = auth_file.read_text()
     assert "hunter22" not in text
     stored = json.loads(text)["password_hash"]
     assert stored.startswith("scrypt$")
     assert verify_password("hunter22", stored)
-    assert auth_file.stat().st_mode & 0o777 == 0o600
+    assert auth_file.stat().st_mode & 0o777 == 0o660
 
 
 def test_mismatch_stores_nothing(auth_file: Path) -> None:

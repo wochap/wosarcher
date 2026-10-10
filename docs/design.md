@@ -1313,6 +1313,26 @@ line of a run process as `run <id>: <line>` (cut to 4000 characters plus
 `…`). Settings: `server.host`, `server.port`, `server.max_concurrent_runs`,
 `server.static_dir`, `server.log_level`, `server.forwarded_allow_ips`.
 
+#### NixOS service
+
+The module runs `wosarcher serve` as `wosarcher.service`, user and group
+`wosarcher`, with the `XDG_*` variables pointing at `/var/lib/wosarcher`,
+`UMask=0007`, `Restart=on-failure`, and `TimeoutStopSec=45` (the 10-second
+run grace plus shutdown). With `autoStart` it is wanted by
+`multi-user.target`. Declared profiles and hooks are copied by an
+`ExecStartPre=+` step that runs as root to set ownership. systemd
+hardening stands in for container isolation: no capabilities and
+`NoNewPrivileges`, `TasksMax=512`, `ProtectSystem=strict` with only
+`/var/lib/wosarcher` writable, `ProtectHome` (the server never reads
+attachment paths; the CLI copies attachments and the API receives
+uploads), private `/tmp` and devices, the kernel, clock, hostname, and
+control-group protections, `RestrictNamespaces`, `RestrictRealtime`,
+`RestrictSUIDSGID`, `LockPersonality`, only `AF_INET`, `AF_INET6`, and
+`AF_UNIX` sockets, and `SystemCallFilter=@system-service`.
+`MemoryDenyWriteExecute` is off: compiled wheels and typst are not known to
+work with it. `DynamicUser` is not used, because the shared group needs a
+stable uid and gid.
+
 ### Authentication
 
 One admin user, for local use: it keeps everyone but the owner out when the
@@ -1333,11 +1353,16 @@ stays loopback only.
   `auth.password_hash` in a profile) wins over the stored hash, and
   `set-password` warns when it is set. The plain password is never stored
   or logged.
-- **`auth.json`** in the config directory (mode 0600) holds the password
+- **`auth.json`** in the config directory (mode 0660 less the umask: 0660
+  under the NixOS module's shared umask 0007, 0600 under a personal 0077)
+  holds the password
   hash, the session secret, and the API tokens (ID, name, SHA-256 hash,
   last 4 characters, created, last used). The server reloads it when its
   modification time changes, so CLI changes apply without a restart;
-  writers lock `auth.json.lock` and replace the file atomically.
+  writers lock `auth.json.lock` and replace the file atomically. The file
+  is group-writable so the service user and a group member's CLI can both
+  update it: the server rewrites it on each token use, so a file owned by
+  one side alone would lock the other out.
 - **Browser session.** `POST /api/login` with `{"password"}` sets the
   `wosarcher_session` cookie and answers 200 with the session; a wrong
   password answers 401 `wrong_password` with `attempts_left`; 409
@@ -1503,9 +1528,35 @@ Secrets come from the environment or a secrets file and are redacted in
 
 ### Switching providers without a rebuild
 
-Provider choice is runtime data, never part of a system build. A NixOS module
-for wosarcher installs the package, runs the server, and points it at a
-config directory; it does not contain provider URLs or model names.
+Provider choice is runtime data, never part of a system build. The NixOS
+module (`nixosModules.default`, options under `services.wosarcher`) installs
+the package, runs the server, and points it at a config directory; it does
+not contain provider URLs or model names.
+
+- Options: `enable`, `package`, `host` and `port` (default `127.0.0.1:8765`),
+  `allowedOrigins` (as `auth.allowed_origins`), `environment` (extra
+  variables), `environmentFile` (secrets; nothing secret goes through an
+  option whose value lands in the Nix store), `profiles`, `hooks`, `users`,
+  and `autoStart` (false for a socket proxy that starts the unit on
+  demand). Anything else goes through `environment` or a profile.
+- Declared `profiles` are copied (never linked into the store) to
+  `profiles/<name>.toml` before the service starts, and `hooks` to
+  `hooks.toml`. A manifest (`profiles/.nix-managed`) names what the module
+  wrote, so a dropped profile or emptied hooks is removed and hand-made
+  profiles are kept.
+- Data lives in `/var/lib/wosarcher` (`config/`, `share/`, `cache/` as the
+  XDG directories), owned by the `wosarcher` system user and group, every
+  directory mode `2770` (setgid, so new directories keep the group). The
+  service and the CLI wrapper both use umask `0007`, so every file stays
+  group-readable and group-writable and closed to others.
+- Users in `services.wosarcher.users` join the group. The module puts a
+  `wosarcher` wrapper on the system path that exports the service's `XDG_*`
+  and `environment` values (one attribute set feeds both), loads
+  `environmentFile` (which must be readable by the group, for example
+  `0440 root:wosarcher`; an unreadable file exits 2 naming the file and the
+  group), sets umask `0007`, and runs the package. A member's CLI thus uses
+  the server's profiles, runs, caches, and secrets; every member can read
+  every secret, which is the accepted trade-off.
 
 **Client side (wosarcher).**
 
@@ -1679,7 +1730,7 @@ orchestration; every model is behind HTTP.
 
 | Concern | Choice | Reason |
 |---|---|---|
-| Packaging | uv, `pyproject.toml`, `uv.lock` | fast, reproducible, works in the Nix dev shell |
+| Packaging | uv, `pyproject.toml` with exact (`==`) versions, `uv.lock`; Nix package built from `uv.lock` with uv2nix | fast, reproducible, works in the Nix dev shell; the package installs the same wheels the tests run against |
 | Contracts, config | pydantic v2; profiles read with stdlib `tomllib` and resolved by own code in `config.py` | one set of models for contracts, docs, config, and JSON Schema; precedence readable in one function |
 | HTTP | httpx | async, explicit timeouts, easy to mock |
 | CLI | typer, rich | readable commands and progress |
@@ -1690,11 +1741,11 @@ orchestration; every model is behind HTTP.
 | Tokens | characters divided by `llm.chars_per_token` (default 3.5), times `llm.token_margin` (default 1.1), rounded up, plus 16 per passage label | local models use different tokenizers; a profile that switches models sets the ratio |
 | Tests | pytest, pytest-asyncio, respx, httpx2 | adapter tests without network; httpx2 is what Starlette's `TestClient` uses |
 | Quality | ruff (lint and format), basedpyright (strict) | readability enforced by tools |
-| Report export | pandoc (3.1.2 or later) and typst, system binaries in the Nix shell and the Docker image | one tool for PDF and DOCX; Typst is a single binary with fonts, no TeX; only export needs them |
+| Report export | pandoc (3.1.2 or later) and typst, system binaries in the Nix shell, from nixpkgs on the Nix package's `PATH`, and pinned in the Docker image | one tool for PDF and DOCX; Typst is a single binary with fonts, no TeX; only export needs them |
 
 Frontend: Vite, React, TypeScript, react-markdown with remark-gfm (tables in
 reports), Biome (format and lint);
-pnpm. No server-side
+pnpm, with exact versions in `package.json` (no `^` or `~`). No server-side
 rendering: FastAPI serves the static build from the same origin, which keeps
 the cookie and `Origin` checks simple. The event and API types are generated
 from the Pydantic models (JSON Schema, then json-schema-to-typescript); a
@@ -1923,6 +1974,23 @@ The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
 Nix: `flake.nix` dev shell with Python, uv, Node.js, and pnpm, loaded by
 direnv. uv uses the Nix Python (`UV_PYTHON_DOWNLOADS=never`), because
 downloaded Python builds do not run on NixOS without extra setup.
+
+The flake also builds the package and a NixOS module (`nix/`):
+
+- `packages.<system>.wosarcher` (and `default`): a uv2nix virtual
+  environment from `uv.lock` (PyPI wheels, runtime group only), wrapped
+  with pandoc and typst on `PATH` and `WOSARCHER_SERVER__STATIC_DIR`
+  defaulting to the web build, so `wosarcher serve` serves the UI with no
+  settings. The pinned nixpkgs is too old for the locked FastAPI and
+  uvicorn, and overriding them cascades; uv2nix needs no compile step.
+  Dependencies rebuild only when `uv.lock` changes.
+- `packages.<system>.wosarcher-web`: `pnpm build` of `web/` with a
+  fixed-output `pnpmDeps` hash in `nix/web.nix`, updated whenever
+  `pnpm-lock.yaml` changes.
+- `nixosModules.default`: the service (see Server) and a host CLI (see
+  Switching providers without a rebuild).
+- `checks.x86_64-linux.nixos`: a NixOS VM test of the module, the
+  shared data, `auth.json` sharing, and PDF export under the sandbox.
 
 License: MIT.
 
