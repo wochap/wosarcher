@@ -11,16 +11,19 @@ scripts, and checks against cross-site requests and DNS rebinding.
 ### Requirement: Password storage
 `wosarcher auth set-password` SHALL prompt twice for a password of at least
 8 characters and store only its scrypt hash, with its salt and parameters,
-in `auth.json` in the wosarcher config directory, readable only by the
-owner (mode 0600). The plain password SHALL never be stored or logged.
+in `auth.json` in the wosarcher config directory, readable and writable by
+the owner and the file's group and by no one else (mode 0660, further
+restricted by the process's file creation mask), so the server's user and a
+group member's CLI can both update it. The plain password SHALL never be
+stored or logged.
 With `--print` it SHALL print the hash instead of storing it. When
 `WOSARCHER_AUTH__PASSWORD_HASH` is set, it SHALL be used instead of the
 stored hash, and `set-password` without `--print` SHALL warn that the
 environment variable takes precedence.
 
 #### Scenario: Set a password
-- **WHEN** the user runs `wosarcher auth set-password` and enters the same password twice
-- **THEN** `auth.json` contains a hash starting with `scrypt$`, does not contain the password, and has mode 0600
+- **WHEN** the user runs `wosarcher auth set-password` with file creation mask 0007 and enters the same password twice
+- **THEN** `auth.json` contains a hash starting with `scrypt$`, does not contain the password, and has mode 0660
 
 #### Scenario: Mismatched confirmation
 - **WHEN** the two entered passwords differ
@@ -29,6 +32,10 @@ environment variable takes precedence.
 #### Scenario: Hash from the environment
 - **WHEN** `WOSARCHER_AUTH__PASSWORD_HASH` holds the hash of `hunter22` and `auth.json` holds a different hash
 - **THEN** logging in with `hunter22` succeeds
+
+#### Scenario: Group member and server share the file
+- **WHEN** a member of the service's group sets the password with the CLI, and the server then records the use of an API token
+- **THEN** the server reads the new hash, and the member can still read and update `auth.json` afterwards
 
 ### Requirement: Authentication mode
 Authentication SHALL be enabled when a password hash is configured. When it
