@@ -148,10 +148,15 @@ The module SHALL offer `services.wosarcher.package`,
 `auth.allowed_origins`), `services.wosarcher.environment` (extra
 environment variables for the service and the wrapper),
 `services.wosarcher.environmentFile` (a path read at service start, for
-secrets), and `services.wosarcher.autoStart` (default true; when false the
-unit is not started at boot, for socket proxies that start it on demand).
-Secrets SHALL NOT be accepted through any option whose value lands in the
-Nix store, and the option descriptions SHALL say so.
+variables that must not land in the Nix store), and
+`services.wosarcher.autoStart` (default true; when false the unit is not
+started at boot, for socket proxies that start it on demand). Secrets
+SHALL NOT be accepted through any option whose value lands in the Nix
+store, and the option descriptions SHALL say so. The `profiles` and
+`environmentFile` descriptions SHALL name the `<x>_file` settings (for
+example `llm.api_key_file`) as the way to pass a secret: a profile in the
+Nix store holds the path of a secret file readable by the `wosarcher`
+group, never the value.
 
 #### Scenario: Allowed origin from the module
 
@@ -162,3 +167,8 @@ Nix store, and the option descriptions SHALL say so.
 
 - **WHEN** `autoStart = false` and the host boots
 - **THEN** `wosarcher.service` is inactive until something starts it
+
+#### Scenario: Profile names a secret file
+
+- **WHEN** the module declares a profile `lan` with `llm.api_key_file = "/run/secrets/llm"`, that file is readable by the `wosarcher` group, and a member runs `wosarcher profile show lan`
+- **THEN** the output shows `api_key = "***"` and `api_key_file = "/run/secrets/llm"`, and the Nix store holds no key value

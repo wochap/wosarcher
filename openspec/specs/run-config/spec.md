@@ -201,6 +201,62 @@ They SHALL appear as `***` when set and as empty when unset.
 - **WHEN** `WOSARCHER_SCORE__API_KEY` is set
 - **THEN** the resolved configuration uses the key, and its serialised form shows `***`
 
+### Requirement: Secret sources
+Every secret setting `<x>` (`api_key` on the `search`, `fetch`, `prefilter`,
+`score`, and `llm` blocks; `auth.password_hash`) SHALL accept two sibling
+settings: `<x>_file`, a path to a file holding the value, and `<x>_command`,
+a list of strings (a command and its arguments) whose standard output is
+the value. Both SHALL be settable from a profile, the environment (as
+`WOSARCHER_<BLOCK>__<X>_FILE` and `WOSARCHER_<BLOCK>__<X>_COMMAND`, the
+command as a TOML list), and the CLI's `--set`. At most one of `<x>`,
+`<x>_file`, and `<x>_command` SHALL be set after precedence is applied;
+more than one SHALL fail resolution naming the setting and the three forms.
+
+A file value SHALL be read when the configuration resolves, once per
+process, with one trailing newline removed. A command SHALL run without a
+shell, with its standard input closed and a 10-second timeout; it SHALL
+exit with status 0, and its standard output with one trailing newline
+removed is the value. An unreadable file, a command that cannot start,
+exits non-zero, or times out, or a value that is not UTF-8 SHALL fail
+resolution with an error that names the setting and the file path or the
+command's first word, and never includes the file's or the command's
+output. The failure SHALL happen before a run directory is created or a
+provider is called.
+
+A resolved value SHALL be a secret like a value given directly: redacted
+as `***` in `profile show`, `request.json`, and every server response. The
+file path and the command SHALL be shown as plain values. A fork or rerun
+SHALL take secrets from the current process, as it does today, and SHALL
+ignore `*_file` and `*_command` keys saved in the parent's configuration.
+
+#### Scenario: Key from a file
+- **WHEN** a profile sets `llm.api_key_file = "/run/secrets/llm"` and that file holds `sk-live\n`
+- **THEN** the resolved `llm.api_key` is `sk-live`, `profile show` prints `api_key = "***"` and `api_key_file = "/run/secrets/llm"`, and the run's `request.json` shows the same
+
+#### Scenario: Key from a command
+- **WHEN** `WOSARCHER_SCORE__API_KEY_COMMAND='["pass", "show", "typesafe"]'` is set and that command prints `tk-1\n` and exits 0
+- **THEN** the resolved `score.api_key` is `tk-1`
+
+#### Scenario: Two forms set
+- **WHEN** a profile sets `llm.api_key = "x"` and the command runs with `--set llm.api_key_file=/run/secrets/llm`
+- **THEN** resolution fails with an error naming `llm.api_key` and the forms `api_key`, `api_key_file`, and `api_key_command`
+
+#### Scenario: Missing file
+- **WHEN** a profile sets `llm.api_key_file = "/run/secrets/missing"` and no such file exists
+- **THEN** `wosarcher run` exits 2 with an error naming `llm.api_key_file` and `/run/secrets/missing`, and no run directory is created
+
+#### Scenario: Failing command
+- **WHEN** `score.api_key_command = ["false"]` is set
+- **THEN** resolution fails with an error naming `score.api_key_command`, `false`, and the exit status, and the error contains no command output
+
+#### Scenario: Password hash from a file
+- **WHEN** `auth.password_hash_file` names a file holding a `scrypt$...` hash
+- **THEN** the server requires that password, as if `auth.password_hash` held the hash
+
+#### Scenario: Fork ignores a saved source
+- **WHEN** a run's saved configuration has `llm.api_key = "***"` and `llm.api_key_file = "/run/secrets/old"`, and the current profile sets `llm.api_key = "sk-new"`
+- **THEN** `wosarcher fork <id> --from write` resolves `llm.api_key` to `sk-new` without reading `/run/secrets/old`
+
 ### Requirement: Profile commands
 The CLI SHALL provide `wosarcher profile list` (one line per profile: a `*`
 marking the active one, the name, the source built-in or user in

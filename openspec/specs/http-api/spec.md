@@ -431,6 +431,31 @@ SHALL answer 422 `invalid_attachment`.
 - **WHEN** a client reruns a run that used depth `deep`
 - **THEN** the rerun's summary has `depth = "deep"` and its resolved `plan.max_sub_queries` is 6
 
+### Requirement: Secret source overrides are rejected
+`POST /api/runs`, `POST /api/runs/{id}/fork`, and `POST /api/runs/{id}/rerun`
+SHALL reject a request whose `set` overrides (for a rerun, the saved
+overrides it replays) name a setting that ends in `_file` or `_command`,
+with 422 `invalid_override` naming the key, before anything is staged.
+Such a setting would let an API caller run a command as the server user or
+send a file the server can read to a `base_url` of its choice. A plain
+secret value in `set` (such as `llm.api_key=...`) is still accepted.
+
+#### Scenario: Command override in a run request
+- **WHEN** a client posts `request = {"query": "q", "set": ["llm.api_key_command=[\"id\"]"]}`
+- **THEN** the response is 422 with `error = "invalid_override"` naming `llm.api_key_command`, and no run is queued or staged
+
+#### Scenario: File override in a fork
+- **WHEN** a client forks a finished run with `{"from": "write", "set": ["llm.api_key_file=/etc/passwd"]}`
+- **THEN** the response is 422 with `error = "invalid_override"` naming `llm.api_key_file`
+
+#### Scenario: Rerun of a run with a saved source override
+- **WHEN** a client reruns a run whose saved overrides include `score.api_key_file=/run/secrets/x`
+- **THEN** the response is 422 with `error = "invalid_override"` naming `score.api_key_file`
+
+#### Scenario: Plain key override still accepted
+- **WHEN** a client posts `request = {"query": "q", "set": ["llm.api_key=sk-own"]}`
+- **THEN** the response is 201
+
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
 option fields, including `format`), `sources`, `domains` (`allow` and
