@@ -35,6 +35,18 @@ class StagingError(Exception):
     pass
 
 
+class OverrideError(StagingError):
+    """An override the API may not set."""
+
+
+def check_overrides(overrides: list[str]) -> None:
+    """Refuse `*_file` and `*_command` settings: they would read a file or run a command as the server."""
+    for override in overrides:
+        key = override.partition("=")[0].strip()
+        if key.rpartition(".")[2].endswith(("_file", "_command")):
+            raise OverrideError(f"{key} cannot be set through the API")
+
+
 NO_ATTACHMENT = "sources files needs at least one attachment"
 
 
@@ -137,6 +149,7 @@ def stage_run(
 
     `own`: what the run's profile and the environment set; a global domain list yields to it.
     """
+    check_overrides(request.set)
     if (request.sources or defaults.sources) == "files" and not uploads:
         raise StagingError(NO_ATTACHMENT)
     writing = merged(merged(defaults.writing, preset_words(request.depth)), request.writing)
@@ -160,6 +173,7 @@ def stage_fork(
     runs_dir: Path, parent: RunRecord, request: ForkCreate, origin: Origin = "web", token_name: str | None = None
 ) -> StagedRun:
     """A fork keeps the parent's configuration; only the request's writing and `set` change it."""
+    check_overrides(request.set)
     writing = WritingOptions.model_validate(parent.settings.get("write", {}))
     staged = StagedRun(
         query=parent.request.query,
@@ -189,6 +203,7 @@ def stage_rerun(
     runs_dir: Path, original: RunRecord, origin: Origin = "web", token_name: str | None = None
 ) -> StagedRun:
     """The original request and saved overrides, and a copy of its attachments; no global settings."""
+    check_overrides(original.overrides)
     staged = StagedRun(
         query=original.request.query,
         sources=original.request.sources,

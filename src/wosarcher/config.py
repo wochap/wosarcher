@@ -6,6 +6,7 @@ validate once.
 """
 
 import json
+import subprocess
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
@@ -72,6 +73,13 @@ class Block(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+def check_one_source(block: BaseModel, name: str) -> None:
+    """At most one of `<name>`, `<name>_file`, and `<name>_command` may be set."""
+    forms = (name, f"{name}_file", f"{name}_command")
+    if sum(getattr(block, form) is not None for form in forms) > 1:
+        raise ValueError(f"{name}: set only one of {', '.join(forms)}")
+
+
 class Prices(Block):
     input_per_mtok: float | None = None
     output_per_mtok: float | None = None
@@ -84,6 +92,8 @@ class Provider(Block):
     provider: str
     base_url: str = ""
     api_key: SecretStr | None = None
+    api_key_file: str | None = None
+    api_key_command: list[str] | None = None
     model: str = ""
     device: str | None = None
     release: Literal["none", "llama-swap", "ollama"] = "none"
@@ -94,6 +104,11 @@ class Provider(Block):
     timeout: float = Field(default=60.0, gt=0)
     retry_budget: float = Field(default=60.0, ge=0)
     prices: Prices = Prices()
+
+    @model_validator(mode="after")
+    def check_api_key(self) -> "Provider":
+        check_one_source(self, "api_key")
+        return self
 
 
 class SearchConfig(Provider):
@@ -242,9 +257,16 @@ class ServerConfig(Block):
 class AuthConfig(Block):
     password_hash: SecretStr | None = None
     """None: the hash in `auth.json`, or no password at all."""
+    password_hash_file: str | None = None
+    password_hash_command: list[str] | None = None
     session_days: int = Field(default=30, gt=0)
     allowed_origins: list[str] = []
     """Origins besides the server's own that may send state-changing requests."""
+
+    @model_validator(mode="after")
+    def check_password_hash(self) -> "AuthConfig":
+        check_one_source(self, "password_hash")
+        return self
 
 
 class Settings(Block):
@@ -431,7 +453,7 @@ def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str], d
     layers = [profile_layer(path, data), env_layer(env)]
     if depth is not None and depth != CUSTOM_DEPTH:
         layers.append(depth_layer(*load_depth(depth)))
-    return validate([*layers, override_layer(overrides)])
+    return load_secrets(validate([*layers, override_layer(overrides)]))
 
 
 def own_settings(profile: str, env: Mapping[str, str]) -> dict[str, Any]:
@@ -513,6 +535,76 @@ def validate(layers: list[Layer]) -> Settings:
         raise ConfigError("invalid configuration:\n" + "\n".join(lines)) from None
 
 
+# Secret sources: `<x>_file` and `<x>_command` fill the secret `<x>`.
+
+SECRET_SUFFIXES = ("_file", "_command")
+COMMAND_TIMEOUT = 10.0
+
+
+def read_secret_file(key: str, path: str) -> str:
+    try:
+        return Path(path).read_text(encoding="utf-8").removesuffix("\n")
+    except OSError as error:
+        raise ConfigError(f"{key}: cannot read {path}: {error.strerror or type(error).__name__}") from None
+    except UnicodeDecodeError:
+        raise ConfigError(f"{key}: {path} is not UTF-8") from None
+
+
+def run_secret_command(key: str, argv: list[str]) -> str:
+    """Standard output of `argv`, run without a shell; errors never include the output."""
+    name = argv[0] if argv else ""
+    if not argv:
+        raise ConfigError(f"{key}: the command is empty")
+    try:
+        done = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=COMMAND_TIMEOUT, check=False)
+    except subprocess.TimeoutExpired:
+        raise ConfigError(f"{key}: {name} did not finish within {COMMAND_TIMEOUT:g} seconds") from None
+    except OSError as error:
+        raise ConfigError(f"{key}: cannot run {name}: {error.strerror or type(error).__name__}") from None
+    if done.returncode != 0:
+        raise ConfigError(f"{key}: {name} exited with status {done.returncode}")
+    try:
+        return done.stdout.decode("utf-8").removesuffix("\n")
+    except UnicodeDecodeError:
+        raise ConfigError(f"{key}: {name} printed output that is not UTF-8") from None
+
+
+def load_block(prefix: str, block: BaseModel) -> BaseModel:
+    update: dict[str, Any] = {}
+    for name, field in type(block).model_fields.items():
+        if not is_secret(field.annotation):
+            continue
+        path: str | None = getattr(block, f"{name}_file", None)
+        argv: list[str] | None = getattr(block, f"{name}_command", None)
+        if path is not None:
+            update[name] = SecretStr(read_secret_file(f"{prefix}{name}_file", path))
+        elif argv is not None:
+            update[name] = SecretStr(run_secret_command(f"{prefix}{name}_command", argv))
+    return block.model_copy(update=update) if update else block
+
+
+def load_secrets(settings: Settings) -> Settings:
+    """Settings with every secret given as a file or a command read once."""
+    update: dict[str, Any] = {}
+    for name in type(settings).model_fields:
+        block = getattr(settings, name)
+        if isinstance(block, BaseModel):
+            loaded = load_block(f"{name}.", block)
+            if loaded is not block:
+                update[name] = loaded
+    return settings.model_copy(update=update) if update else settings
+
+
+def drop_sources(tree: Mapping[str, Any]) -> dict[str, Any]:
+    """`tree` without `*_file` and `*_command` keys, at any depth."""
+    out: dict[str, Any] = {}
+    for key, value in tree.items():
+        if key.endswith(SECRET_SUFFIXES):
+            continue
+        out[key] = drop_sources(value) if isinstance(value, Mapping) else value  # pyright: ignore[reportUnknownArgumentType]
+    return out
+
+
 # Redaction
 
 
@@ -575,11 +667,12 @@ def restore_secrets(
 ) -> tuple[Settings, list[str]]:
     """Validate saved (redacted) settings, secrets taken from `current`, then `overrides` on top.
 
-    Keys the current `Settings` does not know are dropped and returned as dotted paths.
+    Keys the current `Settings` does not know are dropped and returned as dotted paths. Saved
+    `*_file` and `*_command` keys are ignored: secrets come from `current`.
     """
     pruned, dropped = prune_unknown(saved, Settings)
-    restored = unredact(pruned, current)
-    return validate([(restored, {}), override_layer(overrides or [])]), dropped
+    restored = unredact(drop_sources(pruned), current)
+    return load_secrets(validate([(restored, {}), override_layer(overrides or [])])), dropped
 
 
 def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:

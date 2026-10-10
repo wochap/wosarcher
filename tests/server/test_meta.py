@@ -231,3 +231,14 @@ def test_models_endpoint_down(client: TestClient) -> None:
     respx.get("http://localhost:8080/v1/models").mock(side_effect=httpx.ConnectError("refused"))
     response = client.get("/api/models?profile=workstation")
     assert (response.status_code, response.json()) == (200, {"models": []})
+
+
+def test_profile_with_key_file(client: TestClient, tmp_path: Path) -> None:
+    secret = tmp_path / "llm-key"
+    secret.write_text("sk-file-secret\n")
+    profiles = tmp_path / "config" / "wosarcher" / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "keyed.toml").write_text(f'[llm]\napi_key_file = "{secret}"\ncontext_window = 1234\n')
+    response = client.get("/api/profiles")
+    assert {p["name"]: p for p in response.json()}["keyed"]["context_window"] == 1234
+    assert "sk-file-secret" not in response.text

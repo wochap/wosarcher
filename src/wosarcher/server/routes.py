@@ -30,7 +30,7 @@ from wosarcher.server import staging
 from wosarcher.server.errors import RouteError, invalid, not_found
 from wosarcher.server.guard import Auth
 from wosarcher.server.manager import ActiveRun
-from wosarcher.server.staging import StagedRun, StagingError
+from wosarcher.server.staging import OverrideError, StagedRun, StagingError
 from wosarcher.server.state import ServerState, get_state
 from wosarcher.store import settings as global_settings
 
@@ -167,6 +167,8 @@ async def create_run(
         origin, token_name = origin_of(http)
         default_profile = select_profile(None, os.environ)
         staged = staging.stage_run(state.runs_dir, body, uploads, defaults, default_profile, own, origin, token_name)
+    except OverrideError as error:
+        raise RouteError(422, "invalid_override", str(error)) from None
     except StagingError as error:
         raise RouteError(422, "invalid_attachment", str(error)) from None
     return await submit(state, staged)
@@ -263,7 +265,11 @@ async def fork_run(state: State, http: Request, run_id: str, body: ForkCreate) -
     if missing:
         detail = f"cannot fork {run_id} from {body.from_stage}: stage {missing[0]} is not finished"
         raise RouteError(409, "stage_not_finished", detail)
-    return await submit(state, staging.stage_fork(state.runs_dir, parent, body, *origin_of(http)))
+    try:
+        staged = staging.stage_fork(state.runs_dir, parent, body, *origin_of(http))
+    except OverrideError as error:
+        raise RouteError(422, "invalid_override", str(error)) from None
+    return await submit(state, staged)
 
 
 @router.post("/{run_id}/rerun", status_code=201, response_model=RunCreated)
@@ -275,6 +281,8 @@ async def rerun_run(state: State, http: Request, run_id: str) -> JSONResponse:
         raise not_found(run_id)
     try:
         staged = staging.stage_rerun(state.runs_dir, original, *origin_of(http))
+    except OverrideError as error:
+        raise RouteError(422, "invalid_override", str(error)) from None
     except StagingError as error:
         raise RouteError(422, "invalid_attachment", str(error)) from None
     return await submit(state, staged)

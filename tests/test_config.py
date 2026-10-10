@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
 from wosarcher.config import (
     ConfigError,
@@ -516,3 +517,66 @@ def test_restore_secrets_rejects_bad_value(env: dict[str, str]) -> None:
     saved["llm"]["provider"] = "llm"
     with pytest.raises(ConfigError, match=r"llm\.provider"):
         restore_secrets(saved, current)
+
+
+def test_two_secret_forms_fail(env: dict[str, str], tmp_path: Path) -> None:
+    user_profile(env, "keyed", '[llm]\napi_key = "x"\n')
+    with pytest.raises(ConfigError) as error:
+        resolve("keyed", [f"llm.api_key_file={tmp_path / 'k'}"], env)
+    message = str(error.value)
+    assert "llm" in message
+    assert "api_key, api_key_file, api_key_command" in message
+
+
+def test_key_from_file(env: dict[str, str], tmp_path: Path) -> None:
+    secret = tmp_path / "k"
+    secret.write_text("sk-live\n")
+    user_profile(env, "keyed", f'[llm]\napi_key_file = "{secret}"\n')
+    settings = resolve("keyed", [], env)
+    assert settings.llm.api_key == SecretStr("sk-live")
+    assert redact(settings)["llm"]["api_key"] == "***"
+    assert redact(settings)["llm"]["api_key_file"] == str(secret)
+
+
+def test_key_from_env_command(env: dict[str, str]) -> None:
+    env["WOSARCHER_SCORE__API_KEY_COMMAND"] = '["sh", "-c", "printf \'tk-1\\\\n\'"]'
+    settings = resolve("workstation", [], env)
+    assert settings.score.api_key == SecretStr("tk-1")
+
+
+def test_password_hash_from_command(env: dict[str, str]) -> None:
+    settings = resolve("workstation", ['auth.password_hash_command=["printf", "scrypt$x\\n"]'], env)
+    assert settings.auth.password_hash == SecretStr("scrypt$x")
+
+
+def test_missing_key_file(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"llm\.api_key_file.*/run/secrets/missing"):
+        resolve("workstation", ["llm.api_key_file=/run/secrets/missing"], env)
+
+
+def test_failing_command(env: dict[str, str]) -> None:
+    command = 'score.api_key_command=["sh", "-c", "echo leaked; exit 3"]'
+    with pytest.raises(ConfigError) as error:
+        resolve("workstation", [command], env)
+    message = str(error.value)
+    assert "score.api_key_command: sh exited with status 3" in message
+    assert "leaked" not in message
+
+
+def test_false_command(env: dict[str, str]) -> None:
+    with pytest.raises(ConfigError, match=r"score\.api_key_command: false exited with status 1"):
+        resolve("workstation", ['score.api_key_command=["false"]'], env)
+
+
+def test_non_utf8_command(env: dict[str, str]) -> None:
+    command = 'llm.api_key_command=["sh", "-c", "printf \'\\\\377\'"]'
+    with pytest.raises(ConfigError, match=r"llm\.api_key_command: sh printed output that is not UTF-8"):
+        resolve("workstation", [command], env)
+
+
+def test_restore_secrets_ignores_saved_source(env: dict[str, str]) -> None:
+    current = resolve("workstation", ["llm.api_key=sk-new"], env)
+    saved = redact(current)
+    saved["llm"]["api_key_file"] = "/run/secrets/old"
+    settings, _ = restore_secrets(saved, current)
+    assert settings.llm.api_key == SecretStr("sk-new")

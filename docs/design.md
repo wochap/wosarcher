@@ -1420,7 +1420,8 @@ stays loopback only.
   `scrypt$15$8$1$<salt>$<key>`) with a new session secret.
   `set-password --print` prints the hash for
   `WOSARCHER_AUTH__PASSWORD_HASH` instead of storing it; that variable (or
-  `auth.password_hash` in a profile) wins over the stored hash, and
+  `auth.password_hash`, `auth.password_hash_file`, or
+  `auth.password_hash_command` in a profile) wins over the stored hash, and
   `set-password` warns when it is set. The plain password is never stored
   or logged.
 - **`auth.json`** in the config directory (mode 0660 less the umask: 0660
@@ -1488,7 +1489,7 @@ stays loopback only.
   `Secure` flag, and the login limiter use them. A malformed session
   cookie, including a non-ASCII one, is 401.
 
-Settings: `auth.password_hash`, `auth.session_days`, `auth.allowed_origins`.
+Settings: `auth.password_hash` (or `_file`, `_command`), `auth.session_days`, `auth.allowed_origins`.
 
 ### Configuration
 
@@ -1560,7 +1561,7 @@ Environment variables use the prefix `WOSARCHER_` and `__` for nesting
 (`WOSARCHER_SCORE__API_KEY`). `--set` values are parsed as TOML values, so
 `--set score.top_k=12` is an integer.
 
-Each provider block has the same shape: `provider`, `base_url`, `api_key`,
+Each provider block has the same shape: `provider`, `base_url`, `api_key` (or `api_key_file`, `api_key_command`),
 `model`, `device`, `release` (none, llama-swap, ollama), `fallback_urls`,
 `batch_size`, `concurrency`, `connect_timeout`, `timeout`, `retry_budget`
 (seconds of retry waits, default 60), `prices` (optional `input_per_mtok`,
@@ -1602,8 +1603,38 @@ the window, so a long report cannot claim most of it; exhaustive's
 model (a 1M-token DeepSeek, a 256k cloud model) sets its own window, output
 cap, and timeouts in its profile; the defaults never assume a big window.
 
-Secrets come from the environment or a secrets file and are redacted in
-`request.json` and in all server responses.
+Secrets (`api_key` on each provider block, `auth.password_hash`) are
+redacted as `***` in `profile show`, `request.json`, and all server
+responses. Each secret `<x>` can be given in one of three forms, and at
+most one may be set after precedence (more than one fails resolution
+naming the setting and the three forms):
+
+- `<x>`: the value itself (a profile, `WOSARCHER_LLM__API_KEY`, `--set`).
+- `<x>_file`: a path; the file is read with one trailing newline removed.
+- `<x>_command`: a TOML list (argv), run without a shell, standard input
+  closed, 10-second timeout; it must exit 0, and its standard output with
+  one trailing newline removed is the value. Commands must be
+  non-interactive. From the environment:
+  `WOSARCHER_SCORE__API_KEY_COMMAND='["pass", "show", "typesafe"]'`.
+
+```toml
+[llm]
+api_key_file = "/run/secrets/llm"
+```
+
+`resolve()` loads files and commands once per process, so every caller (CLI
+commands, the server's profile and model routes, run and doctor children)
+sees a loaded value; a server run is a fresh child, so a rotated secret is
+picked up by the next run. An unreadable file, a command that cannot
+start, exits non-zero, or times out, or output that is not UTF-8 fails
+resolution (CLI exit 2, before any run directory exists) with an error
+naming the setting and the path or the command's first word, never the
+output. Paths and commands are not secret and print as plain values. Fork
+and rerun ignore `*_file` and `*_command` keys saved in the parent's
+configuration and take secrets from the current process. The HTTP API
+refuses any `set` override whose key ends in `_file` or `_command` (422
+`invalid_override`), so a client cannot run a command as the server user
+or send a server-readable file to a `base_url` of its choice.
 
 ### Switching providers without a rebuild
 
@@ -1614,8 +1645,8 @@ not contain provider URLs or model names.
 
 - Options: `enable`, `package`, `host` and `port` (default `127.0.0.1:8765`),
   `allowedOrigins` (as `auth.allowed_origins`), `environment` (extra
-  variables), `environmentFile` (secrets; nothing secret goes through an
-  option whose value lands in the Nix store), `profiles`, `hooks`, `users`,
+  variables), `environmentFile` (variables that must not land in the Nix
+  store; nothing secret goes through an option whose value does), `profiles`, `hooks`, `users`,
   and `autoStart` (false for a socket proxy that starts the unit on
   demand). Anything else goes through `environment` or a profile.
 - Declared `profiles` are copied (never linked into the store) to
@@ -1636,6 +1667,10 @@ not contain provider URLs or model names.
   group), sets umask `0007`, and runs the package. A member's CLI thus uses
   the server's profiles, runs, caches, and secrets; every member can read
   every secret, which is the accepted trade-off.
+- Secrets reach the service as files: a declared profile sets
+  `llm.api_key_file = "/run/secrets/llm"` (for example a sops-nix secret
+  path readable by the `wosarcher` group), so the profile in the Nix store
+  holds only the path.
 
 **Client side (wosarcher).**
 
@@ -1652,7 +1687,8 @@ not contain provider URLs or model names.
   a server restart. The frontend's New run screen lists profiles and accepts
   per-run overrides.
 - `wosarcher profile list` (with each profile's `description`),
-  `wosarcher profile show <name>` (resolved, secrets redacted), and
+  `wosarcher profile show <name>` (resolved, secrets redacted; `*_file`
+  paths and `*_command` lists shown as written), and
   `wosarcher doctor --profile <name>` make switching safe.
 
 **Model host side (each GPU machine).** One llama-swap service per machine,

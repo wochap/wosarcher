@@ -397,7 +397,7 @@ def test_invalid_domain_422(client: TestClient, runs_dir: Path) -> None:
     assert response.status_code == 422
     assert "domains.allow" in response.json()["detail"]
     assert "gob.pe/tramites" in response.json()["detail"]
-    assert not (runs_dir / ".queue").exists() or not any((runs_dir / ".queue").iterdir())
+    assert not list((runs_dir / ".queue").glob("*"))
 
 
 def test_queries_per_round_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
@@ -430,7 +430,7 @@ def test_invalid_search_language_422(client: TestClient, runs_dir: Path) -> None
     response = client.post("/api/runs", files=fields)
     assert response.status_code == 422
     assert "search_language" in response.json()["detail"]
-    assert not (runs_dir / ".queue").exists() or not any((runs_dir / ".queue").iterdir())
+    assert not list((runs_dir / ".queue").glob("*"))
 
 
 def test_global_domain_list_applies_and_reruns(client: TestClient, runs_dir: Path) -> None:
@@ -498,3 +498,39 @@ def test_older_run_shows_no_thinking(client: TestClient, runs_dir: Path) -> None
     on_disk(runs_dir, "r", ends=True)
     shown = summary(client, "r")
     assert (shown["model"], shown["reasoning"]) == ("", {"plan": "none", "gap": "none", "write": "none"})
+
+
+def test_command_override_422(client: TestClient, runs_dir: Path) -> None:
+    request = {"query": "q", "set": ['llm.api_key_command=["id"]']}
+    response = client.post("/api/runs", files=[("request", (None, json.dumps(request).encode()))])
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_override"
+    assert "llm.api_key_command" in response.json()["detail"]
+    assert not list((runs_dir / ".queue").glob("*"))
+
+
+def test_plain_key_override_201(client: TestClient) -> None:
+    request = {"query": "q", "set": ["llm.api_key=sk-own"]}
+    response = client.post("/api/runs", files=[("request", (None, json.dumps(request).encode()))])
+    assert response.status_code == 201
+
+
+def test_fork_file_override_422(client: TestClient) -> None:
+    parent = create(client, {"query": "q"})
+    finished(client, parent)
+    body = {"from": "write", "set": ["llm.api_key_file=/etc/passwd"]}
+    response = client.post(f"/api/runs/{parent}/fork", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_override"
+    assert "llm.api_key_file" in response.json()["detail"]
+
+
+def test_rerun_saved_source_override_422(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True)
+    path = runs_dir / "r" / "request.json"
+    record = RunRecord.model_validate_json(path.read_text())
+    path.write_text(record.model_copy(update={"overrides": ["score.api_key_file=/run/secrets/x"]}).model_dump_json())
+    response = client.post("/api/runs/r/rerun")
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_override"
+    assert "score.api_key_file" in response.json()["detail"]

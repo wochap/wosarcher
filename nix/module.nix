@@ -139,11 +139,12 @@ in
       example = "/run/secrets/wosarcher.env";
       description = ''
         File of NAME=value lines read at service start and by the CLI
-        wrapper, for secrets such as WOSARCHER_LLM__API_KEY or
-        WOSARCHER_AUTH__PASSWORD_HASH. Give it a path outside the Nix store.
+        wrapper, for variables that must not land in the Nix store. Give it a
+        path outside the Nix store. For secrets prefer the <x>_file settings
+        in a profile (for example llm.api_key_file = "/run/secrets/llm").
         The wrapper runs as the calling user, so the file must be readable by
         the wosarcher group (for example 0440 root:wosarcher); every member of
-        the group can then read every secret in it.
+        the group can then read everything in it.
       '';
     };
 
@@ -154,7 +155,9 @@ in
         Profiles copied to /var/lib/wosarcher/config/wosarcher/profiles/<name>.toml
         before the service starts. A profile removed from this option is
         removed from the directory; hand-made profiles are kept. Never put
-        secrets here: they land in the Nix store. Use environmentFile instead.
+        secret values here: they land in the Nix store. Pass a secret as the
+        path of a file readable by the wosarcher group, for example
+        llm.api_key_file = "/run/secrets/llm" or auth.password_hash_file.
       '';
     };
 
