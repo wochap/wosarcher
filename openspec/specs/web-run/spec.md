@@ -193,31 +193,47 @@ Nocturne variables only.
 
 ### Requirement: Live run header
 The Live run screen (scenario `live`) SHALL show a header with the status
-tag (Connecting, Running, Completed, Failed, Cancelled, with the
+tag (Connecting, Queued, Running, Completed, Failed, Cancelled, with the
 prototype's tints and pulses), a "rewrite of <id>" tag for a fork from the
-write stage, the run id, the meta line `recipe · sources · profile [· N
-files]`, and the query clamped to two lines. When the query is longer than
-240 characters (scenario `long-brief`), a ghost text button SHALL follow
-the query: a caret-down icon, "Show full question", and "· <N>
-characters" in the faint color, where N is the query's character count
-with thousands separators (for example "4,030 characters"). Pressing it
-SHALL show the whole query as plain text, line breaks kept and Markdown
-marks (`#`, `**`, list markers) shown as typed, never rendered as
-formatting, in a tinted box no taller
-than the smaller of 40% of the viewport and 360px that scrolls inside
-itself, and SHALL change the button to a caret-up icon and "Show less";
-pressing again SHALL restore the two-line clamp. The button SHALL carry
-`aria-expanded` and `aria-controls` naming the query element. A query of
-240 characters or fewer SHALL show no button. Actions: Cancel only while
-the run status is queued or running, "Open report" when completed, Rerun
-when failed, interrupted, or cancelled. Cancel SHALL send
-`POST /api/runs/{id}/cancel` and SHALL be disabled until the request
-answers. A 409 answer with `error = "run_not_active"` SHALL NOT show an
-error: the app SHALL apply the `status` from the answer and refresh the run
-(web-shell "Run status from the server"), so the header shows the ended
-state and Cancel disappears. Rerun SHALL send `POST /api/runs/{id}/rerun`
-(same request and attachments, a new run) and show the new run on the Live
-run screen.
+write stage, the origin label for a run not started in the browser
+(scenarios `live-cli` and `live-api`), the run id, the meta line
+`recipe · sources · profile [· N files]`, and the query clamped to two
+lines. The origin label SHALL be the prototype's small muted outlined
+monospace label after the depth and rewrite tags: a terminal-window icon
+and `cli` with the title "Started from the wosarcher CLI on this
+machine" for origin `cli`, and a key icon and `api · <token name>` with
+the title "Started through the API with token “<token name>”" for origin
+`api`. A run with origin `web` SHALL show no origin label. When the query
+is longer than 240 characters (scenario `long-brief`), a ghost text button
+SHALL follow the query: a caret-down icon, "Show full question", and "·
+<N> characters" in the faint color, where N is the query's character
+count with thousands separators (for example "4,030 characters").
+Pressing it SHALL show the whole query as plain text, line breaks kept and
+Markdown marks (`#`, `**`, list markers) shown as typed, never rendered as
+formatting, in a tinted box no taller than the smaller of 40% of the
+viewport and 360px that scrolls inside itself, and SHALL change the button
+to a caret-up icon and "Show less"; pressing again SHALL restore the
+two-line clamp. The button SHALL carry `aria-expanded` and `aria-controls`
+naming the query element. A query of 240 characters or fewer SHALL show
+no button. Actions: Cancel only while the run status is queued or running,
+"Open report" when completed, Rerun when failed, interrupted, or
+cancelled. For a run with origin `web`, Cancel SHALL send
+`POST /api/runs/{id}/cancel` at once. For a run with origin `cli` or `api`,
+Cancel SHALL first open the prototype's confirm dialog (scenario
+`cancel-cli`): the title "Cancel this CLI run?" or "Cancel this API run?";
+the body "An agent started this run with the wosarcher CLI on this
+machine. Cancelling stops it for the agent too: its command exits and
+reports the run as cancelled." for `cli`, or "It was started through the
+API with token “<token name>”. The caller gets the run back as cancelled."
+for `api`; the muted line "Completed stages are kept. Nothing is
+written."; and the buttons "Keep running", which closes the dialog, and
+"Cancel run" (danger outline, stop icon), which sends the cancel request.
+Cancel SHALL be disabled until the request answers. A 409 answer with
+`error = "run_not_active"` SHALL NOT show an error: the app SHALL apply
+the `status` from the answer and refresh the run (web-shell "Run status
+from the server"), so the header shows the ended state and Cancel
+disappears. Rerun SHALL send `POST /api/runs/{id}/rerun` (same request and
+attachments, a new run) and show the new run on the Live run screen.
 
 #### Scenario: Completed
 - **WHEN** `run.done` is applied (end of scenario `live`)
@@ -238,6 +254,26 @@ run screen.
 #### Scenario: Cancel in flight
 - **WHEN** the user presses Cancel and the server has not answered yet
 - **THEN** the Cancel button is disabled
+
+#### Scenario: CLI run header
+- **WHEN** the Live run screen shows a running run with origin `cli` (scenario `live-cli`)
+- **THEN** the header shows the `cli` origin label with the terminal-window icon after the depth tag
+
+#### Scenario: API run header
+- **WHEN** the Live run screen shows a running run with origin `api` and token `ci-runner` (scenario `live-api`)
+- **THEN** the header shows the label `api · ci-runner` with the key icon
+
+#### Scenario: Confirm before cancelling a CLI run
+- **WHEN** the user presses Cancel on a running CLI run (scenario `cancel-cli`)
+- **THEN** the "Cancel this CLI run?" dialog opens and no request is sent until "Cancel run" is pressed
+
+#### Scenario: Keep running
+- **WHEN** the confirm dialog is open and the user presses "Keep running"
+- **THEN** the dialog closes and no cancel request is sent
+
+#### Scenario: Web run cancels at once
+- **WHEN** the user presses Cancel on a running run with origin `web`
+- **THEN** the cancel request is sent with no dialog
 
 ### Requirement: Phase timeline
 The Live run screen (scenario `live`) SHALL show the phases Plan, Search,
@@ -673,16 +709,39 @@ styled as in the prototype.
 - **THEN** only the Passages panel is shown and the tab is marked selected
 
 ### Requirement: Queued state
-While the connection is opening, and after `run.queued` until `run.started`,
-the Live run screen SHALL show the prototype scenario `loading`: tag
-Connecting, the banner "Connecting to <ws origin>…" (with " · queued,
-waiting for a free worker…" when queued), six shimmering skeleton rows in
-Sources, "Waiting for the planner…" in Sub-queries, "Waiting for the run to
-start." in Passages, and every phase pending.
+While the connection is opening, the Live run screen SHALL show the
+prototype scenario `loading`: tag Connecting, the banner "Connecting to
+<ws origin>…", six shimmering skeleton rows in Sources, "Waiting for the
+planner…" in Sub-queries, "Waiting for the run to start." in Passages, and
+every phase pending. After `run.queued` until `run.started`, the screen
+SHALL show the prototype scenarios `queued` and `queued-cli`: the same
+skeleton panels and pending phases, the status tag "Queued" with no pulse,
+and the banner with the hourglass icon whose text comes from the latest
+`run.queued` data. Let N be the number of `held` runs, C the number with
+origin `cli`, and W = N − C (every run not from the CLI counts as web).
+The place is "Next in line." for position 1, otherwise "<position>nd in
+line.", "<position>rd in line.", or "<position>th in line." (2nd, 3rd,
+then th). When C < N the text SHALL be "Waiting for a free slot: <N> of
+<limit> in use (<W> web, <C> CLI). <place>", leaving out a zero part
+("(1 web)", "(2 CLI)"). When C = N the text SHALL be "Waiting for a free
+slot: <N> of <limit> in use, all by CLI runs an agent started on this
+machine. <place> This run starts as soon as one of them finishes or is
+cancelled." Below the text the banner SHALL list each held run: an accent
+dot, its run id in monospace, the origin with its icon (terminal window
+and "CLI", or browser and "web"), and "· running <m:ss>" counted from its
+`started` time.
 
 #### Scenario: Queued
-- **WHEN** `run.queued` is the last applied event
-- **THEN** the banner says the run is queued and waiting for a free worker
+- **WHEN** `run.queued` with position 1, limit 2, and one web and one CLI holder is the last applied event (scenario `queued`)
+- **THEN** the tag reads Queued and the banner says "Waiting for a free slot: 2 of 2 in use (1 web, 1 CLI). Next in line." with both holders listed
+
+#### Scenario: Queued behind CLI runs only
+- **WHEN** both holders have origin `cli` (scenario `queued-cli`)
+- **THEN** the banner says "Waiting for a free slot: 2 of 2 in use, all by CLI runs an agent started on this machine. Next in line. This run starts as soon as one of them finishes or is cancelled."
+
+#### Scenario: Connecting
+- **WHEN** the event socket is opening and no `run.queued` has arrived
+- **THEN** the screen shows scenario `loading` with the tag Connecting
 
 ### Requirement: Reconnecting state
 When the event connection drops during a run, the Live run screen SHALL

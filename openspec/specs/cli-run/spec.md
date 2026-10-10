@@ -162,11 +162,16 @@ SHALL exit with 2 and change nothing.
 ### Requirement: Exit status
 `wosarcher run` and `wosarcher fork` SHALL exit with 0 when the run ends
 with `run.done`, 1 when it ends with `run.failed`, 130 when it is
-cancelled, and 2 for invalid arguments or configuration.
+cancelled, 2 for invalid arguments or configuration, and 75 when
+`--no-wait` finds no free run slot.
 
 #### Scenario: Invalid override
 - **WHEN** the user runs `wosarcher run "q" --set score.topk=3`
 - **THEN** the command exits with 2 and creates no run directory
+
+#### Scenario: Removed concurrency setting
+- **WHEN** the user runs `wosarcher run "q" --set server.max_concurrent_runs=2`
+- **THEN** the command exits with 2 naming the unknown key and creates no run directory
 
 ### Requirement: Fork command
 `wosarcher fork <run_id> --from <stage>` SHALL accept `--set`, the writing
@@ -204,7 +209,8 @@ configuration rejects (not an unknown key) SHALL still fail as before.
 
 ### Requirement: Runs command
 `wosarcher runs` SHALL list runs newest first with ID, creation time,
-status (`done`, `failed`, `cancelled`, or `interrupted`), version, parent
+status (`queued`, `running`, `done`, `failed`, `cancelled`, or
+`interrupted`, run-store "Status of a live run"), origin, version, parent
 run ID, and query. `--limit N` SHALL limit the list (default 20) and
 `--json` SHALL print the list as a JSON array.
 
@@ -213,8 +219,12 @@ run ID, and query. `--limit N` SHALL limit the list (default 20) and
 - **THEN** `wosarcher runs` shows its status as `failed`
 
 #### Scenario: Interrupted run
-- **WHEN** a run's log has `run.started` and no `run.done`, `run.failed`, or `run.cancelled`
+- **WHEN** a run's log has `run.started` and no `run.done`, `run.failed`, or `run.cancelled`, and no live process holds or waits for a slot for it
 - **THEN** `wosarcher runs` shows its status as `interrupted`
+
+#### Scenario: Run started by the server
+- **WHEN** a run started from the web UI is running
+- **THEN** `wosarcher runs` shows its status as `running` and its origin as `web`
 
 ### Requirement: Logs command
 `wosarcher logs <run-id> [--follow] [--profile NAME] [--set KEY=VALUE]`
@@ -285,3 +295,34 @@ reruns keep them. Without a flag the configured value is left unchanged.
 #### Scenario: Fork keeps thinking
 - **WHEN** a run was started with `--write-thinking high` and the user runs `wosarcher fork <id> --from write --tone critical`
 - **THEN** the fork's resolved `llm.reasoning.write` is `high`
+
+### Requirement: Waiting for a run slot
+`wosarcher run` and `wosarcher fork` SHALL create the run directory and
+`request.json` (origin `cli`), then wait for a slot in the shared run queue
+(run-slots "One limit for every run") before the first stage. While the
+run waits, the command SHALL write `waiting for a free run slot (position
+<n>)` to standard error when it starts waiting and whenever its position
+changes; on a terminal the progress view SHALL show the same text above
+the stage rows. SIGINT or SIGTERM while waiting, or a cancel request,
+SHALL end the run with `run.cancelled` and exit 130.
+
+Both commands SHALL accept `--no-wait`. With `--no-wait`, when no slot is
+free or another run is already waiting, the command SHALL create no run
+directory, print `error: no free run slot (<held> of <limit> in use)` to
+standard error, and exit with 75.
+
+#### Scenario: Waiting shown
+- **WHEN** `max_concurrent_runs = 1`, a run is running, and an agent runs `wosarcher run "q" --json`
+- **THEN** standard error has `waiting for a free run slot (position 1)`, and the run starts when the other run ends
+
+#### Scenario: Fail fast
+- **WHEN** `max_concurrent_runs = 1`, a run is running, and an agent runs `wosarcher run "q" --no-wait`
+- **THEN** the command exits with 75 and no new run directory exists
+
+#### Scenario: Free slot with --no-wait
+- **WHEN** no run holds a slot and an agent runs `wosarcher run "q" --no-wait`
+- **THEN** the run starts at once
+
+#### Scenario: Ctrl-C while waiting
+- **WHEN** the user presses Ctrl-C while `wosarcher run` waits for a slot
+- **THEN** the run's log ends with `run.cancelled`, it leaves the queue, and the command exits with 130

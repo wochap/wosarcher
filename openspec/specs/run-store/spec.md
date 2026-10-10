@@ -56,9 +56,13 @@ time.
 - the parent run ID (empty for a new run);
 - the stage a fork started from;
 - the version;
-- the creation time.
+- the creation time;
+- the origin: `web` (started in the browser), `api` (started with an API
+  token) with the token's name, or `cli` (started with `wosarcher run` or
+  `wosarcher fork` by a person or an agent).
 
-A fork SHALL record its parent's depth.
+A fork SHALL record its parent's depth. A fork, rerun, or rewrite SHALL
+record the origin of the request that started it, not its parent's.
 
 #### Scenario: Secrets redacted
 - **WHEN** a run is created with `WOSARCHER_SCORE__API_KEY` set
@@ -71,6 +75,18 @@ A fork SHALL record its parent's depth.
 #### Scenario: Fork keeps depth
 - **WHEN** a run with depth `quick` is forked from `write`
 - **THEN** the fork's `request.json` has depth `quick`
+
+#### Scenario: CLI origin
+- **WHEN** an agent runs `wosarcher run "q"`
+- **THEN** `request.json` has origin `cli` and no token name
+
+#### Scenario: Web rerun of a CLI run
+- **WHEN** a run with origin `cli` is rerun from the web UI with a browser session
+- **THEN** the new run's `request.json` has origin `web`
+
+#### Scenario: API origin
+- **WHEN** a run is created through `POST /api/runs` with the API token named `ci-runner`
+- **THEN** `request.json` has origin `api` and token name `ci-runner`
 
 ### Requirement: Attachments copied
 Attachment files, directories (recursively), and glob matches SHALL be
@@ -133,10 +149,11 @@ and SHALL record the overrides it added over the parent.
 ### Requirement: Run listing
 Listing runs SHALL return every run directory under `runs_dir`, newest
 first, and SHALL ignore directories whose name starts with `.` (other
-programs, such as the server's queue in `runs/.queue/`, keep data there).
+programs keep data there: the server's queue in `runs/.queue/`, and the
+shared run queue and slots in `runs/.slots/`).
 
 #### Scenario: Dot directory ignored
-- **WHEN** `runs_dir` contains `.queue/` and two run directories
+- **WHEN** `runs_dir` contains `.queue/`, `.slots/`, and two run directories
 - **THEN** the listing contains exactly the two runs
 
 ### Requirement: Page cache
@@ -172,3 +189,23 @@ and nothing SHALL be written.
 #### Scenario: Wrong dimension
 - **WHEN** a 768-dimensional vector is stored under an identity with dimension 1024
 - **THEN** storing fails with an error naming 768 and 1024 and no file is written
+
+### Requirement: Status of a live run
+A run whose log has no `run.done`, `run.failed`, or `run.cancelled` SHALL
+have status `queued` while its process waits for a slot, `running` while
+its process holds a slot, and `interrupted` only when no live process
+waits for or holds a slot for it (run-slots "Slot state"). This status
+SHALL be the same for every reader of the runs directory: the server, the
+`wosarcher runs` command, and the server after a restart.
+
+#### Scenario: CLI run seen by the server
+- **WHEN** a `wosarcher run` is between its `search` and `fetch` stages and the server lists runs
+- **THEN** the run's status is `running`
+
+#### Scenario: Server restarts during a CLI run
+- **WHEN** the server restarts while a CLI run is running
+- **THEN** after the restart the run's status is `running`, not `interrupted`
+
+#### Scenario: CLI process killed
+- **WHEN** a CLI run's process is killed with SIGKILL during the `score` stage
+- **THEN** the run's status is `interrupted`

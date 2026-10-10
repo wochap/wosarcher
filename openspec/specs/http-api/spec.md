@@ -210,20 +210,36 @@ null), `profile`, `sources`, `until` (the recipe: null for a full report,
 while queued or running, and for interrupted runs), `cost` (the total cost
 in dollars from `costs.json`; null when absent), `queue_position` (null
 unless queued), `error` (the `run.failed` error text; null unless failed),
-and `end_stage` (the stage named by `run.failed` or `run.cancelled`; null
-otherwise). Status SHALL be one of `queued`, `running`, `done`, `failed`,
-`cancelled`, or `interrupted` (no terminal event and no process owned by
-this server). `GET /api/runs/{id}` SHALL return the same summary plus the
-redacted `request`, the `costs` when present, and `last_seq` (0 when the
-run has no logged event).
+`end_stage` (the stage named by `run.failed` or `run.cancelled`; null
+otherwise), `origin` (`web`, `api`, or `cli`, from `request.json` or the
+staged request), and `token_name` (the API token's name for origin `api`;
+null otherwise). Status SHALL be one of `queued`, `running`, `done`,
+`failed`, `cancelled`, or `interrupted`, following run-store "Status of a
+live run" for runs with no terminal event, whichever process started them.
+`queue_position` SHALL be the run's place in the shared run queue (1 for
+the next run to start). `GET /api/runs/{id}` SHALL return the same summary
+plus the redacted `request`, the `costs` when present, and `last_seq` (0
+when the run has no logged event).
 
 #### Scenario: Finished run
 - **WHEN** a run's log ends with `run.done`
 - **THEN** its status is `done`
 
 #### Scenario: Run left by a crash
-- **WHEN** a run's log has no terminal event and no server-owned process runs it
+- **WHEN** a run's log has no terminal event and no live process holds or waits for a slot for it
 - **THEN** its status is `interrupted`
+
+#### Scenario: Running CLI run
+- **WHEN** a `wosarcher run` started by an agent is in its `fetch` stage
+- **THEN** its summary has `status = "running"` and `origin = "cli"`
+
+#### Scenario: Waiting CLI run
+- **WHEN** a `wosarcher run` waits for a slot behind one other waiting run
+- **THEN** its summary has `status = "queued"` and `queue_position = 2`
+
+#### Scenario: API run
+- **WHEN** a run was created with the API token named `ci-runner`
+- **THEN** its summary has `origin = "api"` and `token_name = "ci-runner"`
 
 #### Scenario: Fork lineage
 - **WHEN** run B was forked from run A, which is version 1, from the write stage
@@ -417,11 +433,14 @@ SHALL answer 422 `invalid_attachment`.
 
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
-option fields, including `format`), `sources`, and `domains` (`allow` and `block`, each a list
-of domain entries, empty by default). `PUT /api/settings` SHALL replace them after
+option fields, including `format`), `sources`, `domains` (`allow` and
+`block`, each a list of domain entries, empty by default), and
+`max_concurrent_runs` (an integer from 1 to 8, default 1; run-slots "One
+limit for every run"). `PUT /api/settings` SHALL replace them after
 validation and persist them in `server-settings.json` in the wosarcher
-config directory, so they survive a restart. Built-in writing defaults
-SHALL apply when the file does not exist.
+config directory, so they survive a restart. Built-in defaults SHALL apply
+when the file does not exist. A new `max_concurrent_runs` SHALL take effect
+at the next slot decision, with no restart.
 
 #### Scenario: Defaults persist
 - **WHEN** a client puts settings with words 800 and the server restarts
@@ -446,6 +465,14 @@ SHALL apply when the file does not exist.
 #### Scenario: Settings saved before format existed
 - **WHEN** `server-settings.json` has no `format` in `writing`
 - **THEN** `GET /api/settings` returns `writing.format = "report"`
+
+#### Scenario: Limit out of range
+- **WHEN** a client puts settings with `max_concurrent_runs = 9`
+- **THEN** the response is 422 naming `max_concurrent_runs`, and the stored settings are unchanged
+
+#### Scenario: Limit raised while a run waits
+- **WHEN** one run is running, one is queued, and a client puts settings with `max_concurrent_runs = 2`
+- **THEN** the queued run starts within 2 seconds
 
 ### Requirement: Profiles
 `GET /api/profiles` SHALL return every profile with:
@@ -651,3 +678,19 @@ this field existed SHALL show `none` for every step.
 #### Scenario: Summary shows thinking
 - **WHEN** a run resolved `llm.reasoning.write` to `high` and `llm.model` to `m`
 - **THEN** its summary has `reasoning.write = "high"`, `reasoning.plan = "none"`, and `model = "m"`
+
+### Requirement: Slot state route
+`GET /api/slots` SHALL return the shared run slot state (run-slots "Slot
+state"): `limit`, `held` (one entry per run holding a slot, oldest first,
+with `run_id`, `origin`, `token_name`, and `started`), and `queued` (one
+entry per waiting run in queue order, with `run_id`, `origin`, and
+`token_name`). It SHALL need the same authentication as every other
+`/api` route.
+
+#### Scenario: Two slots in use
+- **WHEN** `max_concurrent_runs = 2`, a web run and a CLI run are running, and one API run waits
+- **THEN** `GET /api/slots` returns `limit = 2`, two `held` entries with origins `web` and `cli`, and one `queued` entry with origin `api`
+
+#### Scenario: Idle
+- **WHEN** no run is running or waiting
+- **THEN** `GET /api/slots` returns the limit with empty `held` and `queued`

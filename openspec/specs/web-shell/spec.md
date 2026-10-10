@@ -338,7 +338,6 @@ for `q0` made by the search stage SHALL count as part of Search.
 - **WHEN** `stage.started` for score carries `rerank:bge-reranker` and `stage.done` carries `rerank`
 - **THEN** the Score phase is not a fallback
 
-
 #### Scenario: Topic searched in Search
 - **WHEN** a long query skipped the initial search and `hit.found` events arrive for `q0` after `stage.started` for search
 - **THEN** they count toward the Search phase, and the Plan phase shows no hits
@@ -780,3 +779,58 @@ own domain lists; runs on that profile use those instead."
 #### Scenario: New run follows the default
 - **WHEN** the selected profile sets no Allow list, the New run Allow row is not edited, and the user sets the global Allow default to `gob.pe`
 - **THEN** the New run Allow row shows gob.pe without an "overridden" mark
+
+### Requirement: Run history origin label
+Each Run history row (scenario `history`) of a run with origin `cli` or
+`api` SHALL show the origin label before the query, as in the prototype: a
+small muted outlined monospace label with a terminal-window icon and `cli`
+(title "Started from the wosarcher CLI on this machine"), or a key icon
+and `api · <token name>` (title "Started through the API with token
+“<token name>”"). Rows of runs with origin `web` SHALL show no label. A
+running CLI or API run SHALL be listed with the Running status, and Open
+SHALL show it on the Live run screen.
+
+#### Scenario: CLI row
+- **WHEN** the history lists a running run with origin `cli` (scenario `history`)
+- **THEN** its row shows the `cli` label before the query and the Running status, and Open shows the Live run screen
+
+#### Scenario: API row
+- **WHEN** the history lists a finished run with origin `api` and token `ci-runner`
+- **THEN** its row shows the label `api · ci-runner` with the key icon
+
+#### Scenario: Web row
+- **WHEN** the history lists a run started in the browser
+- **THEN** its row shows no origin label
+
+### Requirement: Run slots settings
+The Settings screen (scenario `settings`) SHALL show a "Run slots" section
+above "Run defaults": the heading "Run slots" with "Saved automatically",
+and a panel with the row "Max concurrent runs": a number field (1 to 8,
+step 1, 80px wide) followed by "runs at a time", the helper "One limit for
+every run on this server, whether it was started here, through the API or
+from the `wosarcher` CLI. Extra runs wait in one queue, oldest first.", and
+a status readout: one bar per slot (filled with the accent color while
+held, outlined while free), "<held> of <limit> in use", and in the muted
+color the parts "<W> web", "<C> CLI", and "<Q> queued" joined by " · ",
+leaving out zero parts. When the field's value is 1, the note "Runs that are already going keep going. The
+lower limit applies as they finish." SHALL follow with an info icon. A
+valid value SHALL be saved with `PUT /api/settings` (`max_concurrent_runs`)
+when it changes; a value outside 1 to 8 SHALL NOT be saved. The readout
+SHALL come from `GET /api/slots`, read when the screen opens and every 5
+seconds while it is shown.
+
+#### Scenario: Slots in use
+- **WHEN** Settings opens with `max_concurrent_runs = 2`, one web run and one CLI run held, and one run queued (scenario `settings`)
+- **THEN** the readout shows two filled bars, "2 of 2 in use", and "1 web · 1 CLI · 1 queued"
+
+#### Scenario: Raise the limit
+- **WHEN** the user sets "Max concurrent runs" to 3
+- **THEN** `PUT /api/settings` is sent with `max_concurrent_runs = 3` and the readout shows three bars
+
+#### Scenario: Limit 1
+- **WHEN** the user sets "Max concurrent runs" to 1 while two runs hold slots
+- **THEN** the note "Runs that are already going keep going. The lower limit applies as they finish." is shown
+
+#### Scenario: Out of range
+- **WHEN** the user types 9
+- **THEN** no settings request is sent
