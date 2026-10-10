@@ -185,6 +185,7 @@ html,body{margin:0;height:100%}
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)">
         <span class="tag" style="background:{{ L.stBg }};color:{{ L.stFg }};gap:5px;padding:2px 8px"><i class="ph-fill ph-circle" style="font-size:7px;animation:{{ L.stAnim }}"></i>{{ L.stLabel }}</span><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ L.depthLabel }}</span>
         <sc-if value="{{ L.isRewrite }}" hint-placeholder-val="{{ false }}"><span class="tag tag-outline" style="gap:5px;padding:1px 8px"><i class="ph ph-git-branch"></i>{{ L.rewriteLabel }}</span></sc-if>
+        <sc-if value="{{ L.oL }}" hint-placeholder-val="{{ false }}"><span title="{{ L.oTitle }}" style="flex:none;display:inline-flex;align-items:center;gap:3px;padding:0 5px;border-radius:4px;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:16px;white-space:nowrap"><i class="ph {{ L.oIc }}" style="font-size:11px"></i>{{ L.oL }}</span></sc-if>
         <span style="font-family:var(--mono);font-size:11.5px">{{ L.id }}</span><span>{{ L.meta }}</span>
       </div>
       <sc-if value="{{ qClamped }}" hint-placeholder-val="{{ true }}"><div id="run-q" style="font-size:{{ L.qSize }};line-height:1.35;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:pretty">{{ L.query }}</div></sc-if>
@@ -200,7 +201,7 @@ html,body{margin:0;height:100%}
   </header>
 
   <sc-if value="{{ L.banner }}" hint-placeholder-val="{{ false }}">
-    <div role="status" style="flex:none;display:flex;align-items:center;gap:9px;padding:6px 11px;border-radius:var(--radius-md);font-size:12.5px;background:{{ L.bannerBg }};border:1px solid {{ L.bannerBd }}"><i class="ph {{ L.bannerIcon }}" style="color:{{ L.bannerIc }};font-size:15px;animation:{{ L.bannerAnim }}"></i><span style="flex:1">{{ L.bannerText }}</span></div>
+    <div role="status" style="flex:none;display:flex;align-items:center;gap:9px;padding:6px 11px;border-radius:var(--radius-md);font-size:12.5px;background:{{ L.bannerBg }};border:1px solid {{ L.bannerBd }}"><i class="ph {{ L.bannerIcon }}" style="color:{{ L.bannerIc }};font-size:15px;animation:{{ L.bannerAnim }}"></i><span style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><span>{{ L.bannerText }}</span><sc-if value="{{ L.hasSlots }}" hint-placeholder-val="{{ false }}"><span style="display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)"><sc-for list="{{ L.slots }}" as="sl" hint-placeholder-count="2"><span style="display:inline-flex;align-items:center;gap:6px;min-width:0"><i class="ph-fill ph-circle" style="font-size:7px;color:var(--color-accent)"></i><span style="font-family:var(--mono);font-size:11.5px;color:var(--color-text)">{{ sl.id }}</span><span style="display:inline-flex;align-items:center;gap:3px"><i class="ph {{ sl.ic }}" style="font-size:12px"></i>{{ sl.o }}</span><span>· running {{ sl.el }}</span></span></sc-for></span></sc-if></span></div>
   </sc-if>
 
   <sc-if value="{{ isPhone }}" hint-placeholder-val="{{ false }}">
@@ -459,7 +460,7 @@ html,body{margin:0;height:100%}
     <tbody>
       <sc-for list="{{ hist }}" as="h" hint-placeholder-count="8">
         <tr>
-          <td style="max-width:0"><button onClick="{{ h.open }}" style="display:block;width:100%;border:0;background:transparent;padding:0;color:var(--color-text);font:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" style-hover="color:var(--color-accent-300)">{{ h.q }}</button><sc-if value="{{ h.parent }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px"><i class="ph ph-arrow-elbow-down-right"></i>rewrite of <span style="font-family:var(--mono);font-size:11px">{{ h.parent }}</span> · {{ h.wnote }}<button type="button" data-help="h-version" aria-label="Help: Rewrite marker" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div></sc-if></td>
+          <td style="max-width:0"><div style="display:flex;align-items:center;gap:6px;min-width:0"><sc-if value="{{ h.oL }}" hint-placeholder-val="{{ false }}"><span title="{{ h.oTitle }}" style="flex:none;display:inline-flex;align-items:center;gap:3px;padding:0 5px;border-radius:4px;border:1px solid var(--line);color:var(--muted);font-family:var(--mono);font-size:10.5px;line-height:16px;white-space:nowrap"><i class="ph {{ h.oIc }}" style="font-size:11px"></i>{{ h.oL }}</span></sc-if><button onClick="{{ h.open }}" style="flex:1;min-width:0;display:block;border:0;background:transparent;padding:0;color:var(--color-text);font:inherit;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" style-hover="color:var(--color-accent-300)">{{ h.q }}</button></div><sc-if value="{{ h.parent }}" hint-placeholder-val="{{ false }}"><div style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px"><i class="ph ph-arrow-elbow-down-right"></i>rewrite of <span style="font-family:var(--mono);font-size:11px">{{ h.parent }}</span> · {{ h.wnote }}<button type="button" data-help="h-version" aria-label="Help: Rewrite marker" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div></sc-if></td>
           <td style="white-space:nowrap;color:var(--muted)">{{ h.d }}</td>
           <td>{{ h.recipe }}</td>
           <td><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span class="tag" style="gap:5px;padding:2px 8px;background:{{ h.bg }};color:{{ h.fg }};border:1px solid {{ h.bd }}"><i class="ph {{ h.icon }}" style="animation:{{ h.anim }}"></i>{{ h.status }}</span><span class="tag tag-outline" style="font-size:10.5px;padding:1px 7px">{{ h.depthL }}</span></div></td>
@@ -501,6 +502,21 @@ html,body{margin:0;height:100%}
     </sc-for>
   </div>
 
+  <div style="display:flex;align-items:baseline;gap:4px 12px;flex-wrap:wrap;margin-top:12px"><h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:500">Run slots</h2><span style="font-size:12px;color:var(--faint)">Saved automatically</span></div>
+  <div style="max-width:800px;padding:6px 14px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
+    <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:6px 0">
+      <label for="set-maxruns" style="font-size:12.5px;padding-top:7px">Max concurrent runs</label>
+      <div style="min-width:0;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><input id="set-maxruns" class="input" type="number" min="1" max="8" step="1" value="{{ maxRuns }}" onChange="{{ onMaxRuns }}" aria-describedby="set-maxruns-h" style="width:80px"><span style="font-size:12px;color:var(--muted)">runs at a time</span></div>
+        <span id="set-maxruns-h" style="font-size:12px;color:var(--muted);text-wrap:pretty">One limit for every run on this server, whether it was started here, through the API or from the <span style="font-family:var(--mono);font-size:11.5px">wosarcher</span> CLI. Extra runs wait in one queue, oldest first.</span>
+        <div role="status" style="display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;font-size:12px">
+          <span style="display:flex;gap:3px" aria-hidden="true"><sc-for list="{{ slotBars }}" as="b" hint-placeholder-count="2"><span style="width:18px;height:6px;border-radius:3px;background:{{ b.bg }};box-shadow:{{ b.sh }}"></span></sc-for></span>
+          <span>{{ slotUse }}</span><span style="color:var(--muted)">{{ slotMix }}</span>
+        </div>
+        <sc-if value="{{ slotNote }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:flex-start;gap:5px;font-size:12px;color:var(--muted)"><i class="ph ph-info" style="font-size:13px;margin-top:2px"></i>{{ slotNote }}</span></sc-if>
+      </div>
+    </div>
+  </div>
   <div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap"><h2 style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0;font-weight:500">Run defaults</h2><button type="button" data-help="rdefaults" aria-label="Help: Run defaults" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><span style="font-size:12px;color:var(--faint)">Preselected on every new run · saved automatically</span><sc-if value="{{ rdSaved }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;color:var(--color-accent-300);display:flex;align-items:center;gap:4px"><i class="ph ph-check"></i>Saved</span></sc-if></div>
   <div style="max-width:800px;padding:6px 14px 10px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
     <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:6px 0"><div style="display:flex;align-items:center;gap:5px;padding-top:7px"><span id="sd-format-l" style="font-size:12.5px">Format</span><button type="button" data-help="w-format" aria-label="Help: Format" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div><div style="min-width:0;display:flex;flex-direction:column;gap:4px"><div class="seg" role="radiogroup" aria-labelledby="sd-format-l" style="align-self:flex-start"><sc-for list="{{ setFormatOpts }}" as="o" hint-placeholder-count="2"><label class="seg-opt"><input type="radio" name="sd-format" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div><span style="font-size:12px;color:var(--muted)">Preselects the Recipe on New run. Context is chosen per run.</span></div></div>
@@ -618,6 +634,15 @@ html,body{margin:0;height:100%}
 </div>
 </sc-if>
 
+<sc-if value="{{ cancelOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" style="position:absolute;z-index:20">
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cx-t" aria-describedby="cx-b">
+    <div id="cx-t" class="dialog-title">{{ cancelTitle }}</div>
+    <div id="cx-b" class="dialog-body" style="display:flex;flex-direction:column;gap:8px"><span>{{ cancelBody }}</span><span style="color:var(--muted)">Completed stages are kept. Nothing is written.</span></div>
+    <div class="dialog-actions"><button class="btn btn-secondary" onClick="{{ keepRun }}">Keep running</button><button class="btn btn-secondary" onClick="{{ confirmCancel }}" style="color:var(--color-danger);border-color:var(--color-danger)"><i class="ph ph-stop"></i>Cancel run</button></div>
+  </div>
+</div>
+</sc-if>
 <sc-if value="{{ revokeOpen }}" hint-placeholder-val="{{ false }}">
 <div class="dialog-backdrop" style="position:absolute;z-index:20">
   <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="rv-t">
@@ -738,7 +763,7 @@ html,body{margin:0;height:100%}
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;rounds-live&quot;,&quot;rounds-done&quot;,&quot;rounds-nofollow&quot;,&quot;rounds-nonew&quot;,&quot;rounds-max&quot;,&quot;live-domains&quot;,&quot;long-brief&quot;,&quot;finished&quot;,&quot;finished-answer&quot;,&quot;report-cut&quot;,&quot;rewrite-format&quot;,&quot;export-menu&quot;,&quot;export-busy&quot;,&quot;export-error&quot;,&quot;dig-deeper&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;new-depth&quot;,&quot;new-custom&quot;,&quot;new-domains&quot;,&quot;new-domain-error&quot;,&quot;new-error&quot;,&quot;history&quot;,&quot;settings&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;downloads&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;buttons&quot;,&quot;menu&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;iterative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;queued&quot;,&quot;queued-cli&quot;,&quot;live-cli&quot;,&quot;cancel-cli&quot;,&quot;live-api&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;rounds-live&quot;,&quot;rounds-done&quot;,&quot;rounds-nofollow&quot;,&quot;rounds-nonew&quot;,&quot;rounds-max&quot;,&quot;live-domains&quot;,&quot;long-brief&quot;,&quot;finished&quot;,&quot;finished-answer&quot;,&quot;report-cut&quot;,&quot;rewrite-format&quot;,&quot;export-menu&quot;,&quot;export-busy&quot;,&quot;export-error&quot;,&quot;dig-deeper&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;new-depth&quot;,&quot;new-custom&quot;,&quot;new-domains&quot;,&quot;new-domain-error&quot;,&quot;new-error&quot;,&quot;history&quot;,&quot;settings&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;downloads&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;buttons&quot;,&quot;menu&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;iterative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
 const PH=[
  {id:'plan',l:'Plan',s:0,r:0,e:2.5,gpu:'LLM'},
  {id:'search',l:'Search',s:2.5,r:2.5,e:6.5},
@@ -873,16 +898,20 @@ const ARB='1px solid var(--wa-ring)';
 const LANGS=['English','German','French','Spanish','Portuguese','Japanese','Chinese (Simplified)'];
 const CITES=[['numeric','[1] Numeric'],['super','¹ Superscript'],['authoryear','(Author, year)']];
 const SUP='⁰¹²³⁴⁵⁶⁷⁸⁹';
+const ORIG={cli:{l:'cli',ic:'ph-terminal-window',t:()=>'Started from the wosarcher CLI on this machine'},api:{ic:'ph-key',l:h=>'api · '+h.tok,t:h=>'Started through the API with token “'+h.tok+'”'}};
+const oMark=h=>{const o=ORIG[h&&h.o];if(!o)return {oL:'',oIc:'',oTitle:''};return {oL:typeof o.l==='function'?o.l(h):o.l,oIc:o.ic,oTitle:o.t(h)};};
+const CLIQ='Benchmark vLLM vs SGLang throughput on a single 24 GB GPU';
 const HIST=[
+{id:'r_8b90',q:CLIQ,d:'Today, 13:58',recipe:'context',status:'running',dur:'4:06',cost:'$0.004',o:'cli',depth:'deep'},
 {id:'r_7f3a',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',d:'Oct 2, 21:14',recipe:'report',status:'completed',dur:'3:12',cost:'$0.006'},
 {id:'r_7f41',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',d:'Oct 2, 21:31',recipe:'report',status:'completed',dur:'0:48',cost:'$0.000',parent:'r_7f3a',wnote:'Informative · 300 words'},
-{id:'r_7e90',q:'What changed in the Python 3.13 free-threaded build for C extensions?',d:'Oct 2, 16:40',recipe:'context',status:'completed',dur:'1:48',cost:'$0.003'},
+{id:'r_7e90',q:'What changed in the Python 3.13 free-threaded build for C extensions?',d:'Oct 2, 16:40',recipe:'context',status:'completed',dur:'1:48',cost:'$0.003',o:'cli'},
 {id:'r_7e2c',q:'llama.cpp KV cache quantization quality impact, q8_0 vs q4_0',d:'Oct 1, 23:02',recipe:'report',status:'failed',dur:'0:41',cost:'$0.001'},
 {id:'r_7d11',q:'Rust async cancellation safety patterns with tokio::select!',d:'Oct 1, 10:15',recipe:'report',status:'completed',dur:'4:05',cost:'$0.008'},
-{id:'r_7c08',q:'Summarize my notes on WebGPU compute shader limits',d:'Sep 30, 19:30',recipe:'context',status:'completed',dur:'0:52',cost:'$0.000'},
+{id:'r_7c08',q:'Summarize my notes on WebGPU compute shader limits',d:'Sep 30, 19:30',recipe:'context',status:'completed',dur:'0:52',cost:'$0.000',o:'api',tok:'notes-sync'},
 {id:'r_7b77',q:'Is SQLite WAL mode safe on network filesystems?',d:'Sep 29, 14:11',recipe:'report',status:'cancelled',dur:'0:37',cost:'$0.002'},
-{id:'r_7a3e',q:'Chunk size best practices for RAG over API reference docs',d:'Sep 28, 09:47',recipe:'report',status:'completed',dur:'2:58',cost:'$0.005'},
-{id:'r_79d0',q:'Embedding models under 500M params ranked on MTEB retrieval',d:'Sep 25, 18:20',recipe:'context',status:'failed',dur:'1:05',cost:'$0.002'}];
+{id:'r_7a3e',q:'Chunk size best practices for RAG over API reference docs',d:'Sep 28, 09:47',recipe:'report',status:'completed',dur:'2:58',cost:'$0.005',o:'cli'},
+{id:'r_79d0',q:'Embedding models under 500M params ranked on MTEB retrieval',d:'Sep 25, 18:20',recipe:'context',status:'failed',dur:'1:05',cost:'$0.002',o:'api',tok:'ci-runner'}];
 const PROV=[
 {id:'search',role:'Search',name:'SearXNG',url:'http://localhost:8888',ml:'Engines',model:'duckduckgo, brave, arxiv'},
 {id:'fetch',role:'Fetch',name:'httpx + trafilatura',url:'in-process',ml:'Limits',model:'timeout 10s · 6 concurrent'},
@@ -996,10 +1025,10 @@ class Component extends DCLogic {
     if(ss&&!ss.loading&&(!p0||p0.sel!==ss.sel||p0.loading||p0.s!==ss.s)){const body=this.sdBodyRef.current;const ce=body&&body.querySelector('[data-chunk="'+ss.sel+'"]');
       if(ce){const smooth=p0&&!p0.loading&&p0.s===ss.s;if(!smooth||ce.offsetTop<body.scrollTop+8||ce.offsetTop+ce.offsetHeight>body.scrollTop+body.clientHeight-8)body.scrollTo({top:Math.max(0,ce.offsetTop-body.clientHeight*.22),behavior:smooth?'smooth':'auto'});}}
   }
-  baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',depth:'standard',iter:null,...o};}
+  baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',depth:'standard',iter:null,o:'web',...o};}
   applyScenario(sc){
     const unlocked={...this.state.auth,locked:false,err:null,pw:'',left:5,until:0};
-    const S={cite:null,toast:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null,depth:'standard',advOpen:false,wordsTouched:false,dWords:this.state.wDef.words,optsOpen:false,dig:null,rqOpen:{},wNew:{...this.state.wDef},opts:{recipe:'report',sources:'both',profile:'low-vram'},domA:null,domB:null,dDraft:{},startErr:null,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null};
+    const S={cancelAsk:false,cite:null,toast:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null,depth:'standard',advOpen:false,wordsTouched:false,dWords:this.state.wDef.words,optsOpen:false,dig:null,rqOpen:{},wNew:{...this.state.wDef},opts:{recipe:'report',sources:'both',profile:'low-vram'},domA:null,domB:null,dDraft:{},startErr:null,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null};
     if(this.rdC)S.opts.recipe=this.rdC.format;
     const v1={id:'r_8c21',v:1,query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},md:MD1,dur:fmtT(END*TF),date:'Today, 14:02',files:[]};
     if(sc==='login')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true}});
@@ -1019,6 +1048,10 @@ class Component extends DCLogic {
     if(sc==='help')return this.setState({...S,run:null,screen:'helpspec'});
     if(sc==='empty')return this.setState({...S,run:null,screen:'live'});
     if(sc==='new')return this.setState({...S,run:null,screen:'new'});
+    const Q1={limit:2,pos:1,busy:[{id:'r_8b90',o:'cli',el:'4:06'},{id:'r_8c0d',o:'web',el:'1:12'}]},Q2={limit:2,pos:1,busy:[{id:'r_8b90',o:'cli',el:'4:06'},{id:'r_8bf2',o:'cli',el:'0:38'}]};
+    if(sc==='queued'||sc==='queued-cli')return this.setState({...S,run:this.baseRun({hold:true,queue:sc==='queued'?Q1:Q2}),screen:'live'});
+    if(sc==='live-cli'||sc==='cancel-cli')return this.setState({...S,run:this.baseRun({id:'r_8b90',query:CLIQ,status:'running',t:12,o:'cli',opts:{recipe:'context',sources:'web',profile:'low-vram'}}),screen:'live',cancelAsk:sc==='cancel-cli'});
+    if(sc==='live-api')return this.setState({...S,run:this.baseRun({id:'r_8b77',status:'running',t:6,o:'api',tok:'ci-runner'}),screen:'live'});
     if(sc==='loading')return this.setState({...S,run:this.baseRun({hold:true}),screen:'live'});
     if(sc==='failure')return this.setState({...S,run:this.baseRun({status:'running',t:18,failAt:25.4}),screen:'live'});
     if(sc==='cancelled')return this.setState({...S,run:this.baseRun({status:'cancelled',t:13.2,stopAt:13.2}),screen:'live'});
@@ -1288,6 +1321,9 @@ class Component extends DCLogic {
     else if(r.conn==='replaying')bn=['ph-arrows-clockwise','var(--color-accent)',`Reconnected. Replaying ${r.replayed} missed events…`,...tint('var(--color-accent)',8,40),'sx-spin 1s linear infinite'];
     else if(r.bannerUntil)bn=['ph-check-circle','var(--color-accent)',`Reconnected · replayed ${r.replayed} events, nothing lost.`,...tint('var(--color-accent)',7,30),'none'];
     else if(status==='cancelled')bn=['ph-stop-circle','var(--muted)',`Cancelled at ${stopLabel||'Fetch'} after ${fmtT(t*TF)}. Completed stages are kept; nothing was written.`,...tint('var(--color-text)',5,16),'none'];
+    else if(conn&&r.queue){const Q=r.queue,n=Q.busy.length,c=Q.busy.filter(b=>b.o==='cli').length,w=n-c,pos=Q.pos===1?'Next in line.':`${Q.pos}${Q.pos===2?'nd':Q.pos===3?'rd':'th'} in line.`;
+      const why=c===n?`Waiting for a free slot: ${n} of ${Q.limit} in use, all by CLI runs an agent started on this machine. ${pos} This run starts as soon as one of them finishes or is cancelled.`:`Waiting for a free slot: ${n} of ${Q.limit} in use (${[w&&w+' web',c&&c+' CLI'].filter(Boolean).join(', ')}). ${pos}`;
+      bn=['ph-hourglass-medium','var(--muted)',why,...tint('var(--color-text)',5,16),'none'];}
     else if(conn)bn=['ph-circle-notch','var(--color-accent)',r.hold?'Connecting to ws://localhost:8765 · queued, waiting for a free worker…':'Connecting to ws://localhost:8765…',...tint('var(--color-accent)',6,25),'sx-spin 1s linear infinite'];
     else if(isRw&&running&&t<34.5)bn=['ph-recycle','var(--color-accent)',`Rewrite of ${r.rewriteOf}: sources and passages are reused, only the write stage runs.`,...tint('var(--color-accent)',6,25),'none'];
     
@@ -1298,7 +1334,7 @@ class Component extends DCLogic {
     else if(r.conn==='replaying'){connText='Replaying';connCol='var(--color-accent)';}
     else if(!running){connText='Closed · run ended';connCol='var(--faint)';}
     return {id:r.id,qLong:r.query.length>240,qLen:fmtN(r.query.length)+' characters',meta:`${r.opts.recipe} · ${r.opts.sources} · ${r.opts.profile}`+(files.length?` · ${files.length} file${files.length>1?'s':''}`:''),query:r.query,qSize:phone?'15px':'17px',
-      stLabel:stm[0],stBg:stm[1],stFg:stm[2],stAnim:stm[3],isRewrite:isRw,rewriteLabel:'rewrite of '+r.rewriteOf,
+      stLabel:r.queue&&conn?'Queued':stm[0],stBg:stm[1],stFg:stm[2],stAnim:r.queue&&conn?'none':stm[3],...oMark(r),hasSlots:!!(conn&&r.queue),slots:conn&&r.queue?r.queue.busy.map(b=>({id:b.id,o:b.o==='cli'?'CLI':'web',ic:b.o==='cli'?'ph-terminal-window':'ph-browser',el:b.el})):[],isRewrite:isRw,rewriteLabel:'rewrite of '+r.rewriteOf,
       showGpu:(running||conn)&&!phone,gpu:gpuPhase?(gpuPhase.st==='waiting'?prof.gpuDev+' · waiting':prof.gpuDev):prof.cpuDev,gpuCol:gpuPhase?(gpuPhase.st==='waiting'?'var(--color-warn)':'var(--color-accent)'):'var(--faint)',gpuTitle:'',
       canCancel:running||conn,isDone:status==='done',canRerun:status==='failed'||status==='cancelled',
       banner:!!bn,bannerIcon:bn&&bn[0],bannerIc:bn&&bn[1],bannerText:bn&&bn[2],bannerBg:bn&&bn[3],bannerBd:bn&&bn[4],bannerAnim:bn&&bn[5],
@@ -1364,13 +1400,13 @@ class Component extends DCLogic {
     const nextV=rwBase?S.versions.filter(v=>(v.root||v.id)===(rwBase.root||rwBase.id)).length+1:2;
     // history
     const session=[];S.versions.forEach(v=>{if(!HIST.find(h=>h.id===v.id))session.push({id:v.id,depth:v.depth,q:v.query,d:v.date,recipe:v.opts.recipe,status:'completed',dur:v.dur,cost:v.parent?'$0.000':'$0.004',parent:v.parent,wnote:v.parent?`${v.wopts.tone} · ${v.wopts.words} words`:''});});
-    if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,depth:r.depth,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?'running':r.status,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
+    if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,depth:r.depth,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?(r.queue?'queued':'running'):r.status,o:r.o,tok:r.tok,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
     const allH=P.emptyHistory?[]:[...session.reverse(),...S.hist];
     const q=S.hq.trim().toLowerCase();
     const shown=allH.filter(h=>(!q||h.q.toLowerCase().includes(q))&&(S.hf==='all'||h.status===S.hf)&&(S.hr==='any'||h.recipe===S.hr));
-    const HS={completed:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent'],running:['ph-circle-notch','var(--color-accent-800)','var(--color-accent-100)','transparent'],failed:['ph-x-circle','color-mix(in srgb,var(--color-danger) 18%,transparent)','var(--color-text)','transparent'],cancelled:['ph-stop-circle','transparent','var(--muted)','var(--color-divider)'],done:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent']};
-    const hist=shown.map(h=>{const s=HS[h.status]||HS.completed;return {...h,depthL:DL[h.depth||'standard'],status:h.status==='done'?'completed':h.status,icon:s[0],bg:s[1],fg:s[2],bd:s[3],anim:h.status==='running'?'sx-spin .9s linear infinite':'none',parent:h.parent||'',
-      open:()=>{if(h.live){this.go('live');return;}if(S.versions.find(v=>v.id===h.id)){this.setState({viewId:h.id,screen:'report'});return;}
+    const HS={queued:['ph-clock','transparent','var(--muted)','var(--color-divider)'],completed:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent'],running:['ph-circle-notch','var(--color-accent-800)','var(--color-accent-100)','transparent'],failed:['ph-x-circle','color-mix(in srgb,var(--color-danger) 18%,transparent)','var(--color-text)','transparent'],cancelled:['ph-stop-circle','transparent','var(--muted)','var(--color-divider)'],done:['ph-check','var(--color-neutral-800)','var(--color-neutral-100)','transparent']};
+    const hist=shown.map(h=>{const s=HS[h.status]||HS.completed;return {...h,depthL:DL[h.depth||'standard'],status:h.status==='done'?'completed':h.status,icon:s[0],bg:s[1],fg:s[2],bd:s[3],anim:h.status==='running'?'sx-spin .9s linear infinite':'none',parent:h.parent||'',...oMark(h),
+      open:()=>{if(h.live){this.go('live');return;}if(h.status==='running'){this.applyScenario('live-cli');return;}if(S.versions.find(v=>v.id===h.id)){this.setState({viewId:h.id,screen:'report'});return;}
         if(h.status==='completed')this.setState({versions:[...S.versions,{id:h.id,v:1,query:h.q,opts:{recipe:h.recipe,sources:'both',profile:'low-vram'},wopts:{...S.wDef},md:h.recipe==='answer'?MDA:MD1,dur:h.dur,date:h.d,files:[]}],viewId:h.id,screen:'report'});
         else this.applyScenario(h.status==='failed'?'failure':'cancelled');},
       rerun:()=>this.start(h.q,{...S.opts,recipe:h.recipe},[],{...S.wDef}),
@@ -1436,7 +1472,7 @@ class Component extends DCLogic {
       skel:[{w:'72%'},{w:'58%'},{w:'80%'},{w:'64%'},{w:'70%'},{w:'52%'}],
       srcOpen:!!(S.src&&r),sd,sdRef:this.sdRef,sdBodyRef:this.sdBodyRef,closeSrc:()=>this.closeSrc(),closeSrcBackdrop:e=>{if(e.target===e.currentTarget)this.closeSrc();},checkAllBusy:Object.values(S.health).some(x=>x.checking),
       repRef:this.repRef,hideCite:()=>this.setState({cite:null}),footGap:phone?'10px':'18px',
-      cancel:()=>{const rr=S.run;if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
+      cancel:()=>{const rr=S.run;if(rr&&rr.o&&rr.o!=='web'){this.setState({cancelAsk:true});return;}if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
       openReport:()=>this.setState({screen:'report',viewId:r&&r.id}),
       rerun:()=>r&&this.start(r.query,r.opts,r.files,r.wopts,{depth:r.depth,iter:r.iter}),
       retry:()=>this.setRun({status:'running',failAt:null,stopAt:null,t:21}),
@@ -1476,6 +1512,14 @@ class Component extends DCLogic {
         this.setState(s=>({tokens:[{id:'t'+Date.now(),name,tail:v.slice(-4),created:'Today',last:'Never'},...s.tokens],tokName:'',newTok:{name,value:v},tokCopied:false}));},
       hasNewTok:!!S.newTok,newTok:S.newTok||{},copyTok:()=>{this.copy(S.newTok.value);this.setState({tokCopied:true});},copyTokIcon:S.tokCopied?'ph-check':'ph-copy',copyTokLabel:S.tokCopied?'Copied':'Copy',dismissTok:()=>this.setState({newTok:null}),
       tokens:S.tokens.map(k=>({name:k.name,masked:'wosarcher_••••'+k.tail,created:k.created,last:k.last,revoke:()=>this.setState({revoke:k})})),tokEmpty:!S.tokens.length,tokHas:S.tokens.length>0,
+      cancelOpen:!!(S.cancelAsk&&r),cancelTitle:r&&r.o==='api'?'Cancel this API run?':'Cancel this CLI run?',
+      cancelBody:r&&r.o==='api'?`It was started through the API with token “${r.tok}”. The caller gets the run back as cancelled.`:'An agent started this run with the wosarcher CLI on this machine. Cancelling stops it for the agent too: its command exits and reports the run as cancelled.',
+      keepRun:()=>this.setState({cancelAsk:false}),confirmCancel:()=>{const rr=S.run;this.setState({cancelAsk:false});if(rr)this.setRun({status:'cancelled',stopAt:this.shownT(rr),conn:'connected'});},
+      ...(()=>{const lim=S.maxRuns||2,busy=Math.min(lim,3),q=Math.max(0,3-lim),mix=['web','cli','cli'].slice(0,busy),w=mix.filter(x=>x==='web').length,c=busy-w;
+        return {maxRuns:lim,onMaxRuns:e=>{const v=Math.round(+e.target.value);if(v>=1&&v<=8)this.setState({maxRuns:v});},
+          slotBars:Array.from({length:lim},(_,i)=>({bg:i<busy?'var(--color-accent)':'transparent',sh:i<busy?'none':'inset 0 0 0 1px var(--color-divider)'})),
+          slotUse:`${busy} of ${lim} in use`,slotMix:[w&&w+' web',c&&c+' CLI',q&&q+' queued'].filter(Boolean).join(' · '),
+          slotNote:lim<2?'Runs that are already going keep going. The lower limit applies as they finish.':''};})(),
       revokeOpen:!!S.revoke,revokeName:S.revoke?S.revoke.name:'',closeRevoke:()=>this.setState({revoke:null}),
       confirmRevoke:()=>{const k=S.revoke;this.setState(s=>({tokens:s.tokens.filter(x=>x.id!==k.id),revoke:null,newTok:s.newTok&&s.newTok.name===k.name?null:s.newTok}));this.toastMsg(`Token “${k.name}” revoked`);},
       // login

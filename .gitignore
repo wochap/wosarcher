@@ -28,4 +28,4 @@ evals/out
 design/**/*.png
 design/**/*.jpg
 design/**/*.webp
-.thumbnail
+design/project/.thumbnail
