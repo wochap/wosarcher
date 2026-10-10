@@ -8,47 +8,27 @@ list runs, with readable progress on a terminal and stable JSON for scripts.
 ## Requirements
 
 ### Requirement: Run command
-`wosarcher run "<query>"` SHALL start a run and accept these options:
-`--attach PATH` (repeatable; files, directories, globs), `--sources
-files|web|both` (default `both`), `--until STAGE`, `--profile NAME`,
-`--depth NAME`, `--set KEY=VALUE` (repeatable), `--tone`,
-`--tone-instructions`, `--words`, `--language`, `--citation-marker`,
-`--reference-style`, `--format report|answer`, `--sub-queries N`, `--results-per-query N`,
-`--max-pages N`, `--passages-per-query N`, `--context-tokens N|auto`,
+`wosarcher run "<query>"` SHALL start a run through the daemon's API and
+accept these options:
+`--attach PATH` (repeatable; files, directories, globs, expanded and
+uploaded by the client), `--sources files|web|both` (default `both`),
+`--until STAGE`, `--profile NAME`, `--depth NAME`, `--set KEY=VALUE`
+(repeatable), `--tone`, `--tone-instructions`, `--words`, `--language`,
+`--citation-marker`, `--reference-style`, `--format report|answer`,
+`--sub-queries N`, `--results-per-query N`, `--max-pages N`,
+`--passages-per-query N`, `--context-tokens N|auto`,
 `--gap-context-tokens N|auto`, `--rounds N`, `--queries-per-round N`,
 `--search-language CODE`, `--allow-domain DOMAIN` (repeatable),
-`--block-domain DOMAIN` (repeatable), `--run-id ID`, and
-`--json`. Each writing flag SHALL act as
-`--set write.<field>=<value>`. Each research flag SHALL act as `--set` on
-its key:
-- `--sub-queries`: `plan.max_sub_queries`
-- `--results-per-query`: `search.max_results`
-- `--max-pages`: `fetch.max_pages`
-- `--passages-per-query`: `score.top_k`
-- `--context-tokens`: `select.max_context_tokens` (a positive integer or
-  `auto`)
-- `--gap-context-tokens`: `research.gap_context_tokens` (a positive
-  integer or `auto`)
-- `--rounds`: `research.rounds`
-- `--queries-per-round`: `research.queries_per_round` (a positive
-  integer)
-
-`--search-language` SHALL set `search.language` for that run, as a quoted
-string. Its value SHALL follow the search language rule (http-api "Create
-a run"); any other value SHALL fail with exit status 2 before a run is
-created, with an error naming `--search-language`. An invalid
-`search.language` given through `--set` or a profile SHALL fail
-configuration validation with an error naming `search.language`. Without
-the flag, `search.language` is left unchanged.
-
-The `--allow-domain` values together SHALL set `search.allow_domains`, and
-the `--block-domain` values `search.block_domains`, replacing the
-configured list for that run; a list whose flag is not given is left
-unchanged.
-
-Writing, research, search language, and domain flags SHALL take precedence over `--set` for
-the same field. The depth preset SHALL apply below all of them (depth-presets
-"Preset expansion").
+`--block-domain DOMAIN` (repeatable), and `--json`. The writing flags SHALL
+be sent as the request's `writing`, the research flags as `research`, the
+domain flags as `domains`, `--search-language` as `search_language`,
+`--model` and the thinking flags as `llm`, and `--set` as `set`, so the
+server applies the precedence of http-api "Run request precedence". Values
+the client can check (`--format`, the thinking levels, `--search-language`,
+the domain entries, `--until`) SHALL fail with exit status 2 before a
+request is sent, with an error naming the flag; a 422 from the server
+SHALL exit with 2 printing its detail. `--sources files` without
+`--attach` SHALL fail before a request is sent.
 
 #### Scenario: Writing flag
 - **WHEN** the user runs `wosarcher run "q" --tone critical --words 500`
@@ -56,7 +36,7 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 
 #### Scenario: Files without attachments
 - **WHEN** the user runs `wosarcher run "q" --sources files` with no `--attach`
-- **THEN** the command fails before creating a run, with an error that `--sources files` needs `--attach`
+- **THEN** the command fails before sending a request, with an error that `--sources files` needs `--attach`
 
 #### Scenario: Unknown stage
 - **WHEN** the user runs `wosarcher run "q" --until rank`
@@ -65,6 +45,30 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 #### Scenario: Depth with a research flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --max-pages 80`
 - **THEN** the resolved `fetch.max_pages` is 80, `plan.max_sub_queries` is 6, and `request.json` records depth `deep` and the `fetch.max_pages` override
+
+#### Scenario: Attachments uploaded
+- **WHEN** the user runs `wosarcher run "q" --attach notes/ --sources files --until load --json`
+- **THEN** every Markdown file under `notes/` is uploaded and appears in the run's `attachments/` on the daemon's host
+
+#### Scenario: Domain flags
+- **WHEN** the profile sets `search.allow_domains = ["gob.pe"]` and the user runs `wosarcher run "q" --allow-domain sunat.gob.pe --allow-domain sbs.gob.pe --block-domain facebook.com`
+- **THEN** the resolved `search.allow_domains` is `["sunat.gob.pe", "sbs.gob.pe"]`, `search.block_domains` is `["facebook.com"]`, and `request.json` records both overrides
+
+#### Scenario: Invalid domain flag
+- **WHEN** the user runs `wosarcher run "q" --allow-domain "https://gob.pe/x"`
+- **THEN** the command fails with exit status 2 before sending a request, with an error that names the entry
+
+#### Scenario: Unknown format
+- **WHEN** the user runs `wosarcher run "q" --format summary`
+- **THEN** the command exits with status 2 before sending a request, with an error naming `--format` and the values `report` and `answer`
+
+#### Scenario: Invalid search language
+- **WHEN** the user runs `wosarcher run "q" --search-language "spanish please"`
+- **THEN** the command exits with status 2 before sending a request, with an error naming `--search-language`
+
+#### Scenario: Server rejects an override
+- **WHEN** the user runs `wosarcher run "q" --set score.topk=3`
+- **THEN** the run fails before its first stage, the command prints the configuration error, and exits with 2
 
 #### Scenario: Rounds flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --rounds 2`
@@ -78,21 +82,9 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 - **WHEN** the user runs `wosarcher run "q" --depth deep --gap-context-tokens auto`
 - **THEN** the resolved `research.gap_context_tokens` is `auto` and `request.json` records that override
 
-#### Scenario: Domain flags
-- **WHEN** the profile sets `search.allow_domains = ["gob.pe"]` and the user runs `wosarcher run "q" --allow-domain sunat.gob.pe --allow-domain sbs.gob.pe --block-domain facebook.com`
-- **THEN** the resolved `search.allow_domains` is `["sunat.gob.pe", "sbs.gob.pe"]`, `search.block_domains` is `["facebook.com"]`, and `request.json` records both overrides
-
-#### Scenario: Invalid domain flag
-- **WHEN** the user runs `wosarcher run "q" --allow-domain "https://gob.pe/x"`
-- **THEN** the command fails with exit status 2 before creating a run, with an error that names `search.allow_domains` and the entry
-
 #### Scenario: Answer format flag
 - **WHEN** the user runs `wosarcher run "q" --format answer`
 - **THEN** the run's resolved writing options have format `answer` and `request.json` records the `write.format` override
-
-#### Scenario: Unknown format
-- **WHEN** the user runs `wosarcher run "q" --format summary`
-- **THEN** the command exits with status 2 before creating a run, with an error naming `--format` and the values `report` and `answer`
 
 #### Scenario: Follow-ups per round flag
 - **WHEN** the user runs `wosarcher run "q" --depth deep --queries-per-round 6`
@@ -102,24 +94,21 @@ the same field. The depth preset SHALL apply below all of them (depth-presets
 - **WHEN** the user runs `wosarcher run "q" --search-language es-PE`
 - **THEN** the resolved `search.language` is `es-PE` and SearXNG receives `language=es-PE` with every query
 
-#### Scenario: Invalid search language
-- **WHEN** the user runs `wosarcher run "q" --search-language "spanish please"`
-- **THEN** the command exits with status 2 before creating a run, with an error naming `--search-language`
-
 #### Scenario: Invalid language through --set
 - **WHEN** the user runs `wosarcher run "q" --set search.language='"spanish"'`
-- **THEN** the command exits with status 2 before creating a run, with an error naming `search.language`
+- **THEN** the run fails before its first stage with an error naming `search.language`, and the command exits with 2
 
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
-counters, device, provider) and, when the run ends, print the report as
-Markdown, or a summary of the context when the run stopped at `select`.
+counters, device, provider) built from the run's event stream and, when
+the run ends, print the report as Markdown, or a summary of the context
+when the run stopped at `select`, both fetched from the run's artifacts.
 When standard output is not a terminal and `--json` is not given, it SHALL
 print the report Markdown without progress. Progress, diagnostics, and
 errors SHALL go to standard error: the live progress view when standard
 error is a terminal and `--json` is not given, otherwise one diagnostic
-line per run and stage event (see run-lifecycle, Diagnostics on standard
-error).
+line per run and stage event (the same lines run-lifecycle "Diagnostics on
+standard error" defines for the run process).
 
 #### Scenario: Piped output
 - **WHEN** the user runs `wosarcher run "q" > report.md`
@@ -131,11 +120,12 @@ error).
 
 ### Requirement: JSON output
 With `--json`, `wosarcher run` and `wosarcher fork` SHALL print exactly one
-JSON document to standard output when the run ends: run ID, status, run
-directory, the selected context (passages with numbers, chunk IDs, sources,
-heading paths, text, and scores) when the select stage finished, and the
-report (Markdown and references) when the write stage finished. Its schema
-SHALL be included in `wosarcher schema`.
+JSON document to standard output when the run ends: run ID, status, error,
+the selected context (passages with numbers, chunk IDs, sources, heading
+paths, text, and scores) when the select stage finished, and the report
+(Markdown and references) when the write stage finished. `wosarcherd run`
+and `wosarcherd fork` SHALL print the same document. Its schema SHALL be
+included in `wosarcher schema`.
 
 #### Scenario: Cited context for agents
 - **WHEN** an agent runs `wosarcher run "q" --until select --json`
@@ -145,47 +135,37 @@ SHALL be included in `wosarcher schema`.
 - **WHEN** a run with `--json` fails in the fetch stage
 - **THEN** standard output is one JSON document with `status` `failed` and the error, and the exit status is 1
 
-### Requirement: Chosen run ID
-With `--run-id ID`, `wosarcher run` and `wosarcher fork` SHALL create the
-run under that ID, so a caller such as the server can know the ID before
-the process starts. When `<runs_dir>/<ID>/` already exists the command
-SHALL exit with 2 and change nothing.
-
-#### Scenario: ID used
-- **WHEN** the user runs `wosarcher run "q" --run-id 20260101-120000-abcdef`
-- **THEN** the run directory is `<runs_dir>/20260101-120000-abcdef/`
-
-#### Scenario: ID taken
-- **WHEN** `<runs_dir>/20260101-120000-abcdef/` exists and the same `--run-id` is given
-- **THEN** the command exits with 2 and the existing directory is unchanged
-
 ### Requirement: Exit status
 `wosarcher run` and `wosarcher fork` SHALL exit with 0 when the run ends
 with `run.done`, 1 when it ends with `run.failed`, 130 when it is
-cancelled, 2 for invalid arguments or configuration, and 75 when
-`--no-wait` finds no free run slot.
+cancelled, 2 for invalid arguments or a request the server rejects, and 69
+when the daemon cannot be reached.
 
 #### Scenario: Invalid override
 - **WHEN** the user runs `wosarcher run "q" --set score.topk=3`
-- **THEN** the command exits with 2 and creates no run directory
+- **THEN** the command exits with 2
+
+#### Scenario: Daemon unreachable
+- **WHEN** nothing listens on the client's socket and the user runs `wosarcher run "q"`
+- **THEN** the command exits with 69 and no run is created
 
 #### Scenario: Removed concurrency setting
 - **WHEN** the user runs `wosarcher run "q" --set server.max_concurrent_runs=2`
-- **THEN** the command exits with 2 naming the unknown key and creates no run directory
+- **THEN** the command exits with 2 and the error names the unknown key
 
 ### Requirement: Fork command
 `wosarcher fork <run_id> --from <stage>` SHALL accept `--set`, the writing
-flags, `--until`, `--profile`, `--run-id`, and `--json`, create a forked
-run as the run store defines, and run it to the end or to `--until`. With
-`--profile NAME` the fork's settings SHALL be resolved from that profile
-and the parent's overrides plus the new overrides, instead of the parent's
-saved settings, and the fork SHALL record `NAME` as its profile. When the
-parent's saved settings hold a key the current configuration does not
-know (a field renamed or removed since the parent ran), the fork SHALL
-drop that key before validation, print one warning line naming every
-dropped key as a dotted path, and continue; the fork's `request.json`
-SHALL hold the settings without those keys. A saved value the current
-configuration rejects (not an unknown key) SHALL still fail as before.
+flags, `--model`, the thinking flags, `--until`, `--profile`, and
+`--json`, and create the fork through `POST /api/runs/{id}/fork`. The
+server's `wosarcherd fork` SHALL resolve the fork as the run store defines:
+with `--profile NAME` from that profile and the parent's overrides plus the
+new overrides, recording `NAME` as its profile; when the parent's saved
+settings hold a key the current configuration does not know, dropping that
+key before validation, printing one warning line naming every dropped key
+as a dotted path, and continuing with a `request.json` without those keys;
+a saved value the current configuration rejects SHALL still fail. A
+queued or running parent SHALL exit with 2 printing the server's 409
+detail.
 
 #### Scenario: Change the tone
 - **WHEN** the user runs `wosarcher fork <id> --from write --tone critical`
@@ -195,49 +175,56 @@ configuration rejects (not an unknown key) SHALL still fail as before.
 - **WHEN** the user runs `wosarcher fork <id> --from score --profile cloud`
 - **THEN** the fork's score block comes from the `cloud` profile and its record names profile `cloud`
 
+#### Scenario: Stale saved key
+- **WHEN** the parent's `request.json` settings hold `llm.reasoning_tokens = 4096` and the field no longer exists
+- **THEN** the fork starts, the server log has a warning naming `llm.reasoning_tokens`, and its `request.json` settings have no `reasoning_tokens`
+
+#### Scenario: Parent still running
+- **WHEN** the user forks a run that is running
+- **THEN** the command exits with 2 and prints the server's detail
+
 #### Scenario: Rewrite as an answer
 - **WHEN** the user runs `wosarcher fork <id> --from write --format answer`
 - **THEN** only the write stage runs, with format `answer`, and the fork's `request.json` records the `write.format` override
 
-#### Scenario: Stale saved key
-- **WHEN** the parent's `request.json` settings hold `llm.reasoning_tokens = 4096` and the field no longer exists
-- **THEN** the fork starts, prints a warning naming `llm.reasoning_tokens`, and its `request.json` settings have no `reasoning_tokens`
-
 #### Scenario: Stale saved value
 - **WHEN** the parent's settings hold `llm.provider = "llm"` and only `openai` is accepted
-- **THEN** the fork fails with exit status 2 naming `llm.provider`
+- **THEN** the fork fails before its first stage naming `llm.provider`, and the command exits with 1 printing the error
 
 ### Requirement: Runs command
-`wosarcher runs` SHALL list runs newest first with ID, creation time,
-status (`queued`, `running`, `done`, `failed`, `cancelled`, or
-`interrupted`, run-store "Status of a live run"), origin, version, parent
-run ID, and query. `--limit N` SHALL limit the list (default 20) and
-`--json` SHALL print the list as a JSON array.
+`wosarcher runs` SHALL list the runs `GET /api/runs` returns, newest first,
+with ID, creation time, status (`queued`, `running`, `done`, `failed`,
+`cancelled`, or `interrupted`), origin, version, parent run ID, and query.
+`--limit N` SHALL limit the list (default 20) and `--json` SHALL print the
+list as a JSON array of `RunSummary`.
 
 #### Scenario: Status from the log
 - **WHEN** a run's last run event is `run.failed`
 - **THEN** `wosarcher runs` shows its status as `failed`
 
 #### Scenario: Interrupted run
-- **WHEN** a run's log has `run.started` and no `run.done`, `run.failed`, or `run.cancelled`, and no live process holds or waits for a slot for it
+- **WHEN** a run's log has `run.started` and no terminal event, and no process holds its run lock
 - **THEN** `wosarcher runs` shows its status as `interrupted`
 
-#### Scenario: Run started by the server
+#### Scenario: Run started in the browser
 - **WHEN** a run started from the web UI is running
 - **THEN** `wosarcher runs` shows its status as `running` and its origin as `web`
 
+#### Scenario: Run started by the server
+- **WHEN** a run started by the server from an API token is running
+- **THEN** `wosarcher runs` shows its status as `running` and its origin as `api · <token name>`
+
 ### Requirement: Logs command
-`wosarcher logs <run-id> [--follow] [--profile NAME] [--set KEY=VALUE]`
-SHALL print the run's logged events, one line each:
-`<HH:MM:SS> <stage or -> <type> <summary>`, where the time is the event
-time in local time and the summary is a short description of `data`
-(newlines replaced by spaces, at most 160 characters). Lines of
-`events.jsonl` that do not parse SHALL be skipped. With `--follow`, it
-SHALL keep printing new events as they are logged, checking at least every
-second, and exit with 0 after printing a terminal event (`run.done`,
-`run.failed`, `run.cancelled`). An unknown run SHALL exit with 2 and an
-error naming the run. The runs directory comes from the resolved
-configuration, as for `wosarcher runs`.
+`wosarcher logs <run-id> [--follow]` SHALL print the run's logged events
+from the daemon, one line each: `<HH:MM:SS> <stage or -> <type>
+<summary>`, where the time is the event time in local time and the summary
+is a short description of `data` (newlines replaced by spaces, at most 160
+characters). Without `--follow` it SHALL read `events.jsonl` through the
+artifacts route and skip lines that do not parse. With `--follow`, it SHALL
+subscribe to the run's event socket from `since=0`, print each logged event
+as it arrives (live-only events are not printed), and exit with 0 after a
+terminal event. An unknown run SHALL exit with 2 and an error naming the
+run.
 
 #### Scenario: Finished run
 - **WHEN** the user runs `wosarcher logs <id>` for a run that failed in fetch
@@ -296,33 +283,23 @@ reruns keep them. Without a flag the configured value is left unchanged.
 - **WHEN** a run was started with `--write-thinking high` and the user runs `wosarcher fork <id> --from write --tone critical`
 - **THEN** the fork's resolved `llm.reasoning.write` is `high`
 
-### Requirement: Waiting for a run slot
-`wosarcher run` and `wosarcher fork` SHALL create the run directory and
-`request.json` (origin `cli`), then wait for a slot in the shared run queue
-(run-slots "One limit for every run") before the first stage. While the
-run waits, the command SHALL write `waiting for a free run slot (position
-<n>)` to standard error when it starts waiting and whenever its position
-changes; on a terminal the progress view SHALL show the same text above
-the stage rows. SIGINT or SIGTERM while waiting, or a cancel request,
-SHALL end the run with `run.cancelled` and exit 130.
-
-Both commands SHALL accept `--no-wait`. With `--no-wait`, when no slot is
-free or another run is already waiting, the command SHALL create no run
-directory, print `error: no free run slot (<held> of <limit> in use)` to
-standard error, and exit with 75.
+### Requirement: Queued run shown
+While a run created by `wosarcher run` or `wosarcher fork` is queued, the
+command SHALL write `waiting for a free run slot (position <n>)` to
+standard error when it starts waiting and whenever `run.queued` reports a
+new position; on a terminal the progress view SHALL show the same text
+above the stage rows. SIGINT or SIGTERM while the run is queued or running
+SHALL send `POST /api/runs/{id}/cancel`, wait for the run's terminal
+event, and exit with 130.
 
 #### Scenario: Waiting shown
 - **WHEN** `max_concurrent_runs = 1`, a run is running, and an agent runs `wosarcher run "q" --json`
 - **THEN** standard error has `waiting for a free run slot (position 1)`, and the run starts when the other run ends
 
-#### Scenario: Fail fast
-- **WHEN** `max_concurrent_runs = 1`, a run is running, and an agent runs `wosarcher run "q" --no-wait`
-- **THEN** the command exits with 75 and no new run directory exists
+#### Scenario: Ctrl-C while queued
+- **WHEN** the user presses Ctrl-C while `wosarcher run` waits in the queue
+- **THEN** the run is dequeued, its status is `cancelled`, and the command exits with 130
 
-#### Scenario: Free slot with --no-wait
-- **WHEN** no run holds a slot and an agent runs `wosarcher run "q" --no-wait`
-- **THEN** the run starts at once
-
-#### Scenario: Ctrl-C while waiting
-- **WHEN** the user presses Ctrl-C while `wosarcher run` waits for a slot
-- **THEN** the run's log ends with `run.cancelled`, it leaves the queue, and the command exits with 130
+#### Scenario: Ctrl-C while running
+- **WHEN** the user presses Ctrl-C while the run is in `fetch`
+- **THEN** the run's log ends with `run.cancelled` and the command exits with 130

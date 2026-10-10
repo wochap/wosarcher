@@ -9,21 +9,20 @@ scripts, and checks against cross-site requests and DNS rebinding.
 ## Requirements
 
 ### Requirement: Password storage
-`wosarcher auth set-password` SHALL prompt twice for a password of at least
+`wosarcherd auth set-password` SHALL prompt twice for a password of at least
 8 characters and store only its scrypt hash, with its salt and parameters,
 in `auth.json` in the wosarcher config directory, readable and writable by
-the owner and the file's group and by no one else (mode 0660, further
-restricted by the process's file creation mask), so the server's user and a
-group member's CLI can both update it. The plain password SHALL never be
+the owner and by no one else (mode 0600). The plain password SHALL never be
 stored or logged.
 With `--print` it SHALL print the hash instead of storing it. When
-`WOSARCHER_AUTH__PASSWORD_HASH` is set, it SHALL be used instead of the
-stored hash, and `set-password` without `--print` SHALL warn that the
-environment variable takes precedence.
+`auth.password_hash` is configured (directly, from the environment, or
+through `password_hash_file` or `password_hash_command`), it SHALL be used
+instead of the stored hash, and `set-password` without `--print` SHALL
+warn that the configured hash takes precedence.
 
 #### Scenario: Set a password
-- **WHEN** the user runs `wosarcher auth set-password` with file creation mask 0007 and enters the same password twice
-- **THEN** `auth.json` contains a hash starting with `scrypt$`, does not contain the password, and has mode 0660
+- **WHEN** the service user runs `wosarcherd auth set-password` and enters the same password twice
+- **THEN** `auth.json` contains a hash starting with `scrypt$`, does not contain the password, and has mode 0600
 
 #### Scenario: Mismatched confirmation
 - **WHEN** the two entered passwords differ
@@ -34,44 +33,51 @@ environment variable takes precedence.
 - **THEN** logging in with `hunter22` succeeds
 
 #### Scenario: Group member and server share the file
-- **WHEN** a member of the service's group sets the password with the CLI, and the server then records the use of an API token
-- **THEN** the server reads the new hash, and the member can still read and update `auth.json` afterwards
+- **WHEN** the service user changes the password with `wosarcherd auth set-password` while the server runs, and the server then records the use of an API token
+- **THEN** the server reads the new hash, rewrites `auth.json` with mode 0600, and a group member cannot read the file
 
 ### Requirement: Authentication mode
 Authentication SHALL be enabled when a password hash is configured. When it
 is not, every request SHALL be treated as authenticated, and the other
 checks in this capability (Origin, content type, loopback Host) SHALL still
-apply. A password set while the server runs SHALL take effect without a
-restart.
+apply. A request that arrives on the daemon's Unix socket listener SHALL be
+authenticated with method `socket` whether or not a password is set, SHALL
+skip the Host and Origin checks (no browser reaches the socket), and SHALL
+start runs with origin `cli`. A password set while the server runs SHALL
+take effect without a restart.
 
 #### Scenario: Password set while running
-- **WHEN** the server runs without a password and the owner runs `wosarcher auth set-password`
-- **THEN** the next `GET /api/runs` without a session or token answers 401
+- **WHEN** the server runs without a password and the owner runs `wosarcherd auth set-password`
+- **THEN** the next `GET /api/runs` over TCP without a session or token answers 401
+
+#### Scenario: Socket request with a password set
+- **WHEN** a password is set and a client sends `GET /api/runs` over the Unix socket with no cookie and no token
+- **THEN** the response is 200 and `GET /api/session` over the socket answers `method = "socket"`
 
 ### Requirement: Loopback bind without a password
-`wosarcher serve` SHALL refuse to start, with a message naming
-`wosarcher auth set-password` and a non-zero exit code, when the host is not
-a loopback address (`127.0.0.0/8`, `::1`, or `localhost`) and no password
-hash is configured.
+`wosarcherd serve` SHALL refuse to start, with a message naming
+`wosarcherd auth set-password` and a non-zero exit code, when the TCP host
+is not a loopback address (`127.0.0.0/8`, `::1`, or `localhost`) and no
+password hash is configured.
 
 #### Scenario: LAN bind without password
-- **WHEN** no password is set and the user runs `wosarcher serve --host 0.0.0.0`
+- **WHEN** no password is set and the user runs `wosarcherd serve --host 0.0.0.0`
 - **THEN** the server does not start and the command exits non-zero
 
 #### Scenario: LAN bind with password
-- **WHEN** a password is set and the user runs `wosarcher serve --host 0.0.0.0`
+- **WHEN** a password is set and the user runs `wosarcherd serve --host 0.0.0.0`
 - **THEN** the server starts
 
 ### Requirement: Protected routes
 Every route under `/api`, including the event WebSocket, SHALL require a
-valid session cookie or API token, except `POST /api/login`. Unauthenticated
-requests SHALL answer 401 with `error = "unauthenticated"`; an
-unauthenticated WebSocket handshake SHALL be rejected. Static frontend
-files (including the `/login` page) SHALL be served without
-authentication.
+valid session cookie, an API token, or the socket listener, except
+`POST /api/login`. Unauthenticated requests SHALL answer 401 with
+`error = "unauthenticated"`; an unauthenticated WebSocket handshake SHALL
+be rejected. Static frontend files (including the `/login` page) SHALL be
+served without authentication.
 
 #### Scenario: No credentials
-- **WHEN** a password is set and a client sends `GET /api/runs` with no cookie and no token
+- **WHEN** a password is set and a client sends `GET /api/runs` over TCP with no cookie and no token
 - **THEN** the response is 401
 
 #### Scenario: Static page
@@ -144,12 +150,16 @@ rejected the same way (401), never answered with a server error.
 ### Requirement: Logout and session info
 `POST /api/logout` SHALL clear the session cookie and answer 204.
 `GET /api/session` SHALL return how the request is authenticated (`cookie`,
-`token`, or `none` when authentication is disabled), and for a cookie its
-`since` and `expires` times, for a token its name.
+`token`, `socket`, or `none` when authentication is disabled), and for a
+cookie its `since` and `expires` times, for a token its name.
 
 #### Scenario: Session details
 - **WHEN** a browser that logged in at 09:12 requests `GET /api/session`
 - **THEN** the response has `method = "cookie"` and `since` at 09:12
+
+#### Scenario: Socket session
+- **WHEN** a client requests `GET /api/session` over the Unix socket
+- **THEN** the response has `method = "socket"`
 
 ### Requirement: Password change ends sessions
 Changing the password SHALL invalidate every existing session cookie. API
@@ -165,12 +175,13 @@ SHALL be stored only as SHA-256 hashes, with an ID, a name, the creation
 time, the last-used time, and the last 4 characters. A request with
 `Authorization: Bearer <token>` for a stored token SHALL be authenticated
 and SHALL update the token's last-used time (at most once per minute). The
-CLI SHALL provide `wosarcher auth new-token <name>` (prints the token
-once), `wosarcher auth list-tokens`, and `wosarcher auth revoke-token <id>`.
-The API SHALL provide `GET /api/tokens` (never the token or its hash),
-`POST /api/tokens` with `{"name"}` (answers 201 with the token, once), and
-`DELETE /api/tokens/{id}` (204, or 404 for an unknown ID). Token routes
-SHALL require a browser session (or disabled authentication); a request
+client SHALL provide `wosarcher tokens new <name>` (prints the token
+once), `wosarcher tokens list`, and `wosarcher tokens revoke <id>`, which
+use the token routes (cli-client "Token commands"). The API SHALL provide
+`GET /api/tokens` (never the token or its hash), `POST /api/tokens` with
+`{"name"}` (answers 201 with the token, once), and `DELETE /api/tokens/{id}`
+(204, or 404 for an unknown ID). Token routes SHALL require a browser
+session, the socket listener, or disabled authentication; a request
 authenticated by a token SHALL get 403 on them.
 
 #### Scenario: Script with a token
@@ -178,7 +189,7 @@ authenticated by a token SHALL get 403 on them.
 - **THEN** the response is 200 and the token's last-used time is set
 
 #### Scenario: Revoked token
-- **WHEN** a token is revoked with `wosarcher auth revoke-token <id>` while the server runs
+- **WHEN** a token is revoked with `wosarcher tokens revoke <id>` over the socket while the server runs
 - **THEN** the next request with that token answers 401
 
 #### Scenario: Token shown once

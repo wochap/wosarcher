@@ -40,15 +40,20 @@ The skill SHALL document, each with a command example:
 
 ### Requirement: Output description
 The skill SHALL describe the JSON document printed by `--json` (run ID,
-status, error, run directory, context passages with number, source, heading
-path, text, and score, and the report), how to cite a passage by its
-number, the exit codes (0, 1, 2, 130), and SHALL point to `wosarcher
-schema` and its `RunOutput` definition for the full schema. It SHALL
-include one example output document.
+status, error, context passages with number, source, heading path, text,
+and score, and the report), how to cite a passage by its number, the exit
+codes (0, 1, 2, 69, 130), that the commands talk to a running `wosarcherd`
+(over the local socket, or `WOSARCHER_URL` with `WOSARCHER_TOKEN`), and
+SHALL point to `wosarcher schema` and its `RunOutput` definition for the
+full schema. It SHALL include one example output document.
 
 #### Scenario: Example matches the contract
 - **WHEN** the example output in the skill is parsed as `RunOutput`
 - **THEN** it validates without error
+
+#### Scenario: Connection documented
+- **WHEN** an agent reads the skill
+- **THEN** it finds exit code 69 explained as "the daemon is not reachable" and the two environment variables for a remote daemon
 
 ### Requirement: Commands match the CLI
 Every command line in the skill's code blocks that starts with `wosarcher`

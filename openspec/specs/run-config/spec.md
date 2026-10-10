@@ -61,19 +61,19 @@ only; needs API keys.".
 ### Requirement: Profile selection
 The active profile SHALL be chosen in this order: the `--profile` option,
 then the `WOSARCHER_PROFILE` environment variable, then the name stored by
-`wosarcher profile use`, then the built-in default `workstation`.
+`wosarcherd profile use`, then the built-in default `workstation`.
 
 #### Scenario: Option wins over environment
 - **WHEN** `WOSARCHER_PROFILE=cloud` is set and the command runs with `--profile low-vram`
 - **THEN** the `low-vram` profile is used
 
 #### Scenario: Stored default
-- **WHEN** the user has run `wosarcher profile use cloud` and neither `--profile` nor `WOSARCHER_PROFILE` is given
+- **WHEN** the service user has run `wosarcherd profile use cloud` and neither `--profile` nor `WOSARCHER_PROFILE` is given
 - **THEN** the `cloud` profile is used
 
 #### Scenario: Profile use persists
-- **WHEN** the user runs `wosarcher profile use low-vram`
-- **THEN** later commands without `--profile` or `WOSARCHER_PROFILE` use `low-vram`
+- **WHEN** the service user runs `wosarcherd profile use low-vram`
+- **THEN** later engine commands without `--profile` or `WOSARCHER_PROFILE` use `low-vram`
 
 ### Requirement: Precedence
 Each setting SHALL be resolved with this precedence, lowest first: built-in

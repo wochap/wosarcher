@@ -9,29 +9,30 @@ scripts drive the same `wosarcher run` code path as the CLI.
 ## Requirements
 
 ### Requirement: Serve command
-`wosarcher serve` SHALL start the HTTP server. It SHALL bind `127.0.0.1`
+`wosarcherd serve` SHALL start the HTTP server. It SHALL bind `127.0.0.1`
 and port `8765` unless `--host`, `--port`, or the `server.host` and
-`server.port` settings say otherwise. It SHALL log at the level
-`server.log_level` (`debug`, `info`, `warning`, or `error`; default
+`server.port` settings say otherwise, and SHALL also listen on a Unix
+socket as daemon-command "Serve listeners" defines. It SHALL log at the
+level `server.log_level` (`debug`, `info`, `warning`, or `error`; default
 `info`, environment `WOSARCHER_SERVER__LOG_LEVEL`) to standard error, for
 both its own lines and uvicorn's, and SHALL trust proxy headers only from
 the addresses in `server.forwarded_allow_ips`.
 
 #### Scenario: Default bind
-- **WHEN** the user runs `wosarcher serve` with no options and no `server` settings
+- **WHEN** the user runs `wosarcherd serve --no-socket` with no options and no `server` settings
 - **THEN** the server listens on `127.0.0.1:8765` only
 
 #### Scenario: Port option
-- **WHEN** the user runs `wosarcher serve --port 9000`
+- **WHEN** the user runs `wosarcherd serve --port 9000`
 - **THEN** the server listens on `127.0.0.1:9000`
 
 #### Scenario: Log level from the environment
-- **WHEN** the user runs `wosarcher serve` with `WOSARCHER_SERVER__LOG_LEVEL=debug`
+- **WHEN** the user runs `wosarcherd serve` with `WOSARCHER_SERVER__LOG_LEVEL=debug`
 - **THEN** the server and uvicorn log at level `debug`
 
 #### Scenario: Invalid log level
 - **WHEN** `server.log_level = "loud"`
-- **THEN** `wosarcher serve` exits with 2 and an error naming `server.log_level`
+- **THEN** `wosarcherd serve` exits with 2 and an error naming `server.log_level`
 
 ### Requirement: API prefix and errors
 Every JSON route and the event WebSocket SHALL live under `/api`. Error
@@ -705,15 +706,15 @@ this field existed SHALL show `none` for every step.
 - **THEN** its summary has `reasoning.write = "high"`, `reasoning.plan = "none"`, and `model = "m"`
 
 ### Requirement: Slot state route
-`GET /api/slots` SHALL return the shared run slot state (run-slots "Slot
-state"): `limit`, `held` (one entry per run holding a slot, oldest first,
-with `run_id`, `origin`, `token_name`, and `started`), and `queued` (one
-entry per waiting run in queue order, with `run_id`, `origin`, and
-`token_name`). It SHALL need the same authentication as every other
-`/api` route.
+`GET /api/slots` SHALL return the server's run queue state: `limit` (the
+current `max_concurrent_runs`), `held` (one entry per run process the
+server is executing, oldest first, with `run_id`, `origin`, `token_name`,
+and `started`), and `queued` (one entry per staged run in queue order, with
+`run_id`, `origin`, and `token_name`). It SHALL need the same
+authentication as every other `/api` route.
 
 #### Scenario: Two slots in use
-- **WHEN** `max_concurrent_runs = 2`, a web run and a CLI run are running, and one API run waits
+- **WHEN** `max_concurrent_runs = 2`, a web run and a run created over the socket are running, and one API run waits
 - **THEN** `GET /api/slots` returns `limit = 2`, two `held` entries with origins `web` and `cli`, and one `queued` entry with origin `api`
 
 #### Scenario: Idle

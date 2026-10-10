@@ -35,7 +35,7 @@ implies `--write`.
 
 ### Requirement: Replay
 `python -m evals.replay` SHALL fork every given recorded run with every
-chosen variant through `wosarcher fork <run_id> --from <stage> --until
+chosen variant through `wosarcherd fork <run_id> --from <stage> --until
 select --json` plus the variant's overrides, and SHALL write one result
 record per (run, variant) with the parent run ID, the variant, the fork's
 run ID, and its status. With `--write` the forks SHALL run through the
@@ -52,7 +52,8 @@ log shows that it did not measure the configured ranking:
   from its resolved `prefilter.provider`. The error is then "prefilter ran
   <method> instead of <configured>".
 
-The fork's run ID and run directory SHALL still be recorded.
+The fork's run ID SHALL still be recorded, and its run directory SHALL be
+derived from the runs directory of the replay's own configuration.
 
 #### Scenario: Two variants
 - **WHEN** replay runs over two recorded runs with variants `bm25` and `bm25-wide`

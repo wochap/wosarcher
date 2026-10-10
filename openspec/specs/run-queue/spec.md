@@ -11,23 +11,29 @@ their process dies.
 
 ### Requirement: One process per run
 Each run started through the server SHALL execute as a separate
-`wosarcher run` process (or `wosarcher fork` for forks) with the run ID
-chosen by the server, so the CLI, the server, and the skill share one code
-path. The server SHALL learn about the run only from its run directory
-(`events.jsonl`, `report.md`) and the process exit code.
+`wosarcherd run` process (or `wosarcherd fork` for forks) with the run ID
+chosen by the server, so the server, the CLI client, and the skill share
+one engine. The server SHALL learn about the run only from its run
+directory (`events.jsonl`, `report.md`) and the process exit code. The
+server SHALL be the only process that starts counted runs; a developer's
+direct `wosarcherd run` is not queued, counted, or cancelled by it.
+
+#### Scenario: Same artifacts as the engine
+- **WHEN** a run started through the server finishes
+- **THEN** its run directory has the same artifacts a `wosarcherd run` with the same request would produce
 
 #### Scenario: Same artifacts as the CLI
-- **WHEN** a run started through the server finishes
-- **THEN** its run directory has the same artifacts a `wosarcher run` with the same request would produce
+- **WHEN** a run created with `wosarcher run` over the socket finishes
+- **THEN** its run directory has the same artifacts a run created from the web UI with the same request would produce
 
 ### Requirement: Concurrency limit
-Runs started through the server SHALL wait for a slot in the shared run
-queue (run-slots "One limit for every run"), so at most
-`max_concurrent_runs` runs execute at a time, counting the runs other
-processes started in the same runs directory. The server SHALL start a
-queued run's process only once the run holds a slot, and the process SHALL
-keep that slot until it exits. Further runs SHALL wait in first-in,
-first-out order and start as soon as a slot frees.
+At most `max_concurrent_runs` run processes started by the server SHALL
+execute at a time. The limit SHALL be read from the global settings each
+time the server decides whether to start a queued run, so a new limit
+applies at the next decision without a restart: runs already executing keep
+running, and new runs start only while fewer than the new limit execute.
+Further runs SHALL wait in first-in, first-out order and start as soon as a
+process exits.
 
 #### Scenario: Second run waits
 - **WHEN** `max_concurrent_runs = 1` and two runs are created one after the other
@@ -37,25 +43,27 @@ first-out order and start as soon as a slot frees.
 - **WHEN** `max_concurrent_runs = 2` and three runs are created
 - **THEN** two run at once and the third is queued with position 1
 
+#### Scenario: Limit lowered
+- **WHEN** two runs execute and `PUT /api/settings` sets `max_concurrent_runs` to 1
+- **THEN** both keep running, and the next queued run starts only after both have ended
+
 #### Scenario: Queued behind a CLI run
-- **WHEN** `max_concurrent_runs = 1`, a CLI run holds the slot, and a run is created through the API
-- **THEN** the API run has status `queued` with position 1 and no process until the CLI run ends
+- **WHEN** `max_concurrent_runs = 1`, a run created over the socket is executing, and a run is created from the web UI
+- **THEN** the web run has status `queued` with position 1 and no process until the first run ends
 
 ### Requirement: Staged queued runs
 A queued run's request and attachments SHALL be stored in a staging
-directory inside the runs directory until its process starts. While it is
-staged, the server SHALL hold its place in the shared run queue. When the
-server starts, staged runs SHALL be queued again in creation order, behind
-runs that were already waiting. The staging directory of a run SHALL be
-removed when its process exits.
+directory inside the runs directory until its process starts. When the
+server starts, staged runs SHALL be queued again in creation order. The
+staging directory of a run SHALL be removed when its process exits.
 
 #### Scenario: Restart with a queue
 - **WHEN** the server stops while two runs are queued and starts again
 - **THEN** both runs are queued again in their original order
 
 #### Scenario: Queue place lost while the server is down
-- **WHEN** the server stops while a run is queued, a CLI run starts waiting, and the server starts again
-- **THEN** the CLI run is ahead of the staged run in the queue
+- **WHEN** the server stops while a run is queued and starts again
+- **THEN** the run is staged again at the front of the queue, and nothing created while the server was down is ahead of it
 
 ### Requirement: Cancel
 `POST /api/runs/{id}/cancel` SHALL, for a running run whose process the
@@ -65,12 +73,9 @@ seconds after SIGTERM, the server SHALL send SIGKILL and append
 `run.cancelled` to the run's log. For a queued run the server staged it
 SHALL remove the run from the queue, delete its staging directory, notify
 connected clients with `run.cancelled`, and answer 200 with
-`{"run_id", "result": "dequeued"}`. For a run another process started
-(origin `cli`), waiting or running, it SHALL make a cancel request
-(run-slots "Cancel request for a run in another process") and answer 202
-with `{"run_id", "result": "signalled"}`; the run's own process writes
-`run.cancelled`. For a known run in any other state (`done`, `failed`,
-`cancelled`, or `interrupted`) it SHALL answer 409 with
+`{"run_id", "result": "dequeued"}`. For a known run in any other state
+(`done`, `failed`, `cancelled`, or `interrupted`, including a direct
+`wosarcherd run` the server did not start) it SHALL answer 409 with
 `error = "run_not_active"`, a `detail`, the `run_id`, and the run's current
 `status`. An unknown run SHALL answer 404 `run_not_found`.
 
@@ -82,14 +87,6 @@ with `{"run_id", "result": "signalled"}`; the run's own process writes
 - **WHEN** a run's process does not exit within 10 seconds of SIGTERM
 - **THEN** it is killed and the server appends `run.cancelled` to its log
 
-#### Scenario: Cancel a running CLI run
-- **WHEN** a client cancels a run that `wosarcher run` started and that is running
-- **THEN** the response is 202 with `result = "signalled"`, the run's log ends with `run.cancelled`, and the CLI exits with 130
-
-#### Scenario: Cancel a waiting CLI run
-- **WHEN** a client cancels a CLI run that waits for a slot
-- **THEN** the response is 202, the run's log ends with `run.cancelled`, and the run never starts its first stage
-
 #### Scenario: Cancel a finished run
 - **WHEN** a client cancels a run with status `done`
 - **THEN** the response is 409 with `{"error": "run_not_active", "detail": ..., "run_id": <id>, "status": "done"}`
@@ -97,6 +94,14 @@ with `{"run_id", "result": "signalled"}`; the run's own process writes
 #### Scenario: Cancel a run that already failed
 - **WHEN** a run's process failed and a client that still shows it running sends cancel
 - **THEN** the response is 409 with `status = "failed"`
+
+#### Scenario: Cancel a running CLI run
+- **WHEN** a client cancels a running run that was created over the socket
+- **THEN** the response is 202 with `result = "signalled"`, the run's log ends with `run.cancelled`, and the `wosarcher run` that follows it exits with 130
+
+#### Scenario: Cancel a waiting CLI run
+- **WHEN** a client cancels a queued run that was created over the socket
+- **THEN** the response is 200 with `result = "dequeued"` and the `wosarcher run` that follows it exits with 130
 
 ### Requirement: Process exit without a terminal event
 When a run process exits and its log has no `run.done`, `run.failed`, or
@@ -129,8 +134,9 @@ staged.
 Whatever goes wrong while the server watches or finishes a run process (an
 unreadable event line, an event type it does not know, a standard-error
 line of any length, a failed file write), the server SHALL still close the
-run's event stream, remove its staging directory, free its slot, and start
-the next queued run. The error SHALL be written to the server log.
+run's event stream, remove its staging directory, count the process as
+ended, and start the next queued run. The error SHALL be written to the
+server log.
 
 #### Scenario: Unreadable event line
 - **WHEN** a run process writes a line that is not a valid event to `events.jsonl`, then continues and ends with `run.done`
@@ -157,8 +163,7 @@ queued (with its position), when its process starts (with the command,
 `run` or `fork`, and the process ID), and when it ends: `done` at level
 `info`, `cancelled` at level `info` (also for a run removed from the queue),
 and `failed` at level `warning` with the stage and the first line of the
-error. A cancel request for a run another process started SHALL be logged
-at level `info` with the run ID.
+error.
 
 #### Scenario: Failed run logged
 - **WHEN** a run fails in the `fetch` stage with the error `no output`

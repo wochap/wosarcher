@@ -90,34 +90,31 @@ whatever their `seq`.
 - **THEN** it receives `run.cancelled` with seq 0, then the socket closes with 1000
 
 ### Requirement: Queued runs on the socket
-While a run is queued, whichever process started it, the server SHALL send
-a `run.queued` event on connect and whenever its data changes, with
-`data.position` (1 for the next run to start), `data.limit` (the current
-`max_concurrent_runs`), and `data.held` (the runs holding a slot, each
-with `run_id`, `origin`, `token_name`, and `started`). When a queued run is
-cancelled, connected clients SHALL receive a `run.cancelled` event before
-the socket closes.
+While a run is queued, the server SHALL send a `run.queued` event on
+connect and whenever its data changes, with `data.position` (1 for the
+next run to start), `data.limit` (the current `max_concurrent_runs`), and
+`data.held` (the runs the server is executing, each with `run_id`,
+`origin`, `token_name`, and `started`). When a queued run is cancelled,
+connected clients SHALL receive a `run.cancelled` event before the socket
+closes.
 
 #### Scenario: Position changes
 - **WHEN** a client watches the second queued run and the running run finishes
 - **THEN** the client receives `run.queued` with position 1
 
 #### Scenario: Slot holders
-- **WHEN** a client watches a queued run while a web run and a CLI run hold the two slots
+- **WHEN** a client watches a queued run while a web run and a run created over the socket execute with `max_concurrent_runs = 2`
 - **THEN** the `run.queued` event has `limit = 2` and two `held` entries with origins `web` and `cli`
 
 ### Requirement: Stream end
 After sending a terminal event (`run.done`, `run.failed`, or
 `run.cancelled`), the server SHALL close the socket with code 1000. For a
-run that another process started and that is queued or running
-(run-store "Status of a live run"), the server SHALL replay, then send new
-logged events, queue updates, and report text as they appear, until the
-run's terminal event; when that process exits without a terminal event,
-the server SHALL close the socket with code 1000. For a run that is not
-queued and not running (finished or interrupted), the server SHALL replay,
-send the snapshot, and close with code 1000. For a run the server
-remembers as ended without a run directory, it SHALL send that run's
-terminal event and close with code 1000.
+run that is not queued and not running (finished or interrupted), the
+server SHALL replay, send the snapshot, and close with code 1000. For a run
+the server remembers as ended without a run directory, it SHALL send that
+run's terminal event and close with code 1000. A run the server did not
+start (a direct `wosarcherd run`) is followed like a finished run: replayed
+and closed.
 
 #### Scenario: Finished run
 - **WHEN** a client connects with `since=0` to a run with status `done`
@@ -127,13 +124,16 @@ terminal event and close with code 1000.
 - **WHEN** a client connects to a run whose process exited before creating its run directory
 - **THEN** it receives one `run.failed` event with seq 0 and the error text, then the socket closes with code 1000
 
+#### Scenario: Run killed while followed
+- **WHEN** a client follows a server-started run and its process is killed with SIGKILL
+- **THEN** the server appends `run.failed`, the client receives it, and the socket closes with 1000
 #### Scenario: Follow a CLI run live
-- **WHEN** a client connects to a CLI run in its `search` stage and the run continues to `run.done`
+- **WHEN** a client connects to a run created over the socket (origin `cli`) in its `search` stage and the run continues to `run.done`
 - **THEN** the client receives every later logged event as it is written, then `run.done`, then the socket closes with 1000
 
 #### Scenario: CLI run killed while followed
-- **WHEN** a client follows a CLI run and its process is killed with SIGKILL
-- **THEN** the socket closes with 1000 within 2 seconds and the run's status is `interrupted`
+- **WHEN** a client follows a run created over the socket and the server process that spawned it has appended `run.failed` after its process was killed with SIGKILL
+- **THEN** the client receives `run.failed` and the socket closes with 1000
 
 ### Requirement: Slow clients
 Each client SHALL have a bounded send buffer. When a client falls more than

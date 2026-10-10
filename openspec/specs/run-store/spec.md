@@ -148,12 +148,11 @@ and SHALL record the overrides it added over the parent.
 
 ### Requirement: Run listing
 Listing runs SHALL return every run directory under `runs_dir`, newest
-first, and SHALL ignore directories whose name starts with `.` (other
-programs keep data there: the server's queue in `runs/.queue/`, and the
-shared run queue and slots in `runs/.slots/`).
+first, and SHALL ignore directories whose name starts with `.` (the server
+keeps its queue in `runs/.queue/`).
 
 #### Scenario: Dot directory ignored
-- **WHEN** `runs_dir` contains `.queue/`, `.slots/`, and two run directories
+- **WHEN** `runs_dir` contains `.queue/` and two run directories
 - **THEN** the listing contains exactly the two runs
 
 ### Requirement: Page cache
@@ -192,20 +191,30 @@ and nothing SHALL be written.
 
 ### Requirement: Status of a live run
 A run whose log has no `run.done`, `run.failed`, or `run.cancelled` SHALL
-have status `queued` while its process waits for a slot, `running` while
-its process holds a slot, and `interrupted` only when no live process
-waits for or holds a slot for it (run-slots "Slot state"). This status
-SHALL be the same for every reader of the runs directory: the server, the
-`wosarcher runs` command, and the server after a restart.
+have status `queued` while the server has it staged, `running` while a
+process holds its run lock (daemon-command "Run lock"), and `interrupted`
+otherwise. This status SHALL be the same for every reader of the runs
+directory: the server, and the server after a restart.
 
+#### Scenario: Server restarts during a run
+- **WHEN** the server restarts while a run process it spawned is in `fetch`
+- **THEN** after the restart the run's status is `running`, not `interrupted`
+
+#### Scenario: Run process killed
+- **WHEN** a run's process is killed with SIGKILL during the `score` stage
+- **THEN** the run's status is `interrupted`
+
+#### Scenario: Direct engine run
+- **WHEN** a developer's `wosarcherd run` is in its `search` stage and the server lists runs
+- **THEN** the run's status is `running`
 #### Scenario: CLI run seen by the server
-- **WHEN** a `wosarcher run` is between its `search` and `fetch` stages and the server lists runs
+- **WHEN** a run created over the socket is between its `search` and `fetch` stages and the server lists runs
 - **THEN** the run's status is `running`
 
 #### Scenario: Server restarts during a CLI run
-- **WHEN** the server restarts while a CLI run is running
+- **WHEN** the server restarts while a run created over the socket is executing
 - **THEN** after the restart the run's status is `running`, not `interrupted`
 
 #### Scenario: CLI process killed
-- **WHEN** a CLI run's process is killed with SIGKILL during the `score` stage
+- **WHEN** a direct `wosarcherd run` process is killed with SIGKILL during the `score` stage
 - **THEN** the run's status is `interrupted`

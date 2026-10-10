@@ -103,13 +103,14 @@ use the API's JSON error shape:
 - **THEN** the response is 503 with `error = "export_unavailable"` and a detail naming `typst`, and `format=docx` still works
 
 ### Requirement: Export command
-`wosarcher export <run id> --format pdf|docx [--output PATH] [--profile NAME]`
-SHALL write the exported document to `PATH`, by default `<run id>.<format>`
-in the current directory, and print the written path. It SHALL refuse to
-overwrite an existing file unless `--force` is given. It SHALL exit with 0
-on success, 1 when the conversion fails or a converter is missing (with the
-same messages as the route), and 2 for an unknown run, a run without a
-report, an unknown format, or an existing output file without `--force`.
+`wosarcher export <run id> --format pdf|docx [--output PATH] [--force]`
+SHALL download `GET /api/runs/{id}/export?format=<format>` from the daemon
+and write it to `PATH`, by default `<run id>.<format>` in the current
+directory, and print the written path. It SHALL refuse to overwrite an
+existing file unless `--force` is given. It SHALL exit with 0 on success, 1
+when the route answers `export_unavailable` or `export_failed` (printing
+the route's detail), and 2 for an unknown run, a run without a report, an
+unknown format, or an existing output file without `--force`.
 
 #### Scenario: Export to the default path
 - **WHEN** the user runs `wosarcher export r_8c21 --format docx` in a directory without `r_8c21.docx`
@@ -118,3 +119,7 @@ report, an unknown format, or an existing output file without `--force`.
 #### Scenario: Existing file
 - **WHEN** `r_8c21.pdf` already exists and the user runs `wosarcher export r_8c21 --format pdf`
 - **THEN** nothing is written and the command exits 2 naming the file and `--force`
+
+#### Scenario: Converter missing on the daemon
+- **WHEN** the daemon's host has no `typst` and the user runs `wosarcher export r_8c21 --format pdf`
+- **THEN** the command prints "PDF export needs typst on the server" and exits 1

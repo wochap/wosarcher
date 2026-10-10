@@ -9,15 +9,15 @@ and lets the runner release a model when GPU use is exclusive.
 ## Requirements
 
 ### Requirement: Doctor command
-`wosarcher doctor` SHALL check the providers of the resolved configuration
-(it accepts `--profile` and `--set` like other commands) and print one row
-per configured block (`search`, `fetch`, `prefilter`, `score`, `llm`):
-provider, base URL, device, status, model name, latency of one small
-request in milliseconds, and unload support (`yes`, `no`, or `n/a` when
-`release = "none"`). Built-in providers (`bm25`, `passthrough`) SHALL be
-shown as built in, without a request. `--json` SHALL print the same report
-as JSON. The command SHALL exit 1 when any probe fails and 0 otherwise,
-warnings included.
+`wosarcherd doctor` SHALL check the providers of the resolved configuration
+(it accepts `--profile` and `--set` like other engine commands) and print
+one row per configured block (`search`, `fetch`, `prefilter`, `score`,
+`llm`): provider, base URL, device, status, model name, latency of one
+small request in milliseconds, and unload support (`yes`, `no`, or `n/a`
+when `release = "none"`). Built-in providers (`bm25`, `passthrough`) SHALL
+be shown as built in, without a request. `--json` SHALL print the same
+report as JSON. The command SHALL exit 1 when any probe fails and 0
+otherwise, warnings included.
 
 A repeatable `--block <name>` option SHALL limit the check to the named
 blocks: only their rows are printed and only they are probed, and the
@@ -35,6 +35,11 @@ probe and before the next local probe when that block reports unload
 support `yes`; a failed release SHALL be added as a warning and SHALL NOT
 change the row's status.
 
+`wosarcher doctor [--profile NAME] [--block NAME]... [--json]` SHALL ask
+the daemon to run the check (`POST /api/providers/health/check`) and print
+the returned report in the same row shape, exiting 1 when any block is
+`down` and 0 otherwise; `--set` is not available on the client.
+
 #### Scenario: All healthy
 - **WHEN** every configured endpoint answers its probe
 - **THEN** each row shows status ok, the model name, and a latency, and the exit code is 0
@@ -48,24 +53,27 @@ change the row's status.
 - **THEN** the score row says built in and no request is sent for it
 
 #### Scenario: Other profile
-- **WHEN** the user runs `wosarcher doctor --profile cloud`
+- **WHEN** the user runs `wosarcherd doctor --profile cloud`
 - **THEN** the providers of the `cloud` profile are checked, not the active profile
 
 #### Scenario: One block
-- **WHEN** the user runs `wosarcher doctor --block score --json`
+- **WHEN** the user runs `wosarcherd doctor --block score --json`
 - **THEN** the report has only the score row and no request is sent to the search, fetch, prefilter, or llm endpoints
 
 #### Scenario: Unknown block
-- **WHEN** the user runs `wosarcher doctor --block scorer`
+- **WHEN** the user runs `wosarcherd doctor --block scorer`
 - **THEN** the command fails naming `search`, `fetch`, `prefilter`, `score`, and `llm`, and sends no request
 
+#### Scenario: Client doctor
+- **WHEN** a member runs `wosarcher doctor --block llm` over the socket and the LLM endpoint is down
+- **THEN** the daemon runs the check, the client prints the llm row as down with the error, and exits 1
 #### Scenario: Local probes one at a time
-- **WHEN** `score` and `llm` both set `device = "desktop:gpu0"` and `search` is a cloud block
-- **THEN** the search probe runs concurrently with the local probes, and the llm probe starts only after the score probe has finished
+- **WHEN** two blocks set a `device` label and `wosarcherd doctor` runs
+- **THEN** their probes never overlap, while cloud probes run concurrently with them
 
 #### Scenario: Exclusive policy releases between local probes
-- **WHEN** `run.gpu_policy = "exclusive"`, `score` and `llm` are local with `release = "llama-swap"` and unload support `yes`
-- **THEN** the score model is released before the llm probe is sent
+- **WHEN** `run.gpu_policy = "exclusive"`, two local blocks share a device, and the first reports unload support `yes`
+- **THEN** the doctor releases the first block's model before probing the second
 
 ### Requirement: Probes
 Each probe SHALL make one small real request through the adapter:
