@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fast backend check: formatting, lint, and architecture layering.
+# Fast backend check: formatting, lint, architecture layering, and the zsh
+# completion against the CLI.
 #
 #   scripts/check-backend          check only
 #   scripts/check-backend --fix    format and apply safe lint fixes, then check
@@ -27,4 +28,5 @@ fi
 ruff format --check .
 ruff check .
 uv run --frozen python scripts/check_architecture.py
+uv run --frozen python scripts/check_completions.py
 echo "backend: ok"

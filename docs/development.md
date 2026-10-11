@@ -45,6 +45,12 @@ and skips a side that does not exist yet:
   use `importlib.resources` to read its own files. A new top-level module
   must be added to its `ALLOWED` table with the imports it may use. The
   script has its own tests in `tests/test_check_architecture.py`.
+  Then `scripts/check_completions.py` compares the zsh completion
+  (`completions/_wosarcher`) with the Typer app: commands, each command's
+  flags, and the `# values:` lists against the package constants (stages,
+  sources, formats, citation markers, thinking levels, tones, doctor
+  blocks). A new command, flag, or value needs its line in the completion;
+  the file's header comment states the shape the check reads.
 - Frontend: `biome check` (format and lint), plus design-token rules: no raw
   hex colors and no font families outside the Nocturne variables
   (`web/src/vendor/` is exempt).
@@ -70,6 +76,15 @@ prints the `export WOSARCHER_SOCKET=...` line that points the `wosarcher`
 client at it. The secrets file reaches the dev daemon's environment only.
 Exiting starts the sockets again. sudo is needed for `systemctl`, the
 copies, and the secrets file.
+
+To try the zsh completion from a checkout:
+
+```sh
+fpath=($PWD/completions $fpath); autoload -U compinit; compinit
+```
+
+`tests/test_e2e_zsh_completion.py` drives it in a real zsh (in the dev
+shell) with a stub `wosarcher` from `tests/fixtures/zsh/`.
 
 ## Nix package and module
 

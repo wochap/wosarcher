@@ -844,6 +844,10 @@ src/wosarcher/
                  # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState;
                  # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
 skill/SKILL.md
+completions/
+  _wosarcher     # zsh completion for the client, installed to share/zsh/site-functions
+scripts/
+  check_completions.py  # drift check: completion vs the Typer app and the value constants
 evals/
   variants.toml  # named variants: fork stage (chunk, prefilter, or score) plus --set overrides
   replay.py      # python -m evals.replay: forks recorded runs per variant through `wosarcherd fork`
@@ -1022,6 +1026,19 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   a token URL they exit 2.
 - `wosarcher schema`: the JSON Schema of every contract, from the installed
   package, without a connection.
+
+The zsh completion, `completions/_wosarcher` (hand-written, no Typer
+completion: `add_completion=False`), completes every command, subcommand,
+flag, and fixed option value (stages, sources, formats, citation markers,
+reference styles, tones, thinking levels, doctor blocks, `all`/`auto`,
+`auto`, files). Run IDs (described by their query), profile names, and
+depth presets come from the daemon through the command being completed
+(`runs --json --limit 50`, `profile list`, `depth list`), so it uses the
+same connection environment; each call is capped at 2 seconds with
+`timeout`, its stderr is discarded, and a failure offers nothing. Token IDs
+for `tokens revoke` are not completed. `scripts/check_completions.py` (run
+by `scripts/check`) fails when the completion and the Typer app disagree on
+commands, flags, or the value lists that mirror package constants.
 
 `wosarcherd`:
 
@@ -1478,7 +1495,9 @@ also removes group and other access from everything under
 `/var/lib/wosarcher`. Only the service user reads the data: members of the
 `wosarcher` group (`services.wosarcher.users`) reach the socket and
 nothing else. The `wosarcher` wrapper on the system path exports
-`WOSARCHER_SOCKET=/run/wosarcher/api.sock` and runs the client; the
+`WOSARCHER_SOCKET=/run/wosarcher/api.sock` and runs the client, and
+carries the package's zsh completion (`share/zsh/site-functions/_wosarcher`,
+linked into the system profile when `programs.zsh.enable` is set); the
 `wosarcherd` wrapper exports the service's `XDG_*` and
 `services.wosarcher.environment` and runs the daemon with umask 0077, for
 `sudo -u wosarcher wosarcherd auth set-password`. `environmentFile` is read

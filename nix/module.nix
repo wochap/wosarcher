@@ -67,12 +67,22 @@ let
     chmod 0600 "$manifest"
   '';
 
-  # The client holds no secret: it only needs the socket.
-  client = pkgs.writeShellApplication {
-    name = "wosarcher";
-    text = ''
-      export WOSARCHER_SOCKET=${lib.escapeShellArg socketPath}
-      exec ${lib.getExe' cfg.package "wosarcher"} "$@"
+  # The client holds no secret: it only needs the socket. It carries the
+  # package's zsh completion, without the unwrapped bin/wosarcher.
+  client = pkgs.symlinkJoin {
+    name = "wosarcher-client";
+    paths = [
+      (pkgs.writeShellApplication {
+        name = "wosarcher";
+        text = ''
+          export WOSARCHER_SOCKET=${lib.escapeShellArg socketPath}
+          exec ${lib.getExe' cfg.package "wosarcher"} "$@"
+        '';
+      })
+    ];
+    postBuild = ''
+      mkdir -p $out/share/zsh/site-functions
+      ln -s ${cfg.package}/share/zsh/site-functions/_wosarcher $out/share/zsh/site-functions/_wosarcher
     '';
   };
 

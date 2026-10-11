@@ -1,0 +1,15 @@
+#!/bin/sh
+# Stub `wosarcher` for the zsh completion test: prints canned daemon answers
+# from $WOSARCHER_STUB_DIR, or fails like an unreachable daemon when
+# $WOSARCHER_STUB_FAIL is set.
+if [ -n "$WOSARCHER_STUB_FAIL" ]; then
+  echo "error: cannot reach the daemon at /run/wosarcher/api.sock" >&2
+  exit 69
+fi
+case "$1 $2" in
+  "runs --json") exec cat "$WOSARCHER_STUB_DIR/runs.json" ;;
+  "profile list") exec cat "$WOSARCHER_STUB_DIR/profiles.txt" ;;
+  "depth list") exec cat "$WOSARCHER_STUB_DIR/depths.txt" ;;
+esac
+echo "error: stub does not answer: $*" >&2
+exit 2

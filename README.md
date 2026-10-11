@@ -383,6 +383,19 @@ Each run directory holds every intermediate artifact (`plan.json`,
 inspected with `jq`, forked from any stage, and replayed by the evaluation
 harness in `evals/`.
 
+## Shell completion
+
+`completions/_wosarcher` completes `wosarcher` commands, flags, option
+values, and, through the daemon, run IDs, profiles, and depth presets in
+zsh. The Nix package installs it to `share/zsh/site-functions`, and the
+NixOS module's `wosarcher` wrapper carries it (with `programs.zsh.enable`).
+For other installs, add the directory to `fpath` before `compinit`:
+
+```sh
+fpath=(/path/to/wosarcher/completions $fpath)
+autoload -U compinit && compinit
+```
+
 ## Agent skill
 
 Copy or symlink `skill/` into your agent's skills directory as `wosarcher/`.
@@ -397,6 +410,7 @@ web/             frontend (Vite + React)
 tests/           backend tests (fakes only, no network)
 evals/           replay harness for comparing prefilters and scorers
 skill/           agent skill
+completions/     zsh completion for the client
 scripts/         check scripts and the architecture rule table
 design/          Claude Design handoff bundle: the UI source of truth
 docs/            design, development guide, frontend inventory

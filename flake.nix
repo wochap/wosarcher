@@ -62,6 +62,8 @@
             # Report export: pandoc writes DOCX and Typst source; typst renders the PDF.
             pkgs.pandoc
             pkgs.typst
+            # The zsh completion test drives a real zsh.
+            pkgs.zsh
           ];
 
           env = {

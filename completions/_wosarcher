@@ -1,0 +1,390 @@
+#compdef wosarcher
+# zsh completion for the wosarcher client.
+#
+# scripts/check_completions.py compares this file with the Typer app, so it
+# keeps a fixed shape:
+#   - one function per command, `_wosarcher_<command>() {` (`_wosarcher_profile_show`
+#     for a subcommand), holding one `_arguments` spec per line; a spec that
+#     names a flag starts with `'--flag[`, `'*--flag[`, `'(...)--flag[`, or a
+#     `{--a,--b}` brace form;
+#   - command lists follow a `# commands: <group>` line and value lists a
+#     `# values: <name>` line, as an array with one quoted `name:description`
+#     or `name` entry per line, closed by a line holding only `)`.
+# Run IDs, profiles, and depth presets are asked from the daemon through the
+# command being completed; when it fails, nothing is offered.
+
+# Runs the wosarcher command on the line (so a wrapper's WOSARCHER_SOCKET
+# applies), at most 2 seconds, silently; prints nothing on failure.
+# `_wosarcher` sets wosarcher_command before `_arguments` shifts $words.
+_wosarcher_query() {
+  local -a cmd=(${wosarcher_command:-wosarcher} "$@")
+  (( $+commands[timeout] )) && cmd=(timeout 2 $cmd)
+  local out
+  out=$($cmd 2>/dev/null) || return 1
+  print -r -- $out
+}
+
+_wosarcher_run_ids() {
+  local -a runs
+  local line id query
+  # `runs --json` prints one field per line; run_id and query sit at the
+  # object's top level (4 spaces in).
+  for line in ${(f)"$(_wosarcher_query runs --json --limit 50)"}; do
+    case $line in
+      ('    "run_id": '*)
+        id=${${line#*: \"}%\",}
+        ;;
+      ('    "query": '*)
+        query=${${line#*: \"}%\",}
+        query=${${query//\\\"/\"}//\\\\/\\}
+        [[ -n $id ]] && runs+=("${id}:${query//:/\\:}")
+        id=
+        ;;
+    esac
+  done
+  _describe -t runs 'run' runs
+}
+
+_wosarcher_profile_names() {
+  local -a profiles
+  local line
+  # `profile list`: a 2-character active marker, the name, then source and description.
+  for line in ${(f)"$(_wosarcher_query profile list)"}; do
+    line=${line[3,-1]}
+    [[ -n $line ]] && profiles+=("${line%% *}:${${line#* }//:/\\:}")
+  done
+  _describe -t profiles 'profile' profiles
+}
+
+_wosarcher_depth_names() {
+  local -a depths
+  local line
+  # `depth list`: the name, then the description.
+  for line in ${(f)"$(_wosarcher_query depth list)"}; do
+    [[ -n $line ]] && depths+=("${line%% *}:${${line#* }//:/\\:}")
+  done
+  _describe -t depths 'depth preset' depths
+}
+
+_wosarcher_stages() {
+  # values: stages
+  local -a stages=(
+    'load'
+    'plan'
+    'search'
+    'fetch'
+    'chunk'
+    'prefilter'
+    'score'
+    'gap'
+    'select'
+    'write'
+  )
+  _describe -t stages 'stage' stages
+}
+
+_wosarcher_sources() {
+  # values: sources
+  local -a sources=(
+    'files:attached files only'
+    'web:the web only'
+    'both:attached files and the web'
+  )
+  _describe -t sources 'sources' sources
+}
+
+_wosarcher_formats() {
+  # values: formats
+  local -a formats=(
+    'report:a cited report'
+    'answer:a short cited answer'
+  )
+  _describe -t formats 'format' formats
+}
+
+_wosarcher_markers() {
+  # values: citation-markers
+  local -a markers=(
+    'numeric'
+    'superscript'
+    'author-year'
+  )
+  _describe -t markers 'citation marker' markers
+}
+
+_wosarcher_styles() {
+  local -a styles=(APA MLA Chicago IEEE)
+  _describe -t styles 'reference style' styles
+}
+
+_wosarcher_efforts() {
+  # values: efforts
+  local -a efforts=(
+    'none'
+    'low'
+    'medium'
+    'high'
+    'default'
+  )
+  _describe -t efforts 'thinking level' efforts
+}
+
+_wosarcher_tones() {
+  # values: tones
+  local -a tones=(
+    'objective:impartial and unbiased presentation of facts and findings'
+    'formal:adheres to academic standards with sophisticated language and structure'
+    'analytical:critical evaluation and detailed examination of data and theories'
+    'persuasive:convincing the audience of a particular viewpoint or argument'
+    'informative:providing clear and comprehensive information on a topic'
+    'explanatory:clarifying complex concepts and processes'
+    'descriptive:detailed depiction of phenomena, experiments, or case studies'
+    'critical:judging the validity and relevance of the research and its conclusions'
+    'comparative:juxtaposing different theories, data, or methods'
+    'speculative:exploring hypotheses and future research directions'
+    'reflective:considering the research process and personal insights'
+  )
+  _describe -t tones 'tone' tones
+}
+
+_wosarcher_budget() {
+  _alternative 'auto:budget:(auto)' 'number:token count:'
+}
+
+_wosarcher_search_language() {
+  _alternative 'keyword:language:((all\:"every language" auto\:"the query'\''s language"))' 'code:language code:'
+}
+
+_wosarcher_run() {
+  _arguments \
+    '*--attach[file, directory, or glob to attach]:file:_files' \
+    '--sources[files, web, or both]:sources:_wosarcher_sources' \
+    '--until[stop after this stage]:stage:_wosarcher_stages' \
+    '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '--depth[depth preset]:depth:_wosarcher_depth_names' \
+    '*--set[override one field]:dotted.key=value:' \
+    '--tone[writing tone]:tone:_wosarcher_tones' \
+    '--tone-instructions[extra tone instructions]:instructions:' \
+    '--words[target report length in words]:words:' \
+    '--language[report language]:language:' \
+    '--citation-marker[citation marker]:marker:_wosarcher_markers' \
+    '--reference-style[reference style]:style:_wosarcher_styles' \
+    '--format[write a report or an answer]:format:_wosarcher_formats' \
+    '--sub-queries[sub-queries to plan]:count:' \
+    '--results-per-query[search results per query]:count:' \
+    '--max-pages[pages to fetch at most]:count:' \
+    '--passages-per-query[passages kept per query]:count:' \
+    '--context-tokens[context token cap]:tokens:_wosarcher_budget' \
+    '--gap-context-tokens[gap step context token budget]:tokens:_wosarcher_budget' \
+    '--rounds[research rounds]:rounds:(1 2 3 4 5 6 7 8)' \
+    '--queries-per-round[follow-up queries per round at most]:count:' \
+    '--search-language[search language]:language:_wosarcher_search_language' \
+    '*--allow-domain[only use search results from this domain]:domain:' \
+    '*--block-domain[drop search results from this domain]:domain:' \
+    '--model[chat model for this run]:model:' \
+    '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
+    '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
+    '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--json[print one JSON document when the run ends]' \
+    '--help[show help]' \
+    '1:query:'
+}
+
+_wosarcher_fork() {
+  _arguments \
+    '--from[first stage to run again]:stage:_wosarcher_stages' \
+    '--until[stop after this stage]:stage:_wosarcher_stages' \
+    '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '*--set[override one field]:dotted.key=value:' \
+    '--tone[writing tone]:tone:_wosarcher_tones' \
+    '--tone-instructions[extra tone instructions]:instructions:' \
+    '--words[target report length in words]:words:' \
+    '--language[report language]:language:' \
+    '--citation-marker[citation marker]:marker:_wosarcher_markers' \
+    '--reference-style[reference style]:style:_wosarcher_styles' \
+    '--format[write a report or an answer]:format:_wosarcher_formats' \
+    '--gap-context-tokens[gap step context token budget]:tokens:_wosarcher_budget' \
+    '--model[chat model for this run]:model:' \
+    '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
+    '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
+    '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--json[print one JSON document when the run ends]' \
+    '--help[show help]' \
+    '1:run:_wosarcher_run_ids'
+}
+
+_wosarcher_runs() {
+  _arguments \
+    '--limit[how many runs to list]:count:' \
+    '--json[print the list as a JSON array]' \
+    '--help[show help]'
+}
+
+_wosarcher_logs() {
+  _arguments \
+    '--follow[keep printing new events until the run ends]' \
+    '--help[show help]' \
+    '1:run:_wosarcher_run_ids'
+}
+
+_wosarcher_cancel() {
+  _arguments \
+    '--help[show help]' \
+    '1:run:_wosarcher_run_ids'
+}
+
+_wosarcher_export() {
+  # values: export-formats
+  local -a export_formats=(
+    'pdf'
+    'docx'
+  )
+  _arguments \
+    "--format[pdf or docx]:format:($export_formats)" \
+    '--output[file to write]:file:_files' \
+    '--force[overwrite an existing file]' \
+    '--help[show help]' \
+    '1:run:_wosarcher_run_ids'
+}
+
+_wosarcher_doctor() {
+  # values: blocks
+  local -a blocks=(
+    'search'
+    'fetch'
+    'prefilter'
+    'score'
+    'llm'
+  )
+  _arguments \
+    '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '--json[print the report as JSON]' \
+    "*--block[check only this block]:block:($blocks)" \
+    '--help[show help]'
+}
+
+_wosarcher_schema() {
+  _arguments \
+    '--help[show help]'
+}
+
+_wosarcher_profile_list() {
+  _arguments \
+    '--help[show help]'
+}
+
+_wosarcher_profile_show() {
+  _arguments \
+    '--help[show help]' \
+    '1:profile:_wosarcher_profile_names'
+}
+
+_wosarcher_depth_list() {
+  _arguments \
+    '--help[show help]'
+}
+
+_wosarcher_depth_show() {
+  _arguments \
+    '--help[show help]' \
+    '1:depth preset:_wosarcher_depth_names'
+}
+
+_wosarcher_tokens_new() {
+  _arguments \
+    '--help[show help]' \
+    '1:token name:'
+}
+
+_wosarcher_tokens_list() {
+  _arguments \
+    '--help[show help]'
+}
+
+_wosarcher_tokens_revoke() {
+  _arguments \
+    '--help[show help]' \
+    '1:token ID (see wosarcher tokens list):'
+}
+
+# Completes a command group: $1 is the group name, the rest its subcommands.
+_wosarcher_group() {
+  local group=$1 curcontext=$curcontext state line
+  shift
+  local -a subcommands=("$@")
+  _arguments -C \
+    '--help[show help]' \
+    '1:command:->command' \
+    '*::arg:->args'
+  case $state in
+    command)
+      _describe -t commands "$group command" subcommands
+      ;;
+    args)
+      (( $+functions[_wosarcher_${group}_${line[1]}] )) && _wosarcher_${group}_${line[1]}
+      ;;
+  esac
+}
+
+_wosarcher_profile() {
+  # commands: profile
+  local -a subcommands=(
+    'list:list profiles with their source and description'
+    'show:print a profile resolved by the daemon, secrets redacted'
+  )
+  _wosarcher_group profile $subcommands
+}
+
+_wosarcher_depth() {
+  # commands: depth
+  local -a subcommands=(
+    'list:list depth presets'
+    'show:print the values a preset runs with'
+  )
+  _wosarcher_group depth $subcommands
+}
+
+_wosarcher_tokens() {
+  # commands: tokens
+  local -a subcommands=(
+    'new:create an API token and print it once'
+    'list:list API tokens, masked'
+    'revoke:revoke an API token'
+  )
+  _wosarcher_group tokens $subcommands
+}
+
+_wosarcher() {
+  local curcontext=$curcontext state line
+  local wosarcher_command=${(Q)words[1]}
+  # commands: wosarcher
+  local -a commands=(
+    'run:research a query and print the report'
+    'fork:copy a run up to a stage and run the rest again'
+    'runs:list runs, newest first'
+    'logs:print a run'\''s logged events'
+    'cancel:cancel a queued or running run'
+    'export:write a finished report as PDF or DOCX'
+    'doctor:check the daemon'\''s providers'
+    'profile:list and show configuration profiles'
+    'depth:list and show depth presets'
+    'tokens:create, list, and revoke API tokens'
+    'schema:print the JSON Schema of every contract type'
+  )
+
+  _arguments -C \
+    '--help[show help]' \
+    '1:command:->command' \
+    '*::arg:->args'
+
+  case $state in
+    command)
+      _describe -t commands 'command' commands
+      ;;
+    args)
+      (( $+functions[_wosarcher_${line[1]}] )) && _wosarcher_${line[1]}
+      ;;
+  esac
+}
+
+_wosarcher "$@"

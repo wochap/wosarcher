@@ -1,12 +1,13 @@
 # The wosarcher client and the wosarcherd daemon: a virtual environment built
 # by uv2nix from uv.lock (PyPI wheels, runtime dependencies only). The daemon
 # gets pandoc and typst on PATH for report export and the built web UI as the
-# default static directory.
+# default static directory. The zsh completion goes to share/zsh/site-functions.
 {
   lib,
   callPackage,
   python313,
   makeWrapper,
+  installShellFiles,
   runCommand,
   pandoc,
   typst,
@@ -33,7 +34,10 @@ let
 in
 runCommand "wosarcher-0.1.0"
   {
-    nativeBuildInputs = [ makeWrapper ];
+    nativeBuildInputs = [
+      makeWrapper
+      installShellFiles
+    ];
     passthru = { inherit venv web; };
     meta.mainProgram = "wosarcher";
   }
@@ -47,4 +51,5 @@ runCommand "wosarcher-0.1.0"
         ]
       } \
       --set-default WOSARCHER_SERVER__STATIC_DIR ${web}
+    installShellCompletion --cmd wosarcher --zsh ${../completions/_wosarcher}
   ''

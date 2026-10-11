@@ -25,6 +25,7 @@ pkgs.testers.runNixOSTest {
       users.users.bob.isNormalUser = true;
 
       environment.systemPackages = [ pkgs.curl ];
+      programs.zsh.enable = true;
 
       # Read by systemd alone.
       environment.etc."wosarcher.env" = {
@@ -158,6 +159,9 @@ pkgs.testers.runNixOSTest {
         mode = machine.succeed(f"stat -c '%a %U' {auth}").strip()
         assert mode == "600 wosarcher", mode
         assert "laptop" in alice("wosarcher tokens list")
+
+    with subtest("zsh completion is on the system path"):
+        machine.succeed("test -f /run/current-system/sw/share/zsh/site-functions/_wosarcher")
 
     with subtest("other users are kept out"):
         out = machine.succeed("su - bob -c 'wosarcher runs; echo code=$?' 2>&1")
