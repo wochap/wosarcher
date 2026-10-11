@@ -14,9 +14,10 @@ The flake SHALL provide `packages.<system>.wosarcher` and
 `packages.<system>.default` (the same package) for `x86_64-linux` and
 `aarch64-linux`. The package SHALL contain the `wosarcher` client and the
 `wosarcherd` daemon with the Python dependency versions recorded in
-`uv.lock`, the built web UI, and the `pandoc` and `typst` commands that
-report export uses. `wosarcherd serve` from the package SHALL serve the
-packaged web UI without `server.static_dir` being set.
+`uv.lock`, the built web UI, the `pandoc` and `typst` commands that
+report export uses, and the `wosarcher` zsh completion at
+`share/zsh/site-functions/_wosarcher`. `wosarcherd serve` from the package
+SHALL serve the packaged web UI without `server.static_dir` being set.
 
 #### Scenario: Package runs without a checkout
 
@@ -32,6 +33,11 @@ packaged web UI without `server.static_dir` being set.
 
 - **WHEN** a finished run is exported with `wosarcher export <run_id> --format pdf` against the packaged daemon
 - **THEN** the PDF is written without `pandoc` or `typst` on the caller's `PATH`
+
+#### Scenario: Package ships the zsh completion
+
+- **WHEN** the package is built with `nix build .#wosarcher`
+- **THEN** `result/share/zsh/site-functions/_wosarcher` exists
 
 ### Requirement: Pinned dependency versions
 
@@ -110,12 +116,13 @@ inaccessible to the group and to others (directories 0750 at most, files
 ### Requirement: Host CLI wrapper
 
 The module SHALL put a `wosarcher` command on the system path that runs the
-packaged client with `WOSARCHER_SOCKET=/run/wosarcher/api.sock`, and a
-`wosarcherd` command that runs the packaged daemon with the service's
-`XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`, and
-`services.wosarcher.environment` values, for administration as the service
-user (`sudo -u wosarcher wosarcherd auth set-password`). Neither wrapper
-SHALL read `services.wosarcher.environmentFile`.
+packaged client with `WOSARCHER_SOCKET=/run/wosarcher/api.sock`, together
+with the package's `wosarcher` zsh completion, and a `wosarcherd` command
+that runs the packaged daemon with the service's `XDG_CONFIG_HOME`,
+`XDG_DATA_HOME`, `XDG_CACHE_HOME`, and `services.wosarcher.environment`
+values, for administration as the service user (`sudo -u wosarcher
+wosarcherd auth set-password`). Neither wrapper SHALL read
+`services.wosarcher.environmentFile`.
 
 #### Scenario: Member CLI uses the server's profiles
 
@@ -141,6 +148,11 @@ SHALL read `services.wosarcher.environmentFile`.
 
 - **WHEN** a user outside the `wosarcher` group runs `wosarcher runs`
 - **THEN** the command exits with 69 and names `/run/wosarcher/api.sock`
+
+#### Scenario: Completion on the system path
+
+- **WHEN** the module is enabled together with `programs.zsh.enable`
+- **THEN** `/run/current-system/sw/share/zsh/site-functions/_wosarcher` exists
 
 ### Requirement: Declared profiles and hooks
 
