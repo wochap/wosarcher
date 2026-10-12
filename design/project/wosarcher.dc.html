@@ -990,14 +990,14 @@ const ENT={search:[{n:'searxng',type:'searxng',url:'http://homelab:8888',ml:'Eng
  fetch:[{n:'firecrawl',type:'firecrawl',url:'http://homelab:3002',ml:'Limits',model:'timeout 10s · 6 concurrent',dev:'homelab',unload:'none'}],
  prefilter:[{n:'embeddings',type:'embeddings',url:'http://localhost:11434',model:'bge-small-en-v1.5',dev:'desktop:gpu0',unload:'ollama'},{n:'bm25',type:'bm25',builtin:true},{n:'passthrough',type:'passthrough',builtin:true}],
  scorer:[{n:'rerank',type:'rerank',url:'http://localhost:8081',model:'bge-reranker-v2-m3-Q8_0.gguf',dev:'desktop:gpu0',unload:'llama-swap'},{n:'jev-strict',type:'jev',url:'http://localhost:8082',model:'qwen3-4b-jev-Q8_0.gguf',dev:'desktop:gpu0',unload:'llama-swap'},{n:'bm25',type:'bm25',builtin:true}],
- llm:[{n:'omniroute',type:'openai',url:'https://omniroute.lan/v1',dev:'remote',unload:'none',models:[{m:'research-smart',def:true,cw:1048576,mo:32768,th:['high','medium','medium'],gc:24000},{m:'research-fast',cw:131072,mo:16384,th:['low','low','medium']},{m:'qwen3-30b-a3b'}]},
+ llm:[{n:'omniroute',type:'openai',url:'https://omniroute.lan/v1',dev:'remote',unload:'none',models:[{m:'research-smart',def:true,cw:1048576,mo:32768,th:['high','medium','medium']},{m:'research-fast',cw:131072,mo:16384,th:['low','low','medium']},{m:'qwen3-30b-a3b'}]},
   {n:'agents',type:'openai',url:'http://localhost:8080/v1',dev:'desktop:gpu0',unload:'llama-swap',models:[{m:'qwen3-14b',def:true,cw:32768,mo:8192,th:['low','off','medium'],gc:4000},{m:'gemma-3-12b'}]}]};
 const DEFPROF='low-vram',FB_CW=32768,FB_MO=8192,THL=['off','low','medium','high'].map(v=>({v,l:v}));
 const llmE=n=>ENT.llm.find(e=>e.n===n)||ENT.llm[0];
 const mdlOf=(l,m)=>llmE(l).models.find(x=>x.m===m);
 const defModel=l=>llmE(l).models.find(x=>x.def).m;
-const limVals=(l,m)=>{const md=mdlOf(l,m);const th=(md&&md.th)||['medium','low','medium'];return {cw:(md&&md.cw)||FB_CW,mo:(md&&md.mo)||FB_MO,plan:th[0],gap:th[1],write:th[2]};};
-const profVals=pid=>{const p=PROFILES.find(x=>x.id===pid)||PROFILES[1];return {search:p.search,fetch:p.fetch,prefilter:p.prefilter,scorer:p.scorer,llm:p.llm,model:p.model,...limVals(p.llm,p.model),ctx:'',gapctx:''};};
+const limVals=(l,m)=>{const md=mdlOf(l,m);const th=(md&&md.th)||['medium','low','medium'];return {cw:(md&&md.cw)||FB_CW,mo:(md&&md.mo)||FB_MO,plan:th[0],gap:th[1],write:th[2],gapctx:(md&&md.gc)||''};};
+const profVals=pid=>{const p=PROFILES.find(x=>x.id===pid)||PROFILES[1];return {search:p.search,fetch:p.fetch,prefilter:p.prefilter,scorer:p.scorer,llm:p.llm,model:p.model,ctx:'',...limVals(p.llm,p.model)};};
 const CTXMAX={workstation:22000,'low-vram':12000,cloud:128000,nixos:16000};
 const fmtN=n=>Number(n).toLocaleString('en-US');const fmtKT=n=>Math.round(n/1000)+'k';
 const llmCalls=(rounds,words)=>1+Math.max(0,rounds-1)+Math.max(1,Math.ceil(words/800));
@@ -1450,7 +1450,7 @@ class Component extends DCLogic {
       return {id:'d-'+k,label,help:'d-'+k,helpLabel:'Help: '+label,min:mn,max:mx,step:st,value:dv[k],dis:(k==='rounds'&&!iterOK)||(k==='fpr'&&effR<2),onChange:e=>this.editDepth(k,+e.target.value||mn),note,noteIcon,bs:isPre?'dashed':'solid',col:isPre?'var(--muted)':'var(--color-text)'};});
     const depthEst='~'+dv.pages+' pages · '+effR+' round'+(effR>1?'s':'')+' · ~'+llmCalls(effR,S.wNew.words)+' LLM calls'+(!iterOK&&dv.rounds>1?' · rounds limited to 1':'');
     const PO=S.pOver||{};const pb=this.pBase(S.opts.profile,PO);const ev={...pb,...PO};const pN=Object.keys(PO).length;const mdE=mdlOf(ev.llm,ev.model);const noLim=!(mdE&&mdE.cw);
-    const cap=Math.floor(ev.cw/1000)*1000,ctxAuto=Math.max(0,ev.cw-4400),gapAuto=(mdE&&mdE.gc)||Math.round(ctxAuto/8),lockG=effR<2;
+    const cap=Math.floor(ev.cw/1000)*1000,wOut=Math.min(Math.max(1024,2*(+S.wNew.words||0)),+ev.mo||FB_MO),ctxAuto=Math.max(0,ev.cw-2000-wOut),gapAuto=Math.max(0,ev.cw-2000-768),lockG=effR<2;
     const mk=(k,label,help,kind,x={})=>{const over=PO[k]!==undefined;const dis=!!x.dis;return {id:'pa-'+k,label,help,helpLabel:'Help: '+label,isSel:kind==='sel',isText:kind==='text',isNum:kind==='num',value:ev[k],over,bs:over?'solid':'dashed',col:over&&!dis?'var(--color-text)':'var(--muted)',note:'',noteIcon:'ph-info',options:[],list:[],listId:'',ph:'',min:0,max:4194304,step:1,
       onChange:e=>this.setPV(k,kind==='num'?(e.target.value===''?'':+e.target.value):e.target.value),...x,dis};};
     const fbN=noLim?'Fallback: no limits set for this model.':'';
