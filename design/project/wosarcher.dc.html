@@ -982,9 +982,9 @@ const PDEV={search:['homelab','none'],fetch:['desktop:cpu','none'],embeddings:['
 const KEPTBY={};PASS.forEach(p=>{if(p.kept)KEPTBY[p.s]=(KEPTBY[p.s]||0)+1;});
 const DEPTHS=[['quick','Quick','Fast overview: few searches, short report.'],['standard','Standard','Balanced: today’s default.'],['deep','Deep','Several research rounds that follow up on gaps.'],['exhaustive','Exhaustive','Many rounds and sources; slow, for thorough reports.'],['wide','wide','Your preset: many sub-queries in one round, for broad surveys.'],['lit-review','lit-review','Your preset: three rounds weighted toward papers, longer report.'],['custom','Custom','Set every value yourself.']];
 const DL={},DD={};DEPTHS.forEach(([v,l,d])=>{DL[v]=l;DD[v]=d;});
-const DPRE={wide:{subq:10,rpq:12,pages:150,rounds:1,fpr:3,ppq:8,words:1500},'lit-review':{subq:8,rpq:10,pages:100,rounds:3,fpr:5,ppq:14,words:2500},quick:{subq:3,rpq:5,pages:15,rounds:1,fpr:2,ppq:6,ctx:4000,words:600},standard:{subq:5,rpq:8,pages:40,rounds:1,fpr:3,ppq:10,ctx:8000,words:1200},deep:{subq:6,rpq:8,pages:60,rounds:3,fpr:4,ppq:12,ctx:16000,words:2000},exhaustive:{subq:8,rpq:10,pages:120,rounds:5,fpr:6,ppq:16,ctx:48000,words:3000}};
+const DPRE={wide:{subq:10,rpq:12,pages:150,rounds:1,fpr:3,ppq:8,words:1500},'lit-review':{subq:8,rpq:10,pages:100,rounds:3,fpr:5,ppq:14,words:2500},quick:{subq:3,rpq:5,pages:15,rounds:1,fpr:3,ppq:6,words:600},standard:{subq:3,rpq:10,pages:40,rounds:1,fpr:3,ppq:10,words:1200},deep:{subq:6,rpq:10,pages:60,rounds:3,fpr:3,ppq:10,words:2000},exhaustive:{subq:10,rpq:10,pages:100,rounds:5,fpr:4,ppq:8,words:3000}};
 const DF=[['subq','Sub-queries',1,12,1],['rpq','Results per query',1,20,1],['pages','Max pages',5,300,5],['rounds','Rounds',1,8,1],['fpr','Follow-ups per round',1,10,1],['ppq','Passages per query',1,40,1]];
-const DCDEF={subq:6,rpq:8,pages:80,rounds:2,fpr:4,ppq:12};
+const DCDEF={subq:3,rpq:10,pages:40,rounds:1,fpr:3,ppq:10};
 const BLOCKS=[['search','Search'],['fetch','Fetch'],['prefilter','Prefilter'],['scorer','Scorer'],['llm','LLM']];
 const ENT={search:[{n:'searxng',type:'searxng',url:'http://homelab:8888',ml:'Engines',model:'duckduckgo, brave, arxiv',dev:'homelab',unload:'none'}],
  fetch:[{n:'firecrawl',type:'firecrawl',url:'http://homelab:3002',ml:'Limits',model:'timeout 10s · 6 concurrent',dev:'homelab',unload:'none'}],
@@ -998,7 +998,6 @@ const mdlOf=(l,m)=>llmE(l).models.find(x=>x.m===m);
 const defModel=l=>llmE(l).models.find(x=>x.def).m;
 const limVals=(l,m)=>{const md=mdlOf(l,m);const th=(md&&md.th)||['medium','low','medium'];return {cw:(md&&md.cw)||FB_CW,mo:(md&&md.mo)||FB_MO,plan:th[0],gap:th[1],write:th[2],gapctx:(md&&md.gc)||''};};
 const profVals=pid=>{const p=PROFILES.find(x=>x.id===pid)||PROFILES[1];return {search:p.search,fetch:p.fetch,prefilter:p.prefilter,scorer:p.scorer,llm:p.llm,model:p.model,ctx:'',...limVals(p.llm,p.model)};};
-const CTXMAX={workstation:22000,'low-vram':12000,cloud:128000,nixos:16000};
 const fmtN=n=>Number(n).toLocaleString('en-US');const fmtKT=n=>Math.round(n/1000)+'k';
 const llmCalls=(rounds,words)=>1+Math.max(0,rounds-1)+Math.max(1,Math.ceil(words/800));
 const FQ2=['speculative decoding acceptance rate measured on 8 GB GPUs','EAGLE-2 draft head VRAM overhead','prompt lookup decoding llama.cpp code benchmark'],FQ3=['speculative decoding production latency p50 p99','draft model quantization effect on acceptance rate'];
@@ -1443,7 +1442,7 @@ class Component extends DCLogic {
     const ndBase={allow:profDom(S.opts.profile,'allow',S.runDef),block:profDom(S.opts.profile,'block',S.runDef)};const ndLists={allow:S.domA??ndBase.allow,block:S.domB??ndBase.block};
     const newDom=this.domFields('nd',ndLists,ndBase,(k,v)=>this.setState(s=>({[k==='allow'?'domA':'domB']:v,startErr:s.startErr&&s.startErr.k===k?null:s.startErr})),S.startErr);const domOver=newDom.filter(f=>f.changed).length;
     const iterOK=P.iterative??true;const dv=S.depth==='custom'?S.dCustom:DPRE[S.depth];const isPre=S.depth!=='custom';
-    const ctxMax=CTXMAX[S.opts.profile]||12000;const effR=iterOK?dv.rounds:1;
+    const effR=iterOK?dv.rounds:1;
     const depthFields=DF.map(([k,label,mn,mx,st])=>{let note='',noteIcon='ph-info';
       if(k==='fpr'&&effR<2){noteIcon='ph-lock-simple';note='Used between rounds; needs 2+ rounds.';}
       if(k==='rounds'&&!iterOK){noteIcon='ph-lock-simple';note=dv.rounds>1?dv.rounds+' → 1 · this server runs 1 round':'This server runs 1 round only.';}
@@ -1571,7 +1570,7 @@ class Component extends DCLogic {
       digRoundOpts:[1,2,3].map(n=>({label:String(n),checked:!!S.dig&&S.dig.rounds===n,onPick:()=>this.setState(s=>({dig:{...s.dig,rounds:n}}))})),
       digDepthOpts:[['deep','Deep'],['exhaustive','Exhaustive']].map(([v,l])=>({label:l,checked:!!S.dig&&S.dig.depth===v,onPick:()=>this.setState(s=>({dig:{...s.dig,depth:v}}))})),
       digDepthDesc:S.dig?(S.dig.depth==='deep'?'Up to 20 new pages per round.':'Up to 24 new pages per round; keeps more passages.'):'',
-      digEst:S.dig?'~'+(S.dig.depth==='deep'?20:24)*S.dig.rounds+' more pages · +'+S.dig.rounds+' round'+(S.dig.rounds>1?'s':'')+' · ~'+(S.dig.rounds+Math.ceil(DPRE[S.dig.depth].words/800))+' LLM calls':'',
+      digEst:S.dig?'~'+Math.round(DPRE[S.dig.depth].pages/DPRE[S.dig.depth].rounds)*S.dig.rounds+' more pages · +'+S.dig.rounds+' round'+(S.dig.rounds>1?'s':'')+' · ~'+(S.dig.rounds+Math.ceil(DPRE[S.dig.depth].words/800))+' LLM calls':'',
       closeDig:()=>this.setState({dig:null}),closeDigBackdrop:e=>{if(e.target===e.currentTarget)this.setState({dig:null});},confirmDig:()=>{this.setState({dig:null});this.toastMsg('Dig deeper is planned for a later release');},
       R,openRewrite:()=>cur&&this.setState({rw:{from:cur.id,w:{...cur.wopts,format:cur.opts.recipe==='answer'?'answer':'report'}}}),...this.dlVals(cur,phone),
       copyMd:()=>this.copy(cur?cur.md:'','Markdown copied'),
