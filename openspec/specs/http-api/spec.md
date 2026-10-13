@@ -55,13 +55,14 @@ SHALL have `query` (required, non-empty), and these optional fields:
 - `sources` (`web`, `files`, or `both`)
 - `until` (a stage name)
 - `profile`
-- `depth` (a preset name or `custom`)
+- `use`: any subset of `search`, `fetch`, `prefilter`, `score`, and
+  `llm`, each an entry name of that block (run-config "Entry selection")
+- `depth` (a preset name, built-in or user, or `custom`)
 - `research`: any subset of `sub_queries`, `results_per_query`,
-  `max_pages`, `passages_per_query`, `context_tokens`,
-  `gap_context_tokens`, `rounds`, and `queries_per_round` (sets
-  `research.queries_per_round`). Each is a positive integer,
-  `context_tokens` and `gap_context_tokens` may also be the string `auto`,
-  and `rounds` is at most 8.
+  `max_pages`, `passages_per_query`, `rounds`, and `queries_per_round`
+  (sets `research.queries_per_round`). Each is a positive integer, and
+  `rounds` is at most 8.
+- `llm` (Requirement: LLM options in a run request)
 - `writing` (any subset of the writing option fields)
 - `domains`: `allow` and `block`, each optional, each a list of domain
   entries (run-config "Domain lists") that replaces the configured list
@@ -74,7 +75,10 @@ SHALL have `query` (required, non-empty), and these optional fields:
   configuration key SHALL use this same rule.
 - `set` (a list of `dotted.key=value` overrides)
 
-An unknown `depth` SHALL be rejected with 422 that names `depth`. An
+An unknown `depth` SHALL be rejected with 422 that names `depth`. A `use`
+key that is not a block, or a name that is not an entry of its block,
+SHALL be rejected with 422 that names `use.<block>` and lists that block's
+entries. An
 invalid domain entry SHALL be rejected with 422 that names `domains.allow`
 or `domains.block` and the entry. An invalid `search_language` SHALL be
 rejected with 422 that names `search_language`. The
@@ -112,13 +116,17 @@ with 422 `invalid_attachment` before anything is staged.
 - **WHEN** a client posts `request = {"query": "q", "research": {"rounds": 9}}`
 - **THEN** the response is 422 and names `rounds`
 
-#### Scenario: Auto context for a custom run
-- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"context_tokens": "auto"}}`
-- **THEN** the run resolves `select.max_context_tokens` to `auto`
+#### Scenario: Entry for one run
+- **WHEN** the profile uses `score = "rerank"` and a client posts `request = {"query": "q", "use": {"score": "jev-strict"}}`
+- **THEN** the run's `score` block is the `jev-strict` entry, its other blocks follow the profile, and `request.json` records `use.score = "jev-strict"`
 
-#### Scenario: Gap context for a custom run
-- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"gap_context_tokens": "auto", "rounds": 3}}`
-- **THEN** the run resolves `research.gap_context_tokens` to `auto` and `research.rounds` to 3
+#### Scenario: Unknown entry
+- **WHEN** a client posts `request = {"query": "q", "use": {"llm": "sonet"}}`
+- **THEN** the response is 422, the detail names `use.llm` and the llm entries, and no run is queued
+
+#### Scenario: Context budget is not a research field
+- **WHEN** a client posts `request = {"query": "q", "research": {"context_tokens": "auto"}}`
+- **THEN** the response is 422 and names `research.context_tokens`
 
 #### Scenario: Domain lists for one run
 - **WHEN** a client posts `request = {"query": "q", "domains": {"allow": ["gob.pe"], "block": []}}`
@@ -148,13 +156,23 @@ with 422 `invalid_attachment` before anything is staged.
 - **WHEN** a client posts `request = {"query": "q", "search_language": "zh-Hans-CN"}`
 - **THEN** the run resolves `search.language` to `zh-Hans-CN`
 
+#### Scenario: Auto context for a custom run
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "llm": {"context_tokens": "auto"}}`
+- **THEN** the run resolves `select.max_context_tokens` to `auto`
+
+#### Scenario: Gap context for a custom run
+- **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"rounds": 3}, "llm": {"gap_context_tokens": "auto"}}`
+- **THEN** the run resolves `research.gap_context_tokens` to `auto` and `research.rounds` to 3
+
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
-(defaults, profile, environment). It SHALL then apply, each later layer
-winning:
+(defaults, the chosen entries, the chosen model's values, profile,
+environment), with the request's `use` choosing entries as run-config
+"Entry selection" defines. It SHALL then apply, each later layer winning:
 1. the global settings;
 2. the request's depth preset;
-3. the request's `sources`, `research`, `writing`, and `domains` fields;
+3. the request's `sources`, `research`, `writing`, `domains`, and `llm`
+   fields;
 4. the request's `set` overrides.
 
 The global domain lists are the exception: a global `domains.allow` or
@@ -199,6 +217,11 @@ apply without restarting the server.
 #### Scenario: Request list wins
 - **WHEN** the profile sets `search.block_domains = ["facebook.com"]` and a run request has `"domains": {"block": []}`
 - **THEN** the run's resolved `search.block_domains` is `[]`
+
+
+#### Scenario: Request model picks its limits
+- **WHEN** the profile's llm entry lists `models.a` with `context_window = 1000000` and `models.b` with `context_window = 131072`, and a run request has `"llm": {"model": "b"}`
+- **THEN** the run's resolved `llm.context_window` is 131072
 
 ### Requirement: List and show runs
 `GET /api/runs` SHALL list every run in the runs directory, every queued
@@ -391,15 +414,20 @@ answer 404 `run_not_found`. A source ID not in the run's `files.jsonl` or `pages
 
 ### Requirement: Fork a run
 `POST /api/runs/{id}/fork` SHALL accept JSON with `from` (a stage name) and
-optional `writing`, `set`, and `profile`, and start
+optional `writing`, `llm`, `use`, `set`, and `profile`, and start
 `wosarcher fork <id> --from <stage>` with those overrides through the run
-queue. The response SHALL be 201 with the new `run_id`. Forking a run that
-is queued or running SHALL answer 409; an unknown stage name SHALL answer
-422 listing the stages.
+queue, as run-store "Fork" defines. The response SHALL be 201 with the new
+`run_id`. Forking a run that is queued or running SHALL answer 409; an
+unknown stage name SHALL answer 422 listing the stages; an unknown entry in
+`use` SHALL answer 422 naming `use.<block>` and that block's entries.
 
 #### Scenario: Rewrite with a new tone
 - **WHEN** a client forks a finished run with `{"from": "write", "writing": {"tone": "critical"}}`
 - **THEN** a new run starts from the write stage with tone `critical` and records the parent run ID
+
+#### Scenario: Retry with another scorer
+- **WHEN** a client forks a run that failed at score with `{"from": "score", "use": {"score": "bm25"}}`
+- **THEN** the fork's score block is the current `bm25` entry and its record names `bm25` as its score entry
 
 #### Scenario: Fork of active run
 - **WHEN** a client forks a run whose status is `running`
@@ -408,13 +436,16 @@ is queued or running SHALL answer 409; an unknown stage name SHALL answer
 ### Requirement: Rerun a run
 `POST /api/runs/{id}/rerun` SHALL start, through the run queue, a new
 `wosarcher run` with the original run's request (query, sources, `until`,
-profile, depth, and its saved overrides, including writing options) and a
-copy of the original run directory's attachments, with nothing uploaded
-again. The new run SHALL have version 1 and no parent run; it is not a
-fork. The response SHALL be 201 with the new `run_id` and its status. An
-unknown run SHALL answer 404, a run that is still queued SHALL answer 409,
-and a run with sources `files` whose run directory has no attachments
-SHALL answer 422 `invalid_attachment`.
+profile, the five recorded entries, depth, and its saved overrides,
+including writing options) and a copy of the original run directory's
+attachments, with nothing uploaded again. The entries SHALL be resolved
+again by name, so edits made to them since apply. The new run SHALL have
+version 1 and no parent run; it is not a fork. The response SHALL be 201
+with the new `run_id` and its status. An unknown run SHALL answer 404, a
+run that is still queued SHALL answer 409, and a run with sources `files`
+whose run directory has no attachments SHALL answer 422
+`invalid_attachment`. A recorded entry that no longer exists SHALL fail the
+new run before its first stage, naming the block and the entry.
 
 #### Scenario: Rerun with attachments
 - **WHEN** a client reruns a finished run that had the attachment `notes.md`
@@ -431,6 +462,14 @@ SHALL answer 422 `invalid_attachment`.
 #### Scenario: Rerun keeps the depth
 - **WHEN** a client reruns a run that used depth `deep`
 - **THEN** the rerun's summary has `depth = "deep"` and its resolved `plan.max_sub_queries` is 6
+
+#### Scenario: Rerun keeps the entries
+- **WHEN** the original run used the profile `default` with the per-run choice `score = "jev-strict"`, and the profile now uses `score = "rerank"`
+- **THEN** the rerun's score block is the `jev-strict` entry
+
+#### Scenario: Entry removed since
+- **WHEN** the original run used the llm entry `sonnet` and `providers/llm/sonnet.toml` no longer exists
+- **THEN** the rerun is created and fails before its first stage with an error naming `llm` and `sonnet`
 
 ### Requirement: Secret source overrides are rejected
 `POST /api/runs`, `POST /api/runs/{id}/fork`, and `POST /api/runs/{id}/rerun`
@@ -503,78 +542,96 @@ at the next slot decision, with no restart.
 ### Requirement: Profiles
 `GET /api/profiles` SHALL return every profile with:
 - its `name`;
-- its `source` (`builtin` or `user`);
+- its `source` (`user`);
 - whether it is `active`;
 - its `description` (empty when the profile sets none);
-- its resolved `context_window`, `prompt_reserve_tokens`, and
-  `max_output_tokens`, so a client can show the effective context budget;
+- `use`: the entry name it chooses for each of the five blocks, after
+  run-config "Entry selection" (environment included), or null for a
+  block that cannot be resolved;
+- `model`: the profile's `llm.model`, or null when it sets none (the
+  entry's default model applies);
+- `context_tokens`: the resolved `select.max_context_tokens` (a positive
+  integer or `auto`), and `prompt_reserve_tokens`;
 - `allow_domains` and `block_domains`: the list the profile (or the
   environment) sets, or null when it sets none, so a client can tell a
-  profile's own list from the global default.
+  profile's own list from the global default;
+- `error`: why the profile does not resolve, or null.
+
+The model limits and defaults SHALL come from `GET /api/providers`, not
+from this route.
 
 #### Scenario: Active profile marked
 - **WHEN** the stored default profile is `cloud`
 - **THEN** the `cloud` entry has `active = true` and every other entry `false`
 
 #### Scenario: Descriptions
-- **WHEN** a client requests `GET /api/profiles` and a user profile `nixos` sets no description
-- **THEN** the `workstation` entry has `description` "One GPU fits all models; models stay loaded." and the `nixos` entry has `description` ""
+- **WHEN** a client requests `GET /api/profiles` and the profile `nixos` sets no description
+- **THEN** the `nixos` entry has `description` ""
 
-#### Scenario: Limits
-- **WHEN** the `workstation` profile resolves `llm.context_window = 32768`
-- **THEN** its entry has `context_window = 32768`, `prompt_reserve_tokens = 2000`, and `max_output_tokens = 8192`
+#### Scenario: Entries
+- **WHEN** the profile `default` has `[use]` with `score = "jev-strict"` and `llm = "omniroute"`, and `search` and `fetch` each have one entry
+- **THEN** its `use` has `search` `searxng`, `fetch` `firecrawl`, `score` `jev-strict`, `llm` `omniroute`, and its configured `prefilter`
 
 #### Scenario: Domain lists
-- **WHEN** the user profile `nixos` sets `search.block_domains = ["facebook.com"]` and no allow list
+- **WHEN** the profile `nixos` sets `search.block_domains = ["facebook.com"]` and no allow list
 - **THEN** its entry has `block_domains = ["facebook.com"]` and `allow_domains = null`
 
+#### Scenario: Broken profile
+- **WHEN** the profile `old` sets `score.base_url`
+- **THEN** the route answers 200 and the `old` entry has an `error` naming `score.base_url`
+
+#### Scenario: Limits
+- **WHEN** the profile `workstation` sets `select.max_context_tokens = 12000` and leaves `select.prompt_reserve_tokens` at its default
+- **THEN** its entry has `context_tokens = 12000` and `prompt_reserve_tokens = 2000`, and no `context_window` or `max_output_tokens`
+
 ### Requirement: Provider health
-`GET /api/providers/health` SHALL return, without sending any probe, the
-provider report of the active profile, or of the profile named by the
-`profile` query parameter, as JSON: the profile name, the profile's
-`gpu_policy` (`shared` or `exclusive`), the warnings of the last check of
-that profile, and one entry per configured provider block with `role`,
-`provider`, `url`, `model`, `device`, `release` (`none`, `llama-swap`, or
-`ollama`), `status`, `latency_ms`, `detail`, and `checked_at`. The entries
-SHALL come from the resolved configuration of the profile, in block order,
-merged with the last check result the server holds for that profile and
-block.
-
-The status SHALL be `skipped` for a built-in provider (no endpoint, no
-check needed), `unchecked` for a block with no stored result, and
-otherwise the stored result: `down` for a failed probe, `degraded` for a
-probe that succeeded but took more than 1000 ms or whose model cannot be
-unloaded although a release is configured, and `ok` otherwise.
-`checked_at` SHALL be the time the stored result was taken, and null for
-`unchecked` and `skipped`. A stored result whose provider, URL, or model
-no longer matches the configuration SHALL be ignored. Stored results SHALL
-live in the server process only and SHALL be lost when the server
-restarts. No secret SHALL appear in the response. An invalid profile SHALL
-answer 400 with the reason.
-
-#### Scenario: Health of a named profile
-- **WHEN** a client requests `GET /api/providers/health?profile=cloud`
-- **THEN** the response lists the providers of the `cloud` profile
+Each item of `GET /api/providers` (provider-entries "Providers route")
+SHALL carry the stored health of that entry, without sending any probe:
+`status`, `latency_ms`, `detail`, and `checked_at`. The status SHALL be
+`skipped` for a built-in entry (no endpoint, no check needed),
+`unchecked` for an entry with no stored result, and otherwise the stored
+result: `down` for a failed probe, `degraded` for a probe that succeeded
+but took more than 1000 ms or whose model cannot be unloaded although a
+release is configured, and `ok` otherwise. `checked_at` SHALL be the time
+the stored result was taken, and null for `unchecked` and `skipped`.
+Results SHALL be stored per block and entry name. A stored result whose
+provider, URL, or model no longer matches the entry SHALL be ignored.
+Stored results SHALL live in the server process only and SHALL be lost
+when the server restarts. The answer SHALL also carry `gpu_policy` and
+the warnings of the last check, from the active profile. No secret SHALL
+appear in the response.
 
 #### Scenario: Never checked
-- **WHEN** the server has just started and a client requests `GET /api/providers/health`
-- **THEN** no request reaches any provider endpoint, every block with an endpoint has `status = "unchecked"` and `checked_at = null`, and built-in blocks have `status = "skipped"`
+- **WHEN** the server has just started and a client requests `GET /api/providers`
+- **THEN** no request reaches any provider endpoint, every entry with an endpoint has `status = "unchecked"` and `checked_at = null`, and built-in entries have `status = "skipped"`
 
 #### Scenario: Slow provider
-- **WHEN** a check found the search probe succeeding in 1840 ms and a client then requests `GET /api/providers/health`
-- **THEN** no probe is sent, and the search entry has `status = "degraded"`, `latency_ms = 1840`, and the check's `checked_at`
+- **WHEN** a check found the `searxng` probe succeeding in 1840 ms and a client then requests `GET /api/providers`
+- **THEN** no probe is sent, and the `searxng` item has `status = "degraded"`, `latency_ms = 1840`, and the check's `checked_at`
 
 #### Scenario: Unreachable provider
-- **WHEN** a check found the score probe failing with a connection error and a client then requests `GET /api/providers/health`
-- **THEN** the response is 200 and the score entry has `status = "down"` and the error as `detail`
+- **WHEN** a check found the `rerank` probe failing with a connection error and a client then requests `GET /api/providers`
+- **THEN** the response is 200 and the `rerank` item has `status = "down"` and the error as `detail`
+
+#### Scenario: Entry changed since the check
+- **WHEN** the `rerank` entry was checked with model `bge-reranker-v2-m3` and the entry now sets another model
+- **THEN** the `rerank` item is `unchecked`
+
+#### Scenario: Same name in two blocks
+- **WHEN** the prefilter entry `kw` and the score entry `kw` exist and only the score entry was checked
+- **THEN** the score `kw` item carries the result and the prefilter `kw` item is `skipped` or `unchecked`
+
+#### Scenario: Health of a named profile
+- **WHEN** a client requests `GET /api/providers` while the active profile is `cloud`
+- **THEN** the answer lists every entry, not only those `cloud` uses, and its `gpu_policy` is `cloud`'s
 
 #### Scenario: Configuration changed since the check
-- **WHEN** the score block was checked with model `bge-reranker-v2-m3` and the profile now sets another model
-- **THEN** the score entry is `unchecked`
+- **WHEN** the `searxng` entry was checked at one URL and its file now sets another `base_url`
+- **THEN** the `searxng` item is `unchecked`
 
 #### Scenario: Policy and release
-- **WHEN** the requested profile is `low-vram` (`gpu_policy = "exclusive"`, prefilter `release = "llama-swap"`)
-- **THEN** the response has `gpu_policy` `exclusive` and the `prefilter` entry has `release` `llama-swap`
+- **WHEN** the active profile is `low-vram` (`gpu_policy = "exclusive"`) and the prefilter entry `embeddings` sets `release = "llama-swap"`
+- **THEN** the answer has `gpu_policy` `exclusive` and the `embeddings` item has `release` `llama-swap`
 
 ### Requirement: Static frontend
 When the frontend build directory (`server.static_dir`, default `web/dist`)
@@ -591,50 +648,55 @@ directory does not exist, the API SHALL still work and `/` SHALL answer 404.
 - **THEN** the response is the JSON run list
 
 ### Requirement: Provider health check
-`POST /api/providers/health/check` SHALL run the `wosarcher doctor` checks
-for the active profile, or for the profile named by the `profile` query
-parameter, limited to the blocks listed in the optional JSON body
-`{"blocks": [...]}` (every block when the body or the list is absent). It
-SHALL store each checked block's result, with the time of the check, for
-that profile, replace the profile's stored warnings with the check's
-warnings, and answer with the same report `GET /api/providers/health`
-would return afterwards. Blocks not checked SHALL keep their stored
-result. An unknown block name SHALL answer 400. When the checks cannot run
-(timeout or unreadable output), the response SHALL be 502 with the reason
-and stored results SHALL stay unchanged.
+`POST /api/providers/check` SHALL run the `wosarcherd doctor` checks for
+the entries listed in the optional JSON body `{"entries": ["<block>/<name>",
+...]}` (every entry when the body or the list is absent). It SHALL store
+each checked entry's result with the time of the check, replace the stored
+warnings with the check's warnings, and answer with the same list
+`GET /api/providers` would return afterwards. Entries not checked SHALL
+keep their stored result. An unknown block or entry SHALL answer 400
+naming it. When the checks cannot run (timeout or unreadable output), the
+response SHALL be 502 with the reason and stored results SHALL stay
+unchanged. Local entries SHALL be probed one at a time as provider-doctor
+"Doctor command" defines, under the active profile's `run.gpu_policy`.
 
-#### Scenario: Check one block
-- **WHEN** a client posts `{"blocks": ["score"]}` to `/api/providers/health/check`
-- **THEN** only the score endpoint is probed, the score entry has a new `checked_at`, and the other entries keep their previous status
+#### Scenario: Check one entry
+- **WHEN** a client posts `{"entries": ["score/jev-strict"]}` to `/api/providers/check`
+- **THEN** only the `jev-strict` endpoint is probed, its item has a new `checked_at`, and the other items keep their previous status
 
 #### Scenario: Check all
-- **WHEN** a client posts to `/api/providers/health/check` with no body
-- **THEN** every block with an endpoint is probed and every such entry has a new `checked_at`
+- **WHEN** a client posts to `/api/providers/check` with no body
+- **THEN** every entry with an endpoint is probed and every such item has a new `checked_at`
 
 #### Scenario: Failed probe in a check
-- **WHEN** the score probe fails with a connection error during a check
-- **THEN** the check response is 200 and the score entry has `status = "down"`, the error as `detail`, and a new `checked_at`
+- **WHEN** the `rerank` probe fails with a connection error during a check
+- **THEN** the check response is 200 and the `rerank` item has `status = "down"`, the error as `detail`, and a new `checked_at`
 
-#### Scenario: Unknown block
-- **WHEN** a client posts `{"blocks": ["scorer"]}`
-- **THEN** the response is 400 and no provider is probed
+#### Scenario: Unknown entry
+- **WHEN** a client posts `{"entries": ["score/nope"]}`
+- **THEN** the response is 400 naming `score/nope` and no provider is probed
 
 #### Scenario: Doctor timeout
 - **WHEN** the doctor does not finish within its timeout
-- **THEN** the response is 502 with the reason and a following `GET /api/providers/health` returns the previous results
+- **THEN** the response is 502 with the reason and a following `GET /api/providers` returns the previous results
+
+#### Scenario: Check one block
+- **WHEN** a client posts `{"entries": ["llm/agents", "llm/omniroute"]}`
+- **THEN** only the two llm endpoints are probed, each with its default model
+
+#### Scenario: Unknown block
+- **WHEN** a client posts `{"entries": ["scorer/bm25"]}`
+- **THEN** the response is 400 naming `scorer` and the five blocks, and no provider is probed
 
 ### Requirement: Depths
-`GET /api/depths` SHALL return the depth presets in the order `quick`,
-`standard`, `deep`, `exhaustive`. Each entry SHALL have:
-- its `name` and `description`;
+`GET /api/depths` SHALL return the depth presets: `quick`, `standard`,
+`deep`, `exhaustive`, then the user presets by name. Each entry SHALL have:
+- its `name`, `description`, and `source` (`builtin` or `user`);
 - `values` with `sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`,
-  `queries_per_round`, and `words`.
+  `passages_per_query`, `rounds`, `queries_per_round`, and `words`.
 
 Each value SHALL be the one the preset sets, or the built-in default when
-it sets none. `context_tokens` and `gap_context_tokens` SHALL each be a
-positive integer or the string `auto`; with the built-in presets
-`context_tokens` is `auto` and `gap_context_tokens` is 4000. The exception is `words`: it SHALL be null when the preset
+it sets none. The exception is `words`: it SHALL be null when the preset
 does not set it (the global default applies). Run summaries from
 `GET /api/runs` and `GET /api/runs/{id}` SHALL include:
 - the run's `depth` (a preset name, `custom`, or null);
@@ -645,7 +707,11 @@ does not set it (the global default applies). Run summaries from
 
 #### Scenario: Standard values
 - **WHEN** a client requests `GET /api/depths`
-- **THEN** the `standard` entry has `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `context_tokens` "auto", `gap_context_tokens` 4000, `rounds` 1, `queries_per_round` 3, and `words` null
+- **THEN** the `standard` entry has `source` `builtin`, `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `rounds` 1, `queries_per_round` 3, and `words` null
+
+#### Scenario: User preset
+- **WHEN** `depths/wide.toml` sets `plan.max_sub_queries = 10` and `write.words = 1500`
+- **THEN** the last entry is `wide` with `source` `user`, `sub_queries` 10, `words` 1500, and the defaults for the other values
 
 #### Scenario: Summary depth
 - **WHEN** a run was started with `"depth": "quick"`
@@ -657,18 +723,33 @@ does not set it (the global default applies). Run summaries from
 
 ### Requirement: LLM options in a run request
 The request JSON of `POST /api/runs` SHALL accept an optional `llm`
-object with `model` (a non-empty string, or absent) and `reasoning` (any
-subset of `plan`, `gap`, `write`, each `none`, `low`, `medium`, `high`,
-or `default`). `model` SHALL set `llm.model` and each reasoning field
-`llm.reasoning.<step>` for this run, in the request layer of "Run request
-precedence" (layer 3, beside `research`), so the request's `set` still
-wins. An invalid level SHALL be rejected with 422 naming `llm.reasoning`
-and the field. `POST /api/runs/{id}/fork` SHALL accept the same `llm`
-object. Absent fields leave the configured values.
+object with:
+- `model` (a non-empty string) setting `llm.model`;
+- `reasoning` (any subset of `plan`, `gap`, `write`, each `none`, `low`,
+  `medium`, `high`, or `default`) setting `llm.reasoning.<step>`;
+- `context_window` and `max_output_tokens` (positive integers) setting
+  `llm.context_window` and `llm.max_output_tokens`;
+- `context_tokens` and `gap_context_tokens` (a positive integer or `auto`)
+  setting `select.max_context_tokens` and `research.gap_context_tokens`.
+
+They apply in the request layer of "Run request precedence" (layer 3), so
+they win over the chosen model's values and the profile, and the request's
+`set` still wins over them. `model` also chooses the model whose values
+apply below them (run-config "Precedence"). An invalid value SHALL be
+rejected with 422 naming `llm.<field>`. `POST /api/runs/{id}/fork` SHALL
+accept the same `llm` object. Absent fields leave the configured values.
 
 #### Scenario: Model and thinking for one run
 - **WHEN** a client posts `request = {"query": "q", "llm": {"model": "deepseek-v4-flash", "reasoning": {"write": "high"}}}`
 - **THEN** the run resolves `llm.model` to `deepseek-v4-flash` and `llm.reasoning.write` to `high`, and `request.json` records both overrides
+
+#### Scenario: Limits for an unlisted model
+- **WHEN** a client posts `request = {"query": "q", "llm": {"model": "qwen3-30b-a3b", "context_window": 262144, "max_output_tokens": 16384}}`
+- **THEN** the run resolves `llm.context_window` 262144 and `llm.max_output_tokens` 16384
+
+#### Scenario: Auto context for one run
+- **WHEN** a client posts `request = {"query": "q", "llm": {"context_tokens": "auto", "gap_context_tokens": 8000}}`
+- **THEN** the run resolves `select.max_context_tokens` to `auto` and `research.gap_context_tokens` to 8000
 
 #### Scenario: Invalid thinking level
 - **WHEN** a client posts `request = {"query": "q", "llm": {"reasoning": {"gap": "max"}}}`
@@ -679,21 +760,22 @@ object. Absent fields leave the configured values.
 - **THEN** the run resolves `llm.model` to `b`
 
 ### Requirement: Models route
-`GET /api/models` SHALL return `{"models": [...]}`: the model IDs the
-active profile's (or `?profile=NAME`'s) LLM endpoint lists at
-`GET <base_url>/models` (`data[].id`, in the order given), through the
-block's fallback URLs and timeouts. When the request fails, the answer is
-not a list, or the list is empty, the route SHALL answer 200 with an empty
-list, never an error. The route SHALL send no other request and SHALL
-infer nothing about a model's abilities.
+`GET /api/models?llm=NAME` SHALL return `{"models": [...]}`: the model IDs
+the llm entry `NAME` (the active profile's llm entry when `llm` is absent)
+lists at `GET <base_url>/models` (`data[].id`, in the order given),
+through the entry's fallback URLs and timeouts. When the request fails,
+the answer is not a list, or the list is empty, the route SHALL answer 200
+with an empty list, never an error. An unknown entry SHALL answer 400
+naming it. The route SHALL send no other request and SHALL infer nothing
+about a model's abilities.
 
 #### Scenario: Models listed
-- **WHEN** the LLM endpoint answers `GET /models` with IDs `a` and `b`
-- **THEN** `GET /api/models` answers `{"models": ["a", "b"]}`
+- **WHEN** the `omniroute` endpoint answers `GET /models` with IDs `a` and `b`
+- **THEN** `GET /api/models?llm=omniroute` answers `{"models": ["a", "b"]}`
 
 #### Scenario: Endpoint down
-- **WHEN** the LLM endpoint refuses connections
-- **THEN** `GET /api/models` answers 200 with `{"models": []}`
+- **WHEN** the `agents` endpoint refuses connections
+- **THEN** `GET /api/models?llm=agents` answers 200 with `{"models": []}`
 
 ### Requirement: LLM options in run summaries
 Every run summary (`GET /api/runs`, `GET /api/runs/{id}`) SHALL carry
@@ -720,3 +802,19 @@ authentication as every other `/api` route.
 #### Scenario: Idle
 - **WHEN** no run is running or waiting
 - **THEN** `GET /api/slots` returns the limit with empty `held` and `queued`
+
+### Requirement: Entries in run summaries
+Every run summary (`GET /api/runs`, `GET /api/runs/{id}`) SHALL carry `use`:
+the entry name of each of the five blocks the run used, from its
+`request.json`, and `modified`: true when the run's request or its saved
+overrides changed a block choice or a field of the profile's Advanced
+values (`use`, `llm` fields), false otherwise. A run recorded before
+entries existed SHALL have `use` null and `modified` false.
+
+#### Scenario: Entries shown
+- **WHEN** a run used `searxng`, `firecrawl`, `embeddings`, `jev-strict`, and `agents` with a per-run `use.score`
+- **THEN** its summary has those five names in `use` and `modified = true`
+
+#### Scenario: Plain profile run
+- **WHEN** a run was started with only `profile` and `depth`
+- **THEN** its summary has `modified = false`

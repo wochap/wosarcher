@@ -12,23 +12,28 @@ list runs, with readable progress on a terminal and stable JSON for scripts.
 accept these options:
 `--attach PATH` (repeatable; files, directories, globs, expanded and
 uploaded by the client), `--sources files|web|both` (default `both`),
-`--until STAGE`, `--profile NAME`, `--depth NAME`, `--set KEY=VALUE`
+`--until STAGE`, `--profile NAME`, `--use BLOCK=NAME` (repeatable),
+`--depth NAME`, `--set KEY=VALUE`
 (repeatable), `--tone`, `--tone-instructions`, `--words`, `--language`,
 `--citation-marker`, `--reference-style`, `--format report|answer`,
 `--sub-queries N`, `--results-per-query N`, `--max-pages N`,
 `--passages-per-query N`, `--context-tokens N|auto`,
 `--gap-context-tokens N|auto`, `--rounds N`, `--queries-per-round N`,
 `--search-language CODE`, `--allow-domain DOMAIN` (repeatable),
-`--block-domain DOMAIN` (repeatable), and `--json`. The writing flags SHALL
-be sent as the request's `writing`, the research flags as `research`, the
-domain flags as `domains`, `--search-language` as `search_language`,
-`--model` and the thinking flags as `llm`, and `--set` as `set`, so the
-server applies the precedence of http-api "Run request precedence". Values
-the client can check (`--format`, the thinking levels, `--search-language`,
-the domain entries, `--until`) SHALL fail with exit status 2 before a
-request is sent, with an error naming the flag; a 422 from the server
-SHALL exit with 2 printing its detail. `--sources files` without
-`--attach` SHALL fail before a request is sent.
+`--block-domain DOMAIN` (repeatable), `--context-window N`,
+`--max-output N`, and `--json`. The writing flags SHALL be sent as the
+request's `writing`; `--sub-queries`, `--results-per-query`,
+`--max-pages`, `--passages-per-query`, `--rounds`, and
+`--queries-per-round` as `research`; the domain flags as `domains`;
+`--search-language` as `search_language`; `--use` as `use`; `--model`, the
+thinking flags, `--context-window`, `--max-output`, `--context-tokens`,
+and `--gap-context-tokens` as `llm`; and `--set` as `set`, so the server
+applies the precedence of http-api "Run request precedence". Values the
+client can check (`--format`, the thinking levels, `--search-language`,
+the domain entries, `--until`, the block of `--use`) SHALL fail with exit
+status 2 before a request is sent, with an error naming the flag; a 422
+from the server SHALL exit with 2 printing its detail. `--sources files`
+without `--attach` SHALL fail before a request is sent.
 
 #### Scenario: Writing flag
 - **WHEN** the user runs `wosarcher run "q" --tone critical --words 500`
@@ -98,6 +103,19 @@ SHALL exit with 2 printing its detail. `--sources files` without
 - **WHEN** the user runs `wosarcher run "q" --set search.language='"spanish"'`
 - **THEN** the run fails before its first stage with an error naming `search.language`, and the command exits with 2
 
+
+#### Scenario: Entry flag
+- **WHEN** the user runs `wosarcher run "q" --use score=jev-strict --use llm=agents`
+- **THEN** the run's score block is the `jev-strict` entry, its llm block is the `agents` entry with that entry's default model, and `request.json` records both choices
+
+#### Scenario: Unknown block in an entry flag
+- **WHEN** the user runs `wosarcher run "q" --use scorer=bm25`
+- **THEN** the command exits 2 before sending a request, naming `--use` and the blocks `search`, `fetch`, `prefilter`, `score`, `llm`
+
+#### Scenario: Limits for an unlisted model
+- **WHEN** the user runs `wosarcher run "q" --model qwen3-30b-a3b --context-window 262144 --max-output 16384`
+- **THEN** the resolved `llm.context_window` is 262144 and `llm.max_output_tokens` is 16384
+
 ### Requirement: Human output
 On a terminal, `wosarcher run` SHALL show live progress per stage (state,
 counters, device, provider) built from the run's event stream and, when
@@ -155,29 +173,36 @@ when the daemon cannot be reached.
 
 ### Requirement: Fork command
 `wosarcher fork <run_id> --from <stage>` SHALL accept `--set`, the writing
-flags, `--model`, the thinking flags, `--until`, `--profile`, and
-`--json`, and create the fork through `POST /api/runs/{id}/fork`. The
-server's `wosarcherd fork` SHALL resolve the fork as the run store defines:
-with `--profile NAME` from that profile and the parent's overrides plus the
-new overrides, recording `NAME` as its profile; when the parent's saved
-settings hold a key the current configuration does not know, dropping that
-key before validation, printing one warning line naming every dropped key
-as a dotted path, and continuing with a `request.json` without those keys;
-a saved value the current configuration rejects SHALL still fail. A
-queued or running parent SHALL exit with 2 printing the server's 409
-detail.
+flags, `--model`, the thinking flags, `--context-window`, `--max-output`,
+`--context-tokens`, `--gap-context-tokens`, `--use`, `--until`,
+`--profile`, and `--json`, and create the fork through
+`POST /api/runs/{id}/fork`. The server's `wosarcherd fork` SHALL resolve
+the fork as the run store defines (run-store "Fork"): with `--profile
+NAME` from that profile, the fork's `--use`, and the parent's overrides
+plus the new overrides, recording `NAME` as its profile; without
+`--profile`, from the parent's saved settings with each `--use` block
+replaced by the current entry. When the parent's saved settings hold a key
+the current configuration does not know, it SHALL drop that key before
+validation, print one warning line naming every dropped key as a dotted
+path, and continue with a `request.json` without those keys; a saved value
+the current configuration rejects SHALL still fail. A queued or running
+parent SHALL exit with 2 printing the server's 409 detail.
 
 #### Scenario: Change the tone
 - **WHEN** the user runs `wosarcher fork <id> --from write --tone critical`
 - **THEN** a new run with the next version of the parent's lineage is created and only the write stage runs
 
+#### Scenario: Retry with another scorer
+- **WHEN** the user runs `wosarcher fork <id> --from score --use score=bm25`
+- **THEN** the fork's score block is the current `bm25` entry, its other blocks keep the parent's saved settings, and its record names `bm25` as the score entry
+
 #### Scenario: Retry with another profile
 - **WHEN** the user runs `wosarcher fork <id> --from score --profile cloud`
-- **THEN** the fork's score block comes from the `cloud` profile and its record names profile `cloud`
+- **THEN** the fork's blocks come from the entries the `cloud` profile uses and its record names profile `cloud`
 
 #### Scenario: Stale saved key
-- **WHEN** the parent's `request.json` settings hold `llm.reasoning_tokens = 4096` and the field no longer exists
-- **THEN** the fork starts, the server log has a warning naming `llm.reasoning_tokens`, and its `request.json` settings have no `reasoning_tokens`
+- **WHEN** the parent's `request.json` settings hold `prefilter.top_k = 50` and the field no longer exists
+- **THEN** the fork starts, the server log has a warning naming `prefilter.top_k`, and its `request.json` settings have no `prefilter.top_k`
 
 #### Scenario: Parent still running
 - **WHEN** the user forks a run that is running
@@ -259,13 +284,17 @@ after each gap step. When research ends, the view SHALL print one line:
 
 ### Requirement: Model and thinking flags
 `wosarcher run` and `wosarcher fork` SHALL accept `--model NAME`, acting as
-`--set llm.model="NAME"`, and `--plan-thinking`, `--gap-thinking`, and
-`--write-thinking`, each taking `none`, `low`, `medium`, `high`, or
+`--set llm.model="NAME"` and choosing the model whose entry values apply
+(run-config "Precedence"), `--context-window N` and `--max-output N`
+(positive integers), acting as `--set llm.context_window=N` and
+`--set llm.max_output_tokens=N`, and `--plan-thinking`, `--gap-thinking`,
+and `--write-thinking`, each taking `none`, `low`, `medium`, `high`, or
 `default` and acting as `--set llm.reasoning.<step>=<value>`. Any other
-value SHALL exit 2 before a run is created, naming the flag and the five
-values. These flags SHALL take precedence over `--set` for the same field
-and SHALL be recorded in `request.json` like other overrides, so forks and
-reruns keep them. Without a flag the configured value is left unchanged.
+value SHALL exit 2 before a run is created, naming the flag and the
+allowed values. These flags SHALL take precedence over `--set` for the
+same field and SHALL be recorded in `request.json` like other overrides,
+so forks and reruns keep them. Without a flag the configured value is left
+unchanged.
 
 #### Scenario: Model flag
 - **WHEN** the user runs `wosarcher run "q" --model deepseek-v4-flash`
@@ -278,6 +307,10 @@ reruns keep them. Without a flag the configured value is left unchanged.
 #### Scenario: Invalid thinking value
 - **WHEN** the user runs `wosarcher run "q" --plan-thinking max`
 - **THEN** the command exits with status 2 before creating a run, naming `--plan-thinking` and the values `none`, `low`, `medium`, `high`, `default`
+
+#### Scenario: Invalid window
+- **WHEN** the user runs `wosarcher run "q" --context-window 0`
+- **THEN** the command exits with status 2 before creating a run, naming `--context-window`
 
 #### Scenario: Fork keeps thinking
 - **WHEN** a run was started with `--write-thinking high` and the user runs `wosarcher fork <id> --from write --tone critical`

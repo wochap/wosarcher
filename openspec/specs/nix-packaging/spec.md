@@ -157,12 +157,18 @@ wosarcherd auth set-password`). Neither wrapper SHALL read
 ### Requirement: Declared profiles and hooks
 
 `services.wosarcher.profiles` SHALL be an attribute set of profile names to
-TOML-compatible values. Before the service starts, each entry SHALL be
-written to `/var/lib/wosarcher/config/wosarcher/profiles/<name>.toml` as a
-copy (never a link into the Nix store), owned by `wosarcher` with mode
-0600. A profile that was declared before and is no longer declared SHALL be
-removed. A profile file the module did not write SHALL be left alone.
-`services.wosarcher.hooks` SHALL be written the same way to
+TOML-compatible values, `services.wosarcher.providers` an attribute set of
+block names (`search`, `fetch`, `prefilter`, `score`, `llm`) to attribute
+sets of entry names to TOML-compatible values, and
+`services.wosarcher.depths` an attribute set of preset names to
+TOML-compatible values. Before the service starts, each SHALL be written as
+a copy (never a link into the Nix store), owned by `wosarcher` with mode
+0600, to `/var/lib/wosarcher/config/wosarcher/` under
+`profiles/<name>.toml`, `providers/<block>/<name>.toml`, and
+`depths/<name>.toml`. A block name other than the five SHALL fail the
+evaluation naming it. A file that was declared before and is no longer
+declared SHALL be removed. A file the module did not write SHALL be left
+alone. `services.wosarcher.hooks` SHALL be written the same way to
 `/var/lib/wosarcher/config/wosarcher/hooks.toml`; when it is empty, a
 `hooks.toml` written by the module SHALL be removed.
 
@@ -170,6 +176,21 @@ removed. A profile file the module did not write SHALL be left alone.
 
 - **WHEN** a profile `old` is removed from `services.wosarcher.profiles` and the system switches
 - **THEN** `profiles/old.toml` no longer exists and a hand-made `profiles/mine.toml` still does
+
+#### Scenario: Entries from the module
+
+- **WHEN** `services.wosarcher.providers.score.jev-strict = { provider = "jev"; min_score = 2.0; }`
+- **THEN** `providers/score/jev-strict.toml` holds `provider = "jev"` and `min_score = 2.0`, and `wosarcher providers list --block score` lists `jev-strict`
+
+#### Scenario: Dropped entry is removed
+
+- **WHEN** `services.wosarcher.providers.llm.free` is removed and the system switches
+- **THEN** `providers/llm/free.toml` no longer exists
+
+#### Scenario: Depth preset from the module
+
+- **WHEN** `services.wosarcher.depths.wide = { description = "Broad survey."; score.top_k = 25; }`
+- **THEN** `depths/wide.toml` exists and `wosarcher depth list` shows `wide`
 
 #### Scenario: Hooks file from the module
 
@@ -187,11 +208,11 @@ start, for variables that must not land in the Nix store; it may be
 readable by root alone), and `services.wosarcher.autoStart` (default true;
 when false the service is started by its socket or a socket proxy only).
 Secrets SHALL NOT be accepted through any option whose value lands in the
-Nix store, and the option descriptions SHALL say so. The `profiles` and
-`environmentFile` descriptions SHALL name the `<x>_file` settings (for
-example `llm.api_key_file`) as the way to pass a secret: a profile in the
-Nix store holds the path of a secret file readable by the `wosarcher` user,
-never the value.
+Nix store, and the option descriptions SHALL say so. The `providers`
+description SHALL name the `<x>_file` settings (for example
+`api_key_file` in an llm entry) as the way to pass a secret: an entry in
+the Nix store holds the path of a secret file readable by the `wosarcher`
+user, never the value.
 
 #### Scenario: Allowed origin from the module
 

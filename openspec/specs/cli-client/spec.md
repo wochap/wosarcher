@@ -63,15 +63,20 @@ as the token routes refuse tokens.
 
 ### Requirement: Read-only commands through the API
 `wosarcher profile list` and `wosarcher profile show [NAME]` SHALL use
-`GET /api/profiles` (show prints the profile's resolved values the route
-returns and never a secret); `wosarcher depth list` and `wosarcher depth
-show NAME` SHALL use `GET /api/depths`; `wosarcher cancel <run_id>` SHALL
-use `POST /api/runs/{id}/cancel` and print the result; `wosarcher schema`
-SHALL print the contracts from the installed package without a connection.
+`GET /api/profiles` (show prints the profile's entries and resolved values
+the route returns and never a secret); `wosarcher providers list` SHALL use
+`GET /api/providers`; `wosarcher depth list` and `wosarcher depth show
+NAME` SHALL use `GET /api/depths`; `wosarcher cancel <run_id>` SHALL use
+`POST /api/runs/{id}/cancel` and print the result; `wosarcher schema` SHALL
+print the contracts from the installed package without a connection.
 
 #### Scenario: Profiles from the server
 - **WHEN** the daemon's config directory has a user profile `lan` and a member runs `wosarcher profile list`
 - **THEN** `lan` is listed with source `user`, and no profile file is read by the client
+
+#### Scenario: Entries from the server
+- **WHEN** the daemon's config directory has `providers/llm/agents.toml` and a member runs `wosarcher providers list`
+- **THEN** `agents` is listed under llm, and no entry file is read by the client
 
 #### Scenario: Schema offline
 - **WHEN** no daemon runs and the user runs `wosarcher schema`

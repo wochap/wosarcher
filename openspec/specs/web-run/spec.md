@@ -46,15 +46,17 @@ size (`B` or `KB` with one decimal), and a remove button.
 The New run screen (scenario `new`) SHALL show the collapsible "Options"
 panel, collapsed by default. Its header SHALL show the summary "<Depth> ·
 <recipe> · <sources> · <profile> · <N> words · <Tone>", as in scenario
-`new-depth`. The panel SHALL start with the Depth group (Requirement:
-Depth control), then the Run group. The Run group SHALL offer:
+`new-depth`, where <profile> is followed by " (modified)" when the
+profile's Advanced values have edits (Requirement: Profile advanced
+values). The panel SHALL start with the Depth group (Requirement: Depth
+control), then the Run group. The Run group SHALL offer:
 - Recipe (segmented, `report`, `answer`, then `context`);
 - Sources (segmented, `web`, `files`, `both`);
 - Profile: a select `min(260px, 100%)` wide listing the profiles from
-  `GET /api/profiles` by name. A profile whose `source` is `user` is
-  followed by "  (user profile)", and the active one is preselected. The
-  selected profile's `description` is shown under the select (12px, muted,
-  4px above) when it is not empty;
+  `GET /api/profiles` by name, the active one preselected. The selected
+  profile's `description` is shown under the select (12px, muted, 4px
+  above) when it is not empty, followed by the profile's Advanced toggle
+  (Requirement: Profile advanced values);
 - Allow domains and Block domains (Requirement: Domain rows);
 - Search language: a text input `min(260px, 100%)` wide with the
   placeholder "Any language" and a help button reading "Search language" /
@@ -96,16 +98,16 @@ count.
 - **THEN** the run request has `until` = `select`
 
 #### Scenario: Profile description
-- **WHEN** `GET /api/profiles` returns `low-vram` with the description "Models take turns on one small GPU; slower, fits 8 GB." and the user selects it (prototype `help` scenario, figure C)
+- **WHEN** `GET /api/profiles` returns `low-vram` with the description "Models take turns on one small GPU; slower, fits 8 GB." and the user selects it (scenario `new-profile`)
 - **THEN** the select shows `low-vram` and the description is shown under it
 
-#### Scenario: User profile marked
-- **WHEN** `GET /api/profiles` returns a profile `nixos` with `source` `user`
-- **THEN** its option reads "nixos  (user profile)" and selecting it sends `profile` = `nixos`
-
 #### Scenario: Summary
-- **WHEN** the depth is Deep, recipe `report`, sources `both`, profile `workstation`, tone objective, and words 2000
+- **WHEN** the depth is Deep, recipe `report`, sources `both`, profile `workstation` without edits, tone objective, and words 2000
 - **THEN** the collapsed header reads "Deep · report · both · workstation · 2000 words · Objective"
+
+#### Scenario: Summary with profile edits
+- **WHEN** the same options are set and the Scorer was changed for this run
+- **THEN** the collapsed header reads "Deep · report · both · workstation (modified) · 2000 words · Objective"
 
 #### Scenario: Domain rows in the Run group
 - **WHEN** the user opens the Options panel (scenario `new-domains`)
@@ -122,6 +124,10 @@ count.
 #### Scenario: Invalid search language
 - **WHEN** the user types "spanish" as the search language
 - **THEN** the row shows "Use all, auto, or a code such as es or es-PE." in place of the hint, and Start is disabled
+
+#### Scenario: User profile marked
+- **WHEN** `GET /api/profiles` returns a profile `nixos`
+- **THEN** its option reads "nixos", with no "(user profile)" suffix since every profile is a user file, and selecting it sends `profile` = `nixos`
 
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
@@ -371,15 +377,15 @@ The Prefilter phase card (scenario `live`) SHALL show a second muted 11px
 line under its progress text, clipped with "…": "top N per sub-query"
 while running, and "top N/sub-query" once done or reused, followed by " ·
 <IDs> passthrough" when any sub-query skipped ranking (IDs joined by ", ").
-N SHALL come from the run's `prefilter.top_k` in its request settings. A
+N SHALL come from the run's `score.candidates` in its request settings. A
 pending, waiting, or skipped Prefilter card SHALL have no detail line.
 
 #### Scenario: Done with passthrough sub-queries
-- **WHEN** the prefilter stage is done with `prefilter.top_k = 50` and passthrough `q4`, `q5`
+- **WHEN** the prefilter stage is done with `score.candidates = 50` and passthrough `q4`, `q5`
 - **THEN** the card's detail line reads "top 50/sub-query · q4, q5 passthrough"
 
 #### Scenario: Running
-- **WHEN** the prefilter stage is running with `prefilter.top_k = 50`
+- **WHEN** the prefilter stage is running with `score.candidates = 50`
 - **THEN** the card's detail line reads "top 50 per sub-query"
 
 ### Requirement: Device chip
@@ -1081,7 +1087,7 @@ accessible label is "Help: <label>"):
 | New run, after "Attachments" | Attachments | Attachments | Markdown or text files to research alongside the web, or instead of it. | pdf-ingest output (.md) |
 | Options, after "Recipe" | Recipe | Recipe | Report writes a cited report. Answer replies to the question directly, with citations, in at most the chosen length. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper. | |
 | Options, after "Sources" | Sources | Sources | Web searches the internet. Files uses only your attachments. Both combines them; attachments get a share of the context budget. | |
-| Options, after "Profile" | Profile | Profile | A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server. | |
+| Options, after "Profile" | Profile | Profile | A saved choice of providers and model. Advanced shows its values; edits apply to this run only. | |
 | Options, after an "overridden" mark | Overridden | Overridden | This value differs from your default in Settings and applies to this run only. | |
 | Rewrite dialog, after a "changed" mark | Changed | Changed | This value differs from the version you are rewriting. | |
 | Sub-queries and Research rounds, after the "Topic line" label on the `q0` row | Topic line | Topic line | A short topic the planner writes from your question. Passages are ranked against it as the first query, q0. Questions up to 200 characters are searched as written; longer ones are searched by this topic. | |
@@ -1108,7 +1114,7 @@ accessible label is "Help: <label>"):
 | Report, after "Versions" | Versions | Versions | Reports that share the same research. v1 is the original; rewrites follow. | |
 | Report, after the References style | Reference style | Reference style | Format of the reference list at the end of the report: APA, MLA, Chicago or IEEE. | |
 
-In the funnel texts, `<P>` is the run's `prefilter.top_k`, `<T>` the shared
+In the funnel texts, `<P>` is the run's `score.candidates`, `<T>` the shared
 display threshold with two decimals (or "the threshold" when queries
 differ), `<K>` the run's `score.top_k`, and `<S>` the run's
 `select.max_chunks_per_source`, all from the run's saved configuration.
@@ -1159,12 +1165,14 @@ saved results of earlier stages."
 - **THEN** the tooltip lists the six fates with their icons, terms, and texts
 
 ### Requirement: Depth control
-The Options panel SHALL show the Depth group of scenarios `new-depth` and
-`new-custom`:
+The Options panel SHALL show the Depth group of scenarios `new-depth`,
+`new-custom`, and `new-preset`:
 - A "Depth" label with its help button.
-- A segmented control: Quick, Standard, Deep, Exhaustive, then Custom.
-  Standard is preselected. Quick through Exhaustive come from
-  `GET /api/depths`.
+- A segmented control: Quick, Standard, Deep, Exhaustive, then the user
+  presets by name as the server lists them (their label is the name as
+  written, for example `wide`), then Custom. Standard is preselected.
+  Every preset comes from `GET /api/depths`. The control SHALL wrap onto
+  more rows when it does not fit, as in the prototype at phone width.
 - Under it, the selected depth's description ("Set every value yourself."
   for Custom).
 - An estimate line: "~<P> pages · <R> round(s) · ~<C> LLM calls".
@@ -1173,35 +1181,18 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
     (Sub-queries + 1) × Results per query, and (R − 1) × Follow-ups per
     round × Results per query.
   - C is (1 when Sub-queries > 0) + (R − 1) + 1.
-  - When context is clamped, the line adds " · context <asked> →
-    <effective> (model window)", in thousands of tokens such as "32k".
-- An "Advanced" disclosure listing, each with its help button: Sub-queries
+- An "Advanced" disclosure ("· <Label> values" for a preset, "· your
+  values" for Custom) listing, each with its help button: Sub-queries
   (1-12), Results per query (1-20), Max pages (5-300, step 5), Rounds
-  (1-8), Follow-ups per round (1-12), Passages per query (1-40), Context
-  tokens (Auto, or 1000-128000, step 1000), and Gap context tokens (Auto,
-  or 1000-128000, step 1000).
+  (1-8), Follow-ups per round (1-12), and Passages per query (1-40). Its
+  note reads "<Label> preset. Edit any value to switch to Custom." for a
+  preset.
   - Follow-ups per round shows the depth's `queries_per_round` from
-    `GET /api/depths`. Like Gap context tokens, it is disabled with the
-    lock icon and the note "Used between rounds; needs 2+ rounds." while
-    Rounds is 1. The prototype has no such field; it SHALL reuse the
-    Sub-queries field's controls and styles, and its help button SHALL
-    read "Follow-ups per round" / "Most follow-up searches the gap step
-    writes after each round but the last. Round 1 searches the
-    sub-queries."
-  - Context tokens is a number input with an "Auto" option. Auto (the value
-    of every built-in preset) shows "Auto · <effective>" with the effective
-    budget; emptying the input selects Auto.
-  - Gap context tokens is a number input with the same "Auto" option.
-    Presets show 4,000. Auto shows "Auto · <effective>", where the
-    effective gap budget is the profile's `context_window` minus
-    `prompt_reserve_tokens` minus 768 (the query's own size is not
-    subtracted in the browser). It is disabled with the lock icon and the
-    note "Used between rounds; needs 2+ rounds." while Rounds is 1. The
-    prototype has no such field; it SHALL reuse the Context tokens field's
-    controls and styles, and its help button SHALL read "Gap context
-    tokens" / "Token budget for the passages the gap step reads between
-    rounds to choose follow-up searches. Auto uses all the room the
-    model window leaves."
+    `GET /api/depths`. It is disabled with the lock icon and the note
+    "Used between rounds; needs 2+ rounds." while Rounds is 1, and its
+    help button SHALL read "Follow-ups per round" / "Most follow-up
+    searches the gap step writes after each round but the last. Round 1
+    searches the sub-queries."
   - With a preset selected, the fields show the preset's values and look
     read-only (dashed, muted), but accept typing. Editing a field switches
     the depth to Custom with the edited values.
@@ -1210,48 +1201,28 @@ The Options panel SHALL show the Depth group of scenarios `new-depth` and
     selected before.
 - When Sources is `files`, Rounds is disabled with the lock icon at 1 and
   the note "Files-only runs use 1 round.", and the estimate counts 1 round.
-- Context tokens shows "<asked> → <effective> (model window)" when a
-  number is asked and it is above the effective budget; with Auto it shows
-  no clamp text and the estimate line has no context part. Gap context
-  tokens follows the same rule against its own effective budget and never
-  adds to the estimate line.
-  - The effective budget is the selected profile's `context_window` minus
-    `prompt_reserve_tokens` minus the output limit (the query's own size
-    is not subtracted in the browser).
-  - The output limit is the larger of 1024 and twice the words, capped at
-    the profile's `max_output_tokens`.
-  - Asked and effective are formatted with thousands separators.
 
 The run request SHALL send `depth` set to the preset name and no `research`
 for a preset. For Custom it SHALL send `depth` = `custom` and `research`
-with all eight values, `context_tokens` and `gap_context_tokens` as
-`"auto"` when Auto is selected. Help texts SHALL be verbatim from the prototype's
+with all six values. Help texts SHALL be verbatim from the prototype's
 help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
-`d-ctx`, and `w-words-def`.
+and `w-words-def`.
 
 #### Scenario: Pick a preset
 - **WHEN** the user picks Deep and starts a run
 - **THEN** the request has `depth` = `deep` and no `research`
 
+#### Scenario: Pick a user preset
+- **WHEN** `GET /api/depths` lists the user preset `wide` and the user picks it (scenario `new-preset`)
+- **THEN** the control shows `wide` between Exhaustive and Custom, the description and the Advanced values are `wide`'s, and starting sends `depth` = `wide` and no `research`
+
 #### Scenario: Edit switches to Custom
 - **WHEN** Deep is selected and the user changes Max pages to 80
-- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those eight values
+- **THEN** the control shows Custom, Advanced is open, Max pages is 80, the other fields keep Deep's values, and starting sends `depth` = `custom` with those six values
 
-#### Scenario: Auto context
-- **WHEN** Deep is selected and the profile has `context_window` 131072, `prompt_reserve_tokens` 2000, `max_output_tokens` 8192, and words is 2000
-- **THEN** Context tokens shows "Auto · 125,072" and the estimate line has no context part
-
-#### Scenario: Clamped context
-- **WHEN** Custom asks 32,000 context tokens, the profile has `context_window` 32768, `prompt_reserve_tokens` 2000, `max_output_tokens` 8192, and words is 3000
-- **THEN** Context tokens shows "32,000 → 24,768 (model window)" and the estimate line ends with "context 32k → 25k (model window)"
-
-#### Scenario: Auto gap context
-- **WHEN** Custom is selected with Rounds 3, Gap context tokens Auto, and the profile has `context_window` 1000000 and `prompt_reserve_tokens` 2000
-- **THEN** Gap context tokens shows "Auto · 997,232" and the request has `research.gap_context_tokens` = `"auto"`
-
-#### Scenario: Gap context locked at one round
-- **WHEN** Rounds is 1
-- **THEN** Gap context tokens is disabled with "Used between rounds; needs 2+ rounds."
+#### Scenario: No budgets in Depth
+- **WHEN** the user opens Depth's Advanced
+- **THEN** it shows no Context tokens, Gap context tokens, Model, or thinking field
 
 #### Scenario: Follow-ups per round edited
 - **WHEN** Deep is selected and the user changes Follow-ups per round to 6
@@ -1272,6 +1243,22 @@ help entries `depth`, `d-subq`, `d-rpq`, `d-pages`, `d-rounds`, `d-ppq`,
 #### Scenario: Deep estimate
 - **WHEN** Deep is selected with Sub-queries 6, Results per query 10, Max pages 60, Rounds 3, and Follow-ups per round 3
 - **THEN** the estimate line reads "~60 pages · 3 rounds · ~4 LLM calls"
+
+#### Scenario: Auto context
+- **WHEN** the user opens Depth's Advanced with Deep selected
+- **THEN** no context budget is shown there; Context tokens and its Auto budget are in the profile's Advanced values (Requirement: Profile advanced values)
+
+#### Scenario: Clamped context
+- **WHEN** the profile's Context tokens asks more than the model window leaves
+- **THEN** the clamp note shows under Context tokens in the profile's Advanced values and the estimate line has no context part
+
+#### Scenario: Auto gap context
+- **WHEN** Custom is selected with Rounds 3
+- **THEN** the request's `research` has no `gap_context_tokens`; Gap context tokens is sent in `llm` only when edited in the profile's Advanced values
+
+#### Scenario: Gap context locked at one round
+- **WHEN** Rounds is 1
+- **THEN** Gap context tokens in the profile's Advanced values is disabled with "Used between rounds; needs 2+ rounds."
 
 ### Requirement: Depth tags
 The Live run header and the Report screen header SHALL show the run's depth
@@ -1494,6 +1481,7 @@ Prefilter card detail).
 #### Scenario: Nothing filtered
 - **WHEN** no domain list is set
 - **THEN** the Search card has no detail line
+
 ### Requirement: Run recipe
 Every run screen that names a run's recipe SHALL derive it from the run's
 `until` and resolved `writing.format`, with one shared rule: `context`
@@ -1512,48 +1500,6 @@ Report screen meta (scenarios `finished` and `finished-answer`), Copy JSON
 - **WHEN** a run has `until` = `select` and `writing.format` = `answer`
 - **THEN** its recipe is shown as `context`
 
-### Requirement: Model and thinking fields
-The Options panel's Advanced disclosure (Requirement: Depth control,
-scenario `new-custom`) SHALL end with a "Model" group below the research
-fields. The prototype has no such controls; the group SHALL reuse the
-Advanced panel's field layout, label, help button, and note styles. It
-holds:
-- "Model": a text input with a datalist of the IDs from `GET /api/models`
-  for the selected profile (free text is always allowed). Empty means the
-  profile's model, shown as the placeholder "profile default". Its help
-  reads "Model" / "The chat model for this run. Pick one the endpoint
-  lists, or type any name the endpoint accepts. Empty uses the profile's
-  model."
-- "Thinking": three selects, Plan, Gap, and Write, each with the options
-  None, Low, Medium, High, Default, preselected None. Gap is disabled with
-  the lock icon and the note "Used between rounds; needs 2+ rounds."
-  while Rounds is 1. Its help reads "Thinking" / "How much hidden
-  reasoning the model may do for each step. None sends an exact output
-  limit and no reasoning. Low, Medium and High let the server set the
-  budget. Default leaves it to the model; use it when the endpoint
-  rejects the reasoning_effort field."
-
-Editing these fields SHALL NOT switch the depth to Custom. The run request
-SHALL send `llm.model` only when the input is not empty and
-`llm.reasoning` with only the steps that differ from None. The last values
-SHALL be kept in browser storage like the Custom research values.
-
-#### Scenario: Thinking for the writer
-- **WHEN** the user sets Write thinking to High and starts a run with the Deep preset
-- **THEN** the request has `depth` = `deep`, no `research`, and `llm.reasoning` = `{"write": "high"}`
-
-#### Scenario: Model typed
-- **WHEN** `GET /api/models` answered an empty list and the user types `deepseek-v4-flash` in Model
-- **THEN** the request has `llm.model` = `deepseek-v4-flash`
-
-#### Scenario: Nothing set
-- **WHEN** the user leaves Model empty and every Thinking select at None
-- **THEN** the request has no `llm` object
-
-#### Scenario: Gap locked at one round
-- **WHEN** Rounds is 1
-- **THEN** Gap thinking is disabled with "Used between rounds; needs 2+ rounds."
-
 ### Requirement: Thinking tags
 The Live run header and the Report screen header SHALL show, after the
 depth tag (Requirement: Depth tags, scenarios `live` and `finished`), one
@@ -1569,3 +1515,111 @@ in lower case, for example "Write thinking high". A run with every step at
 #### Scenario: No thinking
 - **WHEN** a run's summary has every reasoning level `none`
 - **THEN** the headers show no thinking tag
+
+### Requirement: Profile advanced values
+The Profile row SHALL have an "Advanced" ghost toggle with a caret, as
+Depth's (scenarios `new-profile`, `new-profile-over`,
+`new-profile-nolimits`), followed by the faint hint "· <profile> values",
+or "· <N> changed" when N fields are edited. Opened, it SHALL show the
+note "Values from the <profile> profile. Edits apply to this run only.",
+or, with edits, "Changed for this run only; the <profile> profile itself
+is unchanged." followed by a "Reset to profile" ghost button (counter-
+clockwise arrow icon) that removes every edit. Below the note, three
+groups, each with an uppercase heading, in the prototype's field grid:
+- **Providers**: selects Search, Fetch, Prefilter, Scorer, and LLM, each
+  listing that block's entries from `GET /api/providers` by name and
+  preselecting the profile's `use`. A block with one entry SHALL be
+  disabled with that entry selected and the lock icon note "Only one
+  configured."
+- **Model**: "Model", a text input with a datalist of
+  `GET /api/models?llm=<chosen llm entry>` (free text allowed),
+  preselected with the profile's `model` or else the entry's default
+  model; "Context window" (1024 to 4194304, step 1024) and "Max output"
+  (256 to 4194304, step 1024), preselected with the chosen model's limits
+  from `GET /api/providers`, or with 32768 and 8192 and the info note
+  "Fallback: no limits set for this model." when the entry does not list
+  the model; "Plan thinking", "Gap thinking", and "Write thinking" selects
+  with None, Low, Medium, High, and Default, preselected with the model's
+  `reasoning` or None. Gap thinking is disabled with the lock note "Used
+  between rounds; needs 2+ rounds." while the depth's Rounds is 1.
+- **Budgets**: "Context tokens" and "Gap context tokens", number inputs
+  (step 1000, min 1000) with the placeholder "Auto", preselected with the
+  profile's `context_tokens` and the model's `gap_context_tokens` (empty
+  for `auto`). Empty means Auto and shows the note "Auto · <budget>". A
+  number above the budget shows "<asked> → <budget rounded down to
+  thousands> (model window)". The Context tokens budget is the context
+  window minus the profile's `prompt_reserve_tokens` minus the output
+  limit, where the output limit is the larger of 1024 and twice the
+  words, capped at Max output. The Gap context tokens budget is the
+  context window minus `prompt_reserve_tokens` minus 768. Both follow the
+  current Length, Context window, and Max output. Gap context tokens is
+  disabled with the lock note while Rounds is 1.
+
+A field whose value differs from the profile's value SHALL be drawn solid
+with a small outline "overridden" tag and the help button `p-over` beside
+its label; an unedited field SHALL look read-only (dashed, muted) but
+accept typing. A value edited back to the profile's value SHALL no longer
+count as edited. Switching the profile SHALL remove every edit. Switching
+the LLM entry SHALL set Model to that entry's default model and remove
+the edits of Model, Context window, Max output, the thinking levels, and
+Gap context tokens; editing Model SHALL remove the Context window and Max
+output edits. Help texts SHALL be verbatim from the prototype's entries
+`profile`, `p-search`, `p-fetch`, `p-prefilter`, `p-scorer`, `p-llm`,
+`p-model`, `p-limits`, `p-think`, `p-ctx`, `p-gapctx`, and `p-over`.
+
+The run request SHALL send `use` with only the blocks whose entry differs
+from the profile's, and `llm` with only the edited fields (`model`,
+`context_window`, `max_output_tokens`, `reasoning` steps,
+`context_tokens`, `gap_context_tokens`, `"auto"` for an emptied budget).
+A run with no edit SHALL send neither. The edits SHALL be kept with the
+New run draft while the user moves between screens and cleared after a run
+starts.
+
+#### Scenario: Profile values
+- **WHEN** the user opens the profile's Advanced for `low-vram` with no edits (scenario `new-profile`)
+- **THEN** the hint reads "· low-vram values", Search and Fetch are disabled with "Only one configured.", and Context tokens shows "Auto · 28,368" for the agents/qwen3-14b limits and the default length
+
+#### Scenario: Three edits
+- **WHEN** the user changes Scorer to `jev-strict`, Write thinking to High, and Context tokens to 60000 on a 32768-token model (scenario `new-profile-over`)
+- **THEN** the hint reads "· 3 changed", those three fields carry "overridden", Context tokens shows "60,000 → 32,000 (model window)", and starting sends `use` = `{"score": "jev-strict"}` and `llm` = `{"reasoning": {"write": "high"}, "context_tokens": 60000}`
+
+#### Scenario: Model without limits
+- **WHEN** the profile `nixos` uses an llm entry whose default model is not listed in its `models` (scenario `new-profile-nolimits`)
+- **THEN** Context window shows 32,768 and Max output 8,192, each with "Fallback: no limits set for this model."
+
+#### Scenario: Reset
+- **WHEN** the user presses "Reset to profile"
+- **THEN** every field shows the profile's value, no "overridden" tag remains, and the hint reads "· <profile> values"
+
+#### Scenario: LLM switch
+- **WHEN** the user switches LLM from `agents` to `omniroute`
+- **THEN** Model shows `research-smart`, Context window and Max output show that model's limits, and starting sends `use.llm` = `omniroute` without `llm.model`
+
+#### Scenario: Profile switch drops edits
+- **WHEN** the user edited Scorer and then selects another profile
+- **THEN** every field shows the new profile's values and nothing is marked overridden
+
+#### Scenario: No edits sent
+- **WHEN** the user starts a run without editing the profile's Advanced values
+- **THEN** the request has no `use` and no `llm`
+
+### Requirement: Profile line in run headers
+The Live run header (Requirement: Live run header) and the Report screen
+header SHALL show, below the meta line, a profile line: the stack icon,
+the run's profile name in the mono font, " · ", and the entries of the
+run summary's `use` joined by " · " in the order search, fetch,
+prefilter, score, llm, the llm entry followed by "/<model>" (11.5px,
+mono, muted). When the summary has `modified = true`, a small outline tag
+"modified" SHALL follow. On a phone, the line SHALL show only the profile
+and "<llm>/<model>", with an "All providers" ghost toggle (caret-down)
+that shows the full list and becomes "Fewer" (caret-up), with
+`aria-expanded`. A run without `use` (recorded before entries existed)
+SHALL show no profile line.
+
+#### Scenario: CLI run with a changed scorer
+- **WHEN** a CLI run on `low-vram` used `searxng`, `firecrawl`, `embeddings`, `jev-strict`, and `agents` with model `qwen3-14b`, and its summary has `modified = true` (scenario `live-cli`)
+- **THEN** the line reads "low-vram · searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14b" followed by the "modified" tag
+
+#### Scenario: Phone collapse
+- **WHEN** the same run is shown at phone width
+- **THEN** the line shows "low-vram · agents/qwen3-14b" and "All providers", and pressing it shows every entry and "Fewer"

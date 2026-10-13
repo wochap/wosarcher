@@ -49,7 +49,7 @@ small-input passthrough; the `passthrough` fallback scorer stays uncapped
 - **THEN** the first 6 pairs in passthrough order are kept without a scorer call, and the other 5 are not kept with the drop reason `query_cap`
 
 ### Requirement: Prefilter
-The prefilter SHALL keep, per query, the `prefilter.top_k` pairs (default
+The prefilter SHALL keep, per query, the `score.candidates` pairs (default
 50) with the highest embedding similarity (`prefilter.provider =
 "embeddings"`) or BM25 score (`"bm25"`), or SHALL keep every pair
 (`"none"`). Only pairs kept by the prefilter SHALL reach the scorer. When
@@ -60,8 +60,12 @@ these reasons. Embeddings SHALL be looked up in and added to a cache keyed
 by the SHA-256 of the text when a cache is given.
 
 #### Scenario: Top-K per query
-- **WHEN** a query has 300 paired chunks and `prefilter.top_k = 50`
+- **WHEN** a query has 300 paired chunks and `score.candidates = 50`
 - **THEN** 50 pairs of that query reach the scorer
+
+#### Scenario: Candidates follow the scorer
+- **WHEN** the run uses the score entry `jev-strict` with `candidates = 100` and the prefilter entry `embeddings`
+- **THEN** 100 pairs per query reach the scorer
 
 #### Scenario: Embedder down
 - **WHEN** `prefilter.provider = "embeddings"` and the embedder raises an error

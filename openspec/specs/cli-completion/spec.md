@@ -11,24 +11,25 @@ asked from the daemon, and stays in step with the CLI.
 ### Requirement: Commands and flags
 The completion SHALL offer, for `wosarcher`, every top-level command with
 its one-line help as description (`run`, `fork`, `runs`, `logs`, `cancel`,
-`export`, `doctor`, `profile`, `depth`, `tokens`, `schema`), the
-subcommands of `profile` (`list`, `show`), `depth` (`list`, `show`), and
-`tokens` (`new`, `list`, `revoke`), and for each command exactly the flags
-that command accepts, each with a description. A flag that takes no value
-SHALL be offered once; a repeatable flag (`--attach`, `--set`,
-`--allow-domain`, `--block-domain`, `--block`) SHALL stay offered after use.
+`export`, `doctor`, `profile`, `providers`, `depth`, `tokens`, `schema`),
+the subcommands of `profile` (`list`, `show`), `providers` (`list`),
+`depth` (`list`, `show`), and `tokens` (`new`, `list`, `revoke`), and for
+each command exactly the flags that command accepts, each with a
+description. A flag that takes no value SHALL be offered once; a
+repeatable flag (`--attach`, `--set`, `--use`, `--allow-domain`,
+`--block-domain`, `--block`) SHALL stay offered after use.
 
 #### Scenario: Top-level commands
 - **WHEN** the user types `wosarcher ` and presses Tab
-- **THEN** the eleven commands are offered with descriptions
+- **THEN** the twelve commands are offered with descriptions
 
 #### Scenario: Flags of one command
 - **WHEN** the user types `wosarcher fork 20260101-000000-abcd --` and presses Tab
-- **THEN** `--from` and `--json` are offered and `--attach` and `--depth` are not
+- **THEN** `--from`, `--use`, and `--json` are offered and `--attach` and `--depth` are not
 
 #### Scenario: Repeatable flag
-- **WHEN** the user types `wosarcher run q --set a=1 --s` and presses Tab
-- **THEN** `--set` is offered again
+- **WHEN** the user types `wosarcher run q --use score=bm25 --u` and presses Tab
+- **THEN** `--use` is offered again
 
 ### Requirement: Static option values
 The completion SHALL complete these values without a connection: stage names
@@ -39,8 +40,9 @@ for `--until` and `--from`; `files`, `web`, `both` for `--sources`;
 `--reference-style`; the built-in tone names for `--tone`; `none`, `low`,
 `medium`, `high`, `default` for the `--*-thinking` flags; `all` and `auto`
 for `--search-language`; `auto` for `--context-tokens` and
-`--gap-context-tokens`; the doctor block names for `doctor --block`; files
-and directories for `--attach`; and files for `export --output`.
+`--gap-context-tokens`; the block names for `doctor --block`,
+`providers list --block`, and the part of `--use` before `=`; files and
+directories for `--attach`; and files for `export --output`.
 
 #### Scenario: Stage values
 - **WHEN** the user types `wosarcher run q --until ` and presses Tab
@@ -50,27 +52,37 @@ and directories for `--attach`; and files for `export --output`.
 - **WHEN** the user types `wosarcher export 20260101-000000-abcd --format ` and presses Tab
 - **THEN** `pdf` and `docx` are offered, and `report` is not
 
+#### Scenario: Use blocks
+- **WHEN** the user types `wosarcher run q --use ` and presses Tab
+- **THEN** `search=`, `fetch=`, `prefilter=`, `score=`, and `llm=` are offered
+
 ### Requirement: Values from the daemon
 The completion SHALL ask the daemon through the `wosarcher` command being
-completed, never by reading a profile, a run directory, or a secret: run IDs
-from `wosarcher runs --json`, described by their query, for the run ID
-argument of `fork`, `logs`, `cancel`, and `export`; profile names from
-`wosarcher profile list` for `--profile` and `profile show`; and depth
-preset names from `wosarcher depth list` for `--depth` and `depth show`. It
-SHALL use the same connection environment as the command
-(`WOSARCHER_URL`, `WOSARCHER_TOKEN`, `WOSARCHER_SOCKET`).
+completed, never by reading a profile, an entry, a run directory, or a
+secret: run IDs from `wosarcher runs --json`, described by their query,
+for the run ID argument of `fork`, `logs`, `cancel`, and `export`; profile
+names from `wosarcher profile list` for `--profile` and `profile show`;
+entry names of the typed block from `wosarcher providers list --block
+BLOCK --json` for the part of `--use` after `=`; and depth preset names
+from `wosarcher depth list` for `--depth` and `depth show`. It SHALL use
+the same connection environment as the command (`WOSARCHER_URL`,
+`WOSARCHER_TOKEN`, `WOSARCHER_SOCKET`).
 
 #### Scenario: Run IDs with queries
 - **WHEN** the daemon has runs `20260101-000000-abcd` ("what is rrf") and `20260102-000000-ef01` and the user types `wosarcher logs ` and presses Tab
 - **THEN** both IDs are offered, `20260101-000000-abcd` described by `what is rrf`
 
 #### Scenario: Profiles
-- **WHEN** the daemon has a user profile `lan` and the user types `wosarcher run q --profile ` and presses Tab
-- **THEN** `lan` and the built-in profiles are offered
+- **WHEN** the daemon has the profiles `lan` and `default` and the user types `wosarcher run q --profile ` and presses Tab
+- **THEN** `lan` and `default` are offered
+
+#### Scenario: Entry names
+- **WHEN** the daemon has the score entries `bm25`, `jev-strict`, and `rerank` and the user types `wosarcher run q --use score=` and presses Tab
+- **THEN** `score=bm25`, `score=jev-strict`, and `score=rerank` are offered
 
 #### Scenario: Depth presets
-- **WHEN** the user types `wosarcher depth show ` and presses Tab
-- **THEN** `quick`, `standard`, `deep`, and `exhaustive` are offered
+- **WHEN** the daemon has the user preset `wide` and the user types `wosarcher depth show ` and presses Tab
+- **THEN** `quick`, `standard`, `deep`, `exhaustive`, and `wide` are offered
 
 ### Requirement: Quiet failure
 When the daemon cannot be reached, refuses the request, or does not answer

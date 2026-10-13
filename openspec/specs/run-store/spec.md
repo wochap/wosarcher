@@ -50,8 +50,10 @@ time.
 `request.json` SHALL hold:
 - the run request (query, sources, `until`, and attachment names);
 - the profile name;
+- `use`: the entry name of each of the five blocks the run resolved;
 - the depth (a preset name, `custom`, or empty);
-- the list of overrides (the user's own, not the preset's expansion);
+- the list of overrides (the user's own, not the preset's expansion),
+  with each per-run entry choice as `use.<block>=<name>`;
 - the resolved configuration with every secret replaced by `***`;
 - the parent run ID (empty for a new run);
 - the stage a fork started from;
@@ -65,12 +67,16 @@ A fork SHALL record its parent's depth. A fork, rerun, or rewrite SHALL
 record the origin of the request that started it, not its parent's.
 
 #### Scenario: Secrets redacted
-- **WHEN** a run is created with `WOSARCHER_SCORE__API_KEY` set
+- **WHEN** a run is created with a score entry that sets `api_key`
 - **THEN** `request.json` contains `"api_key": "***"` for the score block and does not contain the key
+
+#### Scenario: Entries recorded
+- **WHEN** a run is created with the profile `default` (score `rerank`) and `--use score=jev-strict`
+- **THEN** `request.json` has profile `default`, `use.score` `jev-strict`, the other four entries the profile chose, and the override `use.score=jev-strict`
 
 #### Scenario: Depth recorded
 - **WHEN** a run is created with depth `deep` and `--words 800`
-- **THEN** `request.json` has depth `deep`, the overrides list only `write.words=800`, and the resolved configuration has `plan.max_sub_queries` 5
+- **THEN** `request.json` has depth `deep`, the overrides list only `write.words=800`, and the resolved configuration has `plan.max_sub_queries` 6
 
 #### Scenario: Fork keeps depth
 - **WHEN** a run with depth `quick` is forked from `write`
@@ -115,9 +121,15 @@ Artifacts SHALL be written completely before `stage.done` is logged.
 copied `stage.done` SHALL name in `copied_from` the run that executed the
 stage: the parent's own `copied_from` for that stage when the parent copied
 it too, else the parent. Secrets that are redacted in the saved
-configuration SHALL be taken from the current environment and profile.
-Forking from a stage whose earlier stages are not all finished SHALL fail
-and name the first unfinished stage.
+configuration SHALL be taken from the current entries the parent recorded
+in `use`. A recorded entry that no longer exists SHALL fail the fork
+before it is created, naming the block and the entry and listing that
+block's entries, unless the fork replaces that block with `--use`. A
+`--use BLOCK=NAME` SHALL replace the whole saved block with the current
+entry; for `llm`, the chosen model's entry values SHALL apply again below
+the fork's overrides. The fork SHALL record the entries it used. Forking
+from a stage whose earlier stages are not all finished SHALL fail and name
+the first unfinished stage.
 
 #### Scenario: Rewrite only
 - **WHEN** the user forks a finished run from `write` with `--set write.tone=critical`
@@ -130,6 +142,14 @@ and name the first unfinished stage.
 #### Scenario: Fork of a fork
 - **WHEN** run A ran every stage, B is a fork of A from `score`, and C is a fork of B from `write`
 - **THEN** C's copied `stage.done` events for `plan` through `prefilter` have `copied_from = A`, and those for `score` and `select` have `copied_from = B`
+
+#### Scenario: Entry gone
+- **WHEN** the parent used the llm entry `sonnet`, `providers/llm/sonnet.toml` was removed, and the user forks from `write`
+- **THEN** the fork fails naming `llm`, `sonnet`, and the current llm entries, and no run directory is created
+
+#### Scenario: Entry gone, replaced
+- **WHEN** the same parent is forked from `write` with `--use llm=omniroute`
+- **THEN** the fork runs the write stage with the `omniroute` entry and its default model's values, and records `use.llm` `omniroute`
 
 ### Requirement: Lineage
 A new run SHALL have version 1 and no parent. A fork SHALL record its

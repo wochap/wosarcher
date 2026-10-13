@@ -9,21 +9,30 @@ and lets the runner release a model when GPU use is exclusive.
 ## Requirements
 
 ### Requirement: Doctor command
-`wosarcherd doctor` SHALL check the providers of the resolved configuration
-(it accepts `--profile` and `--set` like other engine commands) and print
-one row per configured block (`search`, `fetch`, `prefilter`, `score`,
-`llm`): provider, base URL, device, status, model name, latency of one
-small request in milliseconds, and unload support (`yes`, `no`, or `n/a`
-when `release = "none"`). Built-in providers (`bm25`, `passthrough`) SHALL
-be shown as built in, without a request. `--json` SHALL print the same
-report as JSON. The command SHALL exit 1 when any probe fails and 0
-otherwise, warnings included.
+`wosarcherd doctor` SHALL check providers in one of two modes and print one
+row per checked item: block, entry name, provider, base URL, device,
+status, model name, latency of one small request in milliseconds, and
+unload support (`yes`, `no`, or `n/a` when `release = "none"`).
 
-A repeatable `--block <name>` option SHALL limit the check to the named
-blocks: only their rows are printed and only they are probed, and the
-exclusive GPU warnings and the context window check apply only to them. An
-unknown block name SHALL stop the command with an error naming the valid
-blocks, before any request is sent.
+- **Combination** (the default): the five blocks of the resolved
+  configuration. It accepts `--profile`, `--use`, and `--set` like other
+  engine commands. A repeatable `--block <name>` option SHALL limit the
+  check to the named blocks: only their rows are printed and only they are
+  probed, and the exclusive GPU warnings and the context window check
+  apply only to them. An unknown block name SHALL stop the command with an
+  error naming the valid blocks, before any request is sent.
+- **Entries**: a repeatable `--entry BLOCK=NAME`, or `--all-entries`,
+  checks those entries alone, one row each, without resolving a profile's
+  choice. An `llm` entry SHALL be probed with its default model and
+  checked against that model's limits. The GPU policy SHALL come from the
+  selected profile, or `shared` when none resolves. An unknown entry SHALL
+  stop the command naming it and the block's entries, before any request
+  is sent. `--entry` and `--all-entries` SHALL NOT be combined with
+  `--block` or `--use`.
+
+Built-in entries SHALL be shown as built in, without a request. `--json`
+SHALL print the same report as JSON. The command SHALL exit 1 when any
+probe fails and 0 otherwise, warnings included.
 
 A block is local when its `release` is not `none` or it sets a `device`
 label; any other block with an endpoint is a cloud block. Cloud blocks
@@ -35,10 +44,12 @@ probe and before the next local probe when that block reports unload
 support `yes`; a failed release SHALL be added as a warning and SHALL NOT
 change the row's status.
 
-`wosarcher doctor [--profile NAME] [--block NAME]... [--json]` SHALL ask
-the daemon to run the check (`POST /api/providers/health/check`) and print
-the returned report in the same row shape, exiting 1 when any block is
-`down` and 0 otherwise; `--set` is not available on the client.
+`wosarcher doctor [--profile NAME] [--use BLOCK=NAME]... [--block NAME]...
+[--json]` SHALL read the profile's entries from `GET /api/profiles`, apply
+`--use`, keep the blocks named by `--block`, ask the daemon to check those
+entries (`POST /api/providers/check`), and print the returned rows for
+them in the same row shape, exiting 1 when any is `down` and 0 otherwise;
+`--set` is not available on the client.
 
 #### Scenario: All healthy
 - **WHEN** every configured endpoint answers its probe
@@ -49,12 +60,20 @@ the returned report in the same row shape, exiting 1 when any block is
 - **THEN** the score row shows the failure with every URL tried, the other rows are still checked, and the exit code is 1
 
 #### Scenario: Built-in scorer
-- **WHEN** `score.provider = "bm25"`
+- **WHEN** the score entry is the built-in `bm25`
 - **THEN** the score row says built in and no request is sent for it
 
 #### Scenario: Other profile
 - **WHEN** the user runs `wosarcherd doctor --profile cloud`
-- **THEN** the providers of the `cloud` profile are checked, not the active profile
+- **THEN** the entries the `cloud` profile uses are checked, not the active profile's
+
+#### Scenario: Another entry
+- **WHEN** the user runs `wosarcherd doctor --use llm=agents --block llm`
+- **THEN** only the `agents` endpoint is probed and its row names the entry `agents`
+
+#### Scenario: Entries mode
+- **WHEN** the user runs `wosarcherd doctor --entry score=jev-strict --entry score=rerank --json`
+- **THEN** the report has two score rows, one per entry, and no other endpoint is probed
 
 #### Scenario: One block
 - **WHEN** the user runs `wosarcherd doctor --block score --json`
@@ -66,7 +85,8 @@ the returned report in the same row shape, exiting 1 when any block is
 
 #### Scenario: Client doctor
 - **WHEN** a member runs `wosarcher doctor --block llm` over the socket and the LLM endpoint is down
-- **THEN** the daemon runs the check, the client prints the llm row as down with the error, and exits 1
+- **THEN** the daemon checks the profile's llm entry, the client prints its row as down with the error, and exits 1
+
 #### Scenario: Local probes one at a time
 - **WHEN** two blocks set a `device` label and `wosarcherd doctor` runs
 - **THEN** their probes never overlap, while cloud probes run concurrently with them

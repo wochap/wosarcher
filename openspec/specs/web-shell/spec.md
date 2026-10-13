@@ -343,98 +343,121 @@ for `q0` made by the search stage SHALL count as part of Search.
 - **THEN** they count toward the Search phase, and the Plan phase shows no hits
 
 ### Requirement: Settings providers
-The Settings screen of the prototype (`design/project/wosarcher.dc.html`, no
-dedicated scenario; reached with Alt+4 from any scenario) SHALL show the H1
-"Settings" with a "Check all providers" button, the profile line, the GPU
-policy line, the "Providers" heading followed by the note "Checked only
-when you click, so idle GPU servers stay asleep.", and a grid with one card
-per configured provider block from `GET /api/providers/health`, in the
-order the server lists them, titled by role: `search` "Search", `fetch`
-"Fetch", `prefilter` "Embeddings" when its provider is `embeddings` and
-"Prefilter" otherwise (for example `bm25` or `none`), `score` "Scorer",
-`llm` "LLM" (any other block name capitalised). Each card SHALL show the
-provider name, a "Check" button labelled for screen readers "Check <role>
-provider", and a list with the prototype's 84px label column: Base URL,
-Model, Device (the device label, or "–"), and Unload (`none`,
-`llama-swap`, or `ollama`, the provider's `release`).
+The Settings screen (scenario `settings`) SHALL show the H1 "Settings" with
+a "Check all providers" button (heartbeat icon), the default profile line,
+the GPU policy line, the "Providers" heading followed by the note "Checked
+only when you click, so idle GPU servers stay asleep.", and one group per
+block in the order Search, Fetch, Prefilter, Scorer, LLM: a heading with
+the block's name and its help button (`p-search`, `p-fetch`,
+`p-prefilter`, `p-scorer`, `p-llm`), then a grid with one card per entry
+of that block from `GET /api/providers`, in the order the server lists
+them.
+
+An entry with an endpoint SHALL be a card whose kicker is its adapter
+(`provider`, for example `rerank` or `openai`), with a "Check" button
+labelled for screen readers "Check <name> (<block>)", its name as the
+title, and a list with the prototype's label column: Base URL, Model (the
+entry's model; left out for `llm` entries), Device (the device label, or
+"–"), and Unload (`none`, `llama-swap`, or `ollama`, the entry's
+`release`). An `llm` entry SHALL list instead a "Models" list: one line per
+listed model, the default first with an accent "default" tag, each with
+"<context window> window · <max output> out" with thousands separators,
+or "fallback limits" (faint) when the model has none. A built-in entry
+SHALL be a compact dashed card with its adapter as kicker, its name, and
+"Built in, nothing to check.", with no Check button and no health strip.
+An entry with an `error` SHALL show the error on the danger tint in place
+of the list.
 
 Opening Settings SHALL NOT probe any provider: the screen reads
-`GET /api/providers/health`, which answers from the server's stored
-results. Each card's health strip SHALL follow the prototype: `unchecked`
-as "Not checked yet" with the faint dashed circle on a dashed, untinted
-strip; `ok` as "OK · checked <ago>" with the latency ("N ms") as the detail
-line; `degraded` as "Slow · checked <ago>" on the warn tint with "N ms,
-limit 1,000 ms" (or the server's detail when the latency is within the
-limit) as the detail line; `down` as "Down · checked <ago>" on the danger
-tint with the error detail in the mono font; and `skipped` as "Skipped ·
-<detail>". <ago> is "just now" under 10 s, "N s ago" under a minute, and
-otherwise "N m ago", computed from the check's `checked_at` and updated
-while the screen is open.
+`GET /api/providers`, which answers from the server's stored results.
+Each card's health strip SHALL follow the prototype: `unchecked` as "Not
+checked yet" with the faint dashed circle on a dashed, untinted strip;
+`ok` as "OK · checked <ago>" with the latency ("N ms") as the detail line;
+`degraded` as "Slow · checked <ago>" on the warn tint with "N ms, limit
+1,000 ms" (or the server's detail when the latency is within the limit) as
+the detail line; and `down` as "Down · checked <ago>" on the danger tint
+with the error detail in the mono font. <ago> is "just now" under 10 s,
+"N s ago" under a minute, and otherwise "N m ago", computed from the
+check's `checked_at` and updated while the screen is open.
 
-"Check" on a card SHALL post a health check for that card's block only;
+"Check" on a card SHALL post a check for that entry only
+(`POST /api/providers/check` with `{"entries": ["<block>/<name>"]}`);
 while it runs, that card SHALL show "Checking…" with the spinning icon and
 its Check button SHALL be disabled, and other cards SHALL stay as they
-are. "Check all providers" SHALL post one health check for every block;
-while it runs, every card SHALL show "Checking…", every Check button and
-"Check all providers" SHALL be disabled. A failed check request SHALL show
-its error above the grid and leave the strips with their previous results.
+are. "Check all providers" SHALL post one check with no body; while it
+runs, every card with an endpoint SHALL show "Checking…", and every Check
+button and "Check all providers" SHALL be disabled. A failed check request
+SHALL show its error above the groups and leave the strips with their
+previous results.
 
-The profile line SHALL read "Active profile <name> · <description>" with
-the muted CPU icon, the name in the mono font, and the description of
-that profile from `GET /api/profiles`; the name is the profile of the
-health report, and " · <description>" is left out when the description is
-empty. The GPU policy line SHALL show "GPU policy", a segmented control
-with Shared and Exclusive in which the report's `gpu_policy` is selected
-and both options are disabled, and the text "Each model unloads before the
+The default profile line SHALL read "Default profile <name> <entries>"
+with the muted stack icon, the label muted, the name in the mono font, and
+the active profile's `use` from `GET /api/profiles` joined by " · " in
+block order (mono, 11.5px, muted), followed by the `profile` help button.
+The GPU policy line SHALL show "GPU policy", a segmented control with
+Shared and Exclusive in which the answer's `gpu_policy` is selected and
+both options are disabled, and the text "Each model unloads before the
 next one loads on <devices>." for exclusive or "All models stay loaded on
 <devices>." for shared, where <devices> are the distinct device labels of
-the `prefilter`, `score`, and `llm` providers joined with ", " (without
-" on <devices>" when none has a device label). Secrets SHALL never be
-shown.
+the default profile's prefilter, score, and llm entries joined with ", "
+(without " on <devices>" when none has a device label). Secrets SHALL
+never be shown.
 
 #### Scenario: Opening Settings sends no check
 - **WHEN** the user opens Settings
-- **THEN** the app requests `GET /api/providers/health` and posts no health check
+- **THEN** the app requests `GET /api/providers` and posts no check
+
+#### Scenario: Grouped entries
+- **WHEN** `GET /api/providers` lists score entries `rerank`, `jev-strict`, and the built-in `bm25`, and llm entries `omniroute` and `agents`
+- **THEN** the Scorer group shows three cards, `bm25` as a compact built-in card, and the LLM group shows two cards
+
+#### Scenario: LLM models
+- **WHEN** the `omniroute` entry lists `research-smart` (default, 1048576 / 32768) and `qwen3-30b-a3b` without limits
+- **THEN** its card lists "research-smart" with "default" and "1,048,576 window · 32,768 out", then "qwen3-30b-a3b" with "fallback limits"
 
 #### Scenario: Not checked yet
-- **WHEN** the health report has the score block `unchecked`
-- **THEN** the Scorer card shows "Not checked yet" with the dashed strip
+- **WHEN** the `rerank` entry is `unchecked`
+- **THEN** its card shows "Not checked yet" with the dashed strip
 
 #### Scenario: Slow provider
-- **WHEN** the health result for search is `degraded` at 1,840 ms, checked 3 minutes ago
-- **THEN** the Search card shows the warn icon, "Slow · checked 3m ago", and "1,840 ms, limit 1,000 ms" on the warn tint
+- **WHEN** the health result for `searxng` is `degraded` at 1,840 ms, checked 3 minutes ago
+- **THEN** its card shows the warn icon, "Slow · checked 3m ago", and "1,840 ms, limit 1,000 ms" on the warn tint
 
 #### Scenario: Down provider
-- **WHEN** the health result for fetch is `down` with detail `ECONNREFUSED`
-- **THEN** the Fetch card shows "Down · checked <ago>" on the danger tint and `ECONNREFUSED` in the mono font
+- **WHEN** the health result for `firecrawl` is `down` with detail `ECONNREFUSED`
+- **THEN** its card shows "Down · checked <ago>" on the danger tint and `ECONNREFUSED` in the mono font
 
 #### Scenario: Check one card
-- **WHEN** the user presses "Check" on the Scorer card
-- **THEN** a health check for `score` only is posted, only the Scorer card shows "Checking…" until the result arrives, and the other cards keep their strips
+- **WHEN** the user presses "Check" on the `jev-strict` card
+- **THEN** a check for `score/jev-strict` only is posted, only that card shows "Checking…" until the result arrives, and the other cards keep their strips
 
 #### Scenario: Check all
 - **WHEN** the user presses "Check all providers"
-- **THEN** one health check for every block is posted and every card shows "Checking…" until the new results arrive
+- **THEN** one check with no body is posted and every card with an endpoint shows "Checking…" until the new results arrive
 
-#### Scenario: Server block names
-- **WHEN** the health report lists the blocks `search`, `fetch`, `prefilter` (provider `embeddings`), `score`, and `llm`
-- **THEN** the cards are titled Search, Fetch, Embeddings, Scorer, and LLM, and no card shows `prefilter` or `score` as its title
-
-#### Scenario: Keyword prefilter
-- **WHEN** the `prefilter` block's provider is `bm25`
-- **THEN** its card is titled "Prefilter" and shows `bm25` as the provider name, never "Embeddings"
-
-#### Scenario: Profile line with description
-- **WHEN** the report's profile is `low-vram` and `GET /api/profiles` describes it as "Models take turns on one small GPU; slower, fits 8 GB."
-- **THEN** the line reads "Active profile low-vram · Models take turns on one small GPU; slower, fits 8 GB." as in the prototype's Settings screen
+#### Scenario: Default profile line
+- **WHEN** the active profile is `low-vram` using `searxng`, `firecrawl`, `embeddings`, `rerank`, and `agents`
+- **THEN** the line reads "Default profile low-vram searxng · firecrawl · embeddings · rerank · agents" as in scenario `settings`
 
 #### Scenario: Exclusive policy
-- **WHEN** the health report has `gpu_policy` `exclusive` and the prefilter, score, and llm providers all use device `desktop:gpu0`
+- **WHEN** the answer has `gpu_policy` `exclusive` and the default profile's prefilter, score, and llm entries all use device `desktop:gpu0`
 - **THEN** Exclusive is selected, neither option can be changed, and the text reads "Each model unloads before the next one loads on desktop:gpu0."
 
 #### Scenario: Device and Unload rows
-- **WHEN** the score provider has device `desktop:gpu0` and release `llama-swap`
-- **THEN** the Scorer card lists Device `desktop:gpu0` and Unload `llama-swap`
+- **WHEN** the `rerank` entry has device `desktop:gpu0` and release `llama-swap`
+- **THEN** its card lists Device `desktop:gpu0` and Unload `llama-swap`
+
+#### Scenario: Server block names
+- **WHEN** `GET /api/providers` lists entries of every block
+- **THEN** the groups are headed Search, Fetch, Prefilter, Scorer, and LLM, and no heading shows `prefilter` or `score`
+
+#### Scenario: Keyword prefilter
+- **WHEN** the prefilter entries are `embeddings` and the built-in `bm25` and `none`
+- **THEN** the Prefilter group shows an `embeddings` card and two compact built-in cards, `bm25` and `none`
+
+#### Scenario: Profile line with description
+- **WHEN** the active profile is `low-vram`
+- **THEN** the line reads "Default profile low-vram" with its entries, and no description
 
 ### Requirement: Writing defaults
 The Settings screen SHALL show the "Writing defaults" panel with the
