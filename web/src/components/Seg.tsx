@@ -8,6 +8,7 @@ type Props<T extends string> = {
   options: Option<T>[];
   onChange: (value: T) => void;
   disabled?: boolean;
+  className?: string;
 };
 
 export function Seg<T extends string>({
@@ -17,9 +18,10 @@ export function Seg<T extends string>({
   options,
   onChange,
   disabled,
+  className,
 }: Props<T>) {
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
+    <div className={className ? `seg ${className}` : "seg"} role="radiogroup" aria-label={label}>
       {options.map((o) => (
         <label key={o.value} className="seg-opt">
           <input

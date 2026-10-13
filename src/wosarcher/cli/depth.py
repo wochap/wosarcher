@@ -18,9 +18,10 @@ def presets() -> list[DepthInfo]:
 
 @depth_app.command("list")
 def depth_list() -> None:
-    """One line per preset: its name and description."""
+    """One line per preset: its name, `(user)` for a user preset, and its description."""
     for preset in presets():
-        typer.echo(f"{preset.name}  {preset.description}")
+        name = f"{preset.name}  (user)" if preset.source == "user" else preset.name
+        typer.echo(f"{name}  {preset.description}")
 
 
 @depth_app.command("show")

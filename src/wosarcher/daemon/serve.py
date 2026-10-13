@@ -24,7 +24,7 @@ import uvicorn
 
 from wosarcher.auth import AuthStore
 from wosarcher.cli.options import fail
-from wosarcher.config import ConfigError, Settings, config_dir, resolve
+from wosarcher.config import ConfigError, Settings, config_dir, resolve_server
 from wosarcher.server import create_app
 from wosarcher.server.guard import socket_listener
 from wosarcher.store import RunStore
@@ -123,7 +123,7 @@ def serve(
     """Serve the API under /api and the frontend build; each run is a `wosarcherd run` subprocess."""
     env = os.environ
     try:
-        settings = resolve(None, [], env)
+        settings = resolve_server(env)
     except ConfigError as error:
         raise fail(error, 2) from None
     bind_host = host or settings.server.host

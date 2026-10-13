@@ -5,7 +5,7 @@ from typing import Annotated, get_args
 import typer
 from rich.console import Console
 
-from wosarcher.models import STAGES, Effort, Sources, Stage, domain_list, search_language
+from wosarcher.models import STAGES, Effort, ProviderBlock, Sources, Stage, domain_list, search_language
 
 FORMATS = ("report", "answer")
 
@@ -66,6 +66,24 @@ def effort_option(value: str | None) -> str | None:
     if value is None or value in get_args(Effort):
         return value
     raise typer.BadParameter(f"must be one of: {', '.join(get_args(Effort))}")
+
+
+def use_option(value: list[str] | None) -> list[str] | None:
+    """`BLOCK=NAME` choices; the block must be one of the five, the name is checked by the daemon."""
+    blocks = get_args(ProviderBlock)
+    for item in value or []:
+        block, sep, name = item.partition("=")
+        if not sep or not name:
+            raise typer.BadParameter(f"'{item}' must look like BLOCK=NAME")
+        if block not in blocks:
+            raise typer.BadParameter(f"unknown block '{block}'; choose from {', '.join(blocks)}")
+    return value
+
+
+def use_map(value: list[str] | None) -> dict[str, str]:
+    """`--use` values as block -> entry name; a later choice for a block wins."""
+    pairs = (item.partition("=") for item in value or [])
+    return {block: name for block, _, name in pairs}
 
 
 def thinking(step: str) -> object:
@@ -137,6 +155,19 @@ BlockDomainOption = Annotated[
         help="Drop search results from this domain (repeatable).",
     ),
 ]
+UseOption = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--use",
+        metavar="BLOCK=NAME",
+        callback=use_option,
+        help="Use this provider entry for one block (repeatable); see `wosarcher providers list`.",
+    ),
+]
+ContextWindowOption = Annotated[
+    int | None, typer.Option("--context-window", min=1, help="The model's context window in tokens.")
+]
+MaxOutputOption = Annotated[int | None, typer.Option("--max-output", min=1, help="The model's output limit in tokens.")]
 ModelOption = Annotated[str | None, typer.Option("--model", help="Chat model for this run (llm.model).")]
 PlanThinkingOption = Annotated[str | None, thinking("plan")]
 GapThinkingOption = Annotated[str | None, thinking("gap")]

@@ -83,7 +83,7 @@ def test_redirect_not_followed(make_app: MakeApp, config_dir: Path, caplog: pyte
 
 def test_command_hook_env(make_app: MakeApp, config_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WOSARCHER_PROFILE", "workstation")
-    monkeypatch.setenv("WOSARCHER_LLM__API_KEY", "provider-key")
+    monkeypatch.setenv("WOSARCHER_AUTH__PASSWORD_HASH", "scrypt$x")
     script = f'printf %s "$WA_HOOK_STATUS" > {tmp_path}/out; env > {tmp_path}/env.txt'
     write_hooks(config_dir, f"[[on_finish]]\ncommand = {json.dumps(['sh', '-c', script])}\n")
     with TestClient(make_app(), base_url=BASE_URL) as client:
@@ -93,7 +93,7 @@ def test_command_hook_env(make_app: MakeApp, config_dir: Path, tmp_path: Path, m
     assert (tmp_path / "out").read_text() == "done"
     env = (tmp_path / "env.txt").read_text()
     assert "WOSARCHER_PROFILE=workstation" in env
-    assert "WOSARCHER_LLM__API_KEY" not in env
+    assert "WOSARCHER_AUTH__PASSWORD_HASH" not in env
     assert "WA_HOOK_QUERY=q; rm -rf $HOME" in env
     assert f"WA_HOOK_RUN_ID={run_id}" in env
 

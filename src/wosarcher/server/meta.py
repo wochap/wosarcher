@@ -1,9 +1,10 @@
-"""`/api/settings`, `/api/profiles`, `/api/models`, `/api/depths`, and `/api/providers/health` (and `/check`)."""
+"""`/api/settings`, `/api/profiles`, `/api/providers` (and `/check`), `/api/models`, and `/api/depths`."""
 
 import asyncio
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends
@@ -11,29 +12,39 @@ from pydantic import ValidationError
 
 from wosarcher.adapters.llm import ChatLLM
 from wosarcher.config import (
+    BLOCKS,
     RESEARCH_KEYS,
     ConfigError,
+    Entry,
     Settings,
     depth_values,
+    entry_block,
+    entry_settings,
+    env_layer,
     list_depths,
+    list_entries,
     list_profiles,
     own_settings,
-    profile_description,
     read_depth,
+    read_entry,
+    read_profile,
     redact,
     resolve,
+    resolve_run,
     select_profile,
 )
-from wosarcher.doctor import BLOCKS
 from wosarcher.http import ProviderClient, UsageLedger
 from wosarcher.models import (
     DepthInfo,
     DepthValues,
     DoctorReport,
-    HealthCheckRequest,
-    HealthReport,
+    ModelInfo,
     ModelList,
     ProfileInfo,
+    ProviderEntryInfo,
+    ProvidersCheck,
+    ProvidersReport,
+    ReasoningPatch,
     ServerSettings,
     SlotState,
 )
@@ -63,22 +74,44 @@ async def get_slots(state: State) -> SlotState:
     return state.manager.slot_state()
 
 
-def profile_info(name: str, source: str, active: str) -> ProfileInfo:
-    info = ProfileInfo(
-        name=name,
-        source="builtin" if source == "built-in" else "user",
-        active=name == active,
-        description=profile_description(name, os.environ),
-    )
+def active_profile() -> str | None:
     try:
-        settings = resolve(name, [], os.environ)
+        return select_profile(None, os.environ)
     except ConfigError:
-        return info
-    own = own_settings(name, os.environ)
+        return None
+
+
+def profile_use(use: Mapping[str, str], entries: Mapping[str, Mapping[str, Entry]]) -> dict[str, str | None]:
+    """The entry each block resolves to, or None where the choice is missing or names no entry."""
+    _, env_use = env_layer(os.environ)
+    chosen: dict[str, str | None] = {}
+    for block in BLOCKS:
+        name = env_use.get(block) or use.get(block)
+        if name is None and len(entries[block]) == 1:
+            name = next(iter(entries[block]))
+        chosen[block] = name if name in entries[block] else None
+    return chosen
+
+
+def profile_info(name: str, active: str | None) -> ProfileInfo:
+    info = ProfileInfo(name=name, active=name == active)
+    try:
+        profile = read_profile(name, os.environ)
+        model = profile.data.get("llm", {}).get("model")
+        info = info.model_copy(
+            update={
+                "description": profile.description,
+                "use": profile_use(profile.use, list_entries(os.environ)),
+                "model": model if isinstance(model, str) else None,
+            }
+        )
+        settings = resolve(name, [], os.environ)
+        own = own_settings(name, os.environ)
+    except ConfigError as error:
+        return info.model_copy(update={"error": str(error)})
     values = {
-        "context_window": settings.llm.context_window,
+        "context_tokens": settings.select.max_context_tokens,
         "prompt_reserve_tokens": settings.select.prompt_reserve_tokens,
-        "max_output_tokens": settings.llm.max_output_tokens,
         "allow_domains": settings.search.allow_domains if "search.allow_domains" in own else None,
         "block_domains": settings.search.block_domains if "search.block_domains" in own else None,
         "settings": redact(settings),
@@ -88,44 +121,76 @@ def profile_info(name: str, source: str, active: str) -> ProfileInfo:
 
 @router.get("/profiles")
 async def profiles() -> list[ProfileInfo]:
-    active = select_profile(None, os.environ)
-    return [profile_info(name, source, active) for name, (_, source) in list_profiles(os.environ).items()]
+    active = active_profile()
+    return [profile_info(name, active) for name in list_profiles(os.environ)]
 
 
-@router.get("/models")
-async def models(profile: str | None = None) -> ModelList:
-    """What the profile's LLM endpoint lists at `GET /models`; empty on any failure."""
+def model_infos(default: str, models: Mapping[str, Mapping[str, Any]]) -> list[ModelInfo]:
+    """The listed models, the default first (also when it is not listed)."""
+    ids = [default] if default else []
+    ids += [model for model in models if model != default]
+    return [
+        ModelInfo(
+            id=model,
+            context_window=models.get(model, {}).get("context_window"),
+            max_output_tokens=models.get(model, {}).get("max_output_tokens"),
+            reasoning=ReasoningPatch.model_validate(models.get(model, {}).get("reasoning", {})),
+            gap_context_tokens=models.get(model, {}).get("gap_context_tokens"),
+        )
+        for model in ids
+    ]
+
+
+def entry_info(entry: Entry) -> ProviderEntryInfo:
+    """The entry's public fields; an entry that does not load is listed with its error."""
+    info = ProviderEntryInfo(block=entry.block, name=entry.name, source=entry.source)  # pyright: ignore[reportArgumentType]
     try:
-        settings = resolve(select_profile(profile, os.environ), [], os.environ)
-    except ConfigError:
-        return ModelList()
-    ledger = UsageLedger({})
-    async with httpx.AsyncClient() as http:
-        llm = ChatLLM(settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "plan")
-        return ModelList(models=await llm.models())
-
-
-def depth_info(name: str) -> DepthInfo:
-    """The preset's values, the built-in default where it sets none; `words` stays None then."""
-    _, description, data = read_depth(name)
-    values = depth_values(data)
-    defaults = Settings()
-    research = {
-        field: values.get(key, getattr(getattr(defaults, key.split(".")[0]), key.split(".")[1]))
-        for field, key in RESEARCH_KEYS.items()
+        data = read_entry(entry)
+        cfg = entry_block(data)
+        models = model_infos(cfg.model, data.models) if entry.block == "llm" else []
+    except (ConfigError, ValidationError) as error:
+        return info.model_copy(update={"error": str(error)})
+    fields = {
+        "description": data.description,
+        "provider": cfg.provider,
+        "url": cfg.base_url,
+        "model": cfg.model,
+        "device": cfg.device,
+        "release": cfg.release,
+        "models": models,
     }
-    depth = DepthValues(**research, words=values.get("write.words"))
-    return DepthInfo(name=name, description=description, values=depth)
+    return info.model_copy(update=fields)
 
 
-@router.get("/depths")
-async def depths() -> list[DepthInfo]:
-    return [depth_info(name) for name in list_depths()]
+def all_entries() -> list[ProviderEntryInfo]:
+    try:
+        entries = list_entries(os.environ)
+    except ConfigError as error:
+        raise RouteError(500, "invalid_providers", str(error)) from None
+    return [entry_info(entry) for block in BLOCKS for entry in entries[block].values()]
 
 
-async def run_doctor(command: list[str], profile: str, chosen: list[str]) -> DoctorReport:
-    """`<command> doctor --json`; exit code 1 (a failed probe) still prints a report."""
-    argv = [*command, "doctor", "--json", "--profile", profile, *(f"--block={name}" for name in chosen)]
+def providers_report(state: ServerState, entries: list[ProviderEntryInfo]) -> ProvidersReport:
+    profile = active_profile()
+    try:
+        policy = resolve(profile, [], os.environ).run.gpu_policy if profile else "shared"
+    except ConfigError:
+        policy = "shared"
+    merged = [state.health.merge(info) for info in entries]
+    return ProvidersReport(profile=profile, gpu_policy=policy, entries=merged, warnings=state.health.warnings)
+
+
+@router.get("/providers")
+async def providers(state: State) -> ProvidersReport:
+    """Every entry by block with its stored health; sends no probe."""
+    return providers_report(state, all_entries())
+
+
+async def run_doctor(command: list[str], profile: str | None, chosen: list[str]) -> DoctorReport:
+    """`<command> doctor --json --entry ...`; exit code 1 (a failed probe) still prints a report."""
+    selected = ["--profile", profile] if profile else []
+    entries = [f"--entry={name}" for name in chosen] if chosen else ["--all-entries"]
+    argv = [*command, "doctor", "--json", *selected, *entries]
     process = await asyncio.create_subprocess_exec(
         *argv, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
@@ -142,32 +207,68 @@ async def run_doctor(command: list[str], profile: str, chosen: list[str]) -> Doc
         raise RouteError(502, "health_unavailable", f"doctor failed: {reason}") from None
 
 
-def profile_settings(profile: str | None) -> tuple[str, Settings]:
-    name = select_profile(profile, os.environ)
-    try:
-        return name, resolve(name, [], os.environ)
-    except ConfigError as error:
-        raise RouteError(400, "invalid_profile", str(error)) from None
+def checked_entries(names: list[str], entries: list[ProviderEntryInfo]) -> list[str]:
+    """`<block>/<name>` as the doctor's `BLOCK=NAME`; 400 naming an unknown block or entry."""
+    known = {(info.block, info.name) for info in entries}
+    chosen: list[str] = []
+    for name in names:
+        block, _, entry = name.partition("/")
+        if block not in BLOCKS:
+            raise RouteError(
+                400, "invalid_entry", f"unknown block '{block}' in {name}; choose from {', '.join(BLOCKS)}"
+            )
+        if (block, entry) not in known:
+            raise RouteError(400, "invalid_entry", f"unknown entry {name}")
+        chosen.append(f"{block}={entry}")
+    return chosen
 
 
-@router.get("/providers/health")
-async def providers_health(state: State, profile: str | None = None) -> HealthReport:
-    """The configured providers with the last stored check of each; sends no probe."""
-    name, settings = profile_settings(profile)
-    return state.health.report(name, settings)
-
-
-@router.post("/providers/health/check")
-async def check_health(
-    state: State, body: HealthCheckRequest | None = None, profile: str | None = None
-) -> HealthReport:
-    """Probe the chosen blocks (every block when none), store the results, and return the merged report."""
-    name, settings = profile_settings(profile)
-    chosen = body.blocks if body else []
-    unknown = [block for block in chosen if block not in BLOCKS]
-    if unknown:
-        raise RouteError(400, "invalid_block", f"unknown block {', '.join(unknown)}; choose from {', '.join(BLOCKS)}")
+@router.post("/providers/check")
+async def check_providers(state: State, body: ProvidersCheck | None = None) -> ProvidersReport:
+    """Probe the listed entries (every entry when none), store the results, and return the merged list."""
+    entries = all_entries()
+    chosen = checked_entries(body.entries if body else [], entries)
     async with state.health.lock:
-        doctor = await run_doctor(state.command, name, chosen)
-        state.health.store(name, settings, doctor, datetime.now(UTC))
-    return state.health.report(name, settings)
+        doctor = await run_doctor(state.command, active_profile(), chosen)
+        state.health.store(entries, doctor, datetime.now(UTC))
+    return providers_report(state, entries)
+
+
+@router.get("/models")
+async def models(llm: str | None = None) -> ModelList:
+    """What the llm entry's endpoint lists at `GET /models`; empty on any failure."""
+    try:
+        name = llm or resolve_run(None, [], os.environ).use["llm"]
+    except ConfigError:
+        return ModelList()
+    try:
+        settings = entry_settings("llm", name, os.environ)
+    except ConfigError as error:
+        if llm is not None and name not in list_entries(os.environ)["llm"]:
+            raise RouteError(400, "invalid_entry", str(error)) from None
+        return ModelList()
+    ledger = UsageLedger({})
+    async with httpx.AsyncClient() as http:
+        chat = ChatLLM(settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "plan")
+        return ModelList(models=await chat.models())
+
+
+def depth_info(name: str) -> DepthInfo:
+    """The preset's values, the built-in default where it sets none; `words` stays None then."""
+    depth, description, data = read_depth(name, os.environ)
+    values = depth_values(data)
+    defaults = Settings()
+    research = {
+        field: values.get(key, getattr(getattr(defaults, key.split(".")[0]), key.split(".")[1]))
+        for field, key in RESEARCH_KEYS.items()
+    }
+    found = DepthValues(**research, words=values.get("write.words"))
+    return DepthInfo(name=name, description=description, source=depth.source, values=found)
+
+
+@router.get("/depths")
+async def depths() -> list[DepthInfo]:
+    try:
+        return [depth_info(name) for name in list_depths(os.environ)]
+    except ConfigError as error:
+        raise RouteError(500, "invalid_depths", str(error)) from None

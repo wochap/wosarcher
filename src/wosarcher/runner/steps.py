@@ -358,7 +358,7 @@ async def prefilter(ctx: StepContext) -> Outcome:
         method=cfg.provider,
         context=cfg.context,
         embedder=embedder,
-        top_k=cfg.top_k,
+        top_k=ctx.settings.score.candidates,
         passthrough_chars=ctx.settings.select.passthrough_chars,
         cache=cache,
     )

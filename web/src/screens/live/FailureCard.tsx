@@ -1,7 +1,6 @@
 // The Report panel's alert for a failed or interrupted run: the error, what is kept, and the
-// ways on: retry from the failed stage, the same on the cloud profile, or copy the error.
+// ways on: retry from the failed stage, or copy the error.
 import { ArrowClockwise, Copy, WarningOctagon } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
 import type { ForkCreate } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
@@ -12,7 +11,7 @@ import { INTERRUPTED, stageLabel, stoppedAt } from "./model";
 
 function keptHint(stage: PhaseId): string {
   const earlier = PHASES.slice(0, PHASES.indexOf(stage));
-  const retry = `Retry from ${stageLabel(stage)}, or run it again on the cloud profile.`;
+  const retry = `Retry from ${stageLabel(stage)}.`;
   if (!earlier.length) return retry;
   if (earlier.length === 1) return `${stageLabel(earlier[0])} is cached. ${retry}`;
   return `${stageLabel(earlier[0])} through ${earlier.at(-1)} are cached. ${retry}`;
@@ -21,16 +20,8 @@ function keptHint(stage: PhaseId): string {
 export function FailureCard({ run }: { run: RunView }) {
   const api = useApi();
   const { follow, toast } = useUi();
-  const [cloud, setCloud] = useState(false);
   const stage = stoppedAt(run) ?? "plan";
   const error = run.failure?.error ?? INTERRUPTED;
-
-  useEffect(() => {
-    api.listProfiles().then(
-      (profiles) => setCloud(profiles.some((p) => p.name === "cloud") && run.profile !== "cloud"),
-      () => {},
-    );
-  }, [api, run.profile]);
 
   async function retry(body: ForkCreate) {
     try {
@@ -67,15 +58,6 @@ export function FailureCard({ run }: { run: RunView }) {
           </button>
           <HelpTip help={stage === "score" ? "retry" : `retry-${stage}`} />
         </span>
-        {cloud && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => void retry({ from: stage, profile: "cloud" })}
-          >
-            Use cloud profile
-          </button>
-        )}
         <button type="button" className="btn btn-ghost" onClick={() => void copy()}>
           <Copy aria-hidden="true" />
           Copy error

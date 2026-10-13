@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 import type {
   DomainLists,
   ProfileInfo,
+  ProviderEntry,
   ResearchValues,
-  TokenBudget,
   WritingOptions,
 } from "../../api/types";
 import type { RunOptions } from "../../app/context";
@@ -19,11 +19,11 @@ import {
   type WritingField,
   WritingOptionsForm,
 } from "../../components/WritingOptionsForm";
-import { DEPTH_LABELS, type Depth } from "../../run/depth";
-import type { LlmValues } from "../../run/thinking";
+import { type Depth, depthLabel } from "../../run/depth";
+import { changedCount, type ProfileChoice } from "../../run/profileValues";
 import { DepthGroup } from "./DepthGroup";
-import { ModelGroup } from "./ModelGroup";
 import css from "./OptionsPanel.module.css";
+import { ProfileAdvanced } from "./ProfileAdvanced";
 
 /** The fields of `value` that differ from `defaults`. */
 export function overriddenFields(
@@ -65,18 +65,17 @@ export type DepthView = {
   depths: Depth[];
   description: string;
   values: ResearchValues;
-  effective: number | null;
-  gapEffective: number | null;
   wordsSet: boolean;
   onPick: (depth: Depth) => void;
-  onEdit: (field: keyof ResearchValues, value: TokenBudget) => void;
+  onEdit: (field: keyof ResearchValues, value: number) => void;
 };
 
-/** The Model group: the values, the endpoint's model IDs, and the change handler. */
-export type LlmView = {
-  values: LlmValues;
+/** The profile's Advanced values: every entry, the run's choice, and the llm's model IDs. */
+export type ProfileView = {
+  entries: ProviderEntry[];
+  choice: ProfileChoice;
   models: string[];
-  onChange: (values: LlmValues) => void;
+  onChange: (choice: ProfileChoice) => void;
 };
 
 type Props = {
@@ -85,7 +84,7 @@ type Props = {
   options: RunOptions;
   profiles: ProfileInfo[];
   depth: DepthView;
-  llm: LlmView;
+  profile: ProfileView;
   onOption: <K extends keyof RunOptions>(key: K, value: RunOptions[K]) => void;
   writing: WritingOptions;
   defaults: WritingOptions;
@@ -104,13 +103,15 @@ export function OptionsPanel(props: Props) {
     writingOverridden + Object.keys(overriddenDomains(domains.lists, domains.defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
   const languageValid = isSearchLanguage(props.searchLanguage.trim());
-  const description = profiles.find((p) => p.name === options.profile)?.description;
-  const label = DEPTH_LABELS[options.depth];
+  const selected = profiles.find((p) => p.name === options.profile);
+  const label = depthLabel(options.depth);
+  const rounds = options.sources === "files" ? 1 : depth.values.rounds;
+  const modified = changedCount(props.profile.choice) > 0;
   const summary = [
     label,
     options.recipe,
     options.sources,
-    options.profile,
+    modified ? `${options.profile} (modified)` : options.profile,
     `${writing.words} words`,
     describeValue("tone", writing.tone),
   ].join(" · ");
@@ -137,19 +138,10 @@ export function OptionsPanel(props: Props) {
             depths={depth.depths}
             description={depth.description}
             values={depth.values}
-            effective={depth.effective}
-            gapEffective={depth.gapEffective}
             filesOnly={options.sources === "files"}
             onPick={depth.onPick}
             onEdit={depth.onEdit}
-          >
-            <ModelGroup
-              values={props.llm.values}
-              models={props.llm.models}
-              rounds={options.sources === "files" ? 1 : depth.values.rounds}
-              onChange={props.llm.onChange}
-            />
-          </DepthGroup>
+          />
           <Row label="Recipe" help="recipe">
             <Seg
               label="Recipe"
@@ -173,19 +165,34 @@ export function OptionsPanel(props: Props) {
             />
           </Row>
           <Row label="Profile" help="profile" htmlFor="opt-profile">
-            <select
-              id="opt-profile"
-              className={`input ${css.profile}`}
-              value={options.profile}
-              onChange={(e) => onOption("profile", e.target.value)}
-            >
-              {profiles.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.source === "user" ? `${p.name}  (user profile)` : p.name}
-                </option>
-              ))}
-            </select>
-            {description && <div className={css.description}>{description}</div>}
+            <div className={css.profileRow}>
+              <div className={css.profileSelect}>
+                <select
+                  id="opt-profile"
+                  className={`input ${css.profile}`}
+                  value={options.profile}
+                  onChange={(e) => onOption("profile", e.target.value)}
+                >
+                  {profiles.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                {selected?.description && (
+                  <div className={css.description}>{selected.description}</div>
+                )}
+              </div>
+              <ProfileAdvanced
+                profile={selected}
+                entries={props.profile.entries}
+                choice={props.profile.choice}
+                models={props.profile.models}
+                words={writing.words}
+                rounds={rounds}
+                onChange={props.profile.onChange}
+              />
+            </div>
           </Row>
           <DomainRows
             idPrefix="nd"

@@ -95,7 +95,7 @@ export function App({ makeApi = httpApi, Socket, login }: Props) {
   // One read of the stored checks after sign-in; it never probes, and nothing polls.
   useEffect(() => {
     if (!ready || locked) return;
-    api.health().then(
+    api.listProviders().then(
       (report) => setHealthWarn(healthWarns(report)),
       () => {},
     );

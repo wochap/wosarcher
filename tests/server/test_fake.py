@@ -7,11 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from tests.server.conftest import COMMAND, wait_until
 
 
 def start(runs_dir: Path, mode: str, run_id: str) -> subprocess.Popen[bytes]:
+    write_config(runs_dir.parent / "config" / "wosarcher", MINIMAL_CONFIG)
     env = {**os.environ, "WOSARCHER_RUN__RUNS_DIR": str(runs_dir), "FAKE_MODE": mode, "FAKE_STEP": "0.05"}
+    env["XDG_CONFIG_HOME"] = str(runs_dir.parent / "config")
     argv = [*COMMAND, "run", "q", "--run-id", run_id, "--set", 'write.tone="dry wit"']
     return subprocess.Popen(argv, env=env, stderr=subprocess.PIPE)
 

@@ -11,6 +11,13 @@ async function openOptions(api = fakeApi()) {
 }
 
 const header = () => screen.getByRole("button", { name: /Options/ }).textContent;
+/** The Advanced toggles: Depth's first, then the profile's. */
+const depthAdvanced = () =>
+  fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[0]);
+const profileAdvanced = () =>
+  fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[1]);
+const field = (label: string) =>
+  screen.getByLabelText(label, { selector: "input, select" }) as HTMLInputElement;
 
 async function start(api: ReturnType<typeof fakeApi>) {
   fireEvent.change(screen.getByLabelText("Question"), { target: { value: "q" } });
@@ -37,8 +44,7 @@ describe("OptionsPanel", () => {
     expect([...profile.options].map((o) => o.textContent)).toEqual([
       "low-vram",
       "workstation",
-      "cloud",
-      "nixos  (user profile)",
+      "nixos",
     ]);
   });
 
@@ -53,8 +59,8 @@ describe("OptionsPanel", () => {
     expect(screen.getByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "nixos" } });
     expect(screen.queryByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "cloud" } });
-    expect(screen.getByText("Hosted APIs only; needs API keys.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    expect(screen.getByText("One GPU fits all models; models stay loaded.")).toBeTruthy();
   });
 
   it("has one help button per Run row", async () => {
@@ -106,7 +112,7 @@ describe("Depth", () => {
   it("switches to Custom when an Advanced value is edited", async () => {
     const api = await openOptions();
     fireEvent.click(screen.getByLabelText("Deep"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    depthAdvanced();
     fireEvent.change(screen.getByLabelText("Max pages"), { target: { value: "80" } });
     expect((screen.getByLabelText("Custom") as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText("Sub-queries") as HTMLInputElement).value).toBe("6");
@@ -118,69 +124,76 @@ describe("Depth", () => {
       results_per_query: 10,
       max_pages: 80,
       passages_per_query: 10,
-      context_tokens: "auto",
-      gap_context_tokens: 4000,
       rounds: 3,
       queries_per_round: 3,
     });
     expect(request.writing).toEqual({ words: 2000, format: "report" });
   });
 
-  it("shows Auto context with its effective budget", async () => {
+  it("Pick a user preset: lists it before Custom and sends its name", async () => {
     const api = fakeApi();
-    api.data.profiles[0] = { ...api.data.profiles[0], context_window: 131072 };
+    api.data.depths.push({
+      name: "wide",
+      description: "Many sub-queries, one round.",
+      source: "user",
+      values: {
+        sub_queries: 10,
+        results_per_query: 8,
+        max_pages: 90,
+        passages_per_query: 8,
+        rounds: 1,
+        queries_per_round: 3,
+        words: null,
+      },
+    });
     await openOptions(api);
-    fireEvent.click(screen.getByLabelText("Deep"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    expect((screen.getByLabelText("Context tokens") as HTMLInputElement).value).toBe("");
-    expect(screen.getByText("Auto · 125,072")).toBeTruthy();
-    expect(screen.getByText("~60 pages · 3 rounds · ~4 LLM calls")).toBeTruthy();
-    expect(screen.queryByText(/model window/)).toBeNull();
-  });
-
-  it("shows the context the model window allows", async () => {
-    await openOptions();
-    fireEvent.click(screen.getByLabelText("Exhaustive"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    fireEvent.change(screen.getByLabelText("Context tokens"), { target: { value: "32000" } });
-    expect(screen.getByText("32,000 → 24,768 (model window)")).toBeTruthy();
-    expect(screen.getByText(/context 32k → 25k \(model window\)$/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Context tokens"), { target: { value: "" } });
-    expect(screen.getByText("Auto · 24,768")).toBeTruthy();
-    expect(screen.queryByText(/context 32k/)).toBeNull();
-  });
-
-  it("shows Auto gap context and sends it", async () => {
-    const api = fakeApi();
-    api.data.profiles[0] = { ...api.data.profiles[0], context_window: 1000000 };
-    await openOptions(api);
-    fireEvent.click(screen.getByLabelText("Deep"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    const gap = screen.getByLabelText("Gap context tokens") as HTMLInputElement;
-    expect(gap.value).toBe("4000");
-    fireEvent.change(gap, { target: { value: "" } });
-    expect((screen.getByLabelText("Custom") as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText("Rounds") as HTMLInputElement).value).toBe("3");
-    expect(screen.getByText("Auto · 997,232")).toBeTruthy();
+    const depth = screen.getByRole("radiogroup", { name: "Depth" });
+    expect(depth.textContent).toBe("QuickStandardDeepExhaustivewideCustom");
+    fireEvent.click(screen.getByLabelText("wide"));
+    expect(screen.getByText("Many sub-queries, one round.")).toBeTruthy();
+    depthAdvanced();
+    expect(screen.getByText("wide preset. Edit any value to switch to Custom.")).toBeTruthy();
+    expect(field("Sub-queries").value).toBe("10");
+    expect(field("Max pages").value).toBe("90");
+    expect(header()).toContain("wide · report");
     const request = await start(api);
-    expect(request.research?.gap_context_tokens).toBe("auto");
-    expect(Object.keys(request.research ?? {})).toHaveLength(8);
+    expect(request.depth).toBe("wide");
+    expect(request.research).toBeUndefined();
   });
 
-  it("locks Gap context tokens and Follow-ups per round at one round", async () => {
+  it("No budgets in Depth: Advanced has the six research values only", async () => {
+    await openOptions();
+    fireEvent.click(screen.getByLabelText("Deep"));
+    depthAdvanced();
+    const grid = screen.getByText("Deep preset. Edit any value to switch to Custom.")
+      .parentElement as HTMLElement;
+    const labels = [...grid.querySelectorAll("label")].map((l) => l.textContent);
+    expect(labels).toEqual([
+      "Sub-queries",
+      "Results per query",
+      "Max pages",
+      "Rounds",
+      "Follow-ups per round",
+      "Passages per query",
+    ]);
+    expect(screen.queryByLabelText("Context tokens")).toBeNull();
+    expect(screen.queryByLabelText("Model")).toBeNull();
+    expect(screen.queryByLabelText("Write thinking")).toBeNull();
+    expect(screen.getByText("~60 pages · 3 rounds · ~4 LLM calls")).toBeTruthy();
+  });
+
+  it("locks Follow-ups per round at one round", async () => {
     await openOptions();
     fireEvent.click(screen.getByLabelText("Quick"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
-    expect((screen.getByLabelText("Gap context tokens") as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText("Follow-ups per round") as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(3);
-    expect(screen.getByRole("button", { name: "Help: Gap context tokens" })).toBeTruthy();
+    depthAdvanced();
+    expect(field("Follow-ups per round").disabled).toBe(true);
+    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(1);
   });
 
   it("edits Rounds, and keeps files-only runs at one round", async () => {
     await openOptions();
     fireEvent.click(screen.getByLabelText("Deep"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    depthAdvanced();
     const rounds = screen.getByLabelText("Rounds") as HTMLInputElement;
     expect(rounds.value).toBe("3");
     expect(rounds.disabled).toBe(false);
@@ -271,48 +284,162 @@ describe("Depth", () => {
   });
 });
 
-describe("Model and thinking", () => {
-  const advanced = () => fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+describe("Profile advanced values", () => {
+  it("shows the profile's values with single entries locked", async () => {
+    await openOptions();
+    expect(screen.getAllByRole("button", { name: /^Advanced/ })[0].textContent).toBe(
+      "Advanced· Standard values",
+    );
+    profileAdvanced();
+    expect(screen.getAllByRole("button", { name: /^Advanced/ })[1].textContent).toBe(
+      "Advanced· low-vram values",
+    );
+    expect(
+      screen.getByText("Values from the low-vram profile. Edits apply to this run only."),
+    ).toBeTruthy();
+    for (const label of ["Search", "Fetch"]) expect(field(label).disabled).toBe(true);
+    expect(screen.getAllByText("Only one configured.")).toHaveLength(2);
+    expect(field("Scorer").value).toBe("rerank");
+    expect(field("Model").value).toBe("qwen3-14b");
+    expect(field("Context window").value).toBe("32768");
+    expect(field("Max output").value).toBe("8192");
+    expect(field("Context tokens").value).toBe("");
+    expect(screen.getByText("Auto · 28,368")).toBeTruthy();
+    expect(field("Gap context tokens").value).toBe("4000");
+    expect(screen.queryByText("overridden")).toBeNull();
+  });
 
-  it("sends writer thinking with a preset and stays on the preset", async () => {
+  it("Three edits: marks them, clamps the budget, and sends only them", async () => {
+    const api = await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    fireEvent.change(field("Write thinking"), { target: { value: "high" } });
+    fireEvent.change(field("Context tokens"), { target: { value: "60000" } });
+    expect(screen.getAllByRole("button", { name: /^Advanced/ })[1].textContent).toBe(
+      "Advanced· 3 changed",
+    );
+    expect(screen.getAllByText("overridden")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Help: Overridden" })).toHaveLength(3);
+    expect(screen.getByText("60,000 → 32,000 (model window)")).toBeTruthy();
+    expect(
+      screen.getByText("Changed for this run only; the low-vram profile itself is unchanged."),
+    ).toBeTruthy();
+    expect(header()).toContain("both · low-vram (modified) · 1200 words");
+    const request = await start(api);
+    expect(request.use).toEqual({ score: "jev-strict" });
+    expect(request.llm).toEqual({ reasoning: { write: "high" }, context_tokens: 60000 });
+  });
+
+  it("LLM switch: takes the entry's default model and its limits", async () => {
+    const api = await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Max output"), { target: { value: "4096" } });
+    fireEvent.change(field("LLM"), { target: { value: "omniroute" } });
+    expect(field("Model").value).toBe("research-smart");
+    expect(field("Context window").value).toBe("1048576");
+    expect(field("Max output").value).toBe("32768");
+    expect(field("Plan thinking").value).toBe("high");
+    expect(screen.getAllByText("overridden")).toHaveLength(1);
+    await act(async () => {});
+    expect(callsTo(api, "listModels").at(-1)).toEqual(["omniroute"]);
+    const request = await start(api);
+    expect(request.use).toEqual({ llm: "omniroute" });
+    expect(request.llm).toBeUndefined();
+  });
+
+  it("notes the fallback limits of a model the entry does not list", async () => {
+    await openOptions();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "nixos" } });
+    profileAdvanced();
+    expect(field("Model").value).toBe("qwen3-30b-a3b");
+    expect(field("Context window").value).toBe("32768");
+    expect(field("Max output").value).toBe("8192");
+    expect(screen.getAllByText("Fallback: no limits set for this model.")).toHaveLength(2);
+  });
+
+  it("drops the limit edits when the model changes", async () => {
+    const api = await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Context window"), { target: { value: "16384" } });
+    fireEvent.change(field("Model"), { target: { value: "gemma-3-12b" } });
+    expect(field("Context window").value).toBe("32768");
+    expect(screen.getAllByText("Fallback: no limits set for this model.")).toHaveLength(2);
+    expect((await start(api)).llm).toEqual({ model: "gemma-3-12b" });
+  });
+
+  it("Reset: removes every edit", async () => {
+    await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    fireEvent.change(field("Context tokens"), { target: { value: "20000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset to profile" }));
+    expect(field("Scorer").value).toBe("rerank");
+    expect(field("Context tokens").value).toBe("");
+    expect(screen.queryByText("overridden")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Advanced/ })[1].textContent).toBe(
+      "Advanced· low-vram values",
+    );
+  });
+
+  it("an edit back to the profile's value no longer counts", async () => {
+    await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
+    expect(screen.queryByText("overridden")).toBeNull();
+    expect(header()).not.toContain("(modified)");
+  });
+
+  it("drops the edits when the profile changes", async () => {
+    await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "bm25" } });
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    expect(field("Scorer").value).toBe("jev-strict");
+    expect(screen.queryByText("overridden")).toBeNull();
+  });
+
+  it("sends auto for an emptied budget", async () => {
     const api = await openOptions();
     fireEvent.click(screen.getByLabelText("Deep"));
-    advanced();
-    fireEvent.change(screen.getByLabelText("Write thinking"), { target: { value: "high" } });
-    const request = await start(api);
-    expect(request.depth).toBe("deep");
-    expect(request.research).toBeUndefined();
-    expect(request.llm).toEqual({ reasoning: { write: "high" } });
+    profileAdvanced();
+    fireEvent.change(field("Gap context tokens"), { target: { value: "" } });
+    expect(screen.getByText("Auto · 30,000")).toBeTruthy();
+    expect((await start(api)).llm).toEqual({ gap_context_tokens: "auto" });
   });
 
-  it("sends a typed model when the endpoint lists none", async () => {
-    const api = await openOptions(fakeApi({ models: [] }));
-    advanced();
-    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "deepseek-v4-flash" } });
-    expect((await start(api)).llm).toEqual({ model: "deepseek-v4-flash" });
+  it("locks the gap fields at one round", async () => {
+    await openOptions();
+    fireEvent.click(screen.getByLabelText("Quick"));
+    profileAdvanced();
+    expect(field("Gap thinking").disabled).toBe(true);
+    expect(field("Gap context tokens").disabled).toBe(true);
+    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.")).toHaveLength(2);
   });
 
-  it("offers the listed models", async () => {
-    await openOptions(fakeApi({ models: ["a", "b"] }));
-    advanced();
+  it("offers the llm entry's models", async () => {
+    const api = await openOptions(fakeApi({ models: ["a", "b"] }));
+    profileAdvanced();
     await act(async () => {});
-    const listed = [...document.querySelectorAll("#m-models option")].map((o) =>
+    expect(callsTo(api, "listModels")[0]).toEqual(["agents"]);
+    const listed = [...document.querySelectorAll("#pa-model-list option")].map((o) =>
       o.getAttribute("value"),
     );
     expect(listed).toEqual(["a", "b"]);
   });
 
-  it("sends no llm object when nothing is set", async () => {
+  it("No edits sent: neither use nor llm", async () => {
     const api = await openOptions();
-    advanced();
-    expect((await start(api)).llm).toBeUndefined();
+    profileAdvanced();
+    const request = await start(api);
+    expect(request.use).toBeUndefined();
+    expect(request.llm).toBeUndefined();
   });
 
-  it("locks Gap thinking at one round", async () => {
+  it("explains each field with the prototype's help", async () => {
     await openOptions();
-    advanced();
-    fireEvent.change(screen.getByLabelText("Rounds"), { target: { value: "1" } });
-    expect((screen.getByLabelText("Gap thinking") as HTMLSelectElement).disabled).toBe(true);
-    expect(screen.getAllByText("Used between rounds; needs 2+ rounds.").length).toBeGreaterThan(0);
+    profileAdvanced();
+    for (const label of ["Search", "Scorer", "LLM", "Model", "Context window", "Context tokens"])
+      expect(screen.getAllByRole("button", { name: `Help: ${label}` }).length).toBeGreaterThan(0);
   });
 });

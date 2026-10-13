@@ -30,7 +30,7 @@ type Props = {
   reloadKey?: string | number;
   marker: WritingOptions["citation_marker"];
   context: Context | null;
-  prefilterTopK?: number;
+  candidates?: number;
   onClose: () => void;
 };
 
@@ -120,7 +120,7 @@ function FateBlock(props: {
   chunk: SourceChunk;
   view: SourceView;
   cite: (n: number) => string;
-  prefilterTopK?: number;
+  candidates?: number;
 }) {
   const { chunk, view, cite } = props;
   const fate = chunk.fate;
@@ -144,7 +144,7 @@ function FateBlock(props: {
         {chunk.floor && <span className={css.floor}>best available</span>}
         <span className={css.path}>{chunk.heading_path?.join(" › ")}</span>
       </div>
-      <div className={css.why}>{whyLine(fate, view, cite, props.prefilterTopK)}</div>
+      <div className={css.why}>{whyLine(fate, view, cite, props.candidates)}</div>
       <ul className={css.chips} aria-label="Sub-queries">
         {chunk.queries.map((row) => {
           const query = view.queries.find((q) => q.id === row.query_id);
@@ -275,7 +275,7 @@ export function SourceDialog(props: Props) {
           </div>
         )}
         {view && selected && (
-          <FateBlock chunk={selected} view={view} cite={cite} prefilterTopK={props.prefilterTopK} />
+          <FateBlock chunk={selected} view={view} cite={cite} candidates={props.candidates} />
         )}
       </header>
       <div ref={body} className={css.body}>

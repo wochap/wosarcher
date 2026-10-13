@@ -1,105 +1,146 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { HealthReport } from "../../api/types";
-import { callsTo, fakeApi } from "../../test/fakeApi";
+import type { ProviderEntry, ProvidersReport } from "../../api/types";
+import { callsTo, type FakeApi, fakeApi } from "../../test/fakeApi";
 import { renderApp } from "../../test/renderApp";
 
-const card = (role: string) => screen.getByRole("region", { name: role });
-const strip = (role: string) => within(card(role)).getByRole("status");
+const card = (name: string, block: string) =>
+  screen.getByRole("region", { name: `${name} (${block})` });
+const strip = (name: string, block: string) => within(card(name, block)).getByRole("status");
+const group = (label: string) => screen.getByRole("group", { name: label });
 const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString();
 const loaded = () => screen.findByText(/^Slow · checked/);
+const entryOf = (api: FakeApi, block: string, name: string) =>
+  api.data.providers.entries.find((e) => e.block === block && e.name === name) as ProviderEntry;
+
+/** Replaces `checkProviders` with one that waits; returns the function that answers it. */
+function holdChecks(api: FakeApi): () => (report: ProvidersReport) => void {
+  let finish: (report: ProvidersReport) => void = () => {};
+  api.checkProviders = (entries) => {
+    api.calls.push({ method: "checkProviders", args: [entries] });
+    return new Promise((resolve) => (finish = resolve));
+  };
+  return () => finish;
+}
 
 describe("ProvidersSection", () => {
   it("opening Settings reads the stored report and posts no check", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
     await loaded();
-    expect(callsTo(api, "health").length).toBeGreaterThan(0);
-    expect(callsTo(api, "checkHealth")).toHaveLength(0);
+    expect(callsTo(api, "listProviders").length).toBeGreaterThan(0);
+    expect(callsTo(api, "checkProviders")).toHaveLength(0);
   });
 
-  it("shows an unchecked block as Not checked yet on a dashed strip", async () => {
+  it("Grouped entries: one group per block with a card per entry", async () => {
     renderApp({ hash: "#/settings" });
     await loaded();
-    expect(strip("Scorer").textContent).toContain("Not checked yet");
-    expect(strip("Scorer").dataset.state).toBe("unchecked");
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Search", "Fetch", "Prefilter", "Scorer", "LLM"]);
+    const scorer = within(group("Scorer"));
+    expect(scorer.getAllByRole("region")).toHaveLength(3);
+    const bm25 = within(group("Scorer")).getByRole("region", { name: "bm25 (score)" });
+    expect(bm25.textContent).toContain("Built in, nothing to check.");
+    expect(within(bm25).queryByRole("button", { name: /^Check/ })).toBeNull();
+    expect(within(bm25).queryByRole("status")).toBeNull();
+    expect(within(group("LLM")).getAllByRole("region")).toHaveLength(2);
+    expect(
+      within(group("Prefilter")).getByRole("region", { name: "none (prefilter)" }),
+    ).toBeTruthy();
+    for (const label of ["Search", "Fetch", "Prefilter", "Scorer", "LLM"])
+      expect(within(group(label)).getByRole("button", { name: `Help: ${label}` })).toBeTruthy();
+  });
+
+  it("LLM models: lists each model's limits, the default first", async () => {
+    renderApp({ hash: "#/settings" });
+    await loaded();
+    const items = within(card("omniroute", "llm")).getAllByRole("listitem");
+    expect(items[0].textContent).toBe("research-smartdefault1,048,576 window · 32,768 out");
+    expect(items[2].textContent).toBe("qwen3-30b-a3bfallback limits");
+    expect(within(items[2]).getByText("fallback limits").className).toMatch(/faint/);
+    expect(within(card("omniroute", "llm")).queryByText("Model")).toBeNull();
+  });
+
+  it("shows an unchecked entry as Not checked yet on a dashed strip", async () => {
+    renderApp({ hash: "#/settings" });
+    await loaded();
+    expect(strip("rerank", "score").textContent).toContain("Not checked yet");
+    expect(strip("rerank", "score").dataset.state).toBe("unchecked");
   });
 
   it("shows a slow provider with its age and latency against the limit", async () => {
     const api = fakeApi();
-    api.data.health.checks[0].checked_at = minutesAgo(3);
+    entryOf(api, "search", "searxng").checked_at = minutesAgo(3);
     renderApp({ hash: "#/settings", api });
     await screen.findByText("Slow · checked 3m ago");
-    expect(strip("Search").dataset.state).toBe("degraded");
-    expect(strip("Search").textContent).toContain("1,840 ms, limit 1,000 ms");
+    expect(strip("searxng", "search").dataset.state).toBe("degraded");
+    expect(strip("searxng", "search").textContent).toContain("1,840 ms, limit 1,000 ms");
   });
 
   it("shows a down provider with the error in the mono font", async () => {
     const api = fakeApi();
-    api.data.health.checks[1] = {
-      ...api.data.health.checks[1],
+    Object.assign(entryOf(api, "fetch", "firecrawl"), {
       status: "down",
       detail: "ECONNREFUSED",
       checked_at: new Date().toISOString(),
-    };
+    });
     renderApp({ hash: "#/settings", api });
     await screen.findByText("Down · checked just now");
-    expect(strip("Fetch").dataset.state).toBe("down");
-    expect(within(strip("Fetch")).getByText("ECONNREFUSED").className).toMatch(/mono/);
+    expect(strip("firecrawl", "fetch").dataset.state).toBe("down");
+    expect(within(strip("firecrawl", "fetch")).getByText("ECONNREFUSED").className).toMatch(/mono/);
   });
 
   it("shows OK with the latency", async () => {
     renderApp({ hash: "#/settings" });
     await loaded();
-    expect(strip("Embeddings").textContent).toContain("OK · checked");
-    expect(strip("Embeddings").textContent).toContain("38 ms");
+    expect(strip("embeddings", "prefilter").textContent).toContain("OK · checked");
+    expect(strip("embeddings", "prefilter").textContent).toContain("38 ms");
   });
 
-  it("shows skipped providers", async () => {
-    renderApp({ hash: "#/settings" });
-    expect((await screen.findByText("Skipped · built in")).closest("[data-state]")).toBeTruthy();
+  it("shows an entry's error in place of its list", async () => {
+    const api = fakeApi();
+    entryOf(api, "score", "jev-strict").error = "api_key_file: no such file";
+    renderApp({ hash: "#/settings", api });
+    await loaded();
+    const jev = within(card("jev-strict", "score"));
+    expect(jev.getByText("api_key_file: no such file")).toBeTruthy();
+    expect(jev.queryByText("Base URL")).toBeNull();
   });
 
-  it("Check on a card checks only that block", async () => {
+  it("Check one card: posts that entry only and only that card checks", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
     await loaded();
-    const check = api.checkHealth;
-    let finish: (report: HealthReport) => void = () => {};
-    api.checkHealth = (blocks, profile) => {
-      api.calls.push({ method: "checkHealth", args: [blocks, profile] });
-      return new Promise((resolve) => (finish = resolve));
-    };
-    fireEvent.click(screen.getByRole("button", { name: "Check Scorer provider" }));
-    expect(callsTo(api, "checkHealth")[0][0]).toEqual(["score"]);
+    const check = api.checkProviders;
+    const finish = holdChecks(api);
+    fireEvent.click(screen.getByRole("button", { name: "Check jev-strict (score)" }));
+    expect(callsTo(api, "checkProviders")).toEqual([[["score/jev-strict"]]]);
     expect(screen.getAllByText("Checking…")).toHaveLength(1);
-    expect(strip("Scorer").textContent).toContain("Checking…");
+    expect(strip("jev-strict", "score").textContent).toContain("Checking…");
     expect(
-      (screen.getByRole("button", { name: "Check Scorer provider" }) as HTMLButtonElement).disabled,
+      (screen.getByRole("button", { name: "Check jev-strict (score)" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
-    expect(strip("Search").textContent).toContain("Slow · checked");
-    const report = await check(["score"]);
-    await act(async () => finish(report));
+    expect(strip("rerank", "score").textContent).toContain("Not checked yet");
+    expect(strip("searxng", "search").textContent).toContain("Slow · checked");
+    const report = await check(["score/jev-strict"]);
+    await act(async () => finish()(report));
     expect(screen.queryByText("Checking…")).toBeNull();
-    expect(strip("Scorer").textContent).toContain("OK · checked just now");
+    expect(strip("jev-strict", "score").textContent).toContain("OK · checked just now");
+    expect(strip("rerank", "score").textContent).toContain("Not checked yet");
   });
 
-  it("Check all posts one check for every block, every card checking meanwhile", async () => {
+  it("Check all posts one check with no entries, every endpoint card checking meanwhile", async () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
     await loaded();
-    let finish: (report: HealthReport) => void = () => {};
-    api.checkHealth = (blocks, profile) => {
-      api.calls.push({ method: "checkHealth", args: [blocks, profile] });
-      return new Promise((resolve) => (finish = resolve));
-    };
+    const finish = holdChecks(api);
     fireEvent.click(screen.getByRole("button", { name: "Check all providers" }));
-    expect(callsTo(api, "checkHealth")).toHaveLength(1);
-    expect(callsTo(api, "checkHealth")[0][0]).toBeUndefined();
-    expect(screen.getAllByText("Checking…")).toHaveLength(5);
+    expect(callsTo(api, "checkProviders")).toEqual([[undefined]]);
+    expect(screen.getAllByText("Checking…")).toHaveLength(7);
     for (const button of screen.getAllByRole("button", { name: /^Check / }))
       expect((button as HTMLButtonElement).disabled).toBe(true);
-    await act(async () => finish(api.data.health));
+    await act(async () => finish()(api.data.providers));
     expect(screen.queryByText("Checking…")).toBeNull();
   });
 
@@ -107,12 +148,12 @@ describe("ProvidersSection", () => {
     const api = fakeApi();
     renderApp({ hash: "#/settings", api });
     await loaded();
-    api.checkHealth = () => Promise.reject(new Error("doctor did not finish within 60 s"));
+    api.checkProviders = () => Promise.reject(new Error("doctor did not finish within 60 s"));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Check all providers" }));
     });
     expect(screen.getByRole("alert").textContent).toBe("doctor did not finish within 60 s");
-    expect(strip("Search").textContent).toContain("Slow · checked");
+    expect(strip("searxng", "search").textContent).toContain("Slow · checked");
   });
 
   it("notes that checks run only on click", async () => {
@@ -129,28 +170,12 @@ describe("ProvidersSection", () => {
     expect(container.textContent).not.toMatch(/api[_ ]?key|secret/i);
   });
 
-  it("titles the cards by the server's block names", async () => {
-    renderApp({ hash: "#/settings" });
-    await loaded();
-    for (const title of ["Search", "Fetch", "Embeddings", "Scorer", "LLM"])
-      expect(card(title)).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "prefilter" })).toBeNull();
-    expect(screen.queryByRole("region", { name: "score" })).toBeNull();
-  });
-
-  it("titles a keyword prefilter Prefilter", async () => {
-    const api = fakeApi();
-    api.data.health.checks[2] = { ...api.data.health.checks[2], provider: "bm25" };
-    renderApp({ hash: "#/settings", api });
-    await loaded();
-    expect(within(card("Prefilter")).getByText("bm25")).toBeTruthy();
-    expect(screen.queryByRole("region", { name: "Embeddings" })).toBeNull();
-  });
-
   it("explains Health in the card's strip", async () => {
     renderApp({ hash: "#/settings" });
     await loaded();
-    fireEvent.mouseEnter(within(strip("Scorer")).getByRole("button", { name: "Help: Health" }));
+    fireEvent.mouseEnter(
+      within(strip("rerank", "score")).getByRole("button", { name: "Help: Health" }),
+    );
     expect(screen.getByRole("tooltip").textContent).toContain(
       "Not checked yet, OK, slow (degraded), down, or skipped (built in, no endpoint). Checks run only when you click Check, so idle GPU servers are never woken by opening this page.",
     );
@@ -159,20 +184,21 @@ describe("ProvidersSection", () => {
   it("lists Device and Unload with their help", async () => {
     renderApp({ hash: "#/settings" });
     await loaded();
-    const scorer = within(card("Scorer"));
-    expect(scorer.getByText("desktop:gpu0")).toBeTruthy();
-    expect(scorer.getByText("llama-swap")).toBeTruthy();
+    const rerank = within(card("rerank", "score"));
+    expect(rerank.getByText("desktop:gpu0")).toBeTruthy();
+    expect(rerank.getByText("llama-swap")).toBeTruthy();
     for (const label of ["Device", "Unload", "Health"])
-      expect(scorer.getByRole("button", { name: `Help: ${label}` })).toBeTruthy();
+      expect(rerank.getByRole("button", { name: `Help: ${label}` })).toBeTruthy();
   });
 
-  it("shows the active profile with its description and the GPU policy", async () => {
+  it("shows the default profile with its entries and the GPU policy", async () => {
     const { container } = renderApp({ hash: "#/settings" });
     await loaded();
-    await screen.findByText("· Models take turns on one small GPU; slower, fits 8 GB.");
+    await screen.findByText("searxng · firecrawl · embeddings · rerank · agents");
     expect(container.textContent).toContain(
-      "Active profilelow-vram· Models take turns on one small GPU; slower, fits 8 GB.",
+      "Default profilelow-vramsearxng · firecrawl · embeddings · rerank · agents",
     );
+    expect(container.textContent).not.toContain("Models take turns");
     expect(screen.getByRole("button", { name: "Help: Profile" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Help: GPU policy" })).toBeTruthy();
     const exclusive = screen.getByLabelText("Exclusive") as HTMLInputElement;

@@ -5,6 +5,7 @@ survives a restart with no other state.
 """
 
 import json
+import os
 import shutil
 from collections.abc import Collection
 from datetime import UTC, datetime
@@ -13,7 +14,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from wosarcher.config import CUSTOM_DEPTH, RESEARCH_KEYS, depth_values, load_depth
+from wosarcher.config import CUSTOM_DEPTH, LLM_KEYS, RESEARCH_KEYS, depth_values, load_depth, without_use
 from wosarcher.models import (
     Attachment,
     ForkCreate,
@@ -94,7 +95,7 @@ def preset_words(depth: str | None) -> WritingPatch:
     """The preset's `write.words`, as a patch between the global settings and the request."""
     if depth is None or depth == CUSTOM_DEPTH:
         return WritingPatch()
-    _, data = load_depth(depth)
+    _, data = load_depth(depth, os.environ)
     return WritingPatch(words=depth_values(data).get("write.words"))
 
 
@@ -182,6 +183,7 @@ def stage_fork(
         depth=parent.request.depth,
         writing=request.writing,
         llm=request.llm,
+        use=request.use,
         set=request.set,
         run_id=fresh_id(runs_dir),
         kind="fork",
@@ -202,15 +204,16 @@ def stage_fork(
 def stage_rerun(
     runs_dir: Path, original: RunRecord, origin: Origin = "web", token_name: str | None = None
 ) -> StagedRun:
-    """The original request and saved overrides, and a copy of its attachments; no global settings."""
+    """The original request, its five entries, saved overrides, and a copy of its attachments; no global settings."""
     check_overrides(original.overrides)
     staged = StagedRun(
         query=original.request.query,
         sources=original.request.sources,
         until=original.request.until,
         profile=original.profile,
+        use=original.use or {},
         depth=original.request.depth,
-        set=original.overrides,
+        set=without_use(original.overrides),
         run_id=fresh_id(runs_dir),
         kind="rerun",
         created=datetime.now(UTC),
@@ -261,8 +264,17 @@ def attach_flags(path: Path) -> list[str]:
 
 def llm_flags(staged: StagedRun) -> list[str]:
     model = [] if staged.llm.model is None else [f"llm.model={toml_value(staged.llm.model)}"]
+    limits = staged.llm.model_dump(include=set(LLM_KEYS), exclude_none=True).items()
     levels = staged.llm.reasoning.model_dump(exclude_none=True).items()
-    return [*model, *(f"llm.reasoning.{step}={toml_value(level)}" for step, level in levels)]
+    return [
+        *model,
+        *(f"{LLM_KEYS[name]}={toml_value(value)}" for name, value in limits),
+        *(f"llm.reasoning.{step}={toml_value(level)}" for step, level in levels),
+    ]
+
+
+def use_flags(staged: StagedRun) -> list[str]:
+    return [flag for block, name in staged.use.items() for flag in ("--use", f"{block}={name}")]
 
 
 def set_flags(staged: StagedRun) -> list[str]:
@@ -292,7 +304,7 @@ def build_run_argv(command: list[str], staged: StagedRun, path: Path) -> list[st
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
-    return argv + depth_flags(staged) + attach_flags(path) + set_flags(staged)
+    return argv + use_flags(staged) + depth_flags(staged) + attach_flags(path) + set_flags(staged)
 
 
 def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
@@ -303,14 +315,14 @@ def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
-    return argv + set_flags(staged)
+    return argv + use_flags(staged) + set_flags(staged)
 
 
 def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
     argv = [*command, "run", staged.query, "--run-id", staged.run_id, "--sources", staged.resolved_sources]
     if staged.until:
         argv += ["--until", staged.until]
-    argv += ["--profile", staged.resolved_profile, *depth_flags(staged)]
+    argv += ["--profile", staged.resolved_profile, *use_flags(staged), *depth_flags(staged)]
     return argv + attach_flags(path) + [flag for value in staged.set for flag in ("--set", value)]
 
 

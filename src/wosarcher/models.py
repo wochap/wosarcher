@@ -3,7 +3,7 @@
 import re
 from datetime import datetime
 from hashlib import sha256
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import (
@@ -489,10 +489,27 @@ class EmbedderInfo(Contract):
     dimension: int = Field(gt=0)
 
 
+ProviderBlock = Literal["search", "fetch", "prefilter", "score", "llm"]
+"""A provider block; each run uses one entry of each."""
+
+
+def entry_choices(use: dict[str, str]) -> dict[str, str]:
+    """Block -> entry name choices; every key must be a block."""
+    blocks = get_args(ProviderBlock)
+    for block, name in use.items():
+        if block not in blocks:
+            raise ValueError(f"use.{block} is not a block; choose from {', '.join(blocks)}")
+        if not name:
+            raise ValueError(f"use.{block} must name an entry")
+    return use
+
+
 class ProviderHealth(Contract):
-    """One row of `wosarcher doctor`: a configured block and its probe result."""
+    """One row of `wosarcher doctor`: a block's entry and its probe result."""
 
     block: str
+    entry: str | None = None
+    """The entry checked; None when the settings did not come from a named entry."""
     provider: str
     base_url: str = ""
     device: str | None = None
@@ -526,8 +543,10 @@ class RunRecord(Contract):
     created_at: datetime
     request: RunRequest
     profile: str
+    use: dict[str, str] | None = None
+    """The entry name of each block; None for runs recorded before entries existed."""
     overrides: list[str] = []
-    """Every `--set` value, the parent's first."""
+    """Every `--set` value, the parent's first; a per-run entry choice as `use.<block>=<name>`."""
     changes: list[str] = []
     """The overrides this fork added."""
     settings: dict[str, Any]
@@ -606,6 +625,10 @@ class RunSummary(Contract):
     """The resolved `llm.model`; empty when none is set."""
     reasoning: ReasoningOptions = ReasoningOptions()
     """The resolved `llm.reasoning`; `none` for every step on older runs."""
+    use: dict[str, str] | None = None
+    """The entry name of each block the run used; None before the run starts and for older runs."""
+    modified: bool = False
+    """The run changed an entry choice or an `llm` value of its profile."""
     origin: Origin = "web"
     token_name: str | None = None
     """The API token's name for origin `api`; None otherwise."""
@@ -681,8 +704,6 @@ class ResearchPatch(Contract):
     results_per_query: int | None = Field(default=None, gt=0)
     max_pages: int | None = Field(default=None, gt=0)
     passages_per_query: int | None = Field(default=None, gt=0)
-    context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
-    gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
     rounds: int | None = Field(default=None, gt=0, le=8)
     queries_per_round: int | None = Field(default=None, gt=0)
 
@@ -696,10 +717,17 @@ class ReasoningPatch(Contract):
 
 
 class LLMPatch(Contract):
-    """The run's model and thinking; unset fields keep the configured value."""
+    """The run's model, its limits, thinking, and context budgets; unset fields keep the configured value.
+
+    Each field besides `model` and `reasoning` sets one key (`config.LLM_KEYS`).
+    """
 
     model: str | None = Field(default=None, min_length=1)
     reasoning: ReasoningPatch = ReasoningPatch()
+    context_window: int | None = Field(default=None, gt=0)
+    max_output_tokens: int | None = Field(default=None, gt=0)
+    context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
+    gap_context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] | None = None
 
 
 class DomainPatch(Contract):
@@ -734,6 +762,8 @@ class RunCreate(Contract):
     """None: the global default."""
     until: Stage | None = None
     profile: str | None = None
+    use: dict[str, str] = {}
+    """An entry name per block for this run; other blocks follow the profile."""
     depth: str | None = None
     """A depth preset name or `custom`; None applies no preset."""
     research: ResearchPatch = ResearchPatch()
@@ -750,6 +780,11 @@ class RunCreate(Contract):
     def check_language(cls, value: str | None) -> str | None:
         return None if value is None else search_language(value)
 
+    @field_validator("use")
+    @classmethod
+    def check_use(cls, value: dict[str, str]) -> dict[str, str]:
+        return entry_choices(value)
+
 
 class ForkCreate(Contract):
     """The body of `POST /api/runs/{id}/fork`."""
@@ -761,8 +796,15 @@ class ForkCreate(Contract):
     """The last stage to run; None runs to the end."""
     writing: WritingPatch = WritingPatch()
     llm: LLMPatch = LLMPatch()
+    use: dict[str, str] = {}
+    """Replace these blocks with the current entries."""
     set: list[str] = []
     profile: str | None = None
+
+    @field_validator("use")
+    @classmethod
+    def check_use(cls, value: dict[str, str]) -> dict[str, str]:
+        return entry_choices(value)
 
 
 class RunCreated(Contract):
@@ -790,25 +832,30 @@ class ServerSettings(Contract):
 
 
 class ModelList(Contract):
-    """`GET /api/models`: the IDs the profile's LLM endpoint lists; empty when it lists none or fails."""
+    """`GET /api/models`: the IDs an llm entry's endpoint lists; empty when it lists none or fails."""
 
     models: list[str] = []
 
 
 class ProfileInfo(Contract):
     name: str
-    source: Literal["builtin", "user"]
+    source: Literal["user"] = "user"
     active: bool
     description: str = ""
-    context_window: int | None = None
-    """None (with `prompt_reserve_tokens`) when the profile does not resolve."""
+    use: dict[str, str | None] | None = None
+    """The entry chosen for each block; a block that cannot be resolved is None."""
+    model: str | None = None
+    """The profile's `llm.model`; None: the llm entry's default model."""
+    context_tokens: int | Literal["auto"] | None = None
+    """The resolved `select.max_context_tokens`; None when the profile does not resolve."""
     prompt_reserve_tokens: int | None = None
-    max_output_tokens: int | None = None
     allow_domains: list[str] | None = None
     """The list the profile (or the environment) sets; None when it sets none."""
     block_domains: list[str] | None = None
     settings: dict[str, Any] | None = None
     """The resolved configuration, secrets as `***`; None when the profile does not resolve."""
+    error: str | None = None
+    """Why the profile does not resolve."""
 
 
 class DepthValues(Contract):
@@ -816,8 +863,6 @@ class DepthValues(Contract):
     results_per_query: int
     max_pages: int
     passages_per_query: int
-    context_tokens: int | Literal["auto"]
-    gap_context_tokens: int | Literal["auto"]
     rounds: int
     queries_per_round: int
     words: int | None = None
@@ -829,33 +874,61 @@ class DepthInfo(Contract):
 
     name: str
     description: str
+    source: Literal["builtin", "user"] = "builtin"
     values: DepthValues
 
 
-class ProviderCheck(Contract):
-    role: str
-    provider: str
+class ModelInfo(Contract):
+    """One model an llm entry lists; None where it sets no value (the built-in default applies)."""
+
+    id: str
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+    reasoning: ReasoningPatch = ReasoningPatch()
+    gap_context_tokens: int | Literal["auto"] | None = None
+
+
+HealthStatus = Literal["ok", "degraded", "down", "skipped", "unchecked"]
+
+
+class ProviderEntryInfo(Contract):
+    """One provider entry as `GET /api/providers` lists it, with its stored health; no secrets."""
+
+    block: ProviderBlock
+    name: str
+    source: Literal["builtin", "user"]
+    description: str = ""
+    provider: str = ""
     url: str = ""
-    model: str | None = None
+    """The entry's `base_url`."""
+    model: str = ""
+    """The default model; empty when none."""
     device: str | None = None
     release: Literal["none", "llama-swap", "ollama"] = "none"
-    status: Literal["ok", "degraded", "down", "skipped", "unchecked"]
+    models: list[ModelInfo] = []
+    """For an llm entry: its listed models, the default model first."""
+    status: HealthStatus = "unchecked"
     latency_ms: float | None = None
     detail: str = ""
     checked_at: datetime | None = None
+    error: str | None = None
+    """Why the entry does not load."""
 
 
-class HealthReport(Contract):
-    profile: str
+class ProvidersReport(Contract):
+    """`GET /api/providers`: every entry by block, the active profile's GPU policy, and the last check's warnings."""
+
+    profile: str | None = None
+    """The active profile; None when there is none."""
     gpu_policy: Literal["shared", "exclusive"] = "shared"
-    checks: list[ProviderCheck]
+    entries: list[ProviderEntryInfo]
     warnings: list[str] = []
 
 
-class HealthCheckRequest(Contract):
-    """Body of `POST /api/providers/health/check`; no blocks means every block."""
+class ProvidersCheck(Contract):
+    """Body of `POST /api/providers/check`: `<block>/<name>` entries; none means every entry."""
 
-    blocks: list[str] = []
+    entries: list[str] = []
 
 
 class ApiError(Contract):
@@ -1303,9 +1376,10 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ProfileInfo,
     DepthValues,
     DepthInfo,
-    ProviderCheck,
-    HealthReport,
-    HealthCheckRequest,
+    ModelInfo,
+    ProviderEntryInfo,
+    ProvidersReport,
+    ProvidersCheck,
     ApiError,
     RunNotActive,
     LoginRequest,

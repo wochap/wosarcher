@@ -381,3 +381,38 @@ def test_page_limit_before_the_last_round(runs: Path) -> None:
     assert result.exit_code == 0, result.output
     research = ResearchRecord.model_validate_json((runs / RUN_ID / "research.json").read_text())
     assert (research.planned, research.ran, research.reason) == (3, 2, "page limit reached")
+
+
+def test_entries_fork_and_rerun(runs: Path, tmp_path: Path) -> None:
+    """A run with `--use`, a fork that swaps the llm entry, and a rerun that sees an edited entry."""
+    with recorded_router():
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", "--use", "score=bm25", "--run-id", RUN_ID])
+    assert result.exit_code == 0, result.output
+    store = RunStore(runs, runs)
+    parent = store.read_record(RUN_ID)
+    assert parent.use == {
+        "search": "searxng",
+        "fetch": "firecrawl",
+        "prefilter": "bm25",
+        "score": "bm25",
+        "llm": "recorded",
+    }
+    assert "use.score=bm25" in parent.overrides
+    assert parent.use is not None
+
+    with recorded_router():
+        args = ["fork", RUN_ID, "--from", "write", "--use", "llm=other", "--run-id", "r-fork"]
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    fork = store.read_record("r-fork")
+    assert fork.use == {**parent.use, "llm": "other"}
+    assert (fork.settings["llm"]["model"], fork.settings["llm"]["context_window"]) == ("other-llm", 65536)
+    assert fork.settings["search"] == parent.settings["search"]
+
+    entry = tmp_path / "config" / "wosarcher" / "providers" / "llm" / "recorded.toml"
+    entry.write_text(entry.read_text() + "timeout = 123\n")
+    rerun = [f"--use={block}={name}" for block, name in parent.use.items()]
+    with recorded_router():
+        result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", *rerun, "--run-id", "r-rerun"])
+    assert result.exit_code == 0, result.output
+    assert store.read_record("r-rerun").settings["llm"]["timeout"] == 123

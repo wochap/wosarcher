@@ -22,14 +22,6 @@ export const HELP: Record<string, Help> = {
     title: "Depth",
     body: "How much research to do. Each preset sets the values under Advanced and a default report length. Deeper runs take longer and use more tokens.",
   },
-  model: {
-    title: "Model",
-    body: "The chat model for this run. Pick one the endpoint lists, or type any name the endpoint accepts. Empty uses the profile's model.",
-  },
-  thinking: {
-    title: "Thinking",
-    body: "How much hidden reasoning the model may do for each step. None sends an exact output limit and no reasoning. Low, Medium and High let the server set the budget. Default leaves it to the model; use it when the endpoint rejects the reasoning_effort field.",
-  },
   "d-subq": {
     title: "Sub-queries",
     body: "How many focused searches the planner writes from your question.",
@@ -49,19 +41,11 @@ export const HELP: Record<string, Help> = {
   },
   "d-rounds": {
     title: "Rounds",
-    body: "Search, fetch and score passes. After each round a gap step decides what to search next, or stops early.",
+    body: "Search, fetch and score passes. After each round a gap step writes the next round’s queries.",
   },
   "d-ppq": {
     title: "Passages per query",
     body: "Top-scoring passages kept for each sub-query before selection.",
-  },
-  "d-ctx": {
-    title: "Context tokens",
-    body: "Token budget for the passages the writer sees. The profile’s model window can lower it.",
-  },
-  "d-gap-ctx": {
-    title: "Gap context tokens",
-    body: "Token budget for the passages the gap step reads between rounds to choose follow-up searches. Auto uses all the room the model window leaves.",
   },
   q0: {
     title: "Topic line",
@@ -81,7 +65,48 @@ export const HELP: Record<string, Help> = {
   },
   profile: {
     title: "Profile",
-    body: "A named set of providers (search, fetch, embeddings, scorer, LLM) and GPU behavior. The list comes from the server.",
+    body: "A saved choice of providers and model. Advanced shows its values; edits apply to this run only.",
+  },
+  "p-search": { title: "Search", body: "Where sub-queries are searched." },
+  "p-fetch": {
+    title: "Fetch",
+    body: "Downloads the pages search found and extracts their text.",
+  },
+  "p-prefilter": {
+    title: "Prefilter",
+    body: "Narrows chunks before scoring: by embedding similarity, by keyword (BM25), or not at all (passthrough).",
+  },
+  "p-scorer": {
+    title: "Scorer",
+    body: "How passages are scored. Each scorer has its own scale and candidate count.",
+  },
+  "p-llm": {
+    title: "LLM",
+    body: "The OpenAI-compatible endpoint that plans, finds gaps, and writes.",
+  },
+  "p-model": {
+    title: "Model",
+    body: "Sent to the LLM endpoint. Suggestions come from its model list. Changing the LLM resets this to that endpoint’s default model.",
+  },
+  "p-limits": {
+    title: "Context window / Max output",
+    body: "The chosen model’s limits. Set them when the model has none configured; too large a window can overflow the model.",
+  },
+  "p-think": {
+    title: "Thinking",
+    body: "How much the model reasons before answering at each step: off, low, medium or high. Higher is slower and uses more tokens.",
+  },
+  "p-ctx": {
+    title: "Context tokens",
+    body: "Token budget for the passages the writer sees. Auto fills what the model window leaves; larger values are clamped to the window.",
+  },
+  "p-gapctx": {
+    title: "Gap context tokens",
+    body: "Token budget for the passages the gap step reads between rounds.",
+  },
+  "p-over": {
+    title: "Overridden",
+    body: "This value differs from the selected profile and applies to this run only.",
   },
   attach: {
     title: "Attachments",
@@ -289,7 +314,7 @@ export function helpFor(key: string): Help {
 
 /** The run's saved settings the funnel help quotes; unknown values read "–". */
 export type FunnelConfig = {
-  prefilterTopK?: number;
+  candidates?: number;
   scoreTopK?: number;
   maxPerSource?: number;
   /** The shared display threshold; null when queries differ or none is known. */
@@ -301,7 +326,7 @@ export type FunnelKey = "f-chunks" | "f-scored" | "f-kept" | "f-cited" | "legend
 /** The Passages funnel steps and the fate legend, with the run's configured values. */
 export function funnelHelp(config: FunnelConfig): Record<FunnelKey, Help> {
   const value = (n: number | undefined) => (n == null ? "–" : String(n));
-  const [P, K, S] = [config.prefilterTopK, config.scoreTopK, config.maxPerSource].map(value);
+  const [P, K, S] = [config.candidates, config.scoreTopK, config.maxPerSource].map(value);
   const T = config.threshold == null ? "the threshold" : config.threshold.toFixed(2);
   const cited = config.maxPerSource === 1 ? "cited passage" : "cited passages";
   return {

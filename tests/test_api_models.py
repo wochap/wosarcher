@@ -10,11 +10,13 @@ from wosarcher.models import (
     ApiError,
     Contract,
     ForkCreate,
-    HealthReport,
+    LLMPatch,
     LoginError,
     LoginRequest,
+    ModelInfo,
     ProfileInfo,
-    ProviderCheck,
+    ProviderEntryInfo,
+    ProvidersReport,
     RunCosts,
     RunCreate,
     RunCreated,
@@ -45,7 +47,8 @@ SUMMARY = {
 }
 EXAMPLES: list[Contract] = [
     RunCreate(query="q", sources="web", until="select", writing=WritingPatch(words=600), set=["score.top_k=5"]),
-    ForkCreate(from_stage="write", writing=WritingPatch(tone="critical"), profile="cloud"),
+    RunCreate(query="q", use={"score": "jev-strict"}, llm=LLMPatch(model="m", context_window=262144)),
+    ForkCreate(from_stage="write", writing=WritingPatch(tone="critical"), profile="cloud", use={"llm": "agents"}),
     RunCreated(run_id="r", status="queued"),
     RunSummary.model_validate(SUMMARY),
     RunDetail.model_validate(
@@ -59,19 +62,28 @@ EXAMPLES: list[Contract] = [
         }
     ),
     ServerSettings(writing=WritingOptions(words=800), sources="web"),
-    ProfileInfo(name="cloud", source="builtin", active=True, description="Hosted APIs only; needs API keys."),
-    HealthReport(
+    ProfileInfo(name="cloud", active=True, description="Hosted APIs.", use={"score": "bm25"}, context_tokens="auto"),
+    ProvidersReport(
         profile="cloud",
         gpu_policy="exclusive",
-        checks=[
-            ProviderCheck(
-                role="search",
+        entries=[
+            ProviderEntryInfo(
+                block="search",
+                name="searxng",
+                source="user",
                 provider="searxng",
                 release="llama-swap",
                 status="degraded",
                 latency_ms=1840,
                 detail="slow",
-            )
+            ),
+            ProviderEntryInfo(
+                block="llm",
+                name="agents",
+                source="user",
+                model="qwen3-14b",
+                models=[ModelInfo(id="qwen3-14b", context_window=32768, max_output_tokens=8192)],
+            ),
         ],
         warnings=["w"],
     ),
@@ -107,7 +119,23 @@ def test_writing_patch_names_field() -> None:
 def test_schema_has_api_models() -> None:
     definitions = json.loads(CliRunner().invoke(app, ["schema"]).output)["$defs"]
     names = {"RunCreate", "ForkCreate", "RunCreated", "RunSummary", "RunDetail", "ServerSettings"}
-    assert names | {"ProfileInfo", "ProviderCheck", "HealthReport", "ApiError", "RunNotActive"} <= set(definitions)
+    assert names | {"ProfileInfo", "ProviderEntryInfo", "ProvidersReport", "ApiError", "RunNotActive"} <= set(
+        definitions
+    )
+
+
+def test_use_names_a_block() -> None:
+    with pytest.raises(ValidationError, match=r"use\.scorer is not a block"):
+        RunCreate.model_validate({"query": "q", "use": {"scorer": "bm25"}})
+
+
+def test_budgets_are_llm_fields() -> None:
+    with pytest.raises(ValidationError) as error:
+        RunCreate.model_validate({"query": "q", "research": {"context_tokens": "auto"}})
+    assert error.value.errors()[0]["loc"] == ("research", "context_tokens")
+    assert (
+        RunCreate.model_validate({"query": "q", "llm": {"gap_context_tokens": "auto"}}).llm.gap_context_tokens == "auto"
+    )
 
 
 def test_schema_has_auth_models() -> None:

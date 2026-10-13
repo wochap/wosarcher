@@ -1,4 +1,4 @@
-"""Recorded SearXNG, Firecrawl, and LLM responses as a respx router, plus the `e2e` profile.
+"""Recorded SearXNG, Firecrawl, and LLM responses as a respx router, plus the `e2e` profile and its entries.
 
 Shared by the end-to-end test, the eval tests, and `make_recorded_run.py`.
 """
@@ -15,6 +15,7 @@ FIXTURES = Path(__file__).resolve().parent
 HTTP = FIXTURES / "http"
 NOTES = HTTP / "notes.md"
 PROFILE = FIXTURES / "profiles" / "e2e.toml"
+PROVIDERS = FIXTURES / "providers"
 RUNS = FIXTURES / "runs"
 FIXTURE_RUN = "20260101-000000-fixture"
 QUERY = "battery recycling"
@@ -25,10 +26,11 @@ def slug(text: str) -> str:
 
 
 def config_home(target: Path) -> Path:
-    """An `XDG_CONFIG_HOME` under `target` whose only user profile is `e2e`."""
+    """An `XDG_CONFIG_HOME` under `target` whose only profile is `e2e`, with the recorded entries."""
     profiles = target / "wosarcher" / "profiles"
     profiles.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(PROFILE, profiles / PROFILE.name)
+    shutil.copytree(PROVIDERS, target / "wosarcher" / "providers", dirs_exist_ok=True)
     return target
 
 

@@ -33,16 +33,18 @@ export type ProfileInfo = G.ProfileInfo;
 export type DepthInfo = G.DepthInfo;
 /** A token budget: a number, or "auto" for all the room the model window leaves. */
 export type TokenBudget = number | "auto";
-export type ResearchValues = {
-  [K in keyof G.ResearchPatch]-?: K extends "context_tokens" | "gap_context_tokens"
-    ? TokenBudget
-    : number;
-};
+export type ResearchValues = { [K in keyof G.ResearchPatch]-?: number };
 /** Thinking effort of one LLM step. */
 export type Effort = NonNullable<G.ReasoningOptions["plan"]>;
 export type ReasoningOptions = Required<G.ReasoningOptions>;
-export type ProviderCheck = G.ProviderCheck;
-export type HealthReport = G.HealthReport;
+/** A provider block, in the order the UI lists them. */
+export type Block = G.ProviderEntryInfo["block"];
+/** The entry chosen per block; a run's `use` or a profile's. */
+export type Use = Partial<Record<Block, string>>;
+export type ModelInfo = G.ModelInfo;
+export type ProviderEntry = G.ProviderEntryInfo;
+export type ProvidersReport = G.ProvidersReport;
+export type LlmPatch = G.LLMPatch;
 export type SessionInfo = G.SessionInfo & { method: "cookie" | "token" | "none" };
 export type TokenInfo = G.TokenInfo;
 export type TokenCreated = G.TokenCreated;

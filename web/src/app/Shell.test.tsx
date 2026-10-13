@@ -51,18 +51,19 @@ describe("Shell", () => {
 
   it("sets the warn dot from a stored result without posting a check", async () => {
     const api = fakeApi();
-    api.data.health.checks[4] = { ...api.data.health.checks[4], status: "down", detail: "refused" };
+    const llm = api.data.providers.entries.find((e) => e.name === "agents");
+    Object.assign(llm ?? {}, { status: "down", detail: "refused" });
     renderApp({ hash: "#/", api });
     const settings = within(nav()).getByRole("button", { name: /Settings/ });
     await vi.waitFor(() => expect(settings.querySelector('[data-tone="warn"]')).toBeTruthy());
-    expect(callsTo(api, "checkHealth")).toHaveLength(0);
+    expect(callsTo(api, "checkProviders")).toHaveLength(0);
   });
 
   it("shows no warn dot when nothing is checked", async () => {
     const api = fakeApi();
-    for (const c of api.data.health.checks) if (c.status !== "skipped") c.status = "unchecked";
+    for (const e of api.data.providers.entries) if (e.status !== "skipped") e.status = "unchecked";
     renderApp({ hash: "#/", api });
-    await vi.waitFor(() => expect(callsTo(api, "health")).toHaveLength(1));
+    await vi.waitFor(() => expect(callsTo(api, "listProviders").length).toBeGreaterThan(0));
     const settings = within(nav()).getByRole("button", { name: /Settings/ });
     expect(settings.querySelector('[data-tone="warn"]')).toBeNull();
   });

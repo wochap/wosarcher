@@ -16,6 +16,7 @@ import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
+import { ProfileLine } from "../../components/ProfileLine";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { StatusTag } from "../../components/StatusTag";
 import { ThinkingTag } from "../../components/ThinkingTag";
@@ -36,7 +37,7 @@ import { VersionsNav } from "./VersionsNav";
 
 export function ReportScreen({ runId }: { runId: string }) {
   const api = useApi();
-  const { toast } = useUi();
+  const { toast, isPhone } = useUi();
   const { view: own } = useRun(runId);
   const { detail, notFound, view, files, context, report } = useRunData(runId, own);
   const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -94,6 +95,7 @@ export function ReportScreen({ runId }: { runId: string }) {
             <span className={css.id}>{runId}</span>
             <span>{meta}</span>
           </div>
+          <ProfileLine run={detail} isPhone={isPhone} />
           <h1
             id={long ? "rep-q" : undefined}
             className={`${css.h1} ${long ? (queryOpen ? css.h1Full : css.h1Clamped) : ""}`}

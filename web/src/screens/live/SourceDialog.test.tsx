@@ -87,7 +87,7 @@ function setup(
           chunkId={options.chunkId ?? "c3"}
           marker="numeric"
           context={null}
-          prefilterTopK={50}
+          candidates={50}
           onClose={onClose}
         />
       </UiContext.Provider>

@@ -16,7 +16,7 @@ from typing import cast
 
 from pydantic import BaseModel
 
-from wosarcher.config import Settings, redact
+from wosarcher.config import LLM_KEYS, Settings, redact
 from wosarcher.models import (
     LOOP_STAGES,
     STAGES,
@@ -103,6 +103,14 @@ def settings_rounds(record: RunRecord) -> int:
     return rounds if isinstance(rounds, int) else 1
 
 
+PROFILE_EDITS = ("use.", "llm.model", "llm.reasoning", *LLM_KEYS.values())
+
+
+def modified(overrides: Sequence[str]) -> bool:
+    """The overrides change an entry choice or an `llm` value the profile sets (the web's Advanced values)."""
+    return any(override.strip().startswith(PROFILE_EDITS) for override in overrides)
+
+
 def settings_llm(record: RunRecord) -> tuple[str, ReasoningOptions]:
     """The run's resolved `llm.model` and `llm.reasoning`; empty and `none` for runs from before them."""
     llm: object = record.settings.get("llm")
@@ -182,6 +190,7 @@ class RunStore:
         origin: Origin = "cli",
         token_name: str | None = None,
         lock: bool = False,
+        use: Mapping[str, str] | None = None,
     ) -> RunRecord:
         """With `lock`, this process holds the run lock (the engine); tests create runs without it."""
         copies: list[tuple[Path, Path]] = []
@@ -200,6 +209,7 @@ class RunStore:
             created_at=datetime.now(UTC),
             request=request.model_copy(update={"attachments": [name.as_posix() for _, name in copies]}),
             profile=profile,
+            use=dict(use) if use is not None else None,
             overrides=list(overrides),
             settings=redact(settings),
             origin=origin,
@@ -221,6 +231,7 @@ class RunStore:
         origin: Origin = "cli",
         token_name: str | None = None,
         lock: bool = False,
+        use: Mapping[str, str] | None = None,
     ) -> RunRecord:
         parent = self.read_record(parent_id)
         done = self.done_events(parent_id)
@@ -238,6 +249,7 @@ class RunStore:
             created_at=datetime.now(UTC),
             request=parent.request.model_copy(update={"until": until}),
             profile=profile or parent.profile,
+            use=dict(use) if use is not None else None,
             overrides=[*parent.overrides, *overrides],
             changes=list(overrides),
             settings=redact(settings),
@@ -467,6 +479,8 @@ class RunStore:
             stop_reason=research.data.reason if research else None,
             model=model,
             reasoning=reasoning,
+            use=record.use,
+            modified=modified(record.overrides),
             origin=record.origin,
             token_name=record.token_name,
         )

@@ -12,6 +12,7 @@ import httpx
 import pytest
 import uvicorn
 
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from wosarcher.auth import hash_password
 from wosarcher.config import AuthConfig, ServerConfig, Settings
 from wosarcher.ports import Exporter
@@ -34,6 +35,7 @@ def runs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "runs"
     monkeypatch.setenv("WOSARCHER_RUN__RUNS_DIR", str(path))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    write_config(tmp_path / "config" / "wosarcher", MINIMAL_CONFIG)
     monkeypatch.setenv("FAKE_MODE", "ok")
     monkeypatch.setenv("FAKE_STEP", "0.05")
     monkeypatch.delenv("WOSARCHER_PROFILE", raising=False)

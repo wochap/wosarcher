@@ -4,8 +4,9 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import SecretStr
 
-from wosarcher.config import RunConfig, Settings, resolve
+from wosarcher.config import PlanConfig, RunConfig, ScoreConfig, Settings
 from wosarcher.models import (
     STAGES,
     Hit,
@@ -20,6 +21,7 @@ from wosarcher.models import (
     Source,
     StageDoneData,
     UsageTotals,
+    WritingOptions,
 )
 from wosarcher.store import RunStore, RunStoreError, new_run_id
 from wosarcher.store.caches import EmbeddingCache, PageCache
@@ -57,8 +59,7 @@ def test_run_ids_sort_by_time() -> None:
 
 
 def test_secrets_redacted(store: RunStore) -> None:
-    env = {"XDG_CONFIG_HOME": "/nonexistent", "WOSARCHER_SCORE__API_KEY": "sk-secret"}
-    run_id = create(store, settings=resolve("workstation", [], env))
+    run_id = create(store, settings=Settings(score=ScoreConfig(provider="jev", api_key=SecretStr("sk-secret"))))
     text = (store.run_dir(run_id) / "request.json").read_text()
     assert '"api_key": "***"' in text
     assert "sk-secret" not in text
@@ -344,7 +345,7 @@ def test_summary_error_and_end_stage(store: RunStore) -> None:
 
 def test_depth_recorded(store: RunStore) -> None:
     overrides = ["write.words=800"]
-    settings = resolve(None, overrides, {}, depth="deep")
+    settings = Settings(plan=PlanConfig(max_sub_queries=6), write=WritingOptions(words=800))
     request = RunRequest(query="battery recycling", depth="deep")
     run_id = store.create(request, "workstation", overrides, settings, []).run_id
     saved = json.loads((store.run_dir(run_id) / "request.json").read_text())

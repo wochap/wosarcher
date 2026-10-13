@@ -20,13 +20,13 @@ export const badgeOf = (fate: ChunkFate): Fate => BADGES[fate.kind];
 
 /**
  * Why the chunk ended where it did. `cite` turns a citation number into the run's marker label;
- * `prefilterTopK` is the run's `prefilter.top_k`, when known.
+ * `candidates` is the run's `score.candidates`, when known.
  */
 export function whyLine(
   fate: ChunkFate,
   view: Pick<SourceView, "threshold" | "query_cap" | "source_cap">,
   cite: (n: number) => string,
-  prefilterTopK?: number,
+  candidates?: number,
 ): string {
   const q = fate.query_id ?? "";
   const score = fate.display == null ? "–" : fixed(fate.display);
@@ -35,8 +35,8 @@ export function whyLine(
   const kept = `Kept: rank ${fate.rank ?? "–"} of ${fate.kept_in_query ?? "–"} in ${q}`;
   switch (fate.kind) {
     case "prefiltered":
-      return prefilterTopK
-        ? `Not scored: outside the top ${prefilterTopK} for every sub-query.`
+      return candidates
+        ? `Not scored: outside the top ${candidates} for every sub-query.`
         : "Not scored: outside the prefilter's top passages for every sub-query.";
     case "pending":
       return "Waiting for the scorer.";

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from wosarcher.config import resolve
 from wosarcher.daemon import app
 
@@ -15,6 +16,9 @@ runner = CliRunner()
 def config_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("WOSARCHER_PROFILE", raising=False)
+    write_config(tmp_path / "wosarcher", MINIMAL_CONFIG)
+    profile = MINIMAL_CONFIG["profiles/workstation.toml"] + '[run]\ngpu_policy = "exclusive"\n'
+    write_config(tmp_path / "wosarcher", {"profiles/low-vram.toml": profile})
     return tmp_path
 
 
@@ -27,4 +31,4 @@ def test_use_persists(config_home: Path) -> None:
 def test_use_unknown_profile_fails() -> None:
     result = runner.invoke(app, ["profile", "use", "nope"])
     assert result.exit_code == 2
-    assert "unknown profile 'nope'" in result.output
+    assert "unknown profile 'nope'; available: low-vram, workstation" in result.output

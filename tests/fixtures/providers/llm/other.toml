@@ -1,0 +1,8 @@
+description = "The same recorded endpoint under another model, for swapping the llm entry."
+provider = "openai"
+base_url = "http://llm.test/v1"
+model = "other-llm"
+
+[models.other-llm]
+context_window = 65536
+max_output_tokens = 16384

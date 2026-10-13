@@ -1,28 +1,10 @@
 # Recorded services for the end-to-end test and the fixture run: every host
 # is answered by tests/fixtures/recorded.py, BM25 ranks without a model.
+description = "Recorded services."
 
-[search]
-provider = "searxng"
-base_url = "http://searxng.test"
-max_results = 5
-
-[fetch]
-provider = "firecrawl"
-base_url = "http://firecrawl.test/v1"
-
-[prefilter]
-provider = "bm25"
-
-[score]
-provider = "bm25"
-
-[llm]
-provider = "openai"
-base_url = "http://llm.test/v1"
-model = "recorded-llm"
-
-[plan]
-max_sub_queries = 2
+[use]
+prefilter = "bm25"
+llm = "recorded"
 
 [select]
 # Rank every chunk; the recorded pages are below the default passthrough size.

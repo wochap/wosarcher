@@ -175,14 +175,14 @@ function fallbackReason(phase: Phase, configured: string): string | undefined {
 
 const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
 
-function prefilterCounts(run: RunView, topK: number | undefined): string {
+function prefilterCounts(run: RunView, candidates: number | undefined): string {
   const phase = run.phases.prefilter;
   const kept = phase.counters.count;
   const chunks = run.phases.chunk.counters.count;
   const parts: string[] = [];
-  if (topK !== undefined) {
+  if (candidates !== undefined) {
     const counts = kept !== undefined && chunks !== undefined ? `: ${kept} of ${chunks}` : "";
-    parts.push(`Kept the top ${topK} chunks per sub-query${counts}.`);
+    parts.push(`Kept the top ${candidates} chunks per sub-query${counts}.`);
   } else if (kept !== undefined && chunks !== undefined) parts.push(`Kept ${kept} of ${chunks}.`);
   if (run.passthrough.length)
     parts.push(`${run.passthrough.join(", ")} skipped ranking (small-input passthrough).`);
@@ -195,7 +195,7 @@ function tagHelp(
   ran: string,
   fallback: boolean,
   run: RunView,
-  topK?: number,
+  candidates?: number,
 ): Help {
   const label = tagLabel(id, ran);
   const configured = phase.configuredProvider ?? ran;
@@ -217,7 +217,7 @@ function tagHelp(
       return { title: `${role} · ${label}`, body: `The configured LLM${on}` };
     }
     case "prefilter": {
-      const counts = prefilterCounts(run, topK);
+      const counts = prefilterCounts(run, candidates);
       if (fallback)
         return {
           title: `Fallback · ${methodName(methodOf(ran))}`,
@@ -244,7 +244,7 @@ function tagHelp(
 }
 
 /** The method tag of a Plan, Prefilter, Score, or Write card; null when it has none. */
-export function methodTag(id: PhaseId, run: RunView, topK?: number): MethodTag | null {
+export function methodTag(id: PhaseId, run: RunView, candidates?: number): MethodTag | null {
   const phase = run.phases[id];
   if (!TAGGED[id] || !TAG_STATES.includes(phase.state) || phase.skipped) return null;
   const ran =
@@ -257,18 +257,18 @@ export function methodTag(id: PhaseId, run: RunView, topK?: number): MethodTag |
   return {
     text: fallback ? `${label} · fallback` : label,
     fallback,
-    help: tagHelp(id, phase, ran, fallback, run, topK),
+    help: tagHelp(id, phase, ran, fallback, run, candidates),
   };
 }
 
 /** The Prefilter card's second line; empty when it has none. */
-export function prefilterDetail(run: RunView, topK?: number): string {
+export function prefilterDetail(run: RunView, candidates?: number): string {
   const phase = run.phases.prefilter;
-  if (topK === undefined || phase.skipped) return "";
-  if (phase.state === "running") return `top ${topK} per sub-query`;
+  if (candidates === undefined || phase.skipped) return "";
+  if (phase.state === "running") return `top ${candidates} per sub-query`;
   if (phase.state !== "done" && phase.state !== "reused") return "";
   const passed = run.passthrough.length ? ` · ${run.passthrough.join(", ")} passthrough` : "";
-  return `top ${topK}/sub-query${passed}`;
+  return `top ${candidates}/sub-query${passed}`;
 }
 
 /** The Search card's domain filter line; empty when nothing was filtered. */
@@ -278,13 +278,13 @@ export function filteredDetail(run: RunView): string {
 
 type Props = {
   run: RunView;
-  /** The run's `prefilter.top_k`, from its request settings. */
-  topK?: number;
+  /** The run's `score.candidates`, from its request settings. */
+  candidates?: number;
   /** The run's `research.rounds`; the Gap card and round texts show only above 1. */
   rounds?: number;
 };
 
-export function PhaseTimeline({ run, topK, rounds = 1 }: Props) {
+export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
   const phases = rounds > 1 ? PHASES : PHASES.filter((id) => id !== "gap");
   return (
     <ol aria-label="Phases" className={css.timeline}>
@@ -293,9 +293,10 @@ export function PhaseTimeline({ run, topK, rounds = 1 }: Props) {
         const Glyph = ICONS[card.state];
         const label = stageLabel(id);
         const waiting = card.state === "waiting";
-        const tag = methodTag(id, run, topK);
+        const tag = methodTag(id, run, candidates);
         const detail =
-          roundDetail(id, run, rounds) || (id === "prefilter" ? prefilterDetail(run, topK) : "");
+          roundDetail(id, run, rounds) ||
+          (id === "prefilter" ? prefilterDetail(run, candidates) : "");
         const filtered = id === "search" ? filteredDetail(run) : "";
         return (
           <li key={id} className={css.card} data-state={card.state}>

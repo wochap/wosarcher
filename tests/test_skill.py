@@ -105,11 +105,27 @@ def check_values(params: dict[str, Any]) -> list[str]:
         }
     )
     with tempfile.TemporaryDirectory() as config_home:
+        write_config(Path(config_home) / "wosarcher")
         try:
             resolve(None, [*(params.get("set_") or []), *flags], {"XDG_CONFIG_HOME": config_home})
         except (ConfigError, ValueError) as error:
             errors.append(f"--set: {error}")
     return errors
+
+
+# One entry per block that has no built-in, and a profile that picks the prefilter.
+CONFIG_FILES = {
+    "providers/search/searxng.toml": 'provider = "searxng"\nbase_url = "http://searxng.test"\n',
+    "providers/fetch/firecrawl.toml": 'provider = "firecrawl"\nbase_url = "http://firecrawl.test/v1"\n',
+    "providers/llm/chat.toml": 'provider = "openai"\nbase_url = "http://llm.test/v1"\nmodel = "chat"\n',
+    "profiles/skill.toml": '[use]\nprefilter = "bm25"\n',
+}
+
+
+def write_config(root: Path) -> None:
+    for name, text in CONFIG_FILES.items():
+        (root / name).parent.mkdir(parents=True, exist_ok=True)
+        (root / name).write_text(text, encoding="utf-8")
 
 
 def schema_defs() -> set[str]:

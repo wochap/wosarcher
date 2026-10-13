@@ -10,13 +10,26 @@ from pathlib import Path
 import pytest
 from pydantic import TypeAdapter
 
-from wosarcher.models import STAGES, RunSummary
+from wosarcher.models import STAGES, ProviderEntryInfo, ProvidersReport, RunSummary
 
 pytestmark = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not on PATH")
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures" / "zsh"
-COMMANDS = {"run", "fork", "runs", "logs", "cancel", "export", "doctor", "profile", "depth", "tokens", "schema"}
+COMMANDS = {
+    "run",
+    "fork",
+    "runs",
+    "logs",
+    "cancel",
+    "export",
+    "doctor",
+    "profile",
+    "providers",
+    "depth",
+    "tokens",
+    "schema",
+}
 PROFILES = """\
 * default  (builtin)  Local models
   lan  (user)  LAN server
@@ -50,6 +63,8 @@ def stub(tmp_path: Path) -> Path:
     (tmp_path / "runs.json").write_bytes(TypeAdapter(list[RunSummary]).dump_json(runs, indent=2))
     (tmp_path / "profiles.txt").write_text(PROFILES)
     (tmp_path / "depths.txt").write_text(DEPTHS)
+    entries = [ProviderEntryInfo(block="score", name=name, source="user") for name in ("bm25", "jev-strict", "rerank")]
+    (tmp_path / "providers-score.json").write_text(ProvidersReport(entries=entries).model_dump_json(indent=2))
     return tmp_path
 
 
@@ -117,3 +132,15 @@ def test_quiet_failure(stub: Path) -> None:
     output = capture("wosarcher cancel ", stub, fail=True)
     assert time.monotonic() - started < 5
     assert output == ""
+
+
+def test_use_blocks(stub: Path) -> None:
+    assert set(complete("wosarcher run q --use ", stub)) == {"search", "fetch", "prefilter", "score", "llm"}
+
+
+def test_entry_names(stub: Path) -> None:
+    assert set(complete("wosarcher run q --use score=", stub)) == {"bm25", "jev-strict", "rerank"}
+
+
+def test_use_repeatable(stub: Path) -> None:
+    assert "--use" in complete("wosarcher run q --use score=bm25 --u", stub)

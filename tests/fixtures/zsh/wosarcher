@@ -10,6 +10,7 @@ case "$1 $2" in
   "runs --json") exec cat "$WOSARCHER_STUB_DIR/runs.json" ;;
   "profile list") exec cat "$WOSARCHER_STUB_DIR/profiles.txt" ;;
   "depth list") exec cat "$WOSARCHER_STUB_DIR/depths.txt" ;;
+  "providers list") exec cat "$WOSARCHER_STUB_DIR/providers-$4.json" ;;
 esac
 echo "error: stub does not answer: $*" >&2
 exit 2

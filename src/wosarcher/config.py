@@ -1,6 +1,7 @@
-"""Run configuration: settings models, profiles, precedence, and secret redaction.
+"""Run configuration: settings models, provider entries, profiles, precedence, and secret redaction.
 
-`resolve()` is the whole story: pick a profile, then merge built-in defaults <
+`resolve()` is the whole story: pick a profile and one provider entry per
+block, then merge built-in defaults < entries < the chosen model's values <
 profile < `WOSARCHER_*` environment < depth preset < `--set` overrides, and
 validate once.
 """
@@ -10,7 +11,7 @@ import subprocess
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, NamedTuple, cast, get_args
 from urllib.parse import urlsplit
 
 from pydantic import (
@@ -27,14 +28,14 @@ from pydantic_core import to_jsonable_python
 
 from wosarcher.models import Effort, FinishedStatus, Stage, WritingOptions, domain_list, search_language
 
-DEFAULT_PROFILE = "workstation"
 ENV_PREFIX = "WOSARCHER_"
 CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET")
 """How the `wosarcher` client reaches the daemon; not settings."""
-BUILTIN_PROFILES = Path(__file__).parent / "profiles"
 BUILTIN_DEPTHS = Path(__file__).parent / "depths"
 DEPTH_ORDER = ("quick", "standard", "deep", "exhaustive")
 CUSTOM_DEPTH = "custom"
+BLOCKS = ("search", "fetch", "prefilter", "score", "llm")
+"""The provider blocks, each filled by one entry of `providers/<block>/`."""
 
 # Typed research fields (CLI flags, `RunCreate.research`) and the key each sets.
 RESEARCH_KEYS = {
@@ -42,13 +43,34 @@ RESEARCH_KEYS = {
     "results_per_query": "search.max_results",
     "max_pages": "fetch.max_pages",
     "passages_per_query": "score.top_k",
-    "context_tokens": "select.max_context_tokens",
-    "gap_context_tokens": "research.gap_context_tokens",
     "rounds": "research.rounds",
     "queries_per_round": "research.queries_per_round",
 }
-# The only keys a depth preset may set, besides its `description`.
+# Typed LLM fields (`RunCreate.llm`, CLI flags) besides `model` and `reasoning`, and the key each sets.
+LLM_KEYS = {
+    "context_window": "llm.context_window",
+    "max_output_tokens": "llm.max_output_tokens",
+    "context_tokens": "select.max_context_tokens",
+    "gap_context_tokens": "research.gap_context_tokens",
+}
+# The only keys a depth preset may set, besides its `description`; no entry or profile sets them.
 DEPTH_KEYS = (*RESEARCH_KEYS.values(), "write.words")
+# What a model of an llm entry's `models` table may set, and the key each fills.
+MODEL_FIELDS = {
+    "context_window": "llm.context_window",
+    "max_output_tokens": "llm.max_output_tokens",
+    "reasoning": "llm.reasoning",
+    "gap_context_tokens": "research.gap_context_tokens",
+}
+# Keys inside the provider blocks that the profile owns, not the entry.
+PROFILE_BLOCK_KEYS = (
+    "llm.model",
+    "search.allow_domains",
+    "search.block_domains",
+    "search.language",
+    "search.time_range",
+    "search.filter_pages",
+)
 
 # Seconds each stage may take; `run.stage_timeouts` overrides single stages.
 DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
@@ -148,11 +170,12 @@ class ScoreConfig(Provider):
     top_k: int = Field(default=10, gt=0)
     fallback: list[Literal["bm25", "passthrough"]] = ["bm25", "passthrough"]
     rerank_scale: Literal["auto", "probability", "logit"] = "auto"
+    candidates: int = Field(default=50, gt=0)
+    """Pairs per query the prefilter passes to this scorer."""
 
 
 class PrefilterConfig(Provider):
     provider: str = "bm25"
-    top_k: int = Field(default=50, gt=0)
     context: Literal["header", "body"] = "header"
 
 
@@ -311,14 +334,9 @@ def config_dir(env: Mapping[str, str]) -> Path:
     return Path(base) / "wosarcher"
 
 
-def list_profiles(env: Mapping[str, str]) -> dict[str, tuple[Path, Literal["built-in", "user"]]]:
-    """Every profile by name; a user file replaces the built-in one with the same name."""
-    found: dict[str, tuple[Path, Literal["built-in", "user"]]] = {
-        path.stem: (path, "built-in") for path in sorted(BUILTIN_PROFILES.glob("*.toml"))
-    }
-    user = config_dir(env) / "profiles"
-    found.update({path.stem: (path, "user") for path in sorted(user.glob("*.toml"))})
-    return dict(sorted(found.items()))
+def list_profiles(env: Mapping[str, str]) -> dict[str, Path]:
+    """Every profile file by name."""
+    return {path.stem: path for path in sorted((config_dir(env) / "profiles").glob("*.toml"))}
 
 
 def stored_profile(env: Mapping[str, str]) -> str | None:
@@ -330,47 +348,216 @@ def stored_profile(env: Mapping[str, str]) -> str | None:
 def store_profile(name: str, env: Mapping[str, str]) -> None:
     available = list_profiles(env)
     if name not in available:
-        raise unknown_profile(name, available)
+        raise unknown_profile(name, available, env)
     current = config_dir(env) / "current"
     current.parent.mkdir(parents=True, exist_ok=True)
     current.write_text(name + "\n", encoding="utf-8")
 
 
 def select_profile(option: str | None, env: Mapping[str, str]) -> str:
-    """`--profile`, then `WOSARCHER_PROFILE`, then `wosarcherd profile use`, then the default."""
-    return option or env.get(ENV_PREFIX + "PROFILE") or stored_profile(env) or DEFAULT_PROFILE
+    """`--profile`, then `WOSARCHER_PROFILE`, then `wosarcherd profile use`, then the first profile by name."""
+    chosen = option or env.get(ENV_PREFIX + "PROFILE") or stored_profile(env)
+    if chosen:
+        return chosen
+    available = list_profiles(env)
+    if not available:
+        raise no_profiles(env)
+    return next(iter(available))
 
 
-def unknown_profile(name: str, available: Mapping[str, object]) -> ConfigError:
+def no_profiles(env: Mapping[str, str]) -> ConfigError:
+    return ConfigError(f"no profiles; add one in {config_dir(env) / 'profiles'}")
+
+
+def unknown_profile(name: str, available: Mapping[str, object], env: Mapping[str, str]) -> ConfigError:
+    if not available:
+        return ConfigError(f"unknown profile '{name}'; {no_profiles(env)}")
     return ConfigError(f"unknown profile '{name}'; available: {', '.join(available)}")
 
 
-def read_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any]]:
-    """The profile file as written, `description` included."""
+def read_toml(kind: str, path: Path) -> dict[str, Any]:
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise ConfigError(f"{kind} {path}: {error}") from None
+
+
+def pop_description(kind: str, path: Path, data: dict[str, Any]) -> str:
+    """The file's one-line `description`, removed from `data`; it is file metadata, not a setting."""
+    description = data.pop("description", "")
+    if not isinstance(description, str):
+        raise ConfigError(f"{kind} {path}: description must be a string")
+    return description
+
+
+def owner(key: str) -> str | None:
+    """Who owns a dotted key when a profile or the environment may not set it."""
+    if key in DEPTH_KEYS:
+        return "depth presets own"
+    if any(key == owned or key.startswith(owned + ".") for owned in MODEL_FIELDS.values()):
+        return "the model owns (models.<id> in its llm entry)"
+    if key.split(".")[0] in BLOCKS and key not in PROFILE_BLOCK_KEYS:
+        return "provider entries own"
+    return None
+
+
+def check_use(where: str, use: object) -> dict[str, str]:
+    """A `[use]` table: block names to entry names."""
+    if not isinstance(use, Mapping):
+        raise ConfigError(f"{where}: use must be a table of block = entry name")
+    out: dict[str, str] = {}
+    for block, name in cast(Mapping[str, object], use).items():
+        if block not in BLOCKS:
+            raise ConfigError(f"{where}: use.{block} is not a block; choose from {', '.join(BLOCKS)}")
+        if not isinstance(name, str | int) or isinstance(name, bool) or not str(name):
+            raise ConfigError(f"{where}: use.{block} must be an entry name")
+        out[block] = str(name)
+    return out
+
+
+class Profile(NamedTuple):
+    name: str
+    path: Path
+    description: str
+    use: dict[str, str]
+    data: dict[str, Any]
+    """The profile's own settings, without `description` and `[use]`."""
+
+
+def read_profile(name: str, env: Mapping[str, str]) -> Profile:
+    """The profile file, its keys checked against the keys a profile may set."""
     available = list_profiles(env)
     if name not in available:
-        raise unknown_profile(name, available)
-    path = available[name][0]
-    try:
-        return path, tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"profile {path}: {error}") from error
+        raise unknown_profile(name, available, env)
+    path = available[name]
+    data = read_toml("profile", path)
+    description = pop_description("profile", path, data)
+    use = check_use(f"profile {path}", data.pop("use", {}))
+    for key in leaf_keys(data):
+        found = owner(key)
+        if found:
+            raise ConfigError(f"profile {path}: {key} cannot be set by a profile; {found} it")
+    return Profile(name, path, description, use, data)
 
 
-def load_profile(name: str, env: Mapping[str, str]) -> tuple[Path, dict[str, Any]]:
-    """The profile's settings; the top-level `description` is file metadata, not a setting."""
-    path, data = read_profile(name, env)
-    data.pop("description", None)
-    return path, data
+# Provider entries: `providers/<block>/<name>.toml`, plus built-in entries that need no file.
+
+BUILTIN_ENTRIES: dict[str, dict[str, dict[str, Any]]] = {
+    "prefilter": {"bm25": {"provider": "bm25"}, "none": {"provider": "none"}},
+    "score": {"bm25": {"provider": "bm25"}},
+}
 
 
-def profile_description(name: str, env: Mapping[str, str]) -> str:
-    """The profile's one-line `description`, empty when it sets none."""
-    path, data = read_profile(name, env)
-    description = data.get("description", "")
-    if not isinstance(description, str):
-        raise ConfigError(f"profile {path}: description must be a string")
-    return description
+class Entry(NamedTuple):
+    block: str
+    name: str
+    source: Literal["builtin", "user"]
+    path: Path | None
+    """None for a built-in entry."""
+
+    @property
+    def label(self) -> str:
+        return f"entry {self.path}" if self.path else f"built-in entry {self.block}/{self.name}"
+
+
+class EntryData(NamedTuple):
+    entry: Entry
+    description: str
+    settings: dict[str, Any]
+    """The block's fields, without `description` and `models`."""
+    models: dict[str, dict[str, Any]]
+    """An llm entry's `models` table by model ID."""
+
+
+def list_entries(env: Mapping[str, str]) -> dict[str, dict[str, Entry]]:
+    """Every entry per block, by name; a user file replaces the built-in entry with the same name."""
+    found: dict[str, dict[str, Entry]] = {block: {} for block in BLOCKS}
+    for block, names in BUILTIN_ENTRIES.items():
+        found[block] = {name: Entry(block, name, "builtin", None) for name in names}
+    root = config_dir(env) / "providers"
+    for directory in sorted(root.iterdir()) if root.is_dir() else []:
+        if not directory.is_dir():
+            continue
+        if directory.name not in BLOCKS:
+            raise ConfigError(f"{directory}: providers/{directory.name} is not a block; use {', '.join(BLOCKS)}")
+        for path in sorted(directory.glob("*.toml")):
+            found[directory.name][path.stem] = Entry(directory.name, path.stem, "user", path)
+    return {block: dict(sorted(entries.items())) for block, entries in found.items()}
+
+
+def unknown_entry(block: str, name: str, available: Mapping[str, object]) -> ConfigError:
+    return ConfigError(f"unknown {block} entry '{name}'; {block} entries: {', '.join(available) or 'none'}")
+
+
+def find_entry(block: str, name: str, env: Mapping[str, str]) -> Entry:
+    if block not in BLOCKS:
+        raise ConfigError(f"unknown block '{block}'; choose from {', '.join(BLOCKS)}")
+    available = list_entries(env)[block]
+    if name not in available:
+        raise unknown_entry(block, name, available)
+    return available[name]
+
+
+def entry_owner(block: str, key: str) -> str | None:
+    """Who owns a key of an entry file when the entry may not set it."""
+    full = f"{block}.{key}"
+    if full in DEPTH_KEYS:
+        return "depth presets own"
+    if full in PROFILE_BLOCK_KEYS and full != "llm.model":
+        return "profiles own"
+    if block == "llm" and key.split(".")[0] in ("context_window", "max_output_tokens", "reasoning"):
+        return "the model owns (set it under models.<id>)"
+    return None
+
+
+def read_entry(entry: Entry) -> EntryData:
+    """The entry's fields, checked against the keys an entry may set."""
+    if entry.path is None:
+        return EntryData(entry, "", dict(BUILTIN_ENTRIES[entry.block][entry.name]), {})
+    path = entry.path
+    data = read_toml("entry", path)
+    description = pop_description("entry", path, data)
+    models: object = data.pop("models", {})
+    if models and entry.block != "llm":
+        raise ConfigError(f"entry {path}: models: only llm entries list models")
+    if not isinstance(models, Mapping):
+        raise ConfigError(f"entry {path}: models must be a table of model tables")
+    for key in leaf_keys(data):
+        found = entry_owner(entry.block, key)
+        if found:
+            raise ConfigError(f"entry {path}: {key} cannot be set by a provider entry; {found} it")
+    checked_models: dict[str, dict[str, Any]] = {}
+    for model, values in cast(Mapping[str, object], models).items():
+        if not isinstance(values, Mapping):
+            raise ConfigError(f"entry {path}: models.{model} must be a table")
+        table = dict(cast(Mapping[str, Any], values))
+        unknown = [key for key in table if key not in MODEL_FIELDS]
+        if unknown:
+            allowed = ", ".join(MODEL_FIELDS)
+            raise ConfigError(
+                f"entry {path}: models.{model}: {', '.join(unknown)} cannot be set; a model sets {allowed}"
+            )
+        checked_models[model] = table
+    return EntryData(entry, description, data, checked_models)
+
+
+def pick_entries(entries: Mapping[str, Mapping[str, Entry]], *choices: Mapping[str, str]) -> dict[str, Entry]:
+    """One entry per block: the last choice that names one wins; a block with one entry needs no choice."""
+    chosen: dict[str, Entry] = {}
+    for block in BLOCKS:
+        available = entries[block]
+        name = next((choice[block] for choice in reversed(choices) if block in choice), None)
+        if name is None:
+            if len(available) != 1:
+                listed = ", ".join(available) or "none"
+                raise ConfigError(
+                    f"choose a {block} entry ([use] in the profile or --use {block}=NAME); {block} entries: {listed}"
+                )
+            name = next(iter(available))
+        if name not in available:
+            raise unknown_entry(block, name, available)
+        chosen[block] = available[name]
+    return chosen
 
 
 # Layers: each is a nested dict plus the source of every leaf key.
@@ -402,24 +589,72 @@ def leaf_keys(tree: Mapping[str, Any], prefix: str = "") -> list[str]:
     return keys
 
 
-def profile_layer(path: Path, data: dict[str, Any]) -> Layer:
-    return data, {key: f"profile {path}" for key in leaf_keys(data)}
+def labelled(tree: dict[str, Any], label: str) -> Layer:
+    return tree, {key: label for key in leaf_keys(tree)}
 
 
-def env_layer(env: Mapping[str, str]) -> Layer:
-    """`WOSARCHER_SCORE__API_KEY=x` sets `score.api_key`. Values stay strings except lists (`[..]`)."""
+def entries_layer(loaded: Mapping[str, EntryData]) -> Layer:
+    """Each block replaced whole by its entry."""
     tree: dict[str, Any] = {}
     sources: dict[str, str] = {}
+    for block, data in loaded.items():
+        tree[block] = data.settings
+        sources.update({f"{block}.{key}": data.entry.label for key in leaf_keys(data.settings)})
+    return tree, sources
+
+
+def model_tree(llm: EntryData, model: str) -> dict[str, Any]:
+    """The values `models.<model>` sets, at their keys; empty when the entry does not list the model."""
+    tree: dict[str, Any] = {}
+    for field, value in llm.models.get(model, {}).items():
+        set_path(tree, MODEL_FIELDS[field].split("."), value)
+    return tree
+
+
+def model_layer(llm: EntryData, model: str) -> Layer:
+    return labelled(model_tree(llm, model), f"{llm.entry.label} models.{model}")
+
+
+def model_defaults() -> dict[str, Any]:
+    """The built-in values of every model-owned key, for a model no entry lists."""
+    defaults = Settings()
+    return {
+        "llm": {
+            "context_window": defaults.llm.context_window,
+            "max_output_tokens": defaults.llm.max_output_tokens,
+            "reasoning": defaults.llm.reasoning.model_dump(),
+        },
+        "research": {"gap_context_tokens": defaults.research.gap_context_tokens},
+    }
+
+
+def env_layer(env: Mapping[str, str]) -> tuple[Layer, dict[str, str]]:
+    """`WOSARCHER_SELECT__MAX_CONTEXT_TOKENS=x` sets `select.max_context_tokens`, and the entry choices.
+
+    Values stay strings except lists (`[..]`). Only keys a profile may set are allowed, plus
+    `WOSARCHER_USE__<BLOCK>`.
+    """
+    tree: dict[str, Any] = {}
+    sources: dict[str, str] = {}
+    use: dict[str, str] = {}
     for name, raw in sorted(env.items()):
         if not name.startswith(ENV_PREFIX) or name == ENV_PREFIX + "PROFILE" or name in CLIENT_ENV:
             continue
         path = name.removeprefix(ENV_PREFIX).lower().split("__")
+        key = ".".join(path)
+        if path[0] == "use":
+            use.update(check_use(f"environment variable {name}", {".".join(path[1:]): raw}))
+            continue
+        found = owner(key)
+        if found:
+            raise ConfigError(f"environment variable {name}: {key} cannot be set by the environment; {found} it")
         set_path(tree, path, parse_value(raw) if raw.startswith("[") else raw)
-        sources[".".join(path)] = f"environment variable {name}"
-    return tree, sources
+        sources[key] = f"environment variable {name}"
+    return (tree, sources), use
 
 
-def override_layer(overrides: list[str]) -> Layer:
+def override_layer(overrides: list[str]) -> tuple[Layer, dict[str, str]]:
+    """`--set` values (any key), and the run's entry choices given as `use.<block>=<name>`."""
     tree: dict[str, Any] = {}
     sources: dict[str, str] = {}
     for override in overrides:
@@ -429,7 +664,17 @@ def override_layer(overrides: list[str]) -> Layer:
         path = key.strip().split(".")
         set_path(tree, path, parse_value(raw.strip()))
         sources[".".join(path)] = f"override --set {override}"
-    return tree, sources
+    use = check_use("--use", tree.pop("use", {}))
+    return (tree, sources), use
+
+
+def use_overrides(use: Mapping[str, str]) -> list[str]:
+    """Entry choices as the overrides a run records (`use.<block>=<name>`)."""
+    return [f"use.{block}={name}" for block, name in use.items()]
+
+
+def without_use(overrides: list[str]) -> list[str]:
+    return [override for override in overrides if not override.strip().startswith("use.")]
 
 
 def deep_merge(base: dict[str, Any], top: Mapping[str, Any]) -> dict[str, Any]:
@@ -453,57 +698,129 @@ def source_of(location: str, sources: Mapping[str, str]) -> str:
     return children[0] if children else "built-in defaults"
 
 
-def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str], depth: str | None = None) -> Settings:
-    path, data = load_profile(select_profile(profile, env), env)
-    layers = [profile_layer(path, data), env_layer(env)]
+def tree_get(tree: Mapping[str, Any], key: str) -> Any:
+    found: Any = tree
+    for part in key.split("."):
+        if not isinstance(found, Mapping) or part not in found:
+            return None
+        found = cast(Mapping[str, Any], found)[part]
+    return found
+
+
+class Resolved(NamedTuple):
+    settings: Settings
+    use: dict[str, str]
+    """The entry name chosen for each block."""
+
+
+def resolve_run(
+    profile: str | None, overrides: list[str], env: Mapping[str, str], depth: str | None = None
+) -> Resolved:
+    """The run's settings and entries; `use.<block>=<name>` overrides choose entries for this run."""
+    chosen_profile = read_profile(select_profile(profile, env), env)
+    env_values, env_use = env_layer(env)
+    run_values, run_use = override_layer(overrides)
+    chosen = pick_entries(list_entries(env), chosen_profile.use, env_use, run_use)
+    loaded = {block: read_entry(entry) for block, entry in chosen.items()}
+    model = str(
+        tree_get(run_values[0], "llm.model")
+        or tree_get(env_values[0], "llm.model")
+        or tree_get(chosen_profile.data, "llm.model")
+        or loaded["llm"].settings.get("model")
+        or ""
+    )
+    layers = [
+        entries_layer(loaded),
+        model_layer(loaded["llm"], model),
+        labelled(chosen_profile.data, f"profile {chosen_profile.path}"),
+        env_values,
+    ]
     if depth is not None and depth != CUSTOM_DEPTH:
-        layers.append(depth_layer(*load_depth(depth)))
-    return load_secrets(validate([*layers, override_layer(overrides)]))
+        layers.append(depth_layer(*load_depth(depth, env)))
+    settings = load_secrets(validate([*layers, run_values]))
+    return Resolved(settings, {block: entry.name for block, entry in chosen.items()})
+
+
+def resolve(profile: str | None, overrides: list[str], env: Mapping[str, str], depth: str | None = None) -> Settings:
+    return resolve_run(profile, overrides, env, depth).settings
+
+
+def resolve_server(env: Mapping[str, str]) -> Settings:
+    """What `wosarcherd serve` and `auth` need: defaults < the active profile's own keys < environment.
+
+    Needs no profile and no entry, so a fresh install can serve.
+    """
+    layers: list[Layer] = []
+    if list_profiles(env) or env.get(ENV_PREFIX + "PROFILE") or stored_profile(env):
+        found = read_profile(select_profile(None, env), env)
+        layers.append(labelled(found.data, f"profile {found.path}"))
+    return load_secrets(validate([*layers, env_layer(env)[0]]))
 
 
 def own_settings(profile: str, env: Mapping[str, str]) -> dict[str, Any]:
     """What the profile and the environment set, as flat dotted keys, before validation."""
-    path, data = load_profile(profile, env)
-    tree = deep_merge(profile_layer(path, data)[0], env_layer(env)[0])
+    tree = deep_merge(read_profile(profile, env).data, env_layer(env)[0][0])
     return depth_values(tree)
+
+
+def entry_settings(block: str, name: str, env: Mapping[str, str], gpu_policy: str = "shared") -> Settings:
+    """Defaults with one entry in its block (an llm entry with its default model's values)."""
+    data = read_entry(find_entry(block, name, env))
+    layers = [entries_layer({block: data}), labelled({"run": {"gpu_policy": gpu_policy}}, "the profile")]
+    if block == "llm":
+        layers.insert(1, model_layer(data, str(data.settings.get("model", ""))))
+    return load_secrets(validate(layers))
+
+
+def entry_block(data: EntryData) -> Provider:
+    """The entry validated as its block, defaults filled in; secrets are not read."""
+    block: Provider = getattr(validate([entries_layer({data.entry.block: data})]), data.entry.block)
+    return block
 
 
 # Depth presets
 
 
-def list_depths(directory: Path = BUILTIN_DEPTHS) -> dict[str, Path]:
-    """Every preset by name, in DEPTH_ORDER first, then by name."""
-    found = {path.stem: path for path in directory.glob("*.toml")}
+class Depth(NamedTuple):
+    name: str
+    path: Path
+    source: Literal["builtin", "user"]
+
+
+def list_depths(env: Mapping[str, str] | None = None) -> dict[str, Depth]:
+    """The built-in presets in DEPTH_ORDER, then the user's (`$XDG_CONFIG_HOME/wosarcher/depths/`) by name."""
     order = {name: index for index, name in enumerate(DEPTH_ORDER)}
-    return dict(sorted(found.items(), key=lambda item: (order.get(item[0], len(order)), item[0])))
+    builtin = sorted(BUILTIN_DEPTHS.glob("*.toml"), key=lambda path: (order.get(path.stem, len(order)), path.stem))
+    found = {path.stem: Depth(path.stem, path, "builtin") for path in builtin}
+    user = config_dir(env) / "depths" if env is not None else None
+    for path in sorted(user.glob("*.toml")) if user is not None else []:
+        if path.stem in found or path.stem == CUSTOM_DEPTH:
+            raise ConfigError(f"depth {path}: {path.stem} is a built-in depth name; rename the file")
+        found[path.stem] = Depth(path.stem, path, "user")
+    return found
 
 
 def unknown_depth(name: str, available: Mapping[str, object]) -> ConfigError:
     return ConfigError(f"unknown depth '{name}'; available: {', '.join(available)}")
 
 
-def read_depth(name: str, directory: Path = BUILTIN_DEPTHS) -> tuple[Path, str, dict[str, Any]]:
-    """The preset's path, description, and settings; any key outside DEPTH_KEYS fails."""
-    available = list_depths(directory)
+def read_depth(name: str, env: Mapping[str, str] | None = None) -> tuple[Depth, str, dict[str, Any]]:
+    """The preset, its description, and its settings; any key outside DEPTH_KEYS fails."""
+    available = list_depths(env)
     if name not in available:
         raise unknown_depth(name, available)
-    path = available[name]
-    try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"depth {path}: {error}") from error
-    description = data.pop("description", "")
-    if not isinstance(description, str):
-        raise ConfigError(f"depth {path}: description must be a string")
+    depth = available[name]
+    data = read_toml("depth", depth.path)
+    description = pop_description("depth", depth.path, data)
     for key in leaf_keys(data):
         if key not in DEPTH_KEYS:
-            raise ConfigError(f"depth {path}: {key} cannot be set by a depth preset")
-    return path, description, data
+            raise ConfigError(f"depth {depth.path}: {key} cannot be set by a depth preset")
+    return depth, description, data
 
 
-def load_depth(name: str, directory: Path = BUILTIN_DEPTHS) -> tuple[Path, dict[str, Any]]:
-    path, _, data = read_depth(name, directory)
-    return path, data
+def load_depth(name: str, env: Mapping[str, str] | None = None) -> tuple[Path, dict[str, Any]]:
+    depth, _, data = read_depth(name, env)
+    return depth.path, data
 
 
 def depth_values(data: Mapping[str, Any]) -> dict[str, Any]:
@@ -518,7 +835,7 @@ def depth_values(data: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def depth_layer(path: Path, data: dict[str, Any]) -> Layer:
-    return data, {key: f"depth {path}" for key in leaf_keys(data)}
+    return labelled(data, f"depth {path}")
 
 
 def validate(layers: list[Layer]) -> Settings:
@@ -774,17 +1091,45 @@ def prune_unknown(
     return out, dropped
 
 
-def restore_secrets(
-    saved: Mapping[str, Any], current: Settings, overrides: list[str] | None = None
-) -> tuple[Settings, list[str]]:
-    """Validate saved (redacted) settings, secrets taken from `current`, then `overrides` on top.
+def fork_settings(
+    saved: Mapping[str, Any],
+    parent_use: Mapping[str, str],
+    use: Mapping[str, str],
+    overrides: list[str],
+    env: Mapping[str, str],
+) -> tuple[Resolved, list[str]]:
+    """A fork's settings: the parent's saved (redacted) settings, then `use` and `overrides` on top.
 
-    Keys the current `Settings` does not know are dropped and returned as dotted paths. Saved
-    `*_file` and `*_command` keys are ignored: secrets come from `current`.
+    Secrets come from the current entries the parent used. A block in `use` is replaced by
+    that entry's fields (profile and depth keys stay as saved); for `llm`, the chosen
+    model's values apply again. Keys the current `Settings` does not know are dropped and
+    returned as dotted paths. Saved `*_file` and `*_command` keys are ignored.
     """
     pruned, dropped = prune_unknown(saved, Settings)
-    restored = unredact(drop_sources(pruned), current)
-    return load_secrets(validate([(restored, {}), override_layer(overrides or [])])), dropped
+    entries = list_entries(env)
+    names = {**parent_use, **use}
+    for block, name in names.items():
+        if block not in BLOCKS:
+            raise ConfigError(f"unknown block '{block}'; choose from {', '.join(BLOCKS)}")
+        if name not in entries[block]:
+            raise unknown_entry(block, name, entries[block])
+    loaded = {block: read_entry(entries[block][name]) for block, name in names.items()}
+    current = validate([entries_layer(loaded)])
+    tree = unredact(drop_sources(pruned), load_secrets(current))
+    sources: dict[str, str] = {}
+    for block in use:
+        kept = {key: value for key, value in tree.get(block, {}).items() if entry_owner(block, key) == "profiles own"}
+        tree[block] = {**loaded[block].settings, **kept}
+        sources.update({f"{block}.{key}": loaded[block].entry.label for key in leaf_keys(loaded[block].settings)})
+    run_values, run_use = override_layer(overrides)
+    if run_use:
+        raise ConfigError("a fork chooses entries with --use, not --set use.<block>")
+    if "llm" in use:
+        model = str(tree_get(run_values[0], "llm.model") or loaded["llm"].settings.get("model") or "")
+        tree = deep_merge(tree, deep_merge(model_defaults(), model_tree(loaded["llm"], model)))
+        tree["llm"]["model"] = model
+    settings = load_secrets(validate([(tree, sources), run_values]))
+    return Resolved(settings, dict(names)), dropped
 
 
 def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:

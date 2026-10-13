@@ -130,8 +130,8 @@ on a small local model). With `auto` it is the room `llm.context_window`
 leaves after `select.prompt_reserve_tokens`, the gap call's output limit
 (768 tokens), and the estimated tokens of the main query and the existing
 queries' text; a budget of 0 or less fails the gap step. A large-window
-deployment sets `auto` in its profile, with `--gap-context-tokens`, or in
-the API's `research.gap_context_tokens`.
+deployment sets `auto` for its model in the llm entry (`models.<id>`), with
+`--gap-context-tokens`, or in the API's `llm.gap_context_tokens`.
 
 The loop and its bookkeeping (`RoundState`: round number, counted pages
 fetched so far, URLs seen, the scorer in use) live in the runner; the stages stay
@@ -307,24 +307,26 @@ one after another, each in large batches.
 
 Every model provider is an HTTP endpoint, so a model can run on this machine
 or on another machine in the local network; the pipeline does not care. Each
-provider block names its endpoint and, optionally, the device it runs on:
+provider entry (one file per entry under `providers/<block>/`, see
+Configuration) names its endpoint and, optionally, the device it runs on:
 
 ```toml
-[prefilter]
+# providers/prefilter/embeddings.toml
 provider = "embeddings"
 base_url = "http://desktop.lan:8002/v1"
 device = "desktop:gpu0"        # free-form label; omit for cloud or CPU
 
-[score]
+# providers/score/rerank.toml
 provider = "rerank"
 base_url = "http://desktop.lan:8001/v1"
 device = "desktop:gpu0"
 release = "llama-swap"         # none | llama-swap | ollama
 
-[llm]
+# providers/llm/laptop.toml
 provider = "openai"
 base_url = "http://localhost:8080/v1"
 device = "laptop:gpu0"
+model = "qwen3-14b"
 ```
 
 `base_url` includes the API version (`/v1`, or `/v2` for Cohere), as in
@@ -358,9 +360,10 @@ device labels decide when a release is needed.
 
 Remote endpoints:
 
-- **Config only.** Machines are named by URL in a profile; no discovery
-  service. A typical setup is one profile per machine, for example
-  `laptop.toml` pointing embeddings and reranker at the desktop.
+- **Config only.** Machines are named by URL in provider entries; no
+  discovery service. A typical setup is one entry per endpoint, for example
+  `score/desktop-rerank.toml` pointing at the desktop, and a profile (or a
+  run's `--use`) that picks the entries.
 - **Failover.** `fallback_urls` lists other endpoints serving the same model,
   tried in order when the first is unreachable. Load balancing across hosts
   is out of scope; put LiteLLM or llama-swap in front if needed.
@@ -368,8 +371,8 @@ Remote endpoints:
   a sleeping machine fails fast and the fallback chain takes over (BM25 for
   prefilter and score). The read `timeout` defaults to 60 s, and to 300 s in
   the `llm` block: a small local model on a consumer GPU can take minutes to
-  process a long prompt before its first token. The local profiles set
-  `llm.timeout = 600` so a model load behind llama-swap also fits.
+  process a long prompt before its first token. A local llm entry sets
+  `timeout = 600` so a model load behind llama-swap also fits.
   Larger batches amortise network latency.
 - **Retries.** HTTP 429, 502, 503, 504, and 529 are retried on the same URL
   with exponential backoff (0.5 s doubling, each wait at most 8 s) or the
@@ -381,15 +384,17 @@ Remote endpoints:
 - **Payload size.** Request `encoding_format: "base64"` for embeddings when
   the server supports it; JSON float arrays are several times larger.
 - **Security.** Run llama-server with `--api-key` and bind to the LAN
-  interface or a VPN such as Tailscale, not to all interfaces. The `api_key`
-  field of each provider block carries the key.
+  interface or a VPN such as Tailscale, not to all interfaces. Each entry
+  carries its key, usually as `api_key_file` (Configuration, Secrets).
 - **Cache correctness.** The embedding cache key is content SHA-256 plus the
   model name reported by the endpoint plus vector dimension, so pointing at a
   different machine with a different model never reuses wrong vectors. The
   runner reads model and dimension from `embedder.describe()` once before
   the prefilter stage; when that fails it passes no cache. Vectors live in
   `<cache_dir>/embeddings/<model>/<dim>/<sha[:2]>/<sha>.f32` (raw float32).
-- **Health.** `wosarcherd doctor` (or `wosarcher doctor` through the daemon) checks each endpoint: reachable, model name,
+- **Health.** `wosarcherd doctor` (or `wosarcher doctor` through the
+  daemon) checks each endpoint of a profile's combination of entries, or
+  the entries named with `--entry` (`--all-entries` for all): reachable, model name,
   latency of one small request, unload support (llama-swap answers
   `GET <root>/running`, Ollama `GET <root>/api/version`). Checks run only on
   request (the CLI, a Check click in Settings, or `run.preflight`), because
@@ -404,8 +409,8 @@ Remote endpoints:
 - A score is always for a pair: `Score(query_id, chunk_id, value, scorer)`.
 - Every chunk, web or file, is paired with the main query and each
   sub-query; no setting narrows it. Only
-  pairs that survive the prefilter (`prefilter.top_k` per query, default
-  50, by embedding similarity or BM25, or all with `none`) reach the
+  pairs that survive the prefilter (`score.candidates` per query, default
+  50, a property of the scorer entry; by embedding similarity or BM25, or all with `none`) reach the
   scorer. If the embedder fails, or returns a vector of another dimension,
   the prefilter uses BM25 for the whole stage and records a warning.
   Embeddings are cached by the SHA-256 of the text embedded, so a scoring
@@ -819,7 +824,7 @@ src/wosarcher/
   config.py      # settings, profiles, precedence, secret redaction; hooks.toml (HookEntry, load_hooks, resolve_hook)
   auth.py        # password hashing, API tokens, session signing, auth.json (AuthStore); stdlib only, no FastAPI
   http.py        # ProviderClient: retry with backoff, fallback URLs, per-provider semaphore, SSE streams; unload; UsageLedger
-  profiles/      # built-in low-vram.toml, workstation.toml, cloud.toml
+  depths/        # built-in depth presets quick.toml, standard.toml, deep.toml, exhaustive.toml
   store/         # __init__.py: RunStore (create, fork, artifacts, events.jsonl with seq, list_runs); caches.py: PageCache, EmbeddingCache
   runner/        # __init__.py: Runner (stage loop, research rounds, timeouts, costs, cancel); steps.py: one function per stage, RoundState;
                  # events.py: EventLog, snapshot_event; devices.py: needs_release; caches.py: CachedFetcher, EmbeddingMapping
@@ -888,7 +893,7 @@ trusted values (query, options). Scraped text never goes through templates.
 ```
 runs/<id>/
   .lock              # held with LOCK_EX by the run process until it exits
-  request.json       # RunRecord: request, profile, overrides, resolved config (secrets "***"), lineage, origin
+  request.json       # RunRecord: request, profile, use (the entry per block), depth, overrides (per-run choices as use.<block>=<name>), resolved config (secrets "***"), lineage, origin
   attachments/       # copies of --attach files, directories, and globs
   files.jsonl        # load: attachment pages
   plan.json          # plan, then each round's follow-up queries
@@ -947,7 +952,7 @@ artifacts and a `stage.done` with `skipped`. Each stage has a timeout in
 ### Commands
 
 Two commands share the run options. `wosarcherd` reads the configuration
-(profiles, secrets, `auth.json`) and writes run directories. `wosarcher`
+(provider entries, profiles, depth presets, secrets, `auth.json`) and writes run directories. `wosarcher`
 does every action through the daemon's API (see Server) and never reads a
 profile, a secret, or a run directory.
 
@@ -960,15 +965,17 @@ settings (`config.CLIENT_ENV`). When the connection fails every command
 prints one error naming the socket path or URL and `wosarcherd`, and exits
 69 (`EX_UNAVAILABLE`); a 401 exits 2 naming `WOSARCHER_TOKEN`.
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--profile NAME] [--depth NAME] [--set k=v]... [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--profile NAME] [--use BLOCK=NAME]... [--depth NAME] [--set k=v]... [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--json]`:
   creates the run with `POST /api/runs`: the writing flags as `writing`,
   the research flags as `research`, the domain flags as `domains`,
-  `--search-language` as `search_language`, `--model` and the thinking
-  flags as `llm`, and `--set` as `set`, so the server's precedence applies
-  (see Server). `--attach` paths (files, directories, globs) are expanded
-  by the client and uploaded. Values the client can check (`--format`, the
-  thinking levels, `--search-language`, the domain entries, `--until`,
-  `--sources files` without `--attach`) exit 2 before a request; a 4xx
+  `--search-language` as `search_language`, `--use` as `use`, `--model`,
+  the thinking flags, `--context-window`, `--max-output`,
+  `--context-tokens`, and `--gap-context-tokens` as `llm`, and `--set` as
+  `set`, so the server's precedence applies (see Server). `--attach` paths
+  (files, directories, globs) are expanded by the client and uploaded.
+  Values the client can check (`--format`, the thinking levels,
+  `--search-language`, the domain entries, `--until`, the block of
+  `--use`, `--sources files` without `--attach`) exit 2 before a request; a 4xx
   answer exits 2 printing its detail. The command then follows the run on
   its event socket from `since=0`: on a terminal the progress view (rows per
   stage; a `gap` row only for multi-round runs, "round k/N" on running loop
@@ -985,7 +992,7 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   stopped at `select`. Exit status: 0 done, 1 failed, 130 cancelled, 2
   invalid arguments, a request the server rejects, or a run the engine
   rejected before its first stage (an invalid override), 69 no daemon.
-- `wosarcher fork <id> --from <stage> [--set k=v]... [writing flags] [--gap-context-tokens N|auto] [--model NAME] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--profile NAME] [--until ...] [--json]`:
+- `wosarcher fork <id> --from <stage> [--set k=v]... [writing flags] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--use BLOCK=NAME]... [--profile NAME] [--until ...] [--json]`:
   creates the fork with `POST /api/runs/{id}/fork` and follows it like
   `run`; a queued or running parent exits 2 printing the server's 409
   detail, and a fork that fails before its first stage exits 1.
@@ -1010,16 +1017,25 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   `export_unavailable` or `export_failed` (the route's detail); 2 an unknown
   run, a run without a report, an unknown format, or an existing file
   without `--force`.
-- `wosarcher doctor [--profile NAME] [--block NAME]... [--json]`: asks the
-  daemon to check its providers (`POST /api/providers/health/check`) and
-  prints the report's rows (only the chosen blocks with `--block`); exit 1
-  when a block is `down`.
+- `wosarcher doctor [--profile NAME] [--use BLOCK=NAME]... [--block NAME]... [--json]`:
+  reads the profile's entries from `GET /api/profiles`, applies `--use`,
+  keeps the blocks named by `--block`, asks the daemon to check those
+  entries (`POST /api/providers/check`), and prints their rows; exit 1
+  when one is `down`. There is no `--set` on the client.
+- `wosarcher providers list [--block BLOCK] [--json]`: the entries of
+  `GET /api/providers`, grouped by block (search, fetch, prefilter, score,
+  llm), one line each: name, source (`(built-in)` or `(user)`), adapter,
+  and description; an llm entry adds an indented line per listed model with
+  its window and output limit, the default marked `(default)`. An unknown
+  block exits 2 naming the five.
 - `wosarcher profile list` and `wosarcher profile show [NAME]`: the
-  profiles `GET /api/profiles` returns (source, description, `*` for the
-  active one) and one profile's resolved configuration, secrets as `***`.
+  profiles `GET /api/profiles` returns (`*` for the active one, source,
+  the entries it uses as `search · fetch · prefilter · score · llm`,
+  description), and one profile's five `use` lines, its own values, then
+  its resolved configuration, secrets as `***`.
 - `wosarcher depth list` and `wosarcher depth show NAME`: the presets from
-  `GET /api/depths` and the values a preset runs with; an unknown name exits
-  2 with the known names.
+  `GET /api/depths` (built-in, then user presets marked `(user)`) and the
+  values a preset runs with; an unknown name exits 2 with the known names.
 - `wosarcher tokens new <name>` (prints the token once), `tokens list` (ID,
   name, masked last 4 characters, creation, last use), and `tokens revoke
   <id>`: the token routes, which need the socket or a browser session; over
@@ -1032,8 +1048,9 @@ completion: `add_completion=False`), completes every command, subcommand,
 flag, and fixed option value (stages, sources, formats, citation markers,
 reference styles, tones, thinking levels, doctor blocks, `all`/`auto`,
 `auto`, files). Run IDs (described by their query), profile names, and
-depth presets come from the daemon through the command being completed
-(`runs --json --limit 50`, `profile list`, `depth list`), so it uses the
+depth presets, and entry names (for `--use BLOCK=` and `--entry`) come from
+the daemon through the command being completed (`runs --json --limit 50`,
+`profile list`, `depth list`, `providers list`), so it uses the
 same connection environment; each call is capped at 2 seconds with
 `timeout`, its stderr is discarded, and a failure offers nothing. Token IDs
 for `tokens revoke` are not completed. `scripts/check_completions.py` (run
@@ -1051,14 +1068,18 @@ commands, flags, or the value lists that mirror package constants.
   write the run directory, holding its run lock. Writing flags act as `--set
   write.<field>=...` and research flags as `--set` on
   `plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`,
-  `score.top_k`, `select.max_context_tokens`,
-  `research.gap_context_tokens`, `research.rounds`, and
-  `research.queries_per_round`, after the `--set` values; the domain flags
+  `score.top_k`, `research.rounds`, and `research.queries_per_round`, after
+  the `--set` values; `--context-tokens` and `--gap-context-tokens` set
+  `select.max_context_tokens` and `research.gap_context_tokens`; the domain flags
   set `search.allow_domains` and `search.block_domains` as JSON lists, and
   `--search-language` sets `search.language` as a quoted string, next to
-  them; `--model` and the thinking flags act as `--set llm.model="NAME"`
-  and `--set llm.reasoning.<step>=<level>` after the domain lists, so forks
-  and reruns keep them. `--until` on a loop stage stops after that stage in
+  them; `--model`, `--context-window`, `--max-output`, and the thinking
+  flags act as `--set llm.model="NAME"`, `llm.context_window`,
+  `llm.max_output_tokens`, and `llm.reasoning.<step>=<level>` after the
+  domain lists, so forks and reruns keep them. `--use BLOCK=NAME`
+  (repeatable) picks the entry of a block for this run and is recorded as
+  the override `use.<block>=<name>`; an unknown block or entry exits 2
+  before a run directory exists. `--until` on a loop stage stops after that stage in
   round 1. `--depth` applies a depth preset below all of them and is
   recorded in `request.json`; forks keep it. `--attach` paths are read by
   the engine process. `--run-id` lets the server choose the ID; an existing
@@ -1071,20 +1092,33 @@ commands, flags, or the value lists that mirror package constants.
   copied `stage.done` per earlier stage whose `copied_from` names the run
   that executed the stage (the parent's own `copied_from` when it copied
   the stage too, else the parent), and continues with the saved config
-  (secrets taken from the current environment) plus the overrides. With
-  `--profile`, settings come from that profile plus the parent's and the
-  new overrides. Saved keys the current configuration does not know are
+  plus the overrides. Secrets come from the current entries the parent
+  recorded in `request.json` `use`; a recorded entry that is gone fails
+  the fork, naming the block and the entry and listing that block's
+  entries, unless the fork's `--use` replaces that block. `--use` replaces
+  the saved block with the current entry (the profile-owned keys of that
+  block are kept), and for `llm` the chosen model's values apply again. A
+  parent recorded without `use` takes its secrets from resolving its
+  profile. With `--profile`, settings come from that profile, the fork's
+  `--use`, and the parent's and the new overrides; the parent's entry
+  choices do not carry over. Saved keys the current configuration does not know are
   dropped before validation, with one stderr line `warning: saved settings
   dropped: llm.reasoning_tokens, ...`; a saved value the configuration
   rejects still fails with exit 2. Exit status: 0 done, 1 failed, 130
   cancelled, 2 invalid arguments or configuration.
-- `wosarcherd doctor [--profile <name>] [--set k=v] [--block <name>...] [--json]`:
-  `--block` (repeatable) limits the check, its rows, and its warnings to the
-  named blocks; an unknown name fails before any request. One row per
-  block (provider, base URL, device, status, model, latency, unload support;
-  `--json` adds each block's configured `release` and the profile's
-  `gpu_policy`);
-  built-in scorers are shown without a request. Warns about blocks that
+- `wosarcherd doctor [--profile <name>] [--use BLOCK=NAME]... [--set k=v] [--block <name>...] [--json]`
+  checks the five blocks of the resolved combination; `--block`
+  (repeatable) limits the check, its rows, and its warnings to the named
+  blocks; an unknown name fails before any request. `wosarcherd doctor
+  --entry BLOCK=NAME... | --all-entries [--json]` checks those entries
+  alone, one row each, without a profile's choice: an llm entry is probed
+  with its default model and checked against that model's limits, and the
+  GPU policy comes from the selected profile, or `shared` when none
+  resolves; it does not combine with `--block` or `--use`, and an unknown
+  entry fails naming the block's entries. One row per block or entry
+  (block, entry, provider, base URL, device, status, model, latency, unload
+  support; `--json` adds each row's configured `release` and the
+  `gpu_policy`); built-in entries are shown without a request. Warns about blocks that
   cannot unload. After a successful LLM probe it reads the server's `n_ctx`
   from `GET <root>/props` (or `<root>/upstream/<model>/props` behind
   llama-swap), shows it as a note, and warns when it is below
@@ -1229,26 +1263,33 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   and so are sources `files` with no attachment, as `invalid_attachment`
   before anything is staged) returns 201 with `run_id` and `queued` or
   `running`. `RunCreate` has `query`, optional `sources`, `until`,
-  `profile`, `depth` (a preset name or `custom`; unknown is 422 naming
-  `depth`), `research` (`sub_queries`, `results_per_query`, `max_pages`,
-  `passages_per_query`, `context_tokens`, `gap_context_tokens`, `rounds`
-  at most 8, `queries_per_round`; the two token values may also be
-  `auto`), `writing`, `domains` (`allow`, `block`, each optional; a given
+  `profile`, `use` (any of `search`, `fetch`, `prefilter`, `score`, `llm`,
+  each an entry name of that block; an unknown block or entry is 422 naming
+  `use.<block>` and listing that block's entries), `depth` (a built-in or
+  user preset name, or `custom`; unknown is 422 naming `depth`), `research`
+  (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
+  `rounds` at most 8, `queries_per_round`), `writing`, `domains` (`allow`, `block`, each optional; a given
   list replaces the configured one for this run; an invalid entry is 422
   naming `domains.allow` or `domains.block` and the entry),
   `search_language` (sets `search.language`; null keeps the configured
   value; an invalid value is 422 naming `search_language`), `llm`
-  (`model`, a non-empty string, and `reasoning`, any of `plan`, `gap`,
-  `write` with a thinking level; an invalid level is 422 naming
-  `llm.reasoning` and the step), and `set`. Request
-  precedence, each later layer winning: defaults, profile, environment,
-  global settings, the depth preset, the request's `sources`, `research`,
-  `writing`, `domains`, and `llm`, then its `set`. The server builds the writing
-  flags from the global writing, then the preset's `write.words`, then the
-  request's `writing`; passes `--depth`; and emits the research values,
-  then the domain lists and the search language, then `llm.model` and
-  `llm.reasoning.<step>`, as `--set` after the writing flags and before the
-  request's `set`. `POST /api/runs/{id}/fork` accepts the same `llm`. The global domain lists sit below the profile instead:
+  (`model`, a non-empty string; `reasoning`, any of `plan`, `gap`,
+  `write` with a thinking level; `context_window` and `max_output_tokens`,
+  positive integers; `context_tokens` and `gap_context_tokens`, a positive
+  integer or `auto`, setting `select.max_context_tokens` and
+  `research.gap_context_tokens`; an invalid value is 422 naming
+  `llm.<field>`), and `set`. Request precedence, each later layer
+  winning: defaults, the chosen entries, the chosen model's values,
+  profile, environment, global settings, the depth preset, the request's
+  `sources`, `research`, `writing`, `domains`, and `llm`, then its `set`;
+  the request's `use` picks entries (see Configuration). The server builds
+  the writing flags from the global writing, then the preset's
+  `write.words`, then the request's `writing`; passes `--use` per chosen
+  block and `--depth`; and emits the research values, then the domain
+  lists and the search language, then `llm.model`, the `llm` limits and
+  budgets, and `llm.reasoning.<step>`, as `--set` after the writing flags
+  and before the request's `set`. `POST /api/runs/{id}/fork` accepts the
+  same `llm` and `use`; an unknown entry is 422. The global domain lists sit below the profile instead:
   at staging, a non-empty global list is passed as `--set` only when
   neither the run's profile nor the environment sets that list (the same
   resolution `GET /api/profiles` uses), so a profile's own list wins. The
@@ -1263,7 +1304,10 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `research.done`, 1 for a single-round run past the loop, else null;
   `stop_reason`, null for single-round runs; `model`, the resolved
   `llm.model`, empty when none; `reasoning`, the resolved `plan`, `gap`,
-  and `write` levels, `none` for older runs), and for one
+  and `write` levels, `none` for older runs; `use`, the entry of each block
+  from `request.json`, null for runs recorded without it; `modified`, true
+  when the request or its saved overrides changed a block choice or an
+  `llm` field of the profile's Advanced values), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
   Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
@@ -1349,10 +1393,13 @@ filter replaces images with their alt text, so no file or URL is read.
   not the global settings. 409 for a queued or running parent or an
   unfinished earlier stage; 422 for an unknown stage.
 - `POST /api/runs/{id}/rerun`: a new run (version 1, no parent) with the
-  original query, sources, `until`, profile, depth, and saved overrides, and a
-  copy of its `attachments/`; global settings are not applied. 404 for an
-  unknown run, 409 for a queued one, 422 `invalid_attachment` for sources
-  `files` without attachments.
+  original query, sources, `until`, profile, depth, `--use` for the five
+  entries recorded in `request.json` `use`, and the saved overrides
+  without their `use.*` entries, and a copy of its `attachments/`; global
+  settings are not applied. The entries are resolved again by name, so
+  edits to them apply, and a recorded entry that is gone fails the new run
+  before its first stage. 404 for an unknown run, 409 for a queued one, 422
+  `invalid_attachment` for sources `files` without attachments.
 - `WS /api/runs/{id}/events?since=<seq>`: replays logged events after
   `seq`, sends a `report.snapshot` when the report is not empty and
   `run.queued` while queued, then live events and `report.delta` until a
@@ -1379,44 +1426,57 @@ filter replaces images with their alt text, so no file or URL is read.
 - `DELETE /api/runs/{id}`: 204 for a finished run, a queued one, or one
   that ended without a run directory (forgotten), 409 `run_active` for a
   running one.
-- `GET /api/profiles`: `name`, `source` (`builtin` or `user`), `active`,
-  `description` (empty when the profile sets none), and the resolved
-  `context_window`, `prompt_reserve_tokens`, and `max_output_tokens` (all
-  null when the profile does not resolve), so the New
-  run form can show the effective context budget; `allow_domains` and
-  `block_domains`, the list the profile (or the environment) sets, or null
-  when it sets none, so a client can tell a profile's list from the global
-  default; and `settings`, the resolved configuration with secrets as
-  `***` (null when it does not resolve), which `wosarcher profile show`
-  prints.
-- `GET /api/models[?profile=P]`: `{"models": [...]}`, the IDs the
-  profile's LLM endpoint lists at `GET <base_url>/models`, in order; an
-  empty list (still 200) when the request fails, the answer is not a list,
-  or the profile does not resolve. Nothing is inferred from the list.
-- `GET /api/depths`: the presets in order (`quick`, `standard`, `deep`,
-  `exhaustive`), each `DepthInfo` with `name`, `description`, and `values`
+- `GET /api/profiles`: `ProfileInfo` per profile: `name`, `source`
+  (`user`), `active`, `description` (empty when the profile sets none),
+  `use`, the entry each block resolves to (environment included; null for
+  a block that cannot be resolved), `model`, the profile's own
+  `llm.model` (null: the entry's default model applies), the resolved
+  `context_tokens` (`select.max_context_tokens`) and
+  `prompt_reserve_tokens`; `allow_domains` and `block_domains`, the list
+  the profile (or the environment) sets, or null when it sets none, so a
+  client can tell a profile's list from the global default; `settings`,
+  the resolved configuration with secrets as `***`, which `wosarcher
+  profile show` prints; and `error`, why it does not resolve (the resolved
+  values are then null). Model limits come from `GET /api/providers`.
+- `GET /api/providers`: `ProvidersReport`, sends no probe: the active
+  `profile`, its `gpu_policy`, the last check's `warnings`, and `entries`,
+  every entry in block order (search, fetch, prefilter, score, llm), then
+  by name, as `ProviderEntryInfo`: `block`, `name`, `source` (`builtin` or
+  `user`), `description`, `provider`, `url` (the `base_url`), `model` (the
+  default model), `device`, `release`, for an llm entry `models`
+  (`ModelInfo`: `id`, `context_window`, `max_output_tokens`, `reasoning`,
+  `gap_context_tokens`, null where unset; the default model first), and its
+  stored health (`status`, `latency_ms`, `detail`, `checked_at`). A
+  built-in entry is `skipped`, an entry never checked `unchecked`. An entry
+  that fails to load is listed with an `error` instead of failing the
+  route. No secret, `*_file` path, or `*_command` appears. Stored results
+  live in memory on `ServerState.health` (`server/health.py`), keyed by
+  (block, entry) with a fingerprint of provider, base URL, and model; a
+  stored result whose fingerprint no longer matches the entry is ignored,
+  and all of them are lost when the server restarts.
+- `POST /api/providers/check` with optional `{"entries": ["<block>/<name>",
+  ...]}` (`ProvidersCheck`; none means every entry): 400 `invalid_entry`
+  for an unknown block or entry, else runs `wosarcherd doctor --json
+  --entry BLOCK=NAME...` (or `--all-entries`) under the active profile,
+  under a lock (one check at a time; 60 s timeout; 502 when it times out
+  or prints no report, stored results unchanged), stores each checked
+  entry's row with the time of the check, replaces the stored warnings,
+  and returns what `GET /api/providers` returns afterwards. Mapping: failed
+  is `down` (error as detail), a model that cannot unload or a probe over
+  1000 ms is `degraded`, else `ok`.
+- `GET /api/models[?llm=NAME]`: `{"models": [...]}`, the IDs the llm
+  entry `NAME` (the active profile's llm entry without `llm`) lists at
+  `GET <base_url>/models`, in order, through its fallback URLs; an empty
+  list (still 200) when the request fails, the answer is not a list, or
+  the active profile does not resolve; 400 `invalid_entry` for an unknown
+  entry. Nothing is inferred from the list.
+- `GET /api/depths`: the built-in presets in order (`quick`, `standard`,
+  `deep`, `exhaustive`), then the user presets by name, each `DepthInfo`
+  with `name`, `description`, `source` (`builtin` or `user`), and `values`
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
-  `context_tokens`, `gap_context_tokens`, `rounds`, `queries_per_round`,
-  the built-in default where the preset sets none; the two token values
-  are a number or `auto`, and `words`, null when the preset leaves it to
-  the global setting).
-- `GET /api/providers/health[?profile=P]`: sends no probe. It resolves the
-  profile in the server process (400 `invalid_profile` on a configuration
-  error) and lists one check per block, merged with the last stored check
-  of that profile and block: built in is `skipped`, a block never checked
-  is `unchecked`, and a stored check whose configured provider, base URL,
-  or model no longer matches is ignored. Each check carries its
-  `checked_at`, the report the profile's `gpu_policy`, the last check's
-  warnings, and each check its `release`. Stored checks live in memory on
-  `ServerState.health` (`server/health.py`) until the server restarts.
-- `POST /api/providers/health/check[?profile=P]` with optional
-  `{"blocks": [...]}` (`HealthCheckRequest`; none means every block): 400
-  `invalid_block` for an unknown name, else runs `wosarcherd doctor --json
-  [--block ...]` under a lock (one check at a time; 60 s timeout; 502 when
-  it times out or prints no report, stored checks unchanged), stores each
-  row with the time of the check, and returns the merged report. Mapping:
-  failed is `down` (error as detail), a model that cannot unload or a probe
-  over 1000 ms is `degraded`, else `ok`.
+  `rounds`, `queries_per_round`, the built-in default where the preset sets
+  none, and `words`, null when the preset leaves it to the global
+  setting).
 - `POST /api/login`, `POST /api/logout`, `GET /api/session`
   (`SessionInfo`): see Authentication.
 - `GET /api/tokens` (`TokenInfo`: ID, name, masked last 4 characters,
@@ -1430,7 +1490,8 @@ filter replaces images with their alt text, so no file or URL is read.
 
 Request and response bodies (`RunCreate`, `ForkCreate`, `RunCreated`,
 `RunSummary`, `RunDetail`, `ServerSettings`, `ProfileInfo`,
-`ProviderCheck`, `HealthReport`, `HealthCheckRequest`, `ApiError`, `RunNotActive`, `LoginRequest`,
+`DepthInfo`, `ProviderEntryInfo`, `ModelInfo`, `ProvidersReport`,
+`ProvidersCheck`, `ApiError`, `RunNotActive`, `LoginRequest`,
 `SessionInfo`, `TokenInfo`, `TokenCreate`, `TokenCreated`, `LoginError`) are models in `models.py` and
 part of `wosarcher schema`.
 
@@ -1489,7 +1550,8 @@ which `Requires` it and starts on the first connection; with `autoStart`
 the service is also wanted by `multi-user.target`. tmpfiles creates
 `/run/wosarcher` 0750 `wosarcher:wosarcher` (a `RuntimeDirectory` would be
 removed with the socket when the service stops) and the data directories
-0700; `StateDirectoryMode=0700`. Declared profiles and hooks are copied
+0700; `StateDirectoryMode=0700`. Declared profiles, provider entries,
+depth presets, and hooks are copied
 0600 by an `ExecStartPre=+` step that runs as root to set ownership; it
 also removes group and other access from everything under
 `/var/lib/wosarcher`. Only the service user reads the data: members of the
@@ -1616,15 +1678,119 @@ Settings: `auth.password_hash` (or `_file`, `_command`), `auth.session_days`, `a
 
 ### Configuration
 
-Precedence: built-in defaults < profile < environment < server global
-settings (server runs only) < depth preset < CLI flags or request fields.
+Precedence, lowest first:
+
+```
+defaults
+ < entries      (each block replaced whole by its chosen entry)
+ < model        (models.<id> of the llm entry, when it lists the model)
+ < profile      (its own keys)
+ < environment  (profile-owned keys and WOSARCHER_USE__<BLOCK>)
+ < server global settings (server runs only)
+ < depth preset
+ < run          (CLI flags, request fields, --set)
+```
+
 The server's global domain lists are the exception: they apply only when
 the profile and environment set no list of their own (see Server). The
 profile name itself is read from the CLI or environment first, then the
-profile loads. `config.resolve(profile, overrides, env, depth)` does the
-whole resolution in one function and validates once; errors name the source
-of the bad value (profile file, environment variable, depth preset file, or
-`--set` override).
+profile loads. The model id is the run's `llm.model`, else the profile's,
+else the entry's `model`; it is read from the parsed layers before the
+model layer is built. `config.resolve_run(profile, overrides, env, depth)`
+does the whole resolution in one function (a `use.<block>=<name>` override
+picks an entry) and validates once; errors
+name the source of the bad value (entry file, `models.<id>` in that file,
+profile file, environment variable, depth preset file, or `--set`
+override).
+
+**Provider entries.** Each block's settings come from a named entry,
+`$XDG_CONFIG_HOME/wosarcher/providers/<block>/<name>.toml`, with the block
+one of `search`, `fetch`, `prefilter`, `score`, `llm`. The directory, not
+the `provider` field, decides the block (`bm25` is valid in both
+`prefilter` and `score`), and the file holds the block's fields at the top
+level, with an optional one-line `description`; a directory under
+`providers/` that is not a block fails resolution naming the five blocks.
+Built-in entries need no file (`BUILTIN_ENTRIES`): prefilter `bm25` and
+`none`, and score `bm25`; a user file with the same block and name
+replaces one. `list_entries` lists them with source `builtin` or `user`,
+and `read_entry` loads and checks one file.
+
+```toml
+# providers/score/jev-strict.toml
+description = "TypeSafe Jev; keeps passages that partly answer or better."
+provider = "jev"
+base_url = "https://api.typesafe.ai/v1"
+api_key_file = "/run/secrets/typesafe"
+candidates = 100
+min_score = 2.0
+
+# providers/llm/omniroute.toml
+provider = "openai"
+base_url = "http://ssc:20700/v1"
+api_key_file = "/run/secrets/omniroute"
+model = "research-smart"        # default model
+timeout = 300
+
+[models.research-smart]
+context_window = 1048576
+max_output_tokens = 131072
+gap_context_tokens = "auto"
+reasoning = { write = "low" }
+```
+
+An llm entry is an OpenAI-compatible endpoint with a default `model` and an
+optional `models` table keyed by model id. A model may set only
+`context_window`, `max_output_tokens`, `reasoning`, and
+`gap_context_tokens` (`MODEL_FIELDS`); any other key fails naming the file
+and the model. A model the table does not list gets the built-in defaults:
+32768 / 8192, reasoning `none`, gap budget 4000.
+
+**Key ownership.** Every key has one owner, and each loader checks its own
+column when its file loads; a key from another column fails naming the
+file, the key, and its owner:
+
+| Owner | Keys |
+|---|---|
+| depth (preset or run) | `plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`, `score.top_k`, `research.rounds`, `research.queries_per_round`, `write.words` (`DEPTH_KEYS`) |
+| model (`models.<id>`) | `llm.context_window`, `llm.max_output_tokens`, `llm.reasoning.*`, `research.gap_context_tokens` |
+| profile | `use.*`, `llm.model`, `search.allow_domains`, `search.block_domains`, `search.language`, `search.time_range`, `search.filter_pages` (`PROFILE_BLOCK_KEYS`), and every key outside the five blocks that no row above owns |
+| entry | every other key of its block, and `llm.model` as the default |
+
+`--set` (CLI and request `set`) reaches any key; it is the expert escape
+hatch, and the API already refuses `*_file` and `*_command` in it.
+
+**Profiles** are thin: TOML files in
+`$XDG_CONFIG_HOME/wosarcher/profiles/` that name one entry per block in
+`[use]` and set only profile-owned keys. The package ships none.
+
+```toml
+# profiles/default.toml
+description = "SearXNG and Firecrawl on homelab, Jev scorer, Omniroute."
+
+[use]
+search = "searxng"
+fetch = "firecrawl"
+prefilter = "embeddings"
+score = "jev-strict"
+llm = "omniroute"
+
+[select]
+max_context_tokens = "auto"
+```
+
+Each block's entry is the run's `--use BLOCK=NAME` (or request `use`),
+else `WOSARCHER_USE__<BLOCK>`, else the profile's `[use]`. A block with
+exactly one entry (built-ins count) may be left out; a block with several
+and no choice fails naming the block and its entries, and a name that is
+not an entry of its block fails listing them, before a run directory
+exists. The profile is `--profile`, else `WOSARCHER_PROFILE`, else the
+name stored by `wosarcherd profile use`, else the first profile by name;
+with no profile file a command fails with "no profiles; add one in
+<dir>/profiles". `wosarcherd serve` and `wosarcherd auth` resolve their
+settings with `resolve_server` (defaults < the active profile's own keys,
+when a profile exists < environment), without entries, so a fresh install
+can serve. `fork_settings` rebuilds a fork's settings from the parent's
+saved ones (see Commands).
 
 The run slot limit is not a profile key: `max_concurrent_runs` (1 to 8,
 default 1) lives in the global settings file
@@ -1637,13 +1803,16 @@ an unknown key.
 
 Depth presets are a per-run axis, separate from profiles:
 `src/wosarcher/depths/{quick,standard,deep,exhaustive}.toml`, each with a
-one-line `description`. A preset may set only `plan.max_sub_queries`,
-`search.max_results`, `fetch.max_pages`, `score.top_k`,
-`select.max_context_tokens`, `research.gap_context_tokens`,
-`research.rounds`, `research.queries_per_round`, and `write.words`
-(`DEPTH_KEYS`); any other key fails when it loads, naming the file and the
-key, so a preset cannot set the domain lists. No built-in preset sets either token budget, so every preset uses
-`auto` context and a 4000-token gap budget. The planner decides how many
+one-line `description`, then the user's presets in
+`$XDG_CONFIG_HOME/wosarcher/depths/<name>.toml` by name (`list_depths`;
+source `builtin` or `user`). A user preset named like a built-in or
+`custom` fails when the presets are listed. A preset may set only the
+depth keys (`DEPTH_KEYS`: `plan.max_sub_queries`, `search.max_results`,
+`fetch.max_pages`, `score.top_k`, `research.rounds`,
+`research.queries_per_round`, and `write.words`); any other key, such as
+a domain list, `select.max_context_tokens`, or
+`research.gap_context_tokens`, fails when it loads, naming the file and the
+key. Context budgets come from the profile, the model, or the run. The planner decides how many
 sub-queries a question needs, so a higher limit costs only when the
 question has that many topics.
 
@@ -1670,8 +1839,8 @@ the pattern. It is a shape check: a well-formed unknown code reaches
 SearXNG, which searches as `all`.
 
 The `research` block: `rounds` (1 to 8, default 1), `queries_per_round`
-(default 3), `gap_context_tokens` (default 4000, or `auto`; see
-Research rounds), and `gap_parts` (default true; a temporary eval switch,
+(default 3), `gap_context_tokens` (default 4000, or `auto`; model-owned,
+see Research rounds), and `gap_parts` (default true; a temporary eval switch,
 not in the CLI flags, presets, API, or web form). The `gap` stage
 timeout defaults to 360 seconds, room for a gap step that asks its model
 twice.
@@ -1681,10 +1850,14 @@ preset; it only labels a run whose research values the user set. An unknown
 name fails before any provider is called and lists the presets.
 
 Environment variables use the prefix `WOSARCHER_` and `__` for nesting
-(`WOSARCHER_SCORE__API_KEY`). `--set` values are parsed as TOML values, so
-`--set score.top_k=12` is an integer.
+(`WOSARCHER_SELECT__MAX_CONTEXT_TOKENS=auto`). They may set only
+profile-owned keys plus `WOSARCHER_USE__<BLOCK>`; a variable that sets a
+provider-block key (`WOSARCHER_SCORE__PROVIDER`, or a secret such as
+`WOSARCHER_LLM__API_KEY`) fails resolution naming the variable and the
+owner, so secrets go in entries. `--set` values are parsed as TOML values,
+so `--set score.top_k=12` is an integer.
 
-Each provider block has the same shape: `provider`, `base_url`, `api_key` (or `api_key_file`, `api_key_command`),
+Each provider block (and so each entry) has the same shape: `provider`, `base_url`, `api_key` (or `api_key_file`, `api_key_command`),
 `model`, `device`, `release` (none, llama-swap, ollama), `fallback_urls`,
 `batch_size`, `concurrency`, `connect_timeout`, `timeout`, `retry_budget`
 (seconds of retry waits, default 60), `prices` (optional `input_per_mtok`,
@@ -1698,11 +1871,13 @@ limit and is the cap of a thinking call); the `fetch` block adds
 `max_pages` (default 40, see Fetch cap and order); the `llm` block's
 `provider` is `openai` (an OpenAI-compatible chat endpoint), the only
 value; the `score` block adds
-`rerank_scale` (`auto`, `probability`, `logit`).
+`rerank_scale` (`auto`, `probability`, `logit`) and `candidates` (default
+50: how many pairs per query the prefilter passes to this scorer).
 
-A profile may start with a top-level `description` string, one line that
-says what it is for. It is file metadata, not a setting: it is not part of
-the resolved configuration and cannot be set by environment or `--set`.
+A profile, an entry, or a depth preset may start with a top-level
+`description` string, one line that says what it is for. It is file
+metadata, not a setting: it is not part of the resolved configuration and
+cannot be set by environment or `--set`.
 
 `run.preflight` (`off` by default, `cloud`, `all`): before the first stage
 the runner probes, as `wosarcher doctor` does, the provider blocks of the
@@ -1711,20 +1886,15 @@ also excludes local blocks). A failed probe ends the run with `run.failed`
 naming the first stage that uses the block and an error starting
 `preflight: <block>`; no stage starts.
 
-Profiles: `low-vram` (exclusive, small batches; needs llama-swap or Ollama),
-`workstation` (shared), `cloud` (no local models, high concurrency). Every
-built-in profile sets `llm.provider = "openai"` and leaves thinking at
-`none`. The local profiles set
-`llm.timeout = 600`.
-
 The built-in defaults target the smallest setup wosarcher supports well: a
 local 32768-token model (a qwen3.5:9b class model behind llama-server or
 Ollama) and the `qwen3-embedding:4b` embedder at `num_ctx` 24576.
 `llm.context_window` is 32768, `llm.max_output_tokens` 8192 (a quarter of
 the window, so a long report cannot claim most of it; exhaustive's
 3000-word target asks for 6000), and `llm.timeout` 300 seconds. A larger
-model (a 1M-token DeepSeek, a 256k cloud model) sets its own window, output
-cap, and timeouts in its profile; the defaults never assume a big window.
+model (a 1M-token DeepSeek, a 256k cloud model) sets its window and output
+cap in its entry's `models.<id>`, and its timeouts in the entry; the
+defaults never assume a big window.
 
 Secrets (`api_key` on each provider block, `auth.password_hash`) are
 redacted as `***` in `profile show`, `request.json`, and all server
@@ -1732,16 +1902,17 @@ responses. Each secret `<x>` can be given in one of three forms, and at
 most one may be set after precedence (more than one fails resolution
 naming the setting and the three forms):
 
-- `<x>`: the value itself (a profile, `WOSARCHER_LLM__API_KEY`, `--set`).
+- `<x>`: the value itself (an entry, `--set`; `auth.password_hash` also
+  from a profile or `WOSARCHER_AUTH__PASSWORD_HASH`).
 - `<x>_file`: a path; the file is read with one trailing newline removed.
 - `<x>_command`: a TOML list (argv), run without a shell, standard input
   closed, 10-second timeout; it must exit 0, and its standard output with
   one trailing newline removed is the value. Commands must be
-  non-interactive. From the environment:
-  `WOSARCHER_SCORE__API_KEY_COMMAND='["pass", "show", "typesafe"]'`.
+  non-interactive. In an entry:
+  `api_key_command = ["pass", "show", "typesafe"]`.
 
 ```toml
-[llm]
+# providers/llm/omniroute.toml
 api_key_file = "/run/secrets/llm"
 ```
 
@@ -1753,8 +1924,9 @@ start, exits non-zero, or times out, or output that is not UTF-8 fails
 resolution (engine exit 2, before any run directory exists) with an error
 naming the setting and the path or the command's first word, never the
 output. Paths and commands are not secret and print as plain values. Fork
-and rerun ignore `*_file` and `*_command` keys saved in the parent's
-configuration and take secrets from the current process. The HTTP API
+ignores `*_file` and `*_command` keys saved in the parent's configuration
+and takes secrets from the current entries the parent recorded; rerun
+resolves the recorded entries again. The HTTP API
 refuses any `set` override whose key ends in `_file` or `_command` (422
 `invalid_override`), so a client cannot run a command as the server user
 or send a server-readable file to a `base_url` of its choice.
@@ -1827,22 +1999,27 @@ send run data elsewhere. No endpoint reads or writes `hooks.toml`.
 
 Provider choice is runtime data, never part of a system build. The NixOS
 module (`nixosModules.default`, options under `services.wosarcher`) installs
-the package, runs the server, and points it at a config directory; it does
-not contain provider URLs or model names.
+the package, runs the server, and points it at a config directory. Provider
+URLs and model names live in entries, which a person or the module writes
+as mutable copies; switching between them is a per-run choice.
 
 - Options: `enable`, `package`, `host` and `port` (default `127.0.0.1:8765`),
   `allowedOrigins` (as `auth.allowed_origins`), `environment` (extra
   variables for the service and the `wosarcherd` wrapper),
   `environmentFile` (variables that must not land in the Nix store, read by
   systemd alone; nothing secret goes through an option whose value does),
-  `profiles`, `hooks`, `users` (socket access only), and `autoStart` (false:
+  `profiles`, `providers` (block, then entry name, to TOML values),
+  `depths`, `hooks`, `users` (socket access only), and `autoStart` (false:
   the unit starts on the first connection to `wosarcher.socket` or through
   a socket proxy). Anything else goes through `environment` or a profile.
-- Declared `profiles` are copied (never linked into the store) to
-  `profiles/<name>.toml` before the service starts, and `hooks` to
-  `hooks.toml`. A manifest (`profiles/.nix-managed`) names what the module
-  wrote, so a dropped profile or emptied hooks is removed and hand-made
-  profiles are kept.
+- Declared `profiles`, `providers`, and `depths` are copied (never linked
+  into the store), owned by `wosarcher` with mode 0600, to
+  `profiles/<name>.toml`, `providers/<block>/<name>.toml`, and
+  `depths/<name>.toml` before the service starts, and `hooks` to
+  `hooks.toml`; a `providers` block name other than the five fails the
+  evaluation. A manifest (`profiles/.nix-managed`) names what the module
+  wrote, so a dropped profile, entry, or preset, or emptied hooks, is
+  removed and hand-made files are kept.
 - Data lives in `/var/lib/wosarcher` (`config/`, `share/`, `cache/` as the
   XDG directories), owned by the `wosarcher` system user, directories
   0700 and files 0600 (service umask `0077`), closed to the group and to
@@ -1857,32 +2034,40 @@ not contain provider URLs or model names.
   administration as the service user (`sudo -u wosarcher wosarcherd auth
   set-password`, `wosarcherd profile use`). Neither wrapper reads
   `environmentFile`.
-- Secrets reach the service as files: a declared profile sets
-  `llm.api_key_file = "/run/secrets/llm"` (for example a sops-nix secret
-  path readable by the `wosarcher` user), so the profile in the Nix store
-  holds only the path.
+- Secrets reach the service as files: a declared llm entry sets
+  `api_key_file = "/run/secrets/llm"` (for example a sops-nix secret path
+  readable by the `wosarcher` user), so the entry in the Nix store holds
+  only the path. Environment variables cannot set provider keys.
 
 **Daemon side (wosarcherd).**
 
-- Profiles are TOML files in the daemon's
-  `$XDG_CONFIG_HOME/wosarcher/profiles/`, a mutable directory, not the Nix
-  store. Built-in profiles ship with the package; a user file with the same
-  name overrides one. The `wosarcher` client never reads them; it names a
-  profile and the daemon resolves it.
+- Entries and profiles are TOML files in the daemon's
+  `$XDG_CONFIG_HOME/wosarcher/providers/<block>/` and `profiles/`, mutable
+  directories, not the Nix store. One entry per endpoint (each scorer, each
+  LLM endpoint with its models) is declared once; a profile picks one entry
+  per block, so trying every scorer with every LLM needs no profile per
+  combination. No profile ships with the package. The `wosarcher` client
+  never reads them; it names a profile and entries, and the daemon
+  resolves them.
 - Select a profile per command (`wosarcher run --profile desktop "q"`), per
   daemon (`WOSARCHER_PROFILE=desktop` in its environment), or as the
   default (`wosarcherd profile use desktop` as the service user, which
   writes `$XDG_CONFIG_HOME/wosarcher/current`).
-- Override a single field without a new profile:
-  `wosarcher run --set score.provider=jev --set prefilter.base_url=http://desktop.lan:8002/v1 "q"`.
+- Switch one block for one run: `wosarcher run --use score=jev-strict
+  --use llm=omniroute "q"` (or `WOSARCHER_USE__SCORE=jev-strict` per
+  daemon). `wosarcher providers list` shows the entries of each block and
+  the models of each llm entry; `--model`, `--context-window`, and
+  `--max-output` change the model and its limits for one run, and `--set`
+  still reaches any single field.
 - The server reads the profile when each run starts (each run is a fresh
-  `wosarcherd run` subprocess), so changing a profile file or the default never needs
-  a server restart. The frontend's New run screen lists profiles and accepts
-  per-run overrides.
-- `wosarcher profile list` (with each profile's `description`),
-  `wosarcher profile show <name>` (resolved by the daemon, secrets
-  redacted; `*_file` paths and `*_command` lists shown as written), and
-  `wosarcher doctor --profile <name>` make switching safe.
+  `wosarcherd run` subprocess), so changing an entry, a profile file, or
+  the default never needs a server restart. The frontend's New run screen
+  lists profiles and lets a run change each block's entry and the model.
+- `wosarcher profile list` (with each profile's entries and
+  `description`), `wosarcher profile show <name>` (resolved by the daemon,
+  secrets redacted; `*_file` paths and `*_command` lists shown as written),
+  and `wosarcher doctor --profile <name> [--use BLOCK=NAME]` make switching
+  safe.
 
 **Model host side (each GPU machine).** One llama-swap service per machine,
 in front of every model that machine may serve (rerankers, embedders, LLMs).
@@ -1896,7 +2081,7 @@ by name on demand. (Check flag and config names against the llama-swap
 version in the pinned nixpkgs.)
 
 The result: switching between a local and a remote reranker, or between two
-models on the desktop, is a profile change on the client, and adding a model
+models on the desktop, is a `--use` or profile change on the client, and adding a model
 to a machine is a config edit on that machine.
 
 ### Agent skill
@@ -2152,16 +2337,42 @@ These override the prototype where they differ:
   `q10`. Each ID is focusable and has its query text as a native tooltip,
   from the plan and the gap rounds. A `page.fetched` with `thin` shows the
   state "thin".
+- **Depth control:** the segmented control lists Quick, Standard, Deep,
+  Exhaustive, then the user presets from `GET /api/depths` by name (labelled
+  with the name as written), then Custom, wrapping onto more rows when it
+  does not fit. Its Advanced disclosure holds only the six depth fields:
+  Sub-queries, Results per query, Max pages, Rounds, Follow-ups per round,
+  and Passages per query.
 - **Follow-ups per round:** an Advanced depth value like the others, locked
   while Rounds is 1; the estimate reads it from the values, not the preset.
-- **Model and thinking:** the Advanced disclosure ends with a Model group
-  (the design bundle has no such controls; it reuses the Advanced field
-  styles): a Model input with a datalist from `GET /api/models?profile=`
-  (free text allowed; empty means the profile's model) and Plan, Gap, and
-  Write thinking selects (None, Low, Medium, High, Default; Gap locked while
-  Rounds is 1). Editing them does not switch to Custom. The values persist
-  in browser storage; the request sends `llm.model` only when typed and
-  `llm.reasoning` only with steps other than None.
+- **Profile row and its Advanced values** (scenarios `new-profile`,
+  `new-profile-over`, `new-profile-nolimits`): the Profile select is
+  followed by an "Advanced" toggle ("· <profile> values", or "· N changed")
+  whose panel has three groups. **Providers**: Search, Fetch, Prefilter,
+  Scorer, and LLM selects with the block's entries from
+  `GET /api/providers`, preselected with the profile's `use`; a block with
+  one entry is locked ("Only one configured."). **Model**: a Model input
+  with a datalist from `GET /api/models?llm=<chosen entry>` (free text
+  allowed), Context window and Max output from the chosen model's limits
+  in `GET /api/providers` (or 32768 / 8192 with the note "Fallback: no
+  limits set for this model."), and Plan, Gap, and Write thinking selects
+  (Gap locked while Rounds is 1). **Budgets**: Context tokens and Gap
+  context tokens (empty means Auto, with the "Auto · <budget>" note; the
+  budget follows Length, Context window, and Max output; Gap locked while
+  Rounds is 1). Edits apply to this run only: an edited field gets the
+  "overridden" tag, "Reset to profile" removes every edit, switching the
+  profile removes them all, and switching the LLM entry resets Model to
+  that entry's default and drops the model-owned edits. The request sends
+  `use` only for changed blocks and `llm` only with edited fields, so an
+  untouched run resolves as the profile says. The edits live in the New
+  run draft and clear after Start; the Options summary marks the profile
+  "(modified)".
+- **Profile line in run headers:** the Live and Report headers show, below
+  the meta line, the stack icon, the profile name, and the run summary's
+  `use` joined by " · " in block order, the llm entry followed by
+  "/<model>", with an outline "modified" tag when the summary's `modified`
+  is true. On a phone it shows the profile and "<llm>/<model>" with an "All
+  providers" toggle. A run without `use` shows no profile line.
 - **Thinking tags:** the Live and Report headers show, after the depth
   tag, one outline tag per step whose summary level is not `none`, in
   order plan, gap, write: "Write thinking high".
@@ -2192,12 +2403,24 @@ These override the prototype where they differ:
   pairs have no score bar and no threshold line.
 - **Device chip:** shows the stage's `device` label. VRAM figures are not
   shown; no source provides them.
-- **GPU policy:** shown from the checked profile, not editable in the
+- **GPU policy:** shown from the active profile, not editable in the
   browser; to change it, edit the profile's `run.gpu_policy`.
+- **Settings providers:** a "Default profile <name> <entries>" line (the
+  active profile's `use` joined by " · "), the GPU policy line, then one
+  group per block (Search, Fetch, Prefilter, Scorer, LLM), each a heading
+  with its help button and a grid with one card per entry from
+  `GET /api/providers`. An endpoint card shows its adapter as kicker, a
+  Check button, its name, and Base URL, Model, Device, and Unload; an llm
+  card lists its models instead, the default first with a "default" tag,
+  each with "<window> window · <out> out" or "fallback limits". A built-in
+  entry is a compact dashed card ("Built in, nothing to check."), and an
+  entry with an `error` shows it on the danger tint. Check posts
+  `{"entries": ["<block>/<name>"]}`; "Check all providers" posts no body.
+  Opening Settings sends no probe.
 - **Prefilter card:** titled Embeddings only for the `embeddings` provider,
   Prefilter otherwise (for example `bm25`). A second line reads "top N per
   sub-query" while running and "top N/sub-query · q4, q5 passthrough" once
-  done, with N from the run's `prefilter.top_k` and the IDs from
+  done, with N from the run's `score.candidates` and the IDs from
   `stage.done` `passthrough`.
 - **Method tags:** the Plan, Prefilter, Score, Gap, and Write cards show the
   method under the label: the configured provider while running, the one

@@ -32,6 +32,7 @@ from wosarcher.cli.options import (
     AttachOption,
     BlockDomainOption,
     ContextTokensOption,
+    ContextWindowOption,
     DepthOption,
     FormatOption,
     FromOption,
@@ -40,6 +41,7 @@ from wosarcher.cli.options import (
     JsonOption,
     LanguageOption,
     MarkerOption,
+    MaxOutputOption,
     ModelOption,
     PagesOption,
     PassagesOption,
@@ -56,11 +58,13 @@ from wosarcher.cli.options import (
     ToneInstructionsOption,
     ToneOption,
     UntilOption,
+    UseOption,
     WordsOption,
     WriteThinkingOption,
     fail,
     sources_option,
     stage_option,
+    use_map,
 )
 from wosarcher.cli.progress import ProgressView
 from wosarcher.models import (
@@ -93,9 +97,29 @@ def writing_patch(**fields: str | int | None) -> WritingPatch:
     return WritingPatch.model_validate({name: value for name, value in fields.items() if value is not None})
 
 
-def llm_patch(model: str | None, plan: str | None, gap: str | None, write: str | None) -> LLMPatch:
-    reasoning = ReasoningPatch.model_validate({"plan": plan, "gap": gap, "write": write})
-    return LLMPatch(model=model, reasoning=reasoning)
+def budget(value: str | None) -> int | str | None:
+    """A token budget flag's value: an integer, or `auto`."""
+    return int(value) if value and value.isdigit() else value
+
+
+def llm_patch(
+    model: str | None,
+    thinking: tuple[str | None, str | None, str | None],
+    limits: tuple[int | None, int | None],
+    budgets: tuple[str | None, str | None],
+) -> LLMPatch:
+    """The model, the thinking levels, `--context-window` and `--max-output`, and the two token budgets."""
+    plan, gap, write = thinking
+    return LLMPatch.model_validate(
+        {
+            "model": model,
+            "reasoning": ReasoningPatch.model_validate({"plan": plan, "gap": gap, "write": write}),
+            "context_window": limits[0],
+            "max_output_tokens": limits[1],
+            "context_tokens": budget(budgets[0]),
+            "gap_context_tokens": budget(budgets[1]),
+        }
+    )
 
 
 def uploads(paths: list[str]) -> list[tuple[str, tuple[str, bytes]]]:
@@ -255,6 +279,7 @@ def run(
     sources: SourcesOption = "both",
     until: UntilOption = None,
     profile: ProfileOption = None,
+    use: UseOption = None,
     depth: DepthOption = None,
     set_: SetOption = None,
     tone: ToneOption = None,
@@ -276,6 +301,8 @@ def run(
     allow_domain: AllowDomainOption = None,
     block_domain: BlockDomainOption = None,
     model: ModelOption = None,
+    context_window: ContextWindowOption = None,
+    max_output: MaxOutputOption = None,
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
@@ -284,13 +311,13 @@ def run(
     """Research QUERY on the daemon and print the report (or stop early with --until)."""
     stop = stage_option(until)
     chosen = sources_option(sources, attach)
-    budgets = {"context_tokens": context_tokens, "gap_context_tokens": gap_context_tokens}
     try:
         request = RunCreate(
             query=query,
             sources=chosen,
             until=stop,
             profile=profile,
+            use=use_map(use),
             depth=depth,
             research=ResearchPatch.model_validate(
                 {
@@ -300,7 +327,6 @@ def run(
                     "passages_per_query": passages_per_query,
                     "rounds": rounds,
                     "queries_per_round": queries_per_round,
-                    **{name: int(value) if value and value.isdigit() else value for name, value in budgets.items()},
                 }
             ),
             writing=writing_patch(
@@ -313,7 +339,12 @@ def run(
                 format=format_,
             ),
             domains=DomainPatch(allow=allow_domain or None, block=block_domain or None),
-            llm=llm_patch(model, plan_thinking, gap_thinking, write_thinking),
+            llm=llm_patch(
+                model,
+                (plan_thinking, gap_thinking, write_thinking),
+                (context_window, max_output),
+                (context_tokens, gap_context_tokens),
+            ),
             search_language=search_language,
             set=set_ or [],
         )
@@ -331,6 +362,7 @@ def fork(
     from_: FromOption,
     until: UntilOption = None,
     profile: ProfileOption = None,
+    use: UseOption = None,
     set_: SetOption = None,
     tone: ToneOption = None,
     tone_instructions: ToneInstructionsOption = None,
@@ -339,8 +371,11 @@ def fork(
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
     format_: FormatOption = None,
+    context_tokens: ContextTokensOption = None,
     gap_context_tokens: GapContextTokensOption = None,
     model: ModelOption = None,
+    context_window: ContextWindowOption = None,
+    max_output: MaxOutputOption = None,
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
@@ -350,7 +385,6 @@ def fork(
     first = stage_option(from_)
     assert first is not None
     stop = stage_option(until)
-    budget = [] if gap_context_tokens is None else [f"research.gap_context_tokens={gap_context_tokens}"]
     try:
         request = ForkCreate(
             from_stage=first,
@@ -364,8 +398,14 @@ def fork(
                 reference_style=reference_style,
                 format=format_,
             ),
-            llm=llm_patch(model, plan_thinking, gap_thinking, write_thinking),
-            set=[*(set_ or []), *budget],
+            llm=llm_patch(
+                model,
+                (plan_thinking, gap_thinking, write_thinking),
+                (context_window, max_output),
+                (context_tokens, gap_context_tokens),
+            ),
+            use=use_map(use),
+            set=set_ or [],
             profile=profile,
         )
     except ValidationError as error:

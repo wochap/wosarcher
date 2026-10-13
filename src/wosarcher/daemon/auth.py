@@ -11,7 +11,7 @@ from rich.console import Console
 
 from wosarcher.auth import AuthStore, hash_password
 from wosarcher.cli.options import fail
-from wosarcher.config import ConfigError, config_dir, resolve
+from wosarcher.config import ConfigError, config_dir, resolve_server
 
 auth_app = typer.Typer(no_args_is_help=True, help="Set the admin password.")
 
@@ -20,7 +20,7 @@ MIN_LENGTH = 8
 
 def store() -> AuthStore:
     try:
-        settings = resolve(None, [], os.environ)
+        settings = resolve_server(os.environ)
     except ConfigError as error:
         raise fail(error, 2) from None
     return AuthStore.from_settings(settings, config_dir(os.environ))

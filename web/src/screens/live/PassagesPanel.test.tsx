@@ -34,7 +34,7 @@ function panel(events: RunEvent[], options: Options = {}) {
       filter={options.filter ?? "kept"}
       onFilter={() => {}}
       configuredScorer={options.configuredScorer}
-      config={{ prefilterTopK: 50, scoreTopK: 10, maxPerSource: 1 }}
+      config={{ candidates: 50, scoreTopK: 10, maxPerSource: 1 }}
       onOpen={options.onOpen}
     />,
   );

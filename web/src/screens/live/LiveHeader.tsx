@@ -6,6 +6,7 @@ import type { RunDetail, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { OriginLabel } from "../../components/OriginLabel";
+import { ProfileLine } from "../../components/ProfileLine";
 import { isLongQuery, QueryToggle } from "../../components/QueryToggle";
 import { ThinkingTag } from "../../components/ThinkingTag";
 import { recipeOf } from "../../run/format";
@@ -47,10 +48,11 @@ export function LiveHeader({
   const status = run.status;
   const active = status === "queued" || status === "running";
   const ended = status === "failed" || status === "cancelled" || status === "interrupted";
+  // The profile line names the profile; a run without one keeps it in the meta line.
   const meta = [
     recipeOf(run.until ?? detail?.until, detail?.writing.format),
     detail?.sources ?? "both",
-    run.profile ?? detail?.profile ?? "",
+    ...(detail?.use ? [] : [run.profile ?? detail?.profile ?? ""]),
   ];
   if (files) meta.push(`${files} file${files > 1 ? "s" : ""}`);
   const parent = run.parentRunId ?? detail?.parent_run_id;
@@ -78,6 +80,7 @@ export function LiveHeader({
           <span className={css.id}>{run.runId}</span>
           <span>{meta.join(" · ")}</span>
         </div>
+        {detail && <ProfileLine run={detail} isPhone={isPhone} />}
         <div id="run-q" className={expanded ? css.queryFull : css.query}>
           {query}
         </div>

@@ -1,7 +1,8 @@
 # NixOS VM test of nixosModules.default: the socket-activated service, the
 # host `wosarcher` client on the group's socket, the `wosarcherd` wrapper for
 # the service user, a data directory only the service user can read, declared
-# profiles and hooks, and PDF export under the unit's sandbox. Runs without
+# provider entries, profiles, depth presets, and hooks, and PDF export under
+# the unit's sandbox. Runs without
 # network: `--until load` calls no provider.
 #
 #   nix build .#checks.x86_64-linux.nixos
@@ -9,8 +10,34 @@
 
 let
   lan = {
+    use = {
+      prefilter = "kw";
+      score = "jev-strict";
+      llm = "lan";
+    };
     llm.model = "lan-model";
-    llm.api_key_file = "/etc/wosarcher-llm-key";
+  };
+  providers = {
+    search.searxng = {
+      provider = "searxng";
+      base_url = "http://127.0.0.1:9";
+    };
+    fetch.firecrawl = {
+      provider = "firecrawl";
+      base_url = "http://127.0.0.1:9/v1";
+    };
+    prefilter.kw.provider = "bm25";
+    score.jev-strict = {
+      provider = "jev";
+      base_url = "http://127.0.0.1:9/v1";
+      min_score = 2.0;
+    };
+    llm.lan = {
+      provider = "openai";
+      base_url = "http://127.0.0.1:9/v1";
+      model = "lan-default";
+      api_key_file = "/etc/wosarcher-llm-key";
+    };
   };
 in
 pkgs.testers.runNixOSTest {
@@ -50,11 +77,24 @@ pkgs.testers.runNixOSTest {
           inherit lan;
           old.llm.model = "old-model";
         };
+        providers = providers // {
+          llm = providers.llm // {
+            free = {
+              provider = "openai";
+              base_url = "http://127.0.0.1:9/v1";
+            };
+          };
+        };
+        depths.wide = {
+          description = "Broad survey.";
+          score.top_k = 25;
+        };
         hooks.on_finish = [ { url = "http://127.0.0.1:9/hook"; } ];
       };
 
       specialisation.dropped.configuration = {
         services.wosarcher.profiles = lib.mkForce { inherit lan; };
+        services.wosarcher.providers = lib.mkForce providers;
         services.wosarcher.hooks = lib.mkForce { };
       };
     };
@@ -65,6 +105,7 @@ pkgs.testers.runNixOSTest {
     api = "http://127.0.0.1:8765/api"
     data = "/var/lib/wosarcher"
     profiles = f"{data}/config/wosarcher/profiles"
+    providers = f"{data}/config/wosarcher/providers"
     auth = f"{data}/config/wosarcher/auth.json"
     sock = "/run/wosarcher/api.sock"
 
@@ -100,9 +141,17 @@ pkgs.testers.runNixOSTest {
         assert hooks.count("[[on_finish]]") == 1, hooks
         assert "http://127.0.0.1:9/hook" in hooks, hooks
 
+    with subtest("declared entries and depth preset"):
+        mode = machine.succeed(f"stat -c '%a %U' {providers}/score/jev-strict.toml").strip()
+        assert mode == "600 wosarcher", mode
+        entry = machine.succeed(f"cat {providers}/score/jev-strict.toml")
+        assert 'provider = "jev"' in entry and "min_score = 2.0" in entry, entry
+        assert "jev-strict  (user)  jev" in alice("wosarcher providers list --block score")
+        assert "wide  (user)  Broad survey." in alice("wosarcher depth list")
+
     with subtest("member client sees the daemon's profiles, never its secrets"):
         listing = alice("wosarcher profile list")
-        assert "lan  (user)" in listing, listing
+        assert "lan  (user)  searxng · firecrawl · kw · jev-strict · lan" in listing, listing
         shown = alice("wosarcher profile show lan")
         assert 'api_key = "***"' in shown, shown
         assert "dummy-key" not in shown, shown
@@ -175,6 +224,8 @@ pkgs.testers.runNixOSTest {
         machine.wait_for_unit("wosarcher.service")
         machine.succeed(f"test ! -e {profiles}/old.toml")
         machine.succeed(f"test -f {profiles}/lan.toml")
+        machine.succeed(f"test ! -e {providers}/llm/free.toml")
+        machine.succeed(f"test -f {providers}/llm/lan.toml")
         machine.succeed(f"test -f {profiles}/mine.toml")
         machine.succeed(f"test ! -e {data}/config/wosarcher/hooks.toml")
   '';

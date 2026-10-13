@@ -56,8 +56,7 @@ export type Sources = Source[]
 export type UsedTokens = number
 export type Description = string
 export type Name1 = string
-export type ContextTokens = (number | "auto")
-export type GapContextTokens = (number | "auto")
+export type Source1 = ("builtin" | "user")
 export type MaxPages = number
 export type PassagesPerQuery = number
 export type QueriesPerRound = number
@@ -70,6 +69,7 @@ export type BaseUrl = string
 export type Block = string
 export type ContextWindow = (number | null)
 export type Device = (string | null)
+export type Entry = (string | null)
 export type Error1 = (string | null)
 export type LatencyMs = (number | null)
 export type Model = (string | null)
@@ -99,6 +99,10 @@ export type Truncated = boolean
 export type Pages = Page[]
 export type Unfetched = number
 export type From = ("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write")
+export type ContextTokens = (number | "auto" | null)
+export type ContextWindow1 = (number | null)
+export type GapContextTokens = (number | "auto" | null)
+export type MaxOutputTokens = (number | null)
 export type Model2 = (string | null)
 export type Gap = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Plan = (("none" | "low" | "medium" | "high" | "default") | null)
@@ -132,30 +136,15 @@ export type Note2 = string
 export type Queries1 = Query1[]
 export type Retried1 = boolean
 export type Uncovered1 = string[]
-export type Blocks = string[]
-export type CheckedAt = (string | null)
-export type Detail1 = string
-export type Device1 = (string | null)
-export type LatencyMs1 = (number | null)
-export type Model3 = (string | null)
-export type Provider1 = string
-export type Release1 = ("none" | "llama-swap" | "ollama")
-export type Role = string
-export type Status1 = ("ok" | "degraded" | "down" | "skipped" | "unchecked")
-export type Url = string
-export type Checks = ProviderCheck[]
-export type GpuPolicy1 = ("shared" | "exclusive")
-export type Profile1 = string
-export type Warnings1 = string[]
 export type QueryIds1 = string[]
 export type Rank2 = number
 export type Round3 = number
 export type Snippet = string
 export type Title1 = string
-export type Url1 = string
+export type Url = string
 export type QueryIds2 = string[]
 export type Title2 = string
-export type Url2 = string
+export type Url1 = string
 export type RunId1 = string
 export type Seq1 = number
 export type Stage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -172,15 +161,19 @@ export type Uri1 = string
 export type Pages1 = Page[]
 export type Skipped1 = Skipped[]
 export type AttemptsLeft = (number | null)
-export type Detail2 = string
+export type Detail1 = string
 export type Error2 = string
 export type RetryAfter = (number | null)
 export type Password = string
 export type Content = string
-export type Role1 = ("system" | "user" | "assistant")
+export type Role = ("system" | "user" | "assistant")
+export type ContextWindow2 = (number | null)
+export type GapContextTokens1 = (number | "auto" | null)
+export type Id1 = string
+export type MaxOutputTokens1 = (number | null)
 export type Models = string[]
 export type Reason1 = string
-export type Url3 = string
+export type Url2 = string
 export type RunId2 = string
 export type Seq2 = number
 export type Stage2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -192,7 +185,7 @@ export type Round4 = number
 export type SourceId4 = string
 export type Thin = boolean
 export type Title4 = string
-export type Url4 = string
+export type Url3 = string
 export type RunId3 = string
 export type Seq3 = number
 export type Stage3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
@@ -211,7 +204,7 @@ export type Ts4 = string
 export type Type4 = "passages.scored"
 export type Parts = string[]
 export type Queries2 = Query1[]
-export type Warnings2 = string[]
+export type Warnings1 = string[]
 export type Queries3 = Query1[]
 export type RunId5 = string
 export type Seq5 = number
@@ -220,19 +213,43 @@ export type Ts5 = string
 export type Type5 = "plan.ready"
 export type Candidates = Candidate[]
 export type Method = ("embeddings" | "bm25" | "none")
-export type Warnings3 = string[]
+export type Warnings2 = string[]
 export type Active = boolean
 export type AllowDomains = (string[] | null)
 export type BlockDomains = (string[] | null)
-export type ContextWindow1 = (number | null)
+export type ContextTokens1 = (number | "auto" | null)
 export type Description1 = string
-export type MaxOutputTokens = (number | null)
+export type Error3 = (string | null)
+export type Model3 = (string | null)
 export type Name2 = string
 export type PromptReserveTokens = (number | null)
 export type Settings = ({
 [k: string]: unknown
 } | null)
-export type Source1 = ("builtin" | "user")
+export type Source2 = "user"
+export type Use1 = ({
+[k: string]: string | null
+} | null)
+export type Block3 = ("search" | "fetch" | "prefilter" | "score" | "llm")
+export type CheckedAt = (string | null)
+export type Description2 = string
+export type Detail2 = string
+export type Device1 = (string | null)
+export type Error4 = (string | null)
+export type LatencyMs1 = (number | null)
+export type Model4 = string
+export type Models1 = ModelInfo[]
+export type Name3 = string
+export type Provider1 = string
+export type Release1 = ("none" | "llama-swap" | "ollama")
+export type Source3 = ("builtin" | "user")
+export type Status1 = ("ok" | "degraded" | "down" | "skipped" | "unchecked")
+export type Url4 = string
+export type Entries = string[]
+export type Entries1 = ProviderEntryInfo[]
+export type GpuPolicy1 = ("shared" | "exclusive")
+export type Profile1 = (string | null)
+export type Warnings3 = string[]
 export type Kept1 = number
 export type ChunkId4 = string
 export type Display4 = (number | null)
@@ -251,7 +268,7 @@ export type ThresholdDisplay1 = (number | null)
 export type Gap1 = ("none" | "low" | "medium" | "high" | "default")
 export type Plan2 = ("none" | "low" | "medium" | "high" | "default")
 export type Write1 = ("none" | "low" | "medium" | "high" | "default")
-export type Entry = string
+export type Entry1 = string
 export type Passages3 = number[]
 export type SourceId5 = string
 export type Body = string
@@ -281,8 +298,6 @@ export type Seq8 = number
 export type Stage8 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts8 = string
 export type Type8 = "research.done"
-export type ContextTokens1 = (number | "auto" | null)
-export type GapContextTokens1 = (number | "auto" | null)
 export type MaxPages1 = (number | null)
 export type PassagesPerQuery1 = (number | null)
 export type QueriesPerRound1 = (number | null)
@@ -349,10 +364,11 @@ export type Created = string
 export type Depth1 = (string | null)
 export type DurationS = (number | null)
 export type EndStage = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
-export type Error3 = (string | null)
+export type Error5 = (string | null)
 export type ForkFrom = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type LastSeq = number
-export type Model4 = string
+export type Model5 = string
+export type Modified = boolean
 export type Origin = ("web" | "api" | "cli")
 export type ParentRunId = (string | null)
 export type Profile3 = string
@@ -372,6 +388,9 @@ export type Sources2 = ("both" | "web" | "files")
 export type Until2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId14 = string
 export type TokenName = (string | null)
+export type Use3 = ({
+[k: string]: string
+} | null)
 export type Version = number
 export type RoundsPlanned = number
 export type RoundsRan = (number | null)
@@ -381,6 +400,9 @@ export type Status3 = ("queued" | "running" | "done" | "failed" | "cancelled" | 
 export type StopReason = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type TokenName1 = (string | null)
 export type Until3 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Use4 = ({
+[k: string]: string
+} | null)
 export type Version1 = number
 export type CitationMarker1 = ("numeric" | "superscript" | "author-year")
 export type Format2 = ("report" | "answer")
@@ -395,7 +417,7 @@ export type Seq13 = number
 export type Stage14 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts13 = string
 export type Type13 = "run.done"
-export type Error4 = string
+export type Error6 = string
 export type Stage15 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type RunId17 = string
 export type Seq14 = number
@@ -403,10 +425,10 @@ export type Stage16 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefil
 export type Ts14 = string
 export type Type14 = "run.failed"
 export type Detail3 = string
-export type Error5 = string
+export type Error7 = string
 export type RunId18 = string
 export type Status4 = ("queued" | "running" | "done" | "failed" | "cancelled" | "interrupted")
-export type Error6 = (string | null)
+export type Error8 = (string | null)
 export type RunId19 = string
 export type Status5 = ("done" | "failed" | "cancelled")
 export type Origin2 = ("web" | "api" | "cli")
@@ -436,9 +458,10 @@ export type Created1 = string
 export type Depth3 = (string | null)
 export type DurationS1 = (number | null)
 export type EndStage1 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
-export type Error7 = (string | null)
+export type Error9 = (string | null)
 export type ForkFrom2 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
-export type Model5 = string
+export type Model6 = string
+export type Modified1 = boolean
 export type Origin3 = ("web" | "api" | "cli")
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
@@ -452,6 +475,9 @@ export type Status6 = ("queued" | "running" | "done" | "failed" | "cancelled" | 
 export type StopReason1 = (("max rounds" | "no new sources" | "page limit reached" | "no follow-ups" | "gap step failed") | null)
 export type TokenName3 = (string | null)
 export type Until6 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
+export type Use5 = ({
+[k: string]: string
+} | null)
 export type Version3 = number
 export type Failed = Skipped[]
 export type Queries4 = QueryScores[]
@@ -505,7 +531,7 @@ export type Seq17 = number
 export type Stage19 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts17 = string
 export type Type17 = "stage.done"
-export type Error8 = string
+export type Error10 = string
 export type Next = string
 export type RunId26 = string
 export type Seq18 = number
@@ -529,15 +555,15 @@ export type Seq20 = number
 export type Stage22 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write") | null)
 export type Ts20 = string
 export type Type20 = "stage.started"
-export type Name3 = string
-export type Id1 = string
 export type Name4 = string
+export type Id2 = string
+export type Name5 = string
 export type Token = string
 export type Created2 = string
-export type Id2 = string
+export type Id3 = string
 export type LastUsed = (string | null)
 export type Masked = string
-export type Name5 = string
+export type Name6 = string
 
 export interface WosarcherContracts {
 [k: string]: unknown
@@ -681,6 +707,7 @@ uri: Uri
 export interface DepthInfo {
 description: Description
 name: Name1
+source?: Source1
 values: DepthValues
 }
 /**
@@ -688,8 +715,6 @@ values: DepthValues
  * via the `definition` "DepthValues".
  */
 export interface DepthValues {
-context_tokens: ContextTokens
-gap_context_tokens: GapContextTokens
 max_pages: MaxPages
 passages_per_query: PassagesPerQuery
 queries_per_round: QueriesPerRound
@@ -708,7 +733,7 @@ providers?: Providers
 warnings?: Warnings
 }
 /**
- * One row of `wosarcher doctor`: a configured block and its probe result.
+ * One row of `wosarcher doctor`: a block's entry and its probe result.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "ProviderHealth".
@@ -718,6 +743,7 @@ base_url?: BaseUrl
 block: Block
 context_window?: ContextWindow
 device?: Device
+entry?: Entry
 error?: Error1
 latency_ms?: LatencyMs
 model?: Model
@@ -802,12 +828,19 @@ llm?: LLMPatch
 profile?: Profile
 set?: Set
 until?: Until
+use?: Use
 writing?: WritingPatch
 }
 /**
- * The run's model and thinking; unset fields keep the configured value.
+ * The run's model, its limits, thinking, and context budgets; unset fields keep the configured value.
+ * 
+ * Each field besides `model` and `reasoning` sets one key (`config.LLM_KEYS`).
  */
 export interface LLMPatch {
+context_tokens?: ContextTokens
+context_window?: ContextWindow1
+gap_context_tokens?: GapContextTokens
+max_output_tokens?: MaxOutputTokens
 model?: Model2
 reasoning?: ReasoningPatch
 }
@@ -818,6 +851,9 @@ export interface ReasoningPatch {
 gap?: Gap
 plan?: Plan
 write?: Write
+}
+export interface Use {
+[k: string]: string
 }
 /**
  * Any subset of the writing options; unset fields keep the value from the layer below.
@@ -882,41 +918,6 @@ retried?: Retried1
 uncovered?: Uncovered1
 }
 /**
- * Body of `POST /api/providers/health/check`; no blocks means every block.
- * 
- * This interface was referenced by `WosarcherContracts`'s JSON-Schema
- * via the `definition` "HealthCheckRequest".
- */
-export interface HealthCheckRequest {
-blocks?: Blocks
-}
-/**
- * This interface was referenced by `WosarcherContracts`'s JSON-Schema
- * via the `definition` "HealthReport".
- */
-export interface HealthReport {
-checks: Checks
-gpu_policy?: GpuPolicy1
-profile: Profile1
-warnings?: Warnings1
-}
-/**
- * This interface was referenced by `WosarcherContracts`'s JSON-Schema
- * via the `definition` "ProviderCheck".
- */
-export interface ProviderCheck {
-checked_at?: CheckedAt
-detail?: Detail1
-device?: Device1
-latency_ms?: LatencyMs1
-model?: Model3
-provider: Provider1
-release?: Release1
-role: Role
-status: Status1
-url?: Url
-}
-/**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "Hit".
  */
@@ -926,7 +927,7 @@ rank: Rank2
 round?: Round3
 snippet: Snippet
 title: Title1
-url: Url1
+url: Url
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -947,7 +948,7 @@ type?: Type1
 export interface HitFoundData {
 query_ids: QueryIds2
 title: Title2
-url: Url2
+url: Url1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -964,12 +965,18 @@ title: Title3
 uri: Uri1
 }
 /**
- * The run's model and thinking; unset fields keep the configured value.
+ * The run's model, its limits, thinking, and context budgets; unset fields keep the configured value.
+ * 
+ * Each field besides `model` and `reasoning` sets one key (`config.LLM_KEYS`).
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "LLMPatch".
  */
 export interface LLMPatch1 {
+context_tokens?: ContextTokens
+context_window?: ContextWindow1
+gap_context_tokens?: GapContextTokens
+max_output_tokens?: MaxOutputTokens
 model?: Model2
 reasoning?: ReasoningPatch
 }
@@ -987,7 +994,7 @@ skipped?: Skipped1
  */
 export interface LoginError {
 attempts_left?: AttemptsLeft
-detail: Detail2
+detail: Detail1
 error: Error2
 retry_after?: RetryAfter
 }
@@ -1004,10 +1011,31 @@ password: Password
  */
 export interface Message {
 content: Content
-role: Role1
+role: Role
 }
 /**
- * `GET /api/models`: the IDs the profile's LLM endpoint lists; empty when it lists none or fails.
+ * One model an llm entry lists; None where it sets no value (the built-in default applies).
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ModelInfo".
+ */
+export interface ModelInfo {
+context_window?: ContextWindow2
+gap_context_tokens?: GapContextTokens1
+id: Id1
+max_output_tokens?: MaxOutputTokens1
+reasoning?: ReasoningPatch1
+}
+/**
+ * Any subset of the thinking levels; each sets `llm.reasoning.<step>`.
+ */
+export interface ReasoningPatch1 {
+gap?: Gap
+plan?: Plan
+write?: Write
+}
+/**
+ * `GET /api/models`: the IDs an llm entry's endpoint lists; empty when it lists none or fails.
  * 
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "ModelList".
@@ -1033,7 +1061,7 @@ type?: Type2
  */
 export interface PageFailedData {
 reason: Reason1
-url: Url3
+url: Url2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1058,7 +1086,7 @@ round?: Round4
 source_id: SourceId4
 thin?: Thin
 title: Title4
-url: Url4
+url: Url3
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1091,7 +1119,7 @@ threshold_display: ThresholdDisplay
 export interface Plan1 {
 parts?: Parts
 queries: Queries2
-warnings?: Warnings2
+warnings?: Warnings1
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1119,7 +1147,7 @@ queries: Queries3
 export interface PrefilterResult {
 candidates: Candidates
 method: Method
-warnings?: Warnings3
+warnings?: Warnings2
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
@@ -1129,13 +1157,59 @@ export interface ProfileInfo {
 active: Active
 allow_domains?: AllowDomains
 block_domains?: BlockDomains
-context_window?: ContextWindow1
+context_tokens?: ContextTokens1
 description?: Description1
-max_output_tokens?: MaxOutputTokens
+error?: Error3
+model?: Model3
 name: Name2
 prompt_reserve_tokens?: PromptReserveTokens
 settings?: Settings
-source: Source1
+source?: Source2
+use?: Use1
+}
+/**
+ * One provider entry as `GET /api/providers` lists it, with its stored health; no secrets.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ProviderEntryInfo".
+ */
+export interface ProviderEntryInfo {
+block: Block3
+checked_at?: CheckedAt
+description?: Description2
+detail?: Detail2
+device?: Device1
+error?: Error4
+latency_ms?: LatencyMs1
+model?: Model4
+models?: Models1
+name: Name3
+provider?: Provider1
+release?: Release1
+source: Source3
+status?: Status1
+url?: Url4
+}
+/**
+ * Body of `POST /api/providers/check`: `<block>/<name>` entries; none means every entry.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ProvidersCheck".
+ */
+export interface ProvidersCheck {
+entries?: Entries
+}
+/**
+ * `GET /api/providers`: every entry by block, the active profile's GPU policy, and the last check's warnings.
+ * 
+ * This interface was referenced by `WosarcherContracts`'s JSON-Schema
+ * via the `definition` "ProvidersReport".
+ */
+export interface ProvidersReport {
+entries: Entries1
+gpu_policy?: GpuPolicy1
+profile?: Profile1
+warnings?: Warnings3
 }
 /**
  * One query's scoring report.
@@ -1183,7 +1257,7 @@ write?: Write1
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema
  * via the `definition` "ReasoningPatch".
  */
-export interface ReasoningPatch1 {
+export interface ReasoningPatch2 {
 gap?: Gap
 plan?: Plan
 write?: Write
@@ -1193,7 +1267,7 @@ write?: Write
  * via the `definition` "Reference".
  */
 export interface Reference {
-entry: Entry
+entry: Entry1
 passages: Passages3
 source_id: SourceId5
 }
@@ -1270,8 +1344,6 @@ reason: Reason2
  * via the `definition` "ResearchPatch".
  */
 export interface ResearchPatch {
-context_tokens?: ContextTokens1
-gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 queries_per_round?: QueriesPerRound1
@@ -1425,6 +1497,7 @@ search_language?: SearchLanguage
 set?: Set1
 sources?: Sources1
 until?: Until1
+use?: Use2
 writing?: WritingPatch1
 }
 /**
@@ -1435,9 +1508,15 @@ allow?: Allow1
 block?: Block2
 }
 /**
- * The run's model and thinking; unset fields keep the configured value.
+ * The run's model, its limits, thinking, and context budgets; unset fields keep the configured value.
+ * 
+ * Each field besides `model` and `reasoning` sets one key (`config.LLM_KEYS`).
  */
 export interface LLMPatch2 {
+context_tokens?: ContextTokens
+context_window?: ContextWindow1
+gap_context_tokens?: GapContextTokens
+max_output_tokens?: MaxOutputTokens
 model?: Model2
 reasoning?: ReasoningPatch
 }
@@ -1445,14 +1524,15 @@ reasoning?: ReasoningPatch
  * Typed research values; each sets one key (`config.RESEARCH_KEYS`).
  */
 export interface ResearchPatch1 {
-context_tokens?: ContextTokens1
-gap_context_tokens?: GapContextTokens1
 max_pages?: MaxPages1
 passages_per_query?: PassagesPerQuery1
 queries_per_round?: QueriesPerRound1
 results_per_query?: ResultsPerQuery1
 rounds?: Rounds1
 sub_queries?: SubQueries1
+}
+export interface Use2 {
+[k: string]: string
 }
 /**
  * Any subset of the writing options; unset fields keep the value from the layer below.
@@ -1487,10 +1567,11 @@ created: Created
 depth?: Depth1
 duration_s?: DurationS
 end_stage?: EndStage
-error?: Error3
+error?: Error5
 fork_from?: ForkFrom
 last_seq?: LastSeq
-model?: Model4
+model?: Model5
+modified?: Modified
 origin?: Origin
 parent_run_id?: ParentRunId
 profile: Profile3
@@ -1506,6 +1587,7 @@ status: Status3
 stop_reason?: StopReason
 token_name?: TokenName1
 until?: Until3
+use?: Use4
 version?: Version1
 writing?: WritingOptions
 }
@@ -1535,6 +1617,7 @@ request: RunRequest
 run_id: RunId14
 settings: Settings1
 token_name?: TokenName
+use?: Use3
 version?: Version
 }
 /**
@@ -1597,7 +1680,7 @@ type?: Type14
  * via the `definition` "RunFailedData".
  */
 export interface RunFailedData {
-error: Error4
+error: Error6
 stage: Stage15
 }
 /**
@@ -1608,7 +1691,7 @@ stage: Stage15
  */
 export interface RunNotActive {
 detail: Detail3
-error: Error5
+error: Error7
 run_id: RunId18
 status: Status4
 }
@@ -1620,7 +1703,7 @@ status: Status4
  */
 export interface RunOutput {
 context?: (Context | null)
-error?: Error6
+error?: Error8
 report?: (Report | null)
 run_id: RunId19
 status: Status5
@@ -1691,9 +1774,10 @@ created: Created1
 depth?: Depth3
 duration_s?: DurationS1
 end_stage?: EndStage1
-error?: Error7
+error?: Error9
 fork_from?: ForkFrom2
-model?: Model5
+model?: Model6
+modified?: Modified1
 origin?: Origin3
 parent_run_id?: ParentRunId3
 profile: Profile6
@@ -1708,6 +1792,7 @@ status: Status6
 stop_reason?: StopReason1
 token_name?: TokenName3
 until?: Until6
+use?: Use5
 version?: Version3
 writing?: WritingOptions1
 }
@@ -1904,7 +1989,7 @@ type?: Type18
  * via the `definition` "StageFailedData".
  */
 export interface StageFailedData {
-error: Error8
+error: Error10
 next: Next
 }
 /**
@@ -1955,7 +2040,7 @@ round?: Round10
  * via the `definition` "TokenCreate".
  */
 export interface TokenCreate {
-name: Name3
+name: Name4
 }
 /**
  * The new token, shown only in this response.
@@ -1964,8 +2049,8 @@ name: Name3
  * via the `definition` "TokenCreated".
  */
 export interface TokenCreated {
-id: Id1
-name: Name4
+id: Id2
+name: Name5
 token: Token
 }
 /**
@@ -1976,10 +2061,10 @@ token: Token
  */
 export interface TokenInfo {
 created: Created2
-id: Id2
+id: Id3
 last_used?: LastUsed
 masked: Masked
-name: Name5
+name: Name6
 }
 /**
  * This interface was referenced by `WosarcherContracts`'s JSON-Schema

@@ -21,9 +21,9 @@ describe("help texts", () => {
       title: "Topic line",
       body: "A short topic the planner writes from your question. Passages are ranked against it as the first query, q0. Questions up to 200 characters are searched as written; longer ones are searched by this topic.",
     });
-    expect(HELP["d-gap-ctx"]).toEqual({
+    expect(HELP["p-gapctx"]).toEqual({
       title: "Gap context tokens",
-      body: "Token budget for the passages the gap step reads between rounds to choose follow-up searches. Auto uses all the room the model window leaves.",
+      body: "Token budget for the passages the gap step reads between rounds.",
     });
   });
 

@@ -48,6 +48,68 @@ const asking = (n: number) => {
   return { query, events: [{ ...start, run_id: RUN_ID }] };
 };
 
+/** A CLI run on low-vram with a changed scorer, as scenario `live-cli`. */
+const cliRun = (extra: Partial<RunDetail> = {}) =>
+  ({
+    ...summary({
+      origin: "cli",
+      profile: "low-vram",
+      model: "qwen3-14b",
+      use: {
+        search: "searxng",
+        fetch: "firecrawl",
+        prefilter: "embeddings",
+        score: "jev-strict",
+        llm: "agents",
+      },
+      modified: true,
+    }),
+    last_seq: 1,
+    ...extra,
+  }) as RunDetail;
+
+describe("Profile line", () => {
+  const line = () => screen.getByText("low-vram").parentElement as HTMLElement;
+
+  it("names the profile and every entry, the llm with its model, and the modified tag", () => {
+    header(
+      upTo(all, (e) => e.type === "run.started"),
+      false,
+      cliRun(),
+    );
+    expect(line().textContent).toBe(
+      "low-vram·searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14bmodified",
+    );
+    expect(screen.queryByRole("button", { name: "All providers" })).toBeNull();
+  });
+
+  it("collapses to the llm on a phone until All providers", () => {
+    header(
+      upTo(all, (e) => e.type === "run.started"),
+      true,
+      cliRun(),
+    );
+    expect(line().textContent).toContain("low-vram·agents/qwen3-14b");
+    expect(line().textContent).not.toContain("searxng");
+    const toggle = screen.getByRole("button", { name: "All providers" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(line().textContent).toContain("searxng · firecrawl · embeddings · jev-strict");
+    const fewer = screen.getByRole("button", { name: "Fewer" });
+    expect(fewer.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("is left out for a run without use", () => {
+    header(
+      upTo(all, (e) => e.type === "run.started"),
+      false,
+      cliRun({ use: null, modified: false }),
+    );
+    expect(screen.queryByText("modified")).toBeNull();
+    expect(screen.queryByText(/agents\/qwen3-14b/)).toBeNull();
+  });
+});
+
 describe("LiveHeader", () => {
   it("clamps a long question and toggles the whole of it", () => {
     const { query, events } = asking(4030);

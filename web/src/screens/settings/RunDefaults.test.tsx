@@ -43,7 +43,7 @@ describe("RunDefaults", () => {
   it("names the profiles that set their own lists", async () => {
     const api = fakeApi();
     api.data.profiles[0].block_domains = ["pinterest.com", "quora.com"];
-    api.data.profiles[3].block_domains = ["facebook.com"];
+    api.data.profiles[2].block_domains = ["facebook.com"];
     renderApp({ hash: "#/settings", api });
     expect(
       await screen.findByText(

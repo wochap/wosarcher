@@ -33,7 +33,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from wosarcher.config import redact, resolve
+from wosarcher.config import ConfigError, list_entries, redact, resolve_run, without_use
 from wosarcher.models import (
     STAGES,
     Context,
@@ -72,6 +72,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
         command.add_argument("--until")
         command.add_argument("--profile")
         command.add_argument("--set", action="append", default=[])
+        command.add_argument("--use", action="append", default=[])
         command.add_argument("--origin")
         command.add_argument("--token-name")
     run.add_argument("--depth")
@@ -79,10 +80,13 @@ def parse(argv: list[str]) -> argparse.Namespace:
     doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--profile")
     doctor.add_argument("--block", action="append", default=[])
+    doctor.add_argument("--entry", action="append", default=[])
+    doctor.add_argument("--all-entries", action="store_true")
     return parser.parse_args(argv)
 
 
-def doctor(store: RunStore, argv: list[str], chosen: list[str]) -> int:
+def doctor(store: RunStore, argv: list[str], entries: list[str]) -> int:
+    """Rows for the `--entry BLOCK=NAME` values, or every entry of `list_entries` with `--all-entries`."""
     store.runs_dir.mkdir(parents=True, exist_ok=True)
     (store.runs_dir / "doctor-argv.json").write_text(json.dumps(argv))
     kind = os.environ.get("FAKE_DOCTOR", "ok")
@@ -93,22 +97,33 @@ def doctor(store: RunStore, argv: list[str], chosen: list[str]) -> int:
         time.sleep(60)
     status = "failed" if kind == "failed" else "ok"
     latency = 1840 if kind == "slow" else 120
-    rows = (
-        ProviderHealth(block="search", provider="searxng", base_url="http://s", status="ok", latency_ms=latency),
-        ProviderHealth(block="fetch", provider="firecrawl", base_url="http://f", status="ok", latency_ms=90),
-        ProviderHealth(block="prefilter", provider="embeddings", base_url="http://e", status="ok", latency_ms=30),
-        ProviderHealth(block="score", provider="rerank", base_url="http://r", status=status, error="refused"),
-        ProviderHealth(block="llm", provider="openai", base_url="http://l", status="ok", latency_ms=200),
-    )
-    rows = tuple(row for row in rows if not chosen or row.block in chosen)
-    print(DoctorReport(providers=rows).model_dump_json(indent=2))
-    return 1 if status == "failed" else 0
+    rows = {
+        "search": ProviderHealth(
+            block="search", provider="searxng", base_url="http://s", status="ok", latency_ms=latency
+        ),
+        "fetch": ProviderHealth(block="fetch", provider="firecrawl", base_url="http://f", status="ok", latency_ms=90),
+        "prefilter": ProviderHealth(block="prefilter", provider="embeddings", base_url="http://e", status="ok"),
+        "score": ProviderHealth(block="score", provider="rerank", base_url="http://r", status=status, error="refused"),
+        "llm": ProviderHealth(block="llm", provider="openai", base_url="http://l", status="ok", latency_ms=200),
+    }
+    if not entries:
+        entries = [f"{block}={name}" for block, found in list_entries(os.environ).items() for name in found]
+    chosen = [entry.partition("=") for entry in entries]
+    report = DoctorReport(providers=tuple(rows[block].model_copy(update={"entry": name}) for block, _, name in chosen))
+    print(report.model_dump_json(indent=2))
+    return 1 if any(row.status == "failed" for row in report.providers) else 0
 
 
 def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
     run_dir = store.run_dir(args.run_id)
     if run_dir.exists():
         sys.exit(2)
+    if args.command == "run":
+        try:
+            resolve_run(args.profile, [*args.set, *(f"use.{choice}" for choice in args.use)], os.environ)
+        except ConfigError as error:
+            print(f"error: {error}", file=sys.stderr)
+            sys.exit(2)
     run_dir.mkdir(parents=True)
     store.lock(args.run_id)
     names: list[str] = []
@@ -124,19 +139,22 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
         parent = store.read_record(args.parent)
         request = parent.request.model_copy(update={"until": args.until})
         lineage = {"parent_run_id": args.parent, "fork_from": args.from_stage, "version": parent.version + 1}
-        profile, overrides = args.profile or parent.profile, [*parent.overrides, *args.set]
+        profile, overrides = args.profile or parent.profile, [*without_use(parent.overrides), *args.set]
     else:
         request = RunRequest(query=args.query, sources=args.sources, until=args.until, attachments=names, depth=depth)
         lineage = {}
         profile, overrides = args.profile or "workstation", args.set
+    overrides += [f"use.{choice}" for choice in args.use]
+    resolved = resolve_run("workstation", overrides, os.environ, request.depth)
     record = RunRecord.model_validate(
         {
             "run_id": args.run_id,
             "created_at": datetime.now(UTC),
             "request": request,
             "profile": profile,
+            "use": resolved.use,
             "overrides": overrides,
-            "settings": redact(resolve("workstation", overrides, {}, request.depth)),
+            "settings": redact(resolved.settings),
             "origin": args.origin or "cli",
             "token_name": args.token_name,
             **lineage,
@@ -150,7 +168,7 @@ def main(argv: list[str]) -> int:
     store = RunStore(Path(os.environ["WOSARCHER_RUN__RUNS_DIR"]), Path())
     args = parse(argv)
     if args.command == "doctor":
-        return doctor(store, argv, args.block)
+        return doctor(store, argv, args.entry)
     query = getattr(args, "query", None)
     if (query if query in MODES else os.environ.get("FAKE_MODE")) == "early-exit":
         print("error: unknown profile 'x'", file=sys.stderr)

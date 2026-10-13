@@ -2,18 +2,20 @@
 
 import os
 import shutil
+from collections.abc import Mapping
 from typing import Annotated, get_args
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import ValidationError
 
-from wosarcher.config import CUSTOM_DEPTH, ConfigError, list_depths, own_settings, select_profile
+from wosarcher.config import CUSTOM_DEPTH, ConfigError, list_depths, list_entries, own_settings, select_profile
 from wosarcher.document import document
 from wosarcher.models import (
     Attachment,
     ExportFormat,
     ForkCreate,
+    LLMPatch,
     Origin,
     ReasoningOptions,
     Report,
@@ -95,6 +97,7 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         queue_position=state.manager.queue_position(staged.run_id),
         model=staged.llm.model or "",
         reasoning=ReasoningOptions.model_validate(staged.llm.reasoning.model_dump(exclude_none=True)),
+        modified=bool(staged.use) or staged.llm != LLMPatch(),
         origin=staged.origin,
         token_name=staged.token_name,
     )
@@ -137,6 +140,20 @@ def require_finished(state: ServerState, run_id: str) -> RunRecord:
     return record
 
 
+def check_use(use: Mapping[str, str]) -> None:
+    """Every chosen entry exists in its block; 422 naming `use.<block>` otherwise."""
+    if not use:
+        return
+    try:
+        entries = list_entries(os.environ)
+    except ConfigError as error:
+        raise RouteError(422, "invalid_request", f"use: {error}") from None
+    for block, name in use.items():
+        if name not in entries[block]:
+            listed = ", ".join(entries[block]) or "none"
+            raise RouteError(422, "invalid_request", f"use.{block}: unknown entry '{name}'; {block} entries: {listed}")
+
+
 async def submit(state: ServerState, staged: StagedRun) -> JSONResponse:
     active: ActiveRun = await state.manager.submit(staged)
     status = "running" if active.run_id in state.manager.running else "queued"
@@ -155,19 +172,25 @@ async def create_run(
         body = RunCreate.model_validate_json(request)
     except ValidationError as error:
         raise invalid(error.errors()) from None
-    known = [*list_depths(), CUSTOM_DEPTH]
+    try:
+        known = [*list_depths(os.environ), CUSTOM_DEPTH]
+    except ConfigError as error:
+        raise RouteError(422, "invalid_request", f"depth: {error}") from None
     if body.depth is not None and body.depth not in known:
         raise RouteError(422, "invalid_request", f"depth: unknown depth '{body.depth}'; available: {', '.join(known)}")
+    check_use(body.use)
     uploads = [Attachment(name=upload.filename or "", data=await upload.read()) for upload in attachments or []]
     defaults = global_settings.load(state.config_dir)
-    profile = select_profile(body.profile, os.environ)
     try:
-        own = own_settings(profile, os.environ)
+        own = own_settings(select_profile(body.profile, os.environ), os.environ)
     except ConfigError:
         own = {}
     try:
-        origin, token_name = origin_of(http)
         default_profile = select_profile(None, os.environ)
+    except ConfigError as error:
+        raise RouteError(422, "invalid_request", f"profile: {error}") from None
+    try:
+        origin, token_name = origin_of(http)
         staged = staging.stage_run(state.runs_dir, body, uploads, defaults, default_profile, own, origin, token_name)
     except OverrideError as error:
         raise RouteError(422, "invalid_override", str(error)) from None
@@ -266,6 +289,7 @@ async def fork_run(state: State, http: Request, run_id: str, body: ForkCreate) -
     if missing:
         detail = f"cannot fork {run_id} from {body.from_stage}: stage {missing[0]} is not finished"
         raise RouteError(409, "stage_not_finished", detail)
+    check_use(body.use)
     try:
         staged = staging.stage_fork(state.runs_dir, parent, body, *origin_of(http))
     except OverrideError as error:

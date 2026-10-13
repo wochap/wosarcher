@@ -29,10 +29,10 @@ function configuredScorer(detail: RunDetail | null | undefined): string | undefi
   return score?.provider;
 }
 
-/** The run's `prefilter.top_k`, from the settings in its `request.json`. */
-function prefilterTopK(detail: RunDetail | null | undefined): number | undefined {
-  const prefilter = detail?.request?.settings.prefilter as { top_k?: number } | undefined;
-  return prefilter?.top_k;
+/** The run's `score.candidates`, from the settings in its `request.json`. */
+function candidates(detail: RunDetail | null | undefined): number | undefined {
+  const score = detail?.request?.settings.score as { candidates?: number } | undefined;
+  return score?.candidates;
 }
 
 /** The run's resolved `research.rounds`, from the settings in its `request.json`; 1 when unset. */
@@ -47,7 +47,7 @@ function funnelConfig(detail: RunDetail | null | undefined) {
   const score = settings?.score as { top_k?: number } | undefined;
   const select = settings?.select as { max_chunks_per_source?: number } | undefined;
   return {
-    prefilterTopK: prefilterTopK(detail),
+    candidates: candidates(detail),
     scoreTopK: score?.top_k,
     maxPerSource: select?.max_chunks_per_source,
   };
@@ -195,7 +195,7 @@ export function LiveScreen() {
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
       {shows("progress") && (
-        <PhaseTimeline run={run} topK={prefilterTopK(detail)} rounds={rounds} />
+        <PhaseTimeline run={run} candidates={candidates(detail)} rounds={rounds} />
       )}
       <div className={css.grid}>
         {(shows("progress") || shows("sources")) && (
@@ -256,7 +256,7 @@ export function LiveScreen() {
           reloadKey={running ? finishedStages : undefined}
           marker={marker}
           context={context}
-          prefilterTopK={prefilterTopK(detail)}
+          candidates={candidates(detail)}
           onClose={closeSource}
         />
       )}

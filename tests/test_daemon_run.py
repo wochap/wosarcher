@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from typer.testing import CliRunner
 
 import wosarcher.build as building
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from tests.runner.helpers import adapters
 from wosarcher.adapters.fakes import FakeLLM, FakeSearcher
 from wosarcher.cli.progress import ProgressView
@@ -55,6 +56,7 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> World:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    write_config(tmp_path / "config" / "wosarcher", MINIMAL_CONFIG)
     fake = World()
     monkeypatch.setattr(building, "build", fake.build)
     return fake
@@ -342,7 +344,113 @@ def test_fork_as_answer(world: World, tmp_path: Path) -> None:
     assert world.built[-1].write.format == "answer"
 
 
+def config(tmp_path: Path, files: dict[str, str]) -> None:
+    write_config(tmp_path / "config" / "wosarcher", files)
+
+
+JEV = 'provider = "jev"\nbase_url = "http://jev.test"\napi_key = "tk"\n'
+
+
+def test_entries_recorded(world: World, tmp_path: Path) -> None:
+    config(tmp_path, {"providers/score/jev-strict.toml": JEV, "profiles/workstation.toml": BASE_USE})
+    result = runner.invoke(app, ["run", "q", "--use", "score=jev-strict", "--until", "plan"])
+    assert result.exit_code == 0, result.output
+    record = only_run(tmp_path)
+    assert record.profile == "workstation"
+    assert record.use == {
+        "search": "searxng",
+        "fetch": "firecrawl",
+        "prefilter": "bm25",
+        "score": "jev-strict",
+        "llm": "agents",
+    }
+    assert record.overrides == ["use.score=jev-strict"]
+    assert world.built[0].score.provider == "jev"
+
+
+def test_unknown_entry(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--use", "llm=sonet"])
+    assert result.exit_code == 2
+    assert "unknown llm entry 'sonet'; llm entries: agents" in result.output
+    assert not runs_dir(tmp_path).exists()
+
+
+def test_unknown_block_in_use(world: World, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "q", "--use", "scorer=bm25"], env={"COLUMNS": "200"})
+    assert result.exit_code == 2
+    assert "--use" in result.output
+    assert "unknown block 'scorer'; choose from search, fetch, prefilter, score, llm" in result.output
+
+
+BASE_USE = '[use]\nprefilter = "bm25"\nscore = "bm25"\nllm = "agents"\n'
+SONNET = 'provider = "openai"\nbase_url = "http://sonnet.test/v1"\nmodel = "sonnet"\n'
+OMNIROUTE = (
+    'provider = "openai"\nbase_url = "http://omni.test/v1"\nmodel = "smart"\n[models.smart]\ncontext_window = 1048576\n'
+)
+
+
+def sonnet_parent(tmp_path: Path) -> RunRecord:
+    config(tmp_path, {"providers/llm/sonnet.toml": SONNET, "profiles/workstation.toml": BASE_USE})
+    assert runner.invoke(app, ["run", "q", "--use", "llm=sonnet"]).exit_code == 0
+    return only_run(tmp_path)
+
+
+def test_fork_entry_gone(world: World, tmp_path: Path) -> None:
+    parent = sonnet_parent(tmp_path)
+    (tmp_path / "config" / "wosarcher" / "providers" / "llm" / "sonnet.toml").unlink()
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
+    assert result.exit_code == 2
+    assert "unknown llm entry 'sonnet'; llm entries: agents" in result.output
+    assert [path.name for path in runs_dir(tmp_path).iterdir() if not path.name.startswith(".")] == [parent.run_id]
+
+
+def test_fork_entry_gone_replaced(world: World, tmp_path: Path) -> None:
+    parent = sonnet_parent(tmp_path)
+    (tmp_path / "config" / "wosarcher" / "providers" / "llm" / "sonnet.toml").unlink()
+    config(tmp_path, {"providers/llm/omniroute.toml": OMNIROUTE})
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write", "--use", "llm=omniroute"])
+    assert result.exit_code == 0, result.output
+    llm = world.built[-1].llm
+    assert (llm.base_url, llm.model, llm.context_window) == ("http://omni.test/v1", "smart", 1048576)
+    store = RunStore(runs_dir(tmp_path), tmp_path)
+    fork = next(r for r in store.list_runs() if r.run_id != parent.run_id)
+    assert store.read_record(fork.run_id).use == {**(parent.use or {}), "llm": "omniroute"}
+
+
+def test_fork_retry_with_another_scorer(world: World, tmp_path: Path) -> None:
+    config(tmp_path, {"providers/score/jev-strict.toml": JEV, "profiles/workstation.toml": BASE_USE})
+    assert runner.invoke(app, ["run", "q", "--use", "score=jev-strict"]).exit_code == 0
+    parent = only_run(tmp_path)
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "score", "--use", "score=bm25"])
+    assert result.exit_code == 0, result.output
+    assert world.built[-1].score.provider == "bm25"
+    store = RunStore(runs_dir(tmp_path), tmp_path)
+    fork = store.read_record(next(r.run_id for r in store.list_runs() if r.run_id != parent.run_id))
+    assert (fork.use or {})["score"] == "bm25"
+    assert fork.changes == ["use.score=bm25"]
+
+
+def test_fork_ignores_saved_source(world: World, tmp_path: Path) -> None:
+    assert runner.invoke(app, ["run", "q"]).exit_code == 0
+    parent = only_run(tmp_path)
+    path = runs_dir(tmp_path) / parent.run_id / "request.json"
+    data = json.loads(path.read_text())
+    data["settings"]["llm"] |= {"api_key": "***", "api_key_file": "/run/secrets/old"}
+    path.write_text(json.dumps(data))
+    agents = 'provider = "openai"\nbase_url = "http://llm.test/v1"\nmodel = "qwen3-14b"\napi_key = "sk-new"\n'
+    config(tmp_path, {"providers/llm/agents.toml": agents})
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "write"])
+    assert result.exit_code == 0, result.output
+    api_key = world.built[-1].llm.api_key
+    assert api_key is not None
+    assert api_key.get_secret_value() == "sk-new"
+
+
 def test_fork_with_profile(world: World, tmp_path: Path) -> None:
+    config(
+        tmp_path, {"providers/score/jev.toml": JEV, "profiles/cloud.toml": '[use]\nprefilter = "bm25"\nscore = "jev"\n'}
+    )
+    config(tmp_path, {"profiles/workstation.toml": '[use]\nprefilter = "bm25"\nscore = "bm25"\n'})
     assert runner.invoke(app, ["run", "battery recycling", "--until", "prefilter"]).exit_code == 0
     parent = only_run(tmp_path)
     result = runner.invoke(app, ["fork", parent.run_id, "--from", "score", "--profile", "cloud", "--until", "score"])
@@ -383,6 +491,7 @@ def test_fork_fails_on_stale_saved_value(world: World, tmp_path: Path) -> None:
 SLOW_RUN = """
 import asyncio, sys
 import wosarcher.build as building
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from tests.runner.helpers import adapters
 from wosarcher.adapters.fakes import FakeFetcher
 
@@ -402,6 +511,7 @@ def slow_run(tmp_path: Path) -> "subprocess.Popen[str]":
     env = {key: value for key, value in os.environ.items() if not key.startswith("WOSARCHER_")}
     env |= {"XDG_DATA_HOME": str(tmp_path / "data"), "XDG_CACHE_HOME": str(tmp_path / "cache")}
     env["XDG_CONFIG_HOME"] = str(tmp_path / "config")
+    write_config(tmp_path / "config" / "wosarcher", MINIMAL_CONFIG)
     root = Path(__file__).resolve().parent.parent
     process = subprocess.Popen(
         [sys.executable, "-c", SLOW_RUN], cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 from typer.testing import CliRunner
 
 from wosarcher.cli import app
-from wosarcher.config import DEFAULT_STAGE_TIMEOUTS, Settings, redact, resolve, restore_secrets
+from wosarcher.config import DEFAULT_STAGE_TIMEOUTS, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     EVENT_TYPES,
@@ -154,22 +154,9 @@ def test_run_config_defaults_and_override() -> None:
     assert (run.runs_dir, run.cache_dir, run.page_cache_ttl_hours) == (None, None, 24)
     assert run.stage_timeouts == DEFAULT_STAGE_TIMEOUTS
     assert run.stage_timeouts["write"] == 1800
-    changed = resolve("workstation", ["run.stage_timeouts.score=30"], {"XDG_CONFIG_HOME": "/nonexistent"}).run
+    changed = Settings.model_validate({"run": {"stage_timeouts": {"score": 30}}}).run
     assert changed.stage_timeouts["score"] == 30
     assert changed.stage_timeouts["fetch"] == 600
-
-
-def test_restore_secrets() -> None:
-    env = {"XDG_CONFIG_HOME": "/nonexistent", "WOSARCHER_SCORE__API_KEY": "sk-score"}
-    saved = redact(resolve("workstation", ["score.top_k=7"], env))
-    assert saved["score"]["api_key"] == "***"
-    current = resolve("workstation", [], env)
-    restored, dropped = restore_secrets(saved, current)
-    assert dropped == []
-    assert restored.score.api_key is not None
-    assert restored.score.api_key.get_secret_value() == "sk-score"
-    assert restored.score.top_k == 7
-    assert restore_secrets(saved, current, ["write.tone=critical"])[0].write.tone == "critical"
 
 
 def test_ledger_total_and_rows() -> None:

@@ -3,8 +3,8 @@
 import { type ApiClient, ApiError, type ExportFormat, type LoginResult } from "../api/client";
 import type {
   DepthInfo,
-  HealthReport,
   ProfileInfo,
+  ProvidersReport,
   RunCreated,
   RunDetail,
   RunEvent,
@@ -32,7 +32,7 @@ export type FakeData = {
   depths: DepthInfo[];
   /** What `listModels` answers. */
   models: string[];
-  health: HealthReport;
+  providers: ProvidersReport;
   session: SessionInfo;
   tokens: TokenInfo[];
   /** Answers to `login`, in order; when empty, the login succeeds. */
@@ -54,7 +54,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     profiles: fixtures.profiles,
     depths: fixtures.depths,
     models: [],
-    health: fixtures.health,
+    providers: fixtures.providers,
     session: fixtures.session,
     tokens: fixtures.tokens,
     logins: [],
@@ -161,24 +161,25 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       record("listDepths");
       return structuredClone(data.depths);
     },
-    async listModels(profile) {
-      record("listModels", profile);
+    async listModels(llm) {
+      record("listModels", llm);
       return [...data.models];
     },
-    async health(profile) {
-      record("health", profile);
-      return structuredClone(data.health);
+    async listProviders() {
+      record("listProviders");
+      return structuredClone(data.providers);
     },
-    async checkHealth(blocks, profile) {
-      record("checkHealth", blocks, profile);
+    async checkProviders(entries) {
+      record("checkProviders", entries);
       const at = new Date().toISOString();
-      for (const c of data.health.checks) {
-        if (c.status !== "skipped" && (!blocks?.length || blocks.includes(c.role))) {
-          if (c.status === "unchecked") c.status = "ok";
-          c.checked_at = at;
+      for (const e of data.providers.entries) {
+        const key = `${e.block}/${e.name}`;
+        if (e.source !== "builtin" && (!entries?.length || entries.includes(key))) {
+          if (e.status === "unchecked") e.status = "ok";
+          e.checked_at = at;
         }
       }
-      return structuredClone(data.health);
+      return structuredClone(data.providers);
     },
     async getSession() {
       record("getSession");

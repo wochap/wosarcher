@@ -316,14 +316,14 @@ def test_custom_research_values(client: TestClient, runs_dir: Path) -> None:
 
 
 def test_auto_context_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
-    run_id = create(client, {"query": "q", "depth": "custom", "research": {"context_tokens": "auto"}})
+    run_id = create(client, {"query": "q", "depth": "custom", "llm": {"context_tokens": "auto"}})
     finished(client, run_id)
     assert resolved(runs_dir, run_id)["select"]["max_context_tokens"] == "auto"
 
 
 def test_gap_context_for_a_custom_run(client: TestClient, runs_dir: Path) -> None:
-    research = {"gap_context_tokens": "auto", "rounds": 3}
-    run_id = create(client, {"query": "q", "depth": "custom", "research": research})
+    request = {"query": "q", "depth": "custom", "research": {"rounds": 3}, "llm": {"gap_context_tokens": "auto"}}
+    run_id = create(client, request)
     finished(client, run_id)
     settings = resolved(runs_dir, run_id)
     assert (settings["research"]["gap_context_tokens"], settings["research"]["rounds"]) == ("auto", 3)
@@ -534,3 +534,64 @@ def test_rerun_saved_source_override_422(client: TestClient, runs_dir: Path) -> 
     assert response.status_code == 422
     assert response.json()["error"] == "invalid_override"
     assert "score.api_key_file" in response.json()["detail"]
+
+
+def add_entry(runs_dir: Path, name: str, text: str) -> Path:
+    path = runs_dir.parent / "config" / "wosarcher" / "providers" / f"{name}.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def test_entry_for_one_run(client: TestClient, runs_dir: Path) -> None:
+    add_entry(runs_dir, "score/jev-strict", 'provider = "jev"\n')
+    run_id = create(client, {"query": "q", "use": {"score": "jev-strict"}})
+    finished(client, run_id)
+    sent = argv(runs_dir, run_id)
+    assert sent[sent.index("--use") + 1] == "score=jev-strict"
+    record = RunStore(runs_dir, runs_dir).read_record(run_id)
+    assert (record.use or {})["score"] == "jev-strict"
+    found = client.get(f"/api/runs/{run_id}").json()
+    assert (found["use"]["score"], found["modified"]) == ("jev-strict", True)
+
+
+def test_unknown_entry_422(client: TestClient, runs_dir: Path) -> None:
+    response = client.post(
+        "/api/runs", files=[("request", (None, json.dumps({"query": "q", "use": {"llm": "sonet"}})))]
+    )
+    assert response.status_code == 422
+    assert "use.llm: unknown entry 'sonet'; llm entries: agents" in response.json()["detail"]
+    assert client.get("/api/runs").json() == []
+
+
+def test_plain_profile_run(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, {"query": "q", "profile": "workstation", "depth": "quick"})
+    finished(client, run_id)
+    found = client.get(f"/api/runs/{run_id}").json()
+    assert (found["use"]["llm"], found["modified"]) == ("agents", False)
+
+
+def test_rerun_keeps_the_entries(client: TestClient, runs_dir: Path) -> None:
+    add_entry(runs_dir, "score/jev-strict", 'provider = "jev"\n')
+    original = create(client, {"query": "q", "use": {"score": "jev-strict"}})
+    finished(client, original)
+    rerun = client.post(f"/api/runs/{original}/rerun").json()["run_id"]
+    finished(client, rerun)
+    sent = argv(runs_dir, rerun)
+    uses = [sent[n + 1] for n, flag in enumerate(sent) if flag == "--use"]
+    assert uses == ["search=searxng", "fetch=firecrawl", "prefilter=bm25", "score=jev-strict", "llm=agents"]
+    assert not any(value.startswith("use.") for n, value in enumerate(sent) if sent[n - 1] == "--set")
+
+
+def test_rerun_entry_removed_since(client: TestClient, runs_dir: Path) -> None:
+    path = add_entry(runs_dir, "llm/sonnet", 'provider = "openai"\n')
+    original = create(client, {"query": "q", "use": {"llm": "sonnet"}})
+    finished(client, original)
+    path.unlink()
+    response = client.post(f"/api/runs/{original}/rerun")
+    assert response.status_code == 201
+    rerun = response.json()["run_id"]
+    wait_until(lambda: client.get(f"/api/runs/{rerun}").json().get("status") not in ("queued", "running"))
+    found = client.get(f"/api/runs/{rerun}").json()
+    assert found["status"] == "failed"
+    assert "unknown llm entry 'sonnet'" in found["error"]

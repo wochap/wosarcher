@@ -2,8 +2,8 @@
 import type {
   DepthInfo,
   ForkCreate,
-  HealthReport,
   ProfileInfo,
+  ProvidersReport,
   RunCreate,
   RunCreated,
   RunDetail,
@@ -45,12 +45,12 @@ export interface ApiClient {
   getSlots(): Promise<SlotState>;
   listProfiles(): Promise<ProfileInfo[]>;
   listDepths(): Promise<DepthInfo[]>;
-  /** The model IDs the profile's LLM endpoint lists; empty when it lists none. */
-  listModels(profile?: string): Promise<string[]>;
-  /** The stored provider checks; sends no probe. */
-  health(profile?: string): Promise<HealthReport>;
-  /** Probes the named blocks (every block when none) and returns the merged report. */
-  checkHealth(blocks?: string[], profile?: string): Promise<HealthReport>;
+  /** The model IDs the llm entry's endpoint lists; empty when it lists none. */
+  listModels(llm: string): Promise<string[]>;
+  /** Every provider entry with its stored check; sends no probe. */
+  listProviders(): Promise<ProvidersReport>;
+  /** Probes the `<block>/<name>` entries (every entry when none) and returns the report. */
+  checkProviders(entries?: string[]): Promise<ProvidersReport>;
   getSession(): Promise<SessionInfo>;
   login(password: string): Promise<LoginResult>;
   logout(): Promise<void>;
@@ -123,8 +123,6 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
   }
 
   const run = (id: string) => `/runs/${encodeURIComponent(id)}`;
-  const profileQuery = (profile?: string) =>
-    profile ? `?profile=${encodeURIComponent(profile)}` : "";
 
   return {
     listRuns: () => json("GET", "/runs"),
@@ -164,11 +162,11 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     getSlots: () => json("GET", "/slots"),
     listProfiles: () => json("GET", "/profiles"),
     listDepths: () => json("GET", "/depths"),
-    listModels: async (profile) =>
-      (await json<{ models: string[] }>("GET", `/models${profileQuery(profile)}`)).models,
-    health: (profile) => json("GET", `/providers/health${profileQuery(profile)}`),
-    checkHealth: (blocks, profile) =>
-      json("POST", `/providers/health/check${profileQuery(profile)}`, { blocks: blocks ?? [] }),
+    listModels: async (llm) =>
+      (await json<{ models: string[] }>("GET", `/models?llm=${encodeURIComponent(llm)}`)).models,
+    listProviders: () => json("GET", "/providers"),
+    checkProviders: (entries) =>
+      json("POST", "/providers/check", entries?.length ? { entries } : undefined),
     getSession: () => json("GET", "/session"),
     login: async (password) => {
       const response = await fetch("/api/login", {

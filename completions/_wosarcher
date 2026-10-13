@@ -10,8 +10,8 @@
 #   - command lists follow a `# commands: <group>` line and value lists a
 #     `# values: <name>` line, as an array with one quoted `name:description`
 #     or `name` entry per line, closed by a line holding only `)`.
-# Run IDs, profiles, and depth presets are asked from the daemon through the
-# command being completed; when it fails, nothing is offered.
+# Run IDs, profiles, provider entries, and depth presets are asked from the
+# daemon through the command being completed; when it fails, nothing is offered.
 
 # Runs the wosarcher command on the line (so a wrapper's WOSARCHER_SOCKET
 # applies), at most 2 seconds, silently; prints nothing on failure.
@@ -64,6 +64,38 @@ _wosarcher_depth_names() {
     [[ -n $line ]] && depths+=("${line%% *}:${${line#* }//:/\\:}")
   done
   _describe -t depths 'depth preset' depths
+}
+
+_wosarcher_blocks() {
+  # values: blocks
+  local -a blocks=(
+    'search'
+    'fetch'
+    'prefilter'
+    'score'
+    'llm'
+  )
+  _describe -t blocks 'block' blocks "$@"
+}
+
+# `--use BLOCK=NAME`: the block names, then the typed block's entry names.
+_wosarcher_use() {
+  if compset -P '*='; then
+    local block=${IPREFIX%=}
+    local -a entries
+    local line
+    # `providers list --json`: each entry's fields sit 6 spaces in.
+    for line in ${(f)"$(_wosarcher_query providers list --block $block --json)"}; do
+      case $line in
+        ('      "name": '*)
+          entries+=(${${line#*: \"}%\",})
+          ;;
+      esac
+    done
+    _describe -t entries "$block entry" entries
+  else
+    _wosarcher_blocks -S =
+  fi
 }
 
 _wosarcher_stages() {
@@ -161,6 +193,7 @@ _wosarcher_run() {
     '--sources[files, web, or both]:sources:_wosarcher_sources' \
     '--until[stop after this stage]:stage:_wosarcher_stages' \
     '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '*--use[use this provider entry for one block]:block=entry:_wosarcher_use' \
     '--depth[depth preset]:depth:_wosarcher_depth_names' \
     '*--set[override one field]:dotted.key=value:' \
     '--tone[writing tone]:tone:_wosarcher_tones' \
@@ -182,6 +215,8 @@ _wosarcher_run() {
     '*--allow-domain[only use search results from this domain]:domain:' \
     '*--block-domain[drop search results from this domain]:domain:' \
     '--model[chat model for this run]:model:' \
+    '--context-window[the model'\''s context window in tokens]:tokens:' \
+    '--max-output[the model'\''s output limit in tokens]:tokens:' \
     '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
     '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
     '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
@@ -195,6 +230,7 @@ _wosarcher_fork() {
     '--from[first stage to run again]:stage:_wosarcher_stages' \
     '--until[stop after this stage]:stage:_wosarcher_stages' \
     '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '*--use[use this provider entry for one block]:block=entry:_wosarcher_use' \
     '*--set[override one field]:dotted.key=value:' \
     '--tone[writing tone]:tone:_wosarcher_tones' \
     '--tone-instructions[extra tone instructions]:instructions:' \
@@ -203,8 +239,11 @@ _wosarcher_fork() {
     '--citation-marker[citation marker]:marker:_wosarcher_markers' \
     '--reference-style[reference style]:style:_wosarcher_styles' \
     '--format[write a report or an answer]:format:_wosarcher_formats' \
+    '--context-tokens[context token cap]:tokens:_wosarcher_budget' \
     '--gap-context-tokens[gap step context token budget]:tokens:_wosarcher_budget' \
     '--model[chat model for this run]:model:' \
+    '--context-window[the model'\''s context window in tokens]:tokens:' \
+    '--max-output[the model'\''s output limit in tokens]:tokens:' \
     '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
     '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
     '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
@@ -248,18 +287,11 @@ _wosarcher_export() {
 }
 
 _wosarcher_doctor() {
-  # values: blocks
-  local -a blocks=(
-    'search'
-    'fetch'
-    'prefilter'
-    'score'
-    'llm'
-  )
   _arguments \
     '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '*--use[check this provider entry for one block]:block=entry:_wosarcher_use' \
     '--json[print the report as JSON]' \
-    "*--block[check only this block]:block:($blocks)" \
+    '*--block[check only this block]:block:_wosarcher_blocks' \
     '--help[show help]'
 }
 
@@ -277,6 +309,13 @@ _wosarcher_profile_show() {
   _arguments \
     '--help[show help]' \
     '1:profile:_wosarcher_profile_names'
+}
+
+_wosarcher_providers_list() {
+  _arguments \
+    '--block[only this block]:block:_wosarcher_blocks' \
+    '--json[print the GET /api/providers answer]' \
+    '--help[show help]'
 }
 
 _wosarcher_depth_list() {
@@ -329,10 +368,18 @@ _wosarcher_group() {
 _wosarcher_profile() {
   # commands: profile
   local -a subcommands=(
-    'list:list profiles with their source and description'
+    'list:list profiles with their source, entries, and description'
     'show:print a profile resolved by the daemon, secrets redacted'
   )
   _wosarcher_group profile $subcommands
+}
+
+_wosarcher_providers() {
+  # commands: providers
+  local -a subcommands=(
+    'list:list provider entries by block'
+  )
+  _wosarcher_group providers $subcommands
 }
 
 _wosarcher_depth() {
@@ -367,6 +414,7 @@ _wosarcher() {
     'export:write a finished report as PDF or DOCX'
     'doctor:check the daemon'\''s providers'
     'profile:list and show configuration profiles'
+    'providers:list the provider entries'
     'depth:list and show depth presets'
     'tokens:create, list, and revoke API tokens'
     'schema:print the JSON Schema of every contract type'

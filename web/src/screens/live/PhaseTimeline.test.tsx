@@ -88,7 +88,7 @@ describe("PhaseTimeline", () => {
           prefilterStarted,
           stageDone(3, "prefilter", { provider: "bm25", warnings: [warning] }),
         ])}
-        topK={50}
+        candidates={50}
       />,
     );
     const tag = screen.getByRole("button", { name: "Method: BM25 · fallback, details" });
@@ -108,13 +108,13 @@ describe("PhaseTimeline", () => {
   });
 
   it("shows the prefilter detail while running", () => {
-    render(<PhaseTimeline run={viewOf([begin, prefilterStarted])} topK={50} />);
+    render(<PhaseTimeline run={viewOf([begin, prefilterStarted])} candidates={50} />);
     expect(card("Prefilter").textContent).toContain("top 50 per sub-query");
   });
 
   it("shows the prefilter detail with passthrough sub-queries once done", () => {
     const done = stageDone(3, "prefilter", { provider: embeddings, passthrough: ["q4", "q5"] });
-    render(<PhaseTimeline run={viewOf([begin, prefilterStarted, done])} topK={50} />);
+    render(<PhaseTimeline run={viewOf([begin, prefilterStarted, done])} candidates={50} />);
     expect(card("Prefilter").textContent).toContain("top 50/sub-query · q4, q5 passthrough");
   });
 });

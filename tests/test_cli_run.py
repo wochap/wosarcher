@@ -97,6 +97,8 @@ def test_flags_sent_to_the_server(daemon: Daemon) -> None:
         (["--allow-domain", "https://gob.pe/x"], "https://gob.pe/x"),
         (["--sources", "files"], "--sources files needs --attach"),
         (["--until", "rank"], "valid stages"),
+        (["--use", "scorer=bm25"], "--use"),
+        (["--context-window", "0"], "--context-window"),
     ],
 )
 def test_checked_before_a_request(daemon: Daemon, args: list[str], named: str) -> None:
@@ -104,6 +106,40 @@ def test_checked_before_a_request(daemon: Daemon, args: list[str], named: str) -
     assert result.exit_code == 2
     assert named in result.output
     assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_unknown_block_in_entry_flag(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q", "--use", "scorer=bm25"], env={"COLUMNS": "200"})
+    assert result.exit_code == 2
+    assert "unknown block 'scorer'; choose from search, fetch, prefilter, score, llm" in result.output
+
+
+def test_entry_flag(daemon: Daemon, config_dir: Path) -> None:
+    (config_dir / "providers" / "score").mkdir()
+    (config_dir / "providers" / "score" / "jev-strict.toml").write_text('provider = "jev"\n')
+    result = runner.invoke(app, ["run", "q", "--use", "score=jev-strict", "--use", "llm=agents", "--json"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    sent = json.loads((daemon.runs_dir / run_id / "argv.json").read_text())
+    assert [sent[n + 1] for n, flag in enumerate(sent) if flag == "--use"] == ["score=jev-strict", "llm=agents"]
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(run_id)
+    assert (record.use or {})["score"] == "jev-strict"
+
+
+def test_unknown_entry_rejected_by_server(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q", "--use", "llm=sonet"])
+    assert result.exit_code == 2
+    assert "use.llm: unknown entry 'sonet'; llm entries: agents" in result.output
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_limits_for_an_unlisted_model(daemon: Daemon) -> None:
+    args = ["run", "q", "--model", "qwen3-30b-a3b", "--context-window", "262144", "--max-output", "16384"]
+    assert runner.invoke(app, [*args, "--context-tokens", "auto", "--json"]).exit_code == 0
+    [run_id] = listed(daemon)
+    settings = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(run_id).settings
+    assert (settings["llm"]["context_window"], settings["llm"]["max_output_tokens"]) == (262144, 16384)
+    assert settings["select"]["max_context_tokens"] == "auto"
 
 
 def test_engine_rejects_configuration(daemon: Daemon) -> None:
@@ -244,13 +280,17 @@ def test_ctrl_c_while_running(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -
     assert json.loads(events[-1])["type"] == "run.cancelled"
 
 
-def test_doctor(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_doctor(daemon: Daemon, config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (config_dir / "providers" / "score").mkdir()
+    (config_dir / "providers" / "score" / "rerank.toml").write_text('provider = "rerank"\nbase_url = "http://r"\n')
+    (config_dir / "profiles" / "workstation.toml").write_text('[use]\nprefilter = "bm25"\nscore = "rerank"\n')
     monkeypatch.setenv("FAKE_DOCTOR", "failed")
     result = runner.invoke(app, ["doctor", "--block", "score", "--json"])
     assert result.exit_code == 1, result.output
-    checks = json.loads(result.stdout)["checks"]
-    assert [(check["role"], check["status"]) for check in checks] == [("score", "down")]
+    entries = json.loads(result.stdout)["entries"]
+    assert [(entry["block"], entry["name"], entry["status"]) for entry in entries] == [("score", "rerank", "down")]
+    assert json.loads((daemon.runs_dir / "doctor-argv.json").read_text())[-1] == "--entry=score=rerank"
     monkeypatch.setenv("FAKE_DOCTOR", "ok")
-    table = runner.invoke(app, ["doctor"])
+    table = runner.invoke(app, ["doctor", "--use", "score=bm25"], env={"COLUMNS": "200"})
     assert table.exit_code == 0, table.output
     assert "searxng" in table.output

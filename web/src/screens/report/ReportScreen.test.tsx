@@ -377,4 +377,25 @@ describe("ReportScreen thinking tags", () => {
     await screen.findByText("Completed");
     expect(screen.queryByText(/thinking (low|medium|high|default)/)).toBeNull();
   });
+
+  it("shows the profile line with the entries the run used", async () => {
+    const api = fakeApi(finished.data);
+    api.data.runs[0] = summary({
+      profile: "low-vram",
+      model: "qwen3-14b",
+      use: {
+        search: "searxng",
+        fetch: "firecrawl",
+        prefilter: "embeddings",
+        score: "rerank",
+        llm: "agents",
+      },
+    });
+    await openScenario(finished, { api });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    const line = screen.getByText("agents", { exact: false }).parentElement as HTMLElement;
+    expect(line.textContent).toBe(
+      "low-vram·searxng · firecrawl · embeddings · rerank · agents/qwen3-14b",
+    );
+  });
 });

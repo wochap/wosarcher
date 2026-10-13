@@ -1,0 +1,4 @@
+description = "Recorded chat endpoint."
+provider = "openai"
+base_url = "http://llm.test/v1"
+model = "recorded-llm"

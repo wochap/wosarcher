@@ -49,16 +49,21 @@ wosarcher run "<query>" --attach notes.md --sources files --until select --json
 
 `--sources` is `files`, `web`, or `both` (default).
 
-## 4. Profiles and overrides
+## 4. Profiles, providers, and overrides
 
 ```sh
 wosarcher profile list
+wosarcher providers list
 wosarcher run "<query>" --profile <profile> --until select --json
+wosarcher run "<query>" --use score=<entry> --use llm=<entry> --until select --json
 wosarcher run "<query>" --set select.max_context_tokens=8000 --until select --json
 ```
 
-A profile picks providers (search, fetch, embeddings, rerank, LLM).
-`--set KEY=VALUE` overrides one configuration field; repeat it for more.
+A profile picks one provider entry per block (`search`, `fetch`,
+`prefilter`, `score`, `llm`). `providers list` shows each block's entries
+and each llm entry's models. `--use BLOCK=NAME` picks another entry for
+this run; repeat it for more blocks. `--set KEY=VALUE` overrides one
+configuration field; repeat it for more.
 
 ```sh
 wosarcher run "<query>" --allow-domain gob.pe --allow-domain sbs.gob.pe --until select --json
@@ -87,14 +92,18 @@ Tones include `objective`, `formal`, `analytical`, `critical`, and
 
 ```sh
 wosarcher run "<query>" --model deepseek-v4-flash --json
+wosarcher run "<query>" --model qwen3-30b-a3b --context-window 262144 --max-output 32768 --json
 wosarcher run "<query>" --write-thinking high --gap-thinking low --json
 ```
 
-`--model` picks the chat model for this run. `--plan-thinking`,
+`--model` picks the chat model of the llm entry for this run; the limits
+and thinking the entry lists for that model apply. `--context-window` and
+`--max-output` set the model's context window and output limit in tokens
+when the entry does not list them (unlisted models get 32768 and 8192). `--plan-thinking`,
 `--gap-thinking`, and `--write-thinking` set how much hidden reasoning each
 step may do: `none` (default), `low`, `medium`, `high`, or `default` (leave
 it to the server; use it when the endpoint rejects `reasoning_effort`).
-Forks keep both.
+Forks keep all of them.
 
 ## 7. Rewrite a finished run
 
@@ -111,8 +120,9 @@ wosarcher runs --json
 wosarcher doctor
 ```
 
-`runs` lists runs newest first. `doctor` checks that every configured
-provider answers; run it when a run fails with a provider error.
+`runs` lists runs newest first. `doctor` checks that the active profile's
+providers answer (`--use BLOCK=NAME` checks another entry); run it when a
+run fails with a provider error.
 
 ## 9. Output
 

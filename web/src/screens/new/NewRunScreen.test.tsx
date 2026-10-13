@@ -88,7 +88,7 @@ describe("NewRunScreen", () => {
     fireEvent.change(question, { target: { value: "q" } });
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
     fireEvent.click(screen.getByLabelText("Deep"));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[0]);
     fireEvent.change(screen.getByLabelText("Follow-ups per round"), { target: { value: "6" } });
     const language = screen.getByLabelText("Search language");
     fireEvent.change(language, { target: { value: "spanish" } });
@@ -193,21 +193,41 @@ describe("NewRunScreen", () => {
   });
 });
 
-describe("NewRunScreen model and thinking", () => {
-  it("asks the selected profile's endpoint for models and keeps the values in the browser", async () => {
-    localStorage.clear();
-    const { api, question } = await open(fakeApi({ models: ["m1"] }));
-    expect(callsTo(api, "listModels")[0]).toEqual(["low-vram"]);
+describe("NewRunScreen profile values", () => {
+  const profileAdvanced = () =>
+    fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[1]);
+
+  it("asks the profile's llm entry for models", async () => {
+    const { api } = await open(fakeApi({ models: ["m1"] }));
+    expect(callsTo(api, "listProviders").length).toBeGreaterThan(0);
+    await act(async () => {});
+    expect(callsTo(api, "listModels")[0]).toEqual(["agents"]);
+  });
+
+  it("keeps the edits across screens and clears them after the run starts", async () => {
+    const { api } = await open();
     fireEvent.click(screen.getByRole("button", { name: /Options/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Advanced/ }));
+    profileAdvanced();
     fireEvent.change(screen.getByLabelText("Plan thinking"), { target: { value: "default" } });
-    fireEvent.change(question, { target: { value: "q" } });
-    await ctrlEnter(question);
+    await act(async () => {
+      window.location.hash = "#/history";
+    });
+    await act(async () => {
+      window.location.hash = "#/new";
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
+    expect(screen.getByRole("button", { name: /Options/ }).textContent).toContain(
+      "low-vram (modified)",
+    );
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "q" } });
+    await ctrlEnter(screen.getByLabelText("Question") as HTMLTextAreaElement);
     const [request] = callsTo(api, "createRun")[0] as [RunCreate, File[]];
     expect(request.llm).toEqual({ reasoning: { plan: "default" } });
-    expect(JSON.parse(localStorage.getItem("wosarcher.llm") ?? "{}").reasoning.plan).toBe(
-      "default",
-    );
-    localStorage.clear();
+    expect(request.use).toBeUndefined();
+    await act(async () => {
+      window.location.hash = "#/new";
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
+    expect(screen.getByRole("button", { name: /Options/ }).textContent).not.toContain("(modified)");
   });
 });

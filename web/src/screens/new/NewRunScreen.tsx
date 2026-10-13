@@ -6,10 +6,10 @@ import type {
   DepthInfo,
   DomainLists,
   ProfileInfo,
+  ProviderEntry,
   ResearchValues,
   RunCreate,
   ServerSettings,
-  TokenBudget,
   WritingOptions,
 } from "../../api/types";
 import { EMPTY_DRAFT, type RunOptions, useApi, useUi } from "../../app/context";
@@ -25,13 +25,11 @@ import type { WritingField } from "../../components/WritingOptionsForm";
 import {
   CUSTOM_DESCRIPTION,
   type Depth,
-  effectiveContext,
-  effectiveGapContext,
   loadCustom,
   researchOf,
   saveCustom,
 } from "../../run/depth";
-import { type LlmValues, llmPatch, loadLlm, saveLlm } from "../../run/thinking";
+import { type ProfileChoice, profileBase, profilePatch } from "../../run/profileValues";
 import { Attachments } from "./Attachments";
 import css from "./NewRunScreen.module.css";
 import {
@@ -70,7 +68,8 @@ function startError(error: unknown): StartError {
  * The request for the form: the context recipe stops after select, and the report and answer
  * recipes send their `writing.format`; writing also holds overrides of
  * the depth-aware `defaults`. Custom sends its six values, and Length whenever it differs from
- * the saved default, since no preset sets it on the server.
+ * the saved default, since no preset sets it on the server. The profile's choice sends only
+ * the changed blocks in `use` and the edited fields in `llm`.
  */
 export function runRequest(
   query: string,
@@ -81,7 +80,7 @@ export function runRequest(
   custom?: ResearchValues,
   domains: Partial<DomainLists> = {},
   searchLanguage = "",
-  llm?: LlmValues,
+  profile: ProfileChoice = { use: {}, edits: {} },
 ): RunCreate {
   const request: RunCreate = {
     query,
@@ -99,9 +98,7 @@ export function runRequest(
   if (Object.keys(overrides).length) request.writing = overrides;
   if (Object.keys(domains).length) request.domains = domains;
   if (searchLanguage.trim()) request.search_language = searchLanguage.trim();
-  const patch = llm && llmPatch(llm);
-  if (patch) request.llm = patch;
-  return request;
+  return { ...request, ...profilePatch(profile) };
 }
 
 export function NewRunScreen() {
@@ -113,6 +110,7 @@ export function NewRunScreen() {
   const [error, setError] = useState<StartError | null>(null);
   const [busy, setBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [entries, setEntries] = useState<ProviderEntry[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [focusField, setFocusField] = useState<DomainKind | null>(null);
   const question = useRef<HTMLTextAreaElement>(null);
@@ -128,6 +126,10 @@ export function NewRunScreen() {
     api.getSettings().then(setSettings, () => {});
     api.listProfiles().then(setProfiles, () => {});
     api.listDepths().then(setDepths, () => {});
+    api.listProviders().then(
+      (report) => setEntries(report.entries),
+      () => {},
+    );
   }, [api]);
 
   const active = profiles.find((p) => p.active)?.name ?? profiles[0]?.name ?? "";
@@ -139,7 +141,6 @@ export function NewRunScreen() {
     depth: "standard",
     ...draft.options,
   };
-  const llm = draft.llm ?? loadLlm();
   const saved = settings?.writing;
   const presetOf = (d: Depth) => depths.find((info) => info.name === d);
   const standard = presetOf("standard");
@@ -161,16 +162,13 @@ export function NewRunScreen() {
     block: selected?.block_domains ?? settings?.domains.block ?? [],
   };
   const domains: DomainLists = { ...domainDefaults, ...draft.domains };
+  const choice: ProfileChoice = { use: draft.use, edits: draft.profileEdits };
+  const llmEntry = profileBase(selected, entries, draft.use).use.llm;
 
   useEffect(() => {
-    if (!options.profile) return;
-    api.listModels(options.profile).then(setModels, () => setModels([]));
-  }, [api, options.profile]);
-
-  function setLlm(values: LlmValues) {
-    saveLlm(values);
-    setDraft((d) => ({ ...d, llm: values }));
-  }
+    if (!llmEntry) return;
+    api.listModels(llmEntry).then(setModels, () => setModels([]));
+  }, [api, llmEntry]);
 
   async function start() {
     if (blank || busy || languageInvalid || !defaults || !writing) return;
@@ -193,7 +191,7 @@ export function NewRunScreen() {
           values,
           overriddenDomains(domains, domainDefaults),
           draft.searchLanguage,
-          llm,
+          choice,
         ),
         draft.files,
       );
@@ -231,7 +229,7 @@ export function NewRunScreen() {
   }
 
   /** Editing an Advanced value switches to Custom with the values shown, the edit applied. */
-  function editResearch(field: keyof ResearchValues, value: TokenBudget) {
+  function editResearch(field: keyof ResearchValues, value: number) {
     if (!values) return;
     const next = { ...values, [field]: value };
     saveCustom(next);
@@ -246,12 +244,16 @@ export function NewRunScreen() {
     }));
   }
 
-  /** A Recipe equal to the default format is no override, so it follows later default changes. */
+  /**
+   * A Recipe equal to the default format is no override, so it follows later default changes.
+   * Switching the profile drops the edits of its Advanced values.
+   */
   function setOption<K extends keyof RunOptions>(key: K, value: RunOptions[K]) {
     setDraft((d) => {
       const { [key]: _, ...rest } = d.options;
       const same = key === "recipe" && value === defaultRecipe;
-      return { ...d, options: same ? rest : { ...rest, [key]: value } };
+      const next = { ...d, options: same ? rest : { ...rest, [key]: value } };
+      return key === "profile" ? { ...next, use: {}, profileEdits: {} } : next;
     });
   }
 
@@ -266,9 +268,8 @@ export function NewRunScreen() {
 
   const profileList: ProfileInfo[] = profiles.length
     ? profiles
-    : [{ name: options.profile, source: "builtin", active: true, description: "" }];
-  const profile = profileList.find((p) => p.name === options.profile);
-  const depthNames = depths.map((info) => info.name as Depth);
+    : [{ name: options.profile, source: "user", active: true, description: "" }];
+  const depthNames = depths.map((info) => info.name);
   return (
     <div className={css.page}>
       <div className={css.inner}>
@@ -346,13 +347,16 @@ export function NewRunScreen() {
                   ? CUSTOM_DESCRIPTION
                   : (presetOf(options.depth)?.description ?? ""),
               values,
-              effective: effectiveContext(profile, writing.words),
-              gapEffective: effectiveGapContext(profile),
               wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
               onPick: pickDepth,
               onEdit: editResearch,
             }}
-            llm={{ values: llm, models, onChange: setLlm }}
+            profile={{
+              entries,
+              choice,
+              models,
+              onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
+            }}
             onOption={setOption}
             writing={writing}
             defaults={defaults}

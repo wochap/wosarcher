@@ -7,6 +7,7 @@ import pytest
 import respx
 
 from tests.adapters.conftest import chunks
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
 from wosarcher.adapters.bm25 import Bm25Scorer
 from wosarcher.adapters.embeddings import OpenAIEmbedder
 from wosarcher.adapters.firecrawl import FirecrawlFetcher
@@ -27,7 +28,18 @@ async def http() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
 
+CONFIG = {
+    **MINIMAL_CONFIG,
+    "providers/prefilter/embeddings.toml": 'provider = "embeddings"\nbase_url = "http://e.test/v1"\nmodel = "e"\n',
+    "providers/score/rerank.toml": 'provider = "rerank"\nbase_url = "http://r.test/v1"\n',
+    "providers/score/jev.toml": 'provider = "jev"\nbase_url = "http://j.test/v1"\n',
+    "profiles/workstation.toml": '[use]\nprefilter = "embeddings"\nscore = "rerank"\n',
+    "profiles/cloud.toml": '[use]\nprefilter = "bm25"\nscore = "jev"\n',
+}
+
+
 def settings(tmp_path: Path, profile: str = "workstation", *overrides: str) -> Settings:
+    write_config(tmp_path / "wosarcher", CONFIG)
     return resolve(profile, list(overrides), {"XDG_CONFIG_HOME": str(tmp_path)})
 
 
@@ -86,7 +98,7 @@ async def test_jev_default_concurrency_64(http: httpx.AsyncClient) -> None:
     assert peak == 64
 
 
-LLM_URL = "http://localhost:8080/v1/chat/completions"
+LLM_URL = "http://llm.test/v1/chat/completions"
 REPLY = {"choices": [{"message": {"content": "ok"}}], "usage": {"prompt_tokens": 100, "completion_tokens": 1}}
 
 

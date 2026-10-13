@@ -2,8 +2,9 @@
 // Security panels.
 import type {
   DepthInfo,
-  HealthReport,
   ProfileInfo,
+  ProviderEntry,
+  ProvidersReport,
   RunStatus,
   RunSummary,
   ServerSettings,
@@ -127,35 +128,45 @@ export const runs: RunSummary[] = [
   ),
 ];
 
+const use = (prefilter: string, score: string, llm: string) => ({
+  search: "searxng",
+  fetch: "firecrawl",
+  prefilter,
+  score,
+  llm,
+});
+
 export const profiles: ProfileInfo[] = [
   {
     name: "low-vram",
-    source: "builtin",
+    source: "user",
     active: true,
     description: "Models take turns on one small GPU; slower, fits 8 GB.",
-    context_window: 32768,
+    use: use("embeddings", "rerank", "agents"),
+    model: "qwen3-14b",
+    context_tokens: "auto",
     prompt_reserve_tokens: 2000,
-    max_output_tokens: 8192,
   },
   {
     name: "workstation",
-    source: "builtin",
+    source: "user",
     active: false,
     description: "One GPU fits all models; models stay loaded.",
-    context_window: 32768,
+    use: use("embeddings", "jev-strict", "agents"),
+    model: "qwen3-14b",
+    context_tokens: "auto",
     prompt_reserve_tokens: 2000,
-    max_output_tokens: 8192,
   },
   {
-    name: "cloud",
-    source: "builtin",
+    name: "nixos",
+    source: "user",
     active: false,
-    description: "Hosted APIs only; needs API keys.",
-    context_window: 1000000,
+    description: "",
+    use: use("bm25", "jev-strict", "omniroute"),
+    model: "qwen3-30b-a3b",
+    context_tokens: "auto",
     prompt_reserve_tokens: 2000,
-    max_output_tokens: 32000,
   },
-  { name: "nixos", source: "user", active: false, description: "" },
 ];
 
 const research = (
@@ -170,8 +181,6 @@ const research = (
   results_per_query: rpq,
   max_pages: pages,
   passages_per_query: ppq,
-  context_tokens: "auto" as const,
-  gap_context_tokens: 4000,
   rounds,
   queries_per_round: perRound,
 });
@@ -199,71 +208,112 @@ export const depths: DepthInfo[] = [
   },
 ];
 
-export const health: HealthReport = {
+const checked = "2026-10-03T09:00:00Z";
+const entry = (block: ProviderEntry["block"], name: string, more: Partial<ProviderEntry>) => ({
+  block,
+  name,
+  source: "user" as const,
+  provider: name,
+  release: "none" as const,
+  ...more,
+});
+const builtin = (block: ProviderEntry["block"], name: string): ProviderEntry => ({
+  block,
+  name,
+  source: "builtin",
+  provider: name,
+  status: "skipped",
+  detail: "built in",
+});
+
+export const providers: ProvidersReport = {
   profile: "low-vram",
   gpu_policy: "exclusive",
   warnings: [],
-  checks: [
-    {
-      role: "search",
-      provider: "searxng",
-      url: "http://localhost:8888",
-      model: null,
-      device: null,
-      release: "none",
+  entries: [
+    entry("search", "searxng", {
+      url: "http://homelab:8888",
+      device: "homelab",
       status: "degraded",
       latency_ms: 1840,
       detail: "probe over 1000 ms",
-      checked_at: "2026-10-03T09:00:00Z",
-    },
-    {
-      role: "fetch",
-      provider: "httpx",
-      url: "in-process",
-      model: null,
-      device: null,
-      release: "none",
-      status: "skipped",
-      latency_ms: null,
-      detail: "built in",
-      checked_at: null,
-    },
-    {
-      role: "prefilter",
-      provider: "embeddings",
+      checked_at: checked,
+    }),
+    entry("fetch", "firecrawl", {
+      url: "http://homelab:3002",
+      device: "homelab",
+      status: "ok",
+      latency_ms: 120,
+      checked_at: checked,
+    }),
+    entry("prefilter", "embeddings", {
       url: "http://localhost:11434",
       model: "bge-small-en-v1.5",
       device: "desktop:gpu0",
-      release: "llama-swap",
+      release: "ollama",
       status: "ok",
       latency_ms: 38,
-      detail: "",
-      checked_at: "2026-10-03T09:00:00Z",
-    },
-    {
-      role: "score",
-      provider: "rerank",
+      checked_at: checked,
+    }),
+    builtin("prefilter", "bm25"),
+    builtin("prefilter", "none"),
+    entry("score", "rerank", {
       url: "http://localhost:8081",
       model: "bge-reranker-v2-m3-Q8_0.gguf",
       device: "desktop:gpu0",
       release: "llama-swap",
       status: "unchecked",
-      latency_ms: null,
-      detail: "",
-      checked_at: null,
-    },
-    {
-      role: "llm",
-      provider: "llama.cpp",
+    }),
+    entry("score", "jev-strict", {
+      provider: "jev",
+      url: "http://localhost:8082",
+      model: "qwen3-4b-jev-Q8_0.gguf",
+      device: "desktop:gpu0",
+      release: "llama-swap",
+      status: "unchecked",
+    }),
+    builtin("score", "bm25"),
+    entry("llm", "omniroute", {
+      provider: "openai",
+      url: "https://omniroute.lan/v1",
+      model: "research-smart",
+      device: "remote",
+      status: "unchecked",
+      models: [
+        {
+          id: "research-smart",
+          context_window: 1048576,
+          max_output_tokens: 32768,
+          reasoning: { plan: "high", gap: "medium", write: "medium" },
+        },
+        {
+          id: "research-fast",
+          context_window: 131072,
+          max_output_tokens: 16384,
+          reasoning: { plan: "low", gap: "low", write: "medium" },
+        },
+        { id: "qwen3-30b-a3b" },
+      ],
+    }),
+    entry("llm", "agents", {
+      provider: "openai",
       url: "http://localhost:8080/v1",
-      model: "qwen2.5-7b-instruct-q4_k_m.gguf",
+      model: "qwen3-14b",
       device: "desktop:gpu0",
       release: "llama-swap",
       status: "ok",
       latency_ms: 212,
-      detail: "",
-      checked_at: "2026-10-03T09:00:00Z",
-    },
+      checked_at: checked,
+      models: [
+        {
+          id: "qwen3-14b",
+          context_window: 32768,
+          max_output_tokens: 8192,
+          gap_context_tokens: 4000,
+        },
+        { id: "gemma-3-12b" },
+      ],
+    }),
   ],
 };
 

@@ -32,6 +32,7 @@ from wosarcher.cli.options import (
     AttachOption,
     BlockDomainOption,
     ContextTokensOption,
+    ContextWindowOption,
     DepthOption,
     FormatOption,
     FromOption,
@@ -40,6 +41,7 @@ from wosarcher.cli.options import (
     JsonOption,
     LanguageOption,
     MarkerOption,
+    MaxOutputOption,
     ModelOption,
     PagesOption,
     PassagesOption,
@@ -56,14 +58,30 @@ from wosarcher.cli.options import (
     ToneInstructionsOption,
     ToneOption,
     UntilOption,
+    UseOption,
     WordsOption,
     WriteThinkingOption,
     fail,
     sources_option,
     stage_option,
+    use_map,
 )
 from wosarcher.cli.progress import ProgressView
-from wosarcher.config import RESEARCH_KEYS, ConfigError, Prices, Settings, resolve, restore_secrets, select_profile
+from wosarcher.config import (
+    BLOCKS,
+    LLM_KEYS,
+    RESEARCH_KEYS,
+    ConfigError,
+    Prices,
+    Resolved,
+    Settings,
+    fork_settings,
+    resolve_run,
+    resolve_server,
+    select_profile,
+    use_overrides,
+    without_use,
+)
 from wosarcher.http import UsageLedger
 from wosarcher.models import Context, Origin, Report, RunFailed, RunOutput, RunRecord, RunRequest, Stage
 from wosarcher.runner import Runner
@@ -72,7 +90,6 @@ from wosarcher.store import RunStore, RunStoreError
 
 Status = Literal["done", "failed", "cancelled"]
 EXIT: dict[Status, int] = {"done": 0, "failed": 1, "cancelled": 130}
-BLOCKS = ("search", "fetch", "prefilter", "score", "llm")
 
 RunIdOption = Annotated[str | None, typer.Option("--run-id", help="Create the run under this ID.")]
 OriginOption = Annotated[str, typer.Option("--origin", hidden=True)]
@@ -100,19 +117,20 @@ def language_overrides(language: str | None) -> list[str]:
     return [] if language is None else [f"search.language={json.dumps(language)}"]
 
 
-def llm_overrides(model: str | None, **reasoning: str | None) -> list[str]:
-    """`--model` and the thinking flags as `llm.model` and `llm.reasoning.<step>` overrides."""
+def llm_overrides(model: str | None, limits: dict[str, int | str | None], **reasoning: str | None) -> list[str]:
+    """`--model`, the limit and budget flags (`LLM_KEYS`), and the thinking flags as overrides."""
     found = [] if model is None else [f"llm.model={json.dumps(model)}"]
+    found += [f"{LLM_KEYS[name]}={value}" for name, value in limits.items() if value is not None]
     return [*found, *(f"llm.reasoning.{step}={json.dumps(level)}" for step, level in reasoning.items() if level)]
 
 
-def checked(make: Callable[[], Settings]) -> Settings:
+def checked(make: Callable[[], Resolved]) -> Resolved:
     try:
-        settings = make()
-        building.check_providers(settings)
+        resolved = make()
+        building.check_providers(resolved.settings)
     except (ConfigError, ValueError) as error:
         raise fail(error, 2) from None
-    return settings
+    return resolved
 
 
 def ledger_for(settings: Settings) -> UsageLedger:
@@ -209,6 +227,7 @@ def run(
     sources: SourcesOption = "both",
     until: UntilOption = None,
     profile: ProfileOption = None,
+    use: UseOption = None,
     depth: DepthOption = None,
     set_: SetOption = None,
     tone: ToneOption = None,
@@ -230,6 +249,8 @@ def run(
     allow_domain: AllowDomainOption = None,
     block_domain: BlockDomainOption = None,
     model: ModelOption = None,
+    context_window: ContextWindowOption = None,
+    max_output: MaxOutputOption = None,
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
@@ -255,22 +276,35 @@ def run(
         results_per_query=results_per_query,
         max_pages=max_pages,
         passages_per_query=passages_per_query,
-        context_tokens=context_tokens,
-        gap_context_tokens=gap_context_tokens,
         rounds=rounds,
         queries_per_round=queries_per_round,
     )
     domains = [*domain_overrides(allow_domain, block_domain), *language_overrides(search_language)]
-    thinking = llm_overrides(model, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
-    overrides = [*(set_ or []), *flags, *research, *domains, *thinking]
+    limits: dict[str, int | str | None] = {
+        "context_window": context_window,
+        "max_output_tokens": max_output,
+        "context_tokens": context_tokens,
+        "gap_context_tokens": gap_context_tokens,
+    }
+    thinking = llm_overrides(model, limits, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
+    overrides = [*(set_ or []), *flags, *research, *domains, *thinking, *use_overrides(use_map(use))]
     env = os.environ
-    settings = checked(lambda: resolve(profile, overrides, env, depth))
+    settings, entries = checked(lambda: resolve_run(profile, overrides, env, depth))
     source, token = origin_option(origin, token_name)
     store = RunStore.from_settings(settings)
     try:
         request = RunRequest(query=query, sources=chosen, until=stop, depth=depth)
         record = store.create(
-            request, select_profile(profile, env), overrides, settings, attach or [], run_id, source, token, lock=True
+            request,
+            select_profile(profile, env),
+            overrides,
+            settings,
+            attach or [],
+            run_id,
+            source,
+            token,
+            lock=True,
+            use=entries,
         )
     except (ValidationError, RunStoreError) as error:
         raise fail(error, 2) from None
@@ -282,6 +316,7 @@ def fork(
     from_: FromOption,
     until: UntilOption = None,
     profile: ProfileOption = None,
+    use: UseOption = None,
     set_: SetOption = None,
     tone: ToneOption = None,
     tone_instructions: ToneInstructionsOption = None,
@@ -290,8 +325,11 @@ def fork(
     citation_marker: MarkerOption = None,
     reference_style: StyleOption = None,
     format_: FormatOption = None,
+    context_tokens: ContextTokensOption = None,
     gap_context_tokens: GapContextTokensOption = None,
     model: ModelOption = None,
+    context_window: ContextWindowOption = None,
+    max_output: MaxOutputOption = None,
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
@@ -314,27 +352,38 @@ def fork(
         reference_style=reference_style,
         format=format_,
     )
-    research = research_overrides(gap_context_tokens=gap_context_tokens)
-    thinking = llm_overrides(model, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
-    new = [*(set_ or []), *flags, *research, *thinking]
+    limits: dict[str, int | str | None] = {
+        "context_window": context_window,
+        "max_output_tokens": max_output,
+        "context_tokens": context_tokens,
+        "gap_context_tokens": gap_context_tokens,
+    }
+    thinking = llm_overrides(model, limits, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
+    new = [*(set_ or []), *flags, *thinking]
+    chosen = use_map(use)
     env = os.environ
-    here = checked(lambda: resolve(profile, set_ or [], env))
+    try:
+        here = resolve_server(env)
+    except ConfigError as error:
+        raise fail(error, 2) from None
     store = RunStore.from_settings(here)
     try:
         parent = store.read_record(parent_id)
     except RunStoreError as error:
         raise fail(error, 2) from None
     if profile:
-        settings = checked(lambda: resolve(profile, [*parent.overrides, *new], env, parent.request.depth))
+        overrides = [*without_use(parent.overrides), *new, *use_overrides(chosen)]
+        settings, entries = checked(lambda: resolve_run(profile, overrides, env, parent.request.depth))
     else:
         dropped: list[str] = []
 
-        def restored() -> Settings:
-            settings, pruned = restore_secrets(parent.settings, resolve(parent.profile, [], env), new)
+        def restored() -> Resolved:
+            parent_use = parent.use or resolve_run(parent.profile, without_use(parent.overrides), env).use
+            resolved, pruned = fork_settings(parent.settings, parent_use, chosen, new, env)
             dropped.extend(pruned)
-            return settings
+            return resolved
 
-        settings = checked(restored)
+        settings, entries = checked(restored)
         if dropped:
             typer.echo(f"warning: saved settings dropped: {', '.join(dropped)}", err=True)
     place = {"runs_dir": here.run.runs_dir, "cache_dir": here.run.cache_dir}
@@ -343,9 +392,10 @@ def fork(
         record = store.fork(
             parent_id,
             first,
-            new,
+            [*new, *use_overrides(chosen)],
             settings,
             profile=profile,
+            use=entries,
             until=stop,
             run_id=run_id,
             origin=source,

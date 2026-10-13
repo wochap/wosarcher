@@ -17,6 +17,15 @@ let
   dataDir = "/var/lib/wosarcher";
   configDir = "${dataDir}/config/wosarcher";
   profilesDir = "${configDir}/profiles";
+  providersDir = "${configDir}/providers";
+  depthsDir = "${configDir}/depths";
+  blocks = [
+    "search"
+    "fetch"
+    "prefilter"
+    "score"
+    "llm"
+  ];
   runtimeDir = "/run/wosarcher";
   socketPath = "${runtimeDir}/api.sock";
 
@@ -32,6 +41,20 @@ let
   // cfg.environment;
 
   profileFiles = lib.mapAttrs (name: settings: toml.generate "wosarcher-${name}.toml" settings) cfg.profiles;
+  # Paths relative to the profiles directory, as the manifest records them.
+  entryFiles = lib.concatLists (
+    lib.mapAttrsToList (
+      block: entries:
+      lib.mapAttrsToList (name: settings: {
+        path = "../providers/${block}/${name}.toml";
+        file = toml.generate "wosarcher-${block}-${name}.toml" settings;
+      }) entries
+    ) cfg.providers
+  );
+  depthFiles = lib.mapAttrsToList (name: settings: {
+    path = "../depths/${name}.toml";
+    file = toml.generate "wosarcher-depth-${name}.toml" settings;
+  }) cfg.depths;
   hooksFile = toml.generate "wosarcher-hooks.toml" cfg.hooks;
 
   install = file: target: ''
@@ -39,9 +62,10 @@ let
   '';
 
   # Declared files are copied, never linked into the Nix store. The manifest
-  # (profile names, and ../hooks.toml) records which files the module wrote,
-  # so a dropped profile or emptied hooks is removed while hand-made files are
-  # left alone.
+  # (profile names, ../providers/<block>/<name>.toml, ../depths/<name>.toml,
+  # and ../hooks.toml) records which files the module wrote, so a dropped
+  # profile, entry, or preset, or emptied hooks, is removed while hand-made
+  # files are left alone.
   syncFiles = pkgs.writeShellScript "wosarcher-sync-files" ''
     set -euo pipefail
     # Data written by older versions was group-readable; it is the service user's alone.
@@ -59,6 +83,13 @@ let
         echo ${lib.escapeShellArg "${name}.toml"} >> "$manifest"
       '') profileFiles
     )}
+    ${lib.concatMapStrings (
+      dir: "install -d -m 0700 -o wosarcher -g wosarcher ${lib.escapeShellArg dir}\n"
+    ) ([ depthsDir ] ++ map (block: "${providersDir}/${block}") (lib.attrNames cfg.providers))}
+    ${lib.concatMapStrings (entry: ''
+      ${install entry.file "${profilesDir}/${entry.path}"}
+      echo ${lib.escapeShellArg entry.path} >> "$manifest"
+    '') (entryFiles ++ depthFiles)}
     ${lib.optionalString (cfg.hooks != { }) ''
       ${install hooksFile "${configDir}/hooks.toml"}
       echo ../hooks.toml >> "$manifest"
@@ -156,8 +187,9 @@ in
         variables that must not land in the Nix store. Give it a path outside
         the Nix store; it may be readable by root alone (for example 0400
         root:root). No wrapper reads it. For secrets prefer the <x>_file
-        settings in a profile (for example llm.api_key_file =
-        "/run/secrets/llm"), with the file readable by the wosarcher user.
+        settings in a provider entry (for example api_key_file =
+        "/run/secrets/llm" in an llm entry), with the file readable by the
+        wosarcher user.
       '';
     };
 
@@ -166,11 +198,60 @@ in
       default = { };
       description = ''
         Profiles copied to /var/lib/wosarcher/config/wosarcher/profiles/<name>.toml
-        before the service starts. A profile removed from this option is
-        removed from the directory; hand-made profiles are kept. Never put
-        secret values here: they land in the Nix store. Pass a secret as the
-        path of a file readable by the wosarcher user, for example
-        llm.api_key_file = "/run/secrets/llm" or auth.password_hash_file.
+        before the service starts. A profile names one provider entry per
+        block (`use.score = "jev-strict"`) and sets only its own keys
+        (llm.model, the domain lists, search.language, and keys outside the
+        provider blocks). A profile removed from this option is removed from
+        the directory; hand-made profiles are kept. Never put secret values
+        here: they land in the Nix store; auth.password_hash_file takes the
+        path of a file instead.
+      '';
+    };
+
+    providers = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.attrsOf toml.type);
+      default = { };
+      example = lib.literalExpression ''
+        {
+          score.jev-strict = {
+            provider = "jev";
+            base_url = "https://api.typesafe.ai/v1";
+            api_key_file = "/run/secrets/typesafe";
+            min_score = 2.0;
+          };
+          llm.omniroute = {
+            provider = "openai";
+            base_url = "http://ssc:20700/v1";
+            api_key_file = "/run/secrets/omniroute";
+            model = "research-smart";
+            models.research-smart = { context_window = 1048576; max_output_tokens = 131072; };
+          };
+        }
+      '';
+      description = ''
+        Provider entries by block (search, fetch, prefilter, score, llm) and
+        name, copied to
+        /var/lib/wosarcher/config/wosarcher/providers/<block>/<name>.toml
+        before the service starts. An entry holds that block's fields at the
+        top level; an llm entry may list per-model limits under `models`.
+        An entry removed from this option is removed from the directory;
+        hand-made entries are kept. Never put secret values here: they land
+        in the Nix store. Pass a secret with the <x>_file settings, for
+        example api_key_file = "/run/secrets/llm" in an llm entry: the entry
+        holds the path of a file readable by the wosarcher user, never the
+        value.
+      '';
+    };
+
+    depths = lib.mkOption {
+      type = lib.types.attrsOf toml.type;
+      default = { };
+      description = ''
+        User depth presets copied to
+        /var/lib/wosarcher/config/wosarcher/depths/<name>.toml before the
+        service starts, listed after the built-in presets. A name may not be
+        a built-in preset's (quick, standard, deep, exhaustive) or custom.
+        A preset removed from this option is removed from the directory.
       '';
     };
 
@@ -207,6 +288,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = map (block: {
+      assertion = lib.elem block blocks;
+      message = "services.wosarcher.providers.${block}: not a block; use ${lib.concatStringsSep ", " blocks}";
+    }) (lib.attrNames cfg.providers);
+
     users.users = lib.mkMerge [
       {
         wosarcher = {
@@ -231,6 +317,8 @@ in
       "${dataDir}/config"
       configDir
       profilesDir
+      providersDir
+      depthsDir
       "${dataDir}/share"
       "${dataDir}/cache"
     ];

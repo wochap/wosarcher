@@ -2,11 +2,11 @@
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
 import type { SocketFactory } from "../api/events";
-import type { DomainLists, ResearchValues, WritingOptions } from "../api/types";
+import type { DomainLists, ResearchValues, Use, WritingOptions } from "../api/types";
 import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
 import type { Recipe } from "../run/format";
-import type { LlmValues } from "../run/thinking";
+import type { ProfileEdits } from "../run/profileValues";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -45,8 +45,10 @@ export type Draft = {
   searchLanguage: string;
   /** The Custom depth's values and its default Length, once Custom was picked or edited. */
   custom?: { values: ResearchValues; words: number };
-  /** The Model group's values, once edited; until then the stored ones. */
-  llm?: LlmValues;
+  /** The blocks whose entry differs from the profile's, for this run only. */
+  use: Use;
+  /** The profile's Model and Budgets fields edited for this run. */
+  profileEdits: ProfileEdits;
 };
 export const EMPTY_DRAFT: Draft = {
   query: "",
@@ -55,6 +57,8 @@ export const EMPTY_DRAFT: Draft = {
   writing: {},
   domains: {},
   searchLanguage: "",
+  use: {},
+  profileEdits: {},
 };
 
 export type LiveTab = "progress" | "sources" | "passages" | "report";

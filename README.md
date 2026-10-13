@@ -17,8 +17,9 @@ every run. It is used three ways, all through its API:
   the CLI for cited context.
 
 Every model and service sits behind HTTP, so each one can run on this
-machine, on another machine in the local network, or in the cloud, chosen per
-run by a configuration profile.
+machine, on another machine in the local network, or in the cloud. Each
+endpoint is a named provider entry; a profile picks one entry per block, and
+a run can swap any of them with `--use`.
 
 ## Pipeline
 
@@ -56,7 +57,7 @@ The full design is in [docs/design.md](docs/design.md).
 
 - Nix with flakes (recommended): provides Python 3.13, uv, Node.js, and pnpm.
   Without Nix, install those yourself.
-- Reachable providers, configured in a profile (see Configuration):
+- Reachable providers, configured as provider entries (see Configuration):
   - a SearXNG instance with the JSON format enabled,
   - a Firecrawl instance (self-hosted or the cloud API),
   - an OpenAI-compatible LLM endpoint,
@@ -93,6 +94,8 @@ uv run wosarcher run "..." --attach notes.md --sources both
 uv run wosarcher run "..." --allow-domain gob.pe --block-domain facebook.com  # domain filter
 uv run wosarcher run "..." --rounds 2 --queries-per-round 6  # follow-up searches per round
 uv run wosarcher run "..." --search-language es-PE  # SearXNG search language
+uv run wosarcher run "..." --use score=jev-strict    # another scorer entry for this run
+uv run wosarcher providers list                  # entries per block, models per llm entry
 uv run wosarcher runs                            # list runs
 uv run wosarcher fork <run-id> --from write --tone critical  # rewrite only
 uv run wosarcherd run "..." --until select --json  # the engine in this process, without a daemon
@@ -128,7 +131,7 @@ subprocess, so a run survives a reload of the UI.
    pnpm --dir web build      # writes web/dist
    ```
 
-2. Configure providers in a profile (see Configuration) and check them:
+2. Add provider entries and a profile (see Configuration) and check them:
 
    ```sh
    uv run --no-dev wosarcherd profile use <name>
@@ -186,10 +189,12 @@ docker run -d --name wosarcher \
   wosarcher
 ```
 
-- **Profiles**: put them in the volume at `/data/config/wosarcher/profiles/`,
-  or pass settings as `WOSARCHER_*` environment variables.
+- **Entries and profiles**: put them in the volume at
+  `/data/config/wosarcher/providers/<block>/` and
+  `/data/config/wosarcher/profiles/`. `WOSARCHER_*` environment variables
+  set only profile keys and `WOSARCHER_USE__<BLOCK>`, never provider keys.
 - **Provider URLs**: inside a container, `localhost` is the container itself.
-  Use LAN or Tailscale addresses in profiles, or run with `--network=host`
+  Use LAN or Tailscale addresses in entries, or run with `--network=host`
   (then drop `-p` and bind with `--host <address>`).
 - **CLI in the container**: `docker exec wosarcher wosarcher doctor`,
   `docker exec wosarcher wosarcher runs` (over the daemon's socket in
@@ -221,8 +226,14 @@ client for that socket and a `wosarcherd` wrapper for the service user:
             users = [ "alice" ];                  # joins the wosarcher group
             environmentFile = "/run/secrets/wosarcher.env";
             environment.WOSARCHER_PROFILE = "lan";
+            providers.llm.desktop = {
+              provider = "openai";
+              base_url = "http://desktop.lan:8080/v1";
+              model = "writer";
+              api_key_file = "/run/secrets/llm";
+            };
             profiles.lan = {
-              llm.base_url = "http://desktop.lan:8080/v1";
+              use.llm = "desktop";
             };
             # allowedOrigins = [ "https://wosarcher.example" ];
           };
@@ -239,11 +250,14 @@ client for that socket and a `wosarcherd` wrapper for the service user:
 - **Group members** (`services.wosarcher.users`; log in again after the
   switch) may use the socket and nothing else: `wosarcher runs`,
   `wosarcher run ...` go through the daemon, which holds the secrets.
-- **Secrets** go in `environmentFile` (API keys,
-  `WOSARCHER_AUTH__PASSWORD_HASH`), read by systemd alone (it may be `0400
-  root:root`), or in files named by `<x>_file` settings and readable by the
-  `wosarcher` user; never in `environment` or `profiles`, which land in the
-  Nix store.
+- **Entries and presets**: `providers.<block>.<name>` and `depths.<name>`
+  are written like `profiles`, as copies, to `providers/<block>/<name>.toml`
+  and `depths/<name>.toml`.
+- **Secrets**: provider keys go in files named by `<x>_file` settings (for
+  example `api_key_file` in an llm entry) and readable by the `wosarcher`
+  user; `WOSARCHER_AUTH__PASSWORD_HASH` may go in `environmentFile`, read
+  by systemd alone (it may be `0400 root:root`). Never put a secret in
+  `environment`, `providers`, or `profiles`, which land in the Nix store.
 - **Password**: `sudo -u wosarcher wosarcherd auth set-password`.
 - **On demand**: with `autoStart = false` the unit starts on the first
   connection to its socket, or when a socket proxy starts it.
@@ -295,56 +309,94 @@ never expose it to the internet.
 Settings are resolved with this precedence, lowest first:
 
 1. built-in defaults,
-2. the active profile,
-3. environment variables (`WOSARCHER_` prefix, `__` for nesting, for
-   example `WOSARCHER_SCORE__PROVIDER=jev`),
-4. command-line overrides (`--set score.top_k=12`) or request fields.
+2. the chosen provider entries,
+3. the chosen model's values from its llm entry,
+4. the active profile,
+5. environment variables (`WOSARCHER_` prefix, `__` for nesting, for
+   example `WOSARCHER_SELECT__MAX_CONTEXT_TOKENS=auto`),
+6. the server's global settings (server runs only),
+7. the depth preset,
+8. command-line overrides (`--set score.top_k=12`) or request fields.
 
-**Profiles** are TOML files. Built-in ones are `workstation` (default),
-`low-vram`, and `cloud`. Your own go in `$XDG_CONFIG_HOME/wosarcher/profiles/`
-(`~/.config/wosarcher/profiles/`); a file with a built-in's name replaces it.
-Select one with `--profile`, `WOSARCHER_PROFILE`, or `wosarcherd profile use`.
-Changing a profile never needs a restart: each run reads it when it starts.
+**Provider entries** are TOML files, one per endpoint, in
+`$XDG_CONFIG_HOME/wosarcher/providers/<block>/<name>.toml`
+(`~/.config/wosarcher/providers/...`), where the block is `search`,
+`fetch`, `prefilter`, `score`, or `llm`. The file holds that block's
+settings. Built-in entries need no file: prefilter `bm25` and `none`, and
+score `bm25`. An llm entry names its default `model` and may list each
+model's `context_window`, `max_output_tokens`, `reasoning`, and
+`gap_context_tokens`; an unlisted model gets 32768 / 8192.
 
 Example: embeddings and reranker on another machine, writer on this one.
 
 ```toml
-# ~/.config/wosarcher/profiles/desktop.toml
-[run]
-gpu_policy = "shared"           # "exclusive" unloads models between phases
-
-[search]
+# ~/.config/wosarcher/providers/search/searxng.toml
 provider = "searxng"
 base_url = "http://localhost:8888"
 
-[fetch]
+# ~/.config/wosarcher/providers/fetch/firecrawl.toml
 provider = "firecrawl"
 base_url = "http://localhost:3002/v1"
 
-[prefilter]
+# ~/.config/wosarcher/providers/prefilter/embeddings.toml
 provider = "embeddings"
 base_url = "http://desktop.lan:8002/v1"
 model = "embeddings"
 device = "desktop:gpu0"
 
-[score]
+# ~/.config/wosarcher/providers/score/rerank.toml
 provider = "rerank"
 base_url = "http://desktop.lan:8001/v1"
 model = "reranker"
 device = "desktop:gpu0"
 release = "llama-swap"          # none | llama-swap | ollama
+candidates = 50                 # pairs per query the prefilter passes on
 
-[llm]
+# ~/.config/wosarcher/providers/llm/laptop.toml
 provider = "openai"
 base_url = "http://localhost:8080/v1"
 model = "writer"
 device = "laptop:gpu0"
+timeout = 600
+
+[models.writer]
+context_window = 65536
+max_output_tokens = 16384
 ```
 
-Secrets never belong in profile files you share: pass them as environment
-variables, for example `WOSARCHER_SCORE__API_KEY` or
-`WOSARCHER_LLM__API_KEY`. They are redacted everywhere they are shown or
-saved.
+**Profiles** are thin TOML files in `$XDG_CONFIG_HOME/wosarcher/profiles/`
+that pick one entry per block in `[use]` and may set `llm.model`, the
+domain lists, `search.language`, `search.time_range`, and keys outside the
+provider blocks (`run.*`, `select.*`, `write.*`, ...). A block with one
+entry may be left out. No profile ships with the package.
+
+```toml
+# ~/.config/wosarcher/profiles/desktop.toml
+description = "Embeddings and reranker on the desktop, writer here."
+
+[use]
+prefilter = "embeddings"
+score = "rerank"
+llm = "laptop"
+
+[run]
+gpu_policy = "shared"           # "exclusive" unloads models between phases
+```
+
+Select a profile with `--profile`, `WOSARCHER_PROFILE`, or `wosarcherd
+profile use`; with none selected the first profile by name is used. Pick
+another entry for one run with `--use BLOCK=NAME` (repeatable), or per
+daemon with `WOSARCHER_USE__<BLOCK>=<name>`. `wosarcher providers list`
+shows every entry and each llm entry's models. Changing an entry or a
+profile never needs a restart: each run reads them when it starts.
+
+Your own depth presets go in `$XDG_CONFIG_HOME/wosarcher/depths/<name>.toml`
+and may set only the depth keys (sub-queries, results, pages, `score.top_k`,
+rounds, follow-ups per round, words).
+
+Secrets go in entries as `api_key_file` (or `api_key_command`), never as
+environment variables: a variable that sets a provider key fails naming
+it. They are redacted everywhere they are shown or saved.
 
 **Provider quirks.**
 
@@ -356,16 +408,18 @@ saved.
   per step, `none` (default: `reasoning_effort: "none"` and an exact output
   limit), `low`, `medium`, `high` (`reasoning_effort` and no limit; the
   server sets the budget), or `default` (neither field, for servers that
-  reject `reasoning_effort`). Per run: `--plan-thinking`, `--gap-thinking`,
-  `--write-thinking`, and `--model`.
+  reject `reasoning_effort`). Set per model in the llm entry's
+  `models.<id>.reasoning`. Per run: `--plan-thinking`, `--gap-thinking`,
+  `--write-thinking`, `--model`, `--context-window`, and `--max-output`.
 - `score.rerank_scale`: `auto` (default), `probability`, or `logit`. Logit
   scores from a reranker are mapped through a sigmoid before thresholds and
   display; `auto` detects the scale per run.
 - `retry_budget` (every provider block): seconds a call may spend waiting
   between retries on 429/502/503/504/529, default 60; `0` disables retries.
 
-`wosarcher profile show` prints the resolved configuration the daemon uses;
-`wosarcher doctor` (or `wosarcherd doctor` locally) checks each endpoint, its model, latency, and whether it
+`wosarcher profile show` prints the entries a profile uses and the resolved
+configuration the daemon uses; `wosarcher doctor [--use BLOCK=NAME]` (or
+`wosarcherd doctor` locally, `--all-entries` for every entry) checks each endpoint, its model, latency, and whether it
 can unload. It warns when the LLM server's context (llama-server `-c`) is
 below `llm.context_window`.
 
@@ -373,7 +427,7 @@ below `llm.context_window`.
 
 | What | Default |
 |---|---|
-| Profiles, password hash, tokens, server settings | `$XDG_CONFIG_HOME/wosarcher/` |
+| Provider entries, profiles, depth presets, password hash, tokens, server settings | `$XDG_CONFIG_HOME/wosarcher/` |
 | Runs | `$XDG_DATA_HOME/wosarcher/runs` (`run.runs_dir`) |
 | Page and embedding cache | `$XDG_CACHE_HOME/wosarcher` (`run.cache_dir`) |
 
@@ -386,7 +440,7 @@ harness in `evals/`.
 ## Shell completion
 
 `completions/_wosarcher` completes `wosarcher` commands, flags, option
-values, and, through the daemon, run IDs, profiles, and depth presets in
+values, and, through the daemon, run IDs, profiles, provider entries, and depth presets in
 zsh. The Nix package installs it to `share/zsh/site-functions`, and the
 NixOS module's `wosarcher` wrapper carries it (with `programs.zsh.enable`).
 For other installs, add the directory to `fpath` before `compinit`:

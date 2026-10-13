@@ -25,18 +25,11 @@ describe("failed run", () => {
     expect(window.location.hash).toBe("#/live/r_new1");
   });
 
-  it("retries on the cloud profile", async () => {
-    const { api } = await openScenario(failure);
-    await press("Use cloud profile");
-    expect(callsTo(api, "forkRun")).toEqual([[RUN_ID, { from: "score", profile: "cloud" }]]);
-  });
-
-  it("hides Use cloud profile without a cloud profile", async () => {
-    const api = fakeApi(failure.data);
-    api.data.profiles = api.data.profiles.filter((p) => p.name !== "cloud");
-    await openScenario(failure, { api });
+  it("offers no other profile", async () => {
+    await openScenario(failure);
     await act(async () => {});
-    expect(screen.queryByRole("button", { name: "Use cloud profile" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /cloud/i })).toBeNull();
+    expect(screen.getByRole("alert").textContent).not.toContain("cloud");
   });
 
   it("reruns with POST /api/runs/{id}/rerun", async () => {
