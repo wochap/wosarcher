@@ -24,7 +24,9 @@
 # runs and caches are copied in at every start, so the history is there;
 # dev runs are not copied back. The service's data directory is readable by
 # the service user alone, so the copies and a secrets file are read with
-# sudo; the secrets reach the dev daemon's environment only.
+# sudo; the secrets file reaches the dev daemon's environment only. Secret
+# files the copied configuration references and you cannot read are copied
+# into <data>/secrets (mode 0600) for the session and removed on exit.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -91,6 +93,27 @@ if sudo test -f "$service_data/config/wosarcher/hooks.toml"; then
   (umask 077; sudo cat "$service_data/config/wosarcher/hooks.toml" > "$hooks")
 fi
 
+# Secret files (`<x>_file = "/path"` in the copied entries, profiles, and
+# hooks.toml) that only the service user can read, such as /run/secrets/*,
+# are copied (mode 0600) into <data>/secrets, and the dev copies point at
+# them. They are removed when this script exits. `<x>_command` secrets run
+# as you and are left as they are.
+secrets="$data/secrets"
+rm -rf "$secrets"
+trap 'rm -rf "$secrets"' EXIT
+mapfile -t configs < <(find "$data/config/wosarcher" -name '*.toml' -type f)
+if ((${#configs[@]})); then
+  mapfile -t secret_paths < <(perl -ne 'print "$2\n" while /\b\w+_file\s*=\s*(["\x27])(\/[^"\x27]+)\1/g' "${configs[@]}" | sort -u)
+  for path in "${secret_paths[@]}"; do
+    [[ -r "$path" ]] && continue
+    sudo test -f "$path" || continue
+    mkdir -p -m 700 "$secrets"
+    copy="$secrets/${path//\//_}"
+    (umask 077; sudo cat "$path" > "$copy")
+    OLD="$path" NEW="$copy" perl -pi -e 's/(["\x27])\Q$ENV{OLD}\E\1/$1$ENV{NEW}$1/g' "${configs[@]}"
+  done
+fi
+
 # auth.json (password hash, session secret, tokens) is the dev server's own
 # once it exists: set a dev password with
 #   XDG_CONFIG_HOME=<data>/config uv run wosarcherd auth set-password
@@ -115,6 +138,7 @@ if systemctl cat "$api_socket" >/dev/null 2>&1; then
 fi
 
 restore() {
+  rm -rf "$secrets"
   echo "dev-serve: starting ${sockets[*]} again" >&2
   sudo systemctl start "${sockets[@]}" || true
 }

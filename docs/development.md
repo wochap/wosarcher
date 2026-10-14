@@ -77,8 +77,12 @@ wosarcherd serve` on the socket's port, so the nginx URL reaches the dev
 server, and on the Unix socket `~/.local/state/wosarcher-dev/api.sock`; it
 prints the `export WOSARCHER_SOCKET=...` line that points the `wosarcher`
 client at it. The secrets file reaches the dev daemon's environment only.
-Exiting starts the sockets again. sudo is needed for `systemctl`, the
-copies, and the secrets file.
+Secret files that the copied entries, profiles, or `hooks.toml` name in a
+`<x>_file` key and that you cannot read (such as `/run/secrets/*`) are
+copied into `~/.local/state/wosarcher-dev/secrets` (mode 0600), the dev
+copies point at them, and they are removed on exit; `<x>_command` secrets
+run as you. Exiting starts the sockets again. sudo is needed for
+`systemctl`, the copies, the secret files, and the secrets file.
 
 To try the zsh completion from a checkout:
 
