@@ -1,12 +1,13 @@
 """Run configuration: settings models, provider entries, profiles, precedence, and secret redaction.
 
 `resolve()` is the whole story: pick a profile and one provider entry per
-block, then merge built-in defaults < entries < the chosen model's values <
-profile < `WOSARCHER_*` environment < depth preset < `--set` overrides, and
+block, then merge built-in defaults < entries < the chosen model's values (entry, then
+profile `models`) < profile < `WOSARCHER_*` environment < depth preset < `--set` overrides, and
 validate once.
 """
 
 import json
+import re
 import subprocess
 import tomllib
 from collections.abc import Mapping
@@ -34,6 +35,7 @@ CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET")
 BUILTIN_DEPTHS = Path(__file__).parent / "depths"
 DEPTH_ORDER = ("quick", "standard", "deep", "exhaustive")
 CUSTOM_DEPTH = "custom"
+BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 BLOCKS = ("search", "fetch", "prefilter", "score", "llm")
 """The provider blocks, each filled by one entry of `providers/<block>/`."""
 
@@ -395,7 +397,7 @@ def owner(key: str) -> str | None:
     if key in DEPTH_KEYS:
         return "depth presets own"
     if any(key == owned or key.startswith(owned + ".") for owned in MODEL_FIELDS.values()):
-        return "the model owns (models.<id> in its llm entry)"
+        return "the model owns (models.<id> in its llm entry or the profile)"
     if key.split(".")[0] in BLOCKS and key not in PROFILE_BLOCK_KEYS:
         return "provider entries own"
     return None
@@ -421,7 +423,9 @@ class Profile(NamedTuple):
     description: str
     use: dict[str, str]
     data: dict[str, Any]
-    """The profile's own settings, without `description` and `[use]`."""
+    """The profile's own settings, without `description`, `[use]`, and `models`."""
+    models: dict[str, dict[str, Any]]
+    """The profile's tuning per model ID, shaped like an llm entry's `models` table."""
 
 
 def read_profile(name: str, env: Mapping[str, str]) -> Profile:
@@ -429,15 +433,36 @@ def read_profile(name: str, env: Mapping[str, str]) -> Profile:
     available = list_profiles(env)
     if name not in available:
         raise unknown_profile(name, available, env)
-    path = available[name]
-    data = read_toml("profile", path)
+    return profile_from(name, available[name], read_toml("profile", available[name]))
+
+
+def profile_from(name: str, path: Path, data: dict[str, Any]) -> Profile:
+    """A profile's parsed keys, checked against the keys a profile may set."""
     description = pop_description("profile", path, data)
     use = check_use(f"profile {path}", data.pop("use", {}))
+    models = check_models(f"profile {path}", data.pop("models", {}))
     for key in leaf_keys(data):
         found = owner(key)
         if found:
             raise ConfigError(f"profile {path}: {key} cannot be set by a profile; {found} it")
-    return Profile(name, path, description, use, data)
+    return Profile(name, path, description, use, data, models)
+
+
+def check_models(where: str, models: object) -> dict[str, dict[str, Any]]:
+    """A `models` table (an llm entry's or a profile's): model ID to the MODEL_FIELDS it sets."""
+    if not isinstance(models, Mapping):
+        raise ConfigError(f"{where}: models must be a table of model tables")
+    checked: dict[str, dict[str, Any]] = {}
+    for model, values in cast(Mapping[str, object], models).items():
+        if not isinstance(values, Mapping):
+            raise ConfigError(f"{where}: models.{model} must be a table")
+        table = dict(cast(Mapping[str, Any], values))
+        unknown = [key for key in table if key not in MODEL_FIELDS]
+        if unknown:
+            allowed = ", ".join(MODEL_FIELDS)
+            raise ConfigError(f"{where}: models.{model}: {', '.join(unknown)} cannot be set; a model sets {allowed}")
+        checked[model] = table
+    return checked
 
 
 # Provider entries: `providers/<block>/<name>.toml`, plus built-in entries that need no file.
@@ -520,31 +545,20 @@ def read_entry(entry: Entry) -> EntryData:
     models: object = data.pop("models", {})
     if models and entry.block != "llm":
         raise ConfigError(f"entry {path}: models: only llm entries list models")
-    if not isinstance(models, Mapping):
-        raise ConfigError(f"entry {path}: models must be a table of model tables")
+    checked_models = check_models(f"entry {path}", models)
     for key in leaf_keys(data):
         found = entry_owner(entry.block, key)
         if found:
             raise ConfigError(f"entry {path}: {key} cannot be set by a provider entry; {found} it")
-    checked_models: dict[str, dict[str, Any]] = {}
-    for model, values in cast(Mapping[str, object], models).items():
-        if not isinstance(values, Mapping):
-            raise ConfigError(f"entry {path}: models.{model} must be a table")
-        table = dict(cast(Mapping[str, Any], values))
-        unknown = [key for key in table if key not in MODEL_FIELDS]
-        if unknown:
-            allowed = ", ".join(MODEL_FIELDS)
-            raise ConfigError(
-                f"entry {path}: models.{model}: {', '.join(unknown)} cannot be set; a model sets {allowed}"
-            )
-        checked_models[model] = table
     return EntryData(entry, description, data, checked_models)
 
 
-def pick_entries(entries: Mapping[str, Mapping[str, Entry]], *choices: Mapping[str, str]) -> dict[str, Entry]:
+def pick_entries(
+    entries: Mapping[str, Mapping[str, Entry]], *choices: Mapping[str, str], blocks: tuple[str, ...] = BLOCKS
+) -> dict[str, Entry]:
     """One entry per block: the last choice that names one wins; a block with one entry needs no choice."""
     chosen: dict[str, Entry] = {}
-    for block in BLOCKS:
+    for block in blocks:
         available = entries[block]
         name = next((choice[block] for choice in reversed(choices) if block in choice), None)
         if name is None:
@@ -603,16 +617,20 @@ def entries_layer(loaded: Mapping[str, EntryData]) -> Layer:
     return tree, sources
 
 
-def model_tree(llm: EntryData, model: str) -> dict[str, Any]:
-    """The values `models.<model>` sets, at their keys; empty when the entry does not list the model."""
+def model_tree(models: Mapping[str, Mapping[str, Any]], model: str) -> dict[str, Any]:
+    """The values `models.<model>` sets, at their keys; empty when the table does not list the model."""
     tree: dict[str, Any] = {}
-    for field, value in llm.models.get(model, {}).items():
+    for field, value in models.get(model, {}).items():
         set_path(tree, MODEL_FIELDS[field].split("."), value)
     return tree
 
 
 def model_layer(llm: EntryData, model: str) -> Layer:
-    return labelled(model_tree(llm, model), f"{llm.entry.label} models.{model}")
+    return labelled(model_tree(llm.models, model), f"{llm.entry.label} models.{model}")
+
+
+def profile_model_layer(profile: Profile, model: str) -> Layer:
+    return labelled(model_tree(profile.models, model), f"profile {profile.path} models.{model}")
 
 
 def model_defaults() -> dict[str, Any]:
@@ -732,6 +750,7 @@ def resolve_run(
     layers = [
         entries_layer(loaded),
         model_layer(loaded["llm"], model),
+        profile_model_layer(chosen_profile, model),
         labelled(chosen_profile.data, f"profile {chosen_profile.path}"),
         env_values,
     ]
@@ -1097,12 +1116,14 @@ def fork_settings(
     use: Mapping[str, str],
     overrides: list[str],
     env: Mapping[str, str],
+    parent_profile: str | None = None,
 ) -> tuple[Resolved, list[str]]:
     """A fork's settings: the parent's saved (redacted) settings, then `use` and `overrides` on top.
 
     Secrets come from the current entries the parent used. A block in `use` is replaced by
     that entry's fields (profile and depth keys stay as saved); for `llm`, the chosen
-    model's values apply again. Keys the current `Settings` does not know are dropped and
+    model's values apply again: the entry's `models.<id>`, then the parent profile's as
+    its file is now (nothing when the profile is gone). Keys the current `Settings` does not know are dropped and
     returned as dotted paths. Saved `*_file` and `*_command` keys are ignored.
     """
     pruned, dropped = prune_unknown(saved, Settings)
@@ -1126,10 +1147,18 @@ def fork_settings(
         raise ConfigError("a fork chooses entries with --use, not --set use.<block>")
     if "llm" in use:
         model = str(tree_get(run_values[0], "llm.model") or loaded["llm"].settings.get("model") or "")
-        tree = deep_merge(tree, deep_merge(model_defaults(), model_tree(loaded["llm"], model)))
+        tuning = deep_merge(model_defaults(), model_tree(loaded["llm"].models, model))
+        if parent_profile is not None and parent_profile in list_profiles(env):
+            tuning = deep_merge(tuning, model_tree(read_profile(parent_profile, env).models, model))
+        tree = deep_merge(tree, tuning)
         tree["llm"]["model"] = model
     settings = load_secrets(validate([(tree, sources), run_values]))
     return Resolved(settings, dict(names)), dropped
+
+
+def toml_key(key: str) -> str:
+    """A bare key when TOML allows one, else a quoted key (`"qwen3.5:9b"`)."""
+    return key if BARE_KEY.fullmatch(key) else json.dumps(key)
 
 
 def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:
@@ -1138,9 +1167,10 @@ def to_toml(tree: Mapping[str, Any], prefix: str = "") -> str:
     tables: list[str] = []
     for key, value in tree.items():
         if isinstance(value, Mapping):
-            body = to_toml(value, f"{prefix}{key}.")  # pyright: ignore[reportUnknownArgumentType]
-            tables.append(f"[{prefix}{key}]\n{body}")
+            name = f"{prefix}{toml_key(key)}"
+            body = to_toml(value, f"{name}.")  # pyright: ignore[reportUnknownArgumentType]
+            tables.append(f"[{name}]\n{body}")
         elif value is not None:
-            scalars.append(f"{key} = {json.dumps(value)}")
+            scalars.append(f"{toml_key(key)} = {json.dumps(value)}")
     head = "\n".join(scalars)
     return "\n".join(part for part in [head + "\n" if head else "", *tables] if part)

@@ -29,8 +29,10 @@ import {
   researchOf,
   saveCustom,
 } from "../../run/depth";
+import { depthDescription, type PresetKind } from "../../run/presets";
 import { type ProfileChoice, profileBase, profilePatch } from "../../run/profileValues";
 import { Attachments } from "./Attachments";
+import { DeleteDialog } from "./DeleteDialog";
 import css from "./NewRunScreen.module.css";
 import {
   isSearchLanguage,
@@ -38,6 +40,10 @@ import {
   overriddenDomains,
   overriddenFields,
 } from "./OptionsPanel";
+import { depthGroups, profileGroups, profileIntro, SaveDialog } from "./SaveDialog";
+
+/** The message of a failed save or delete, as the server wrote it. */
+const failure = (error: unknown) => (error as Error).message;
 
 /** Why the server (or the entry check) refused the run; `field` names a domain row to fix. */
 type StartError = { message: string; field?: DomainKind; entry?: string };
@@ -103,7 +109,7 @@ export function runRequest(
 
 export function NewRunScreen() {
   const api = useApi();
-  const { draft, setDraft, follow } = useUi();
+  const { draft, setDraft, follow, toast } = useUi();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [depths, setDepths] = useState<DepthInfo[]>([]);
@@ -113,6 +119,8 @@ export function NewRunScreen() {
   const [entries, setEntries] = useState<ProviderEntry[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [focusField, setFocusField] = useState<DomainKind | null>(null);
+  const [saving, setSaving] = useState<PresetKind | null>(null);
+  const [deleting, setDeleting] = useState<{ kind: PresetKind; name: string } | null>(null);
   const question = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -224,8 +232,95 @@ export function NewRunScreen() {
       const base = depth === "custom" ? custom?.words : wordsOf(depth);
       const { words, ...rest } = d.writing;
       const writing = words === undefined || words === base ? rest : d.writing;
-      return { ...d, custom, writing, options: { ...d.options, depth } };
+      return { ...d, custom, customFrom: undefined, writing, options: { ...d.options, depth } };
     });
+  }
+
+  /** Selects a preset just saved; its Length is the one shown, so no Length override is left. */
+  function selectSaved(depth: Depth) {
+    setDraft((d) => {
+      const { words: _, ...writing } = d.writing;
+      return { ...d, customFrom: undefined, writing, options: { ...d.options, depth } };
+    });
+  }
+
+  const reloadDepths = () => api.listDepths().then(setDepths);
+  const reloadProfiles = () => api.listProfiles().then(setProfiles);
+  const clearEdits = () => setDraft((d) => ({ ...d, use: {}, profileEdits: {} }));
+
+  /** The depth values a save sends: the six values and the Length shown. */
+  const savedDepth = () => values && writing && { ...values, words: writing.words };
+
+  async function saveDepthTo(name: string) {
+    const body = savedDepth();
+    if (!body) return;
+    try {
+      await api.replaceDepth(name, { description: depthDescription(body), values: body });
+    } catch (e) {
+      toast(failure(e), { error: true });
+      return;
+    }
+    await reloadDepths().catch(() => {});
+    selectSaved(name);
+    toast(`Saved depth “${name}”`);
+  }
+
+  async function saveDepthAs(name: string) {
+    const body = savedDepth();
+    if (!body) return;
+    await api.saveDepth({ name, description: depthDescription(body), values: body });
+    await reloadDepths().catch(() => {});
+    selectSaved(name);
+    setSaving(null);
+    toast(`Saved depth “${name}”`);
+  }
+
+  async function saveProfileTo() {
+    const name = options.profile;
+    try {
+      await api.updateProfile(name, profilePatch(choice));
+    } catch (e) {
+      toast(failure(e), { error: true });
+      return;
+    }
+    await reloadProfiles().catch(() => {});
+    clearEdits();
+    toast(`Saved profile “${name}”`);
+  }
+
+  async function saveProfileAs(name: string, description: string) {
+    const from = options.profile;
+    await api.saveProfile({
+      name,
+      from,
+      description: description || `Based on ${from}.`,
+      ...profilePatch(choice),
+    });
+    await reloadProfiles().catch(() => {});
+    setOption("profile", name);
+    setSaving(null);
+    toast(`Saved profile “${name}”`);
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    const { kind, name } = deleting;
+    setDeleting(null);
+    try {
+      if (kind === "depth") await api.deleteDepth(name);
+      else await api.deleteProfile(name);
+    } catch (e) {
+      toast(failure(e), { error: true });
+      return;
+    }
+    if (kind === "depth") {
+      await reloadDepths().catch(() => {});
+      if (options.depth === name) pickDepth("standard");
+    } else {
+      await reloadProfiles().catch(() => {});
+      if (options.profile === name) setOption("profile", active);
+    }
+    toast(`Deleted ${kind} “${name}”`);
   }
 
   /** Editing an Advanced value switches to Custom with the values shown, the edit applied. */
@@ -240,6 +335,7 @@ export function NewRunScreen() {
         words:
           d.custom && options.depth === "custom" ? d.custom.words : (wordsOf(options.depth) ?? 0),
       },
+      customFrom: options.depth === "custom" ? d.customFrom : options.depth,
       options: { ...d.options, depth: "custom" },
     }));
   }
@@ -270,6 +366,7 @@ export function NewRunScreen() {
     ? profiles
     : [{ name: options.profile, source: "user", active: true, description: "" }];
   const depthNames = depths.map((info) => info.name);
+  const depthSave = savedDepth();
   return (
     <div className={css.page}>
       <div className={css.inner}>
@@ -341,7 +438,8 @@ export function NewRunScreen() {
             options={options}
             profiles={profileList}
             depth={{
-              depths: [...depthNames, "custom"],
+              presets: depths,
+              customFrom: draft.customFrom,
               description:
                 options.depth === "custom"
                   ? CUSTOM_DESCRIPTION
@@ -350,12 +448,22 @@ export function NewRunScreen() {
               wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
               onPick: pickDepth,
               onEdit: editResearch,
+              actions: {
+                onSaveTo: (name) => void saveDepthTo(name),
+                onSaveAs: () => setSaving("depth"),
+                onDelete: (name) => setDeleting({ kind: "depth", name }),
+              },
             }}
             profile={{
               entries,
               choice,
               models,
               onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
+              actions: {
+                onSaveTo: () => void saveProfileTo(),
+                onSaveAs: () => setSaving("profile"),
+                onDelete: () => setDeleting({ kind: "profile", name: options.profile }),
+              },
             }}
             onOption={setOption}
             writing={writing}
@@ -370,6 +478,42 @@ export function NewRunScreen() {
             }}
             searchLanguage={draft.searchLanguage}
             onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
+          />
+        )}
+        {saving === "depth" && depthSave && (
+          <SaveDialog
+            kind="depth"
+            existing={depthNames}
+            groups={depthGroups(depthSave)}
+            onSave={saveDepthAs}
+            onClose={() => setSaving(null)}
+          />
+        )}
+        {saving === "profile" && writing && (
+          <SaveDialog
+            kind="profile"
+            existing={profiles.map((p) => p.name)}
+            intro={profileIntro(options.profile, choice)}
+            groups={profileGroups(selected, entries, choice, writing.words)}
+            onSave={saveProfileAs}
+            onClose={() => setSaving(null)}
+          />
+        )}
+        {deleting && (
+          <DeleteDialog
+            kind={deleting.kind}
+            name={deleting.name}
+            switchNote={
+              deleting.kind === "depth"
+                ? options.depth === deleting.name
+                  ? " Depth switches to Standard."
+                  : ""
+                : options.profile === deleting.name
+                  ? ` New run switches to ${active}.`
+                  : ""
+            }
+            onConfirm={() => void confirmDelete()}
+            onClose={() => setDeleting(null)}
           />
         )}
       </div>

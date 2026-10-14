@@ -1,16 +1,31 @@
 """Run store: layout, record, attachments, artifacts, event log, fork, listing, costs, caches."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
 
-from wosarcher.config import PlanConfig, RunConfig, ScoreConfig, Settings
+from tests.fixtures.config import MINIMAL_CONFIG, write_config
+from wosarcher.config import (
+    PlanConfig,
+    RunConfig,
+    ScoreConfig,
+    Settings,
+    list_depths,
+    read_depth,
+    read_profile,
+    resolve,
+    store_profile,
+)
 from wosarcher.models import (
     STAGES,
+    DepthSaveValues,
+    DepthUpdate,
     Hit,
     Page,
+    ProfileUpdate,
     RunCancelledData,
     RunCosts,
     RunDoneData,
@@ -23,8 +38,9 @@ from wosarcher.models import (
     UsageTotals,
     WritingOptions,
 )
-from wosarcher.store import RunStore, RunStoreError, new_run_id
+from wosarcher.store import RunStore, RunStoreError, new_run_id, presets
 from wosarcher.store.caches import EmbeddingCache, PageCache
+from wosarcher.store.presets import PresetError
 
 REQUEST = RunRequest(query="battery recycling")
 
@@ -360,3 +376,163 @@ def test_fork_keeps_depth(store: RunStore) -> None:
     finish(store, run_id, *STAGES[:-1])
     record = store.fork(run_id, "write", [], Settings())
     assert record.request.depth == "quick"
+
+
+# Saved profiles and depth presets
+
+
+@pytest.fixture
+def preset_env(tmp_path: Path) -> dict[str, str]:
+    """The minimal configuration plus a `cloud` profile on an `openrouter` entry."""
+    env = {"XDG_CONFIG_HOME": str(tmp_path / "config")}
+    root = tmp_path / "config" / "wosarcher"
+    write_config(root, MINIMAL_CONFIG)
+    write_config(
+        root,
+        {
+            "providers/llm/openrouter.toml": 'provider = "openai"\nbase_url = "http://or.test/v1"\nmodel = "x"\n',
+            "providers/score/rerank.toml": 'provider = "rerank"\nbase_url = "http://rr.test/v1"\n',
+            "profiles/cloud.toml": 'description = "Hosted models."\n[use]\nprefilter = "bm25"\nllm = "openrouter"\n'
+            '[llm]\nmodel = "claude-sonnet-5-5"\n[search]\nlanguage = "es"\n[run]\ngpu_policy = "exclusive"\n',
+        },
+    )
+    return env
+
+
+def preset_dir(env: dict[str, str]) -> Path:
+    return Path(env["XDG_CONFIG_HOME"]) / "wosarcher"
+
+
+DEPTH = DepthUpdate(
+    description="Your preset: 10 sub-queries, 1 round, 1,500 words.",
+    values=DepthSaveValues(
+        sub_queries=10,
+        results_per_query=12,
+        max_pages=200,
+        passages_per_query=8,
+        rounds=1,
+        queries_per_round=3,
+        words=1500,
+    ),
+)
+
+
+def test_path_in_a_name(preset_env: dict[str, str]) -> None:
+    with pytest.raises(PresetError) as error:
+        presets.save_profile("../x", "cloud", ProfileUpdate(), preset_env)
+    assert error.value.code == "invalid_name"
+    assert not (preset_dir(preset_env) / "x.toml").exists()
+
+
+def test_reserved_depth_name(preset_env: dict[str, str]) -> None:
+    with pytest.raises(PresetError, match="'Deep' is reserved") as error:
+        presets.save_depth("Deep", DEPTH, preset_env)
+    assert error.value.code == "invalid_name"
+
+
+def test_taken_ignoring_case(preset_env: dict[str, str]) -> None:
+    with pytest.raises(PresetError, match="'cloud'") as error:
+        presets.save_profile("Cloud", "cloud", ProfileUpdate(), preset_env)
+    assert error.value.code == "name_taken"
+
+
+def test_saved_mode(preset_env: dict[str, str]) -> None:
+    previous = os.umask(0o022)
+    try:
+        presets.save_profile("cloud-rerank", "cloud", ProfileUpdate(), preset_env)
+    finally:
+        os.umask(previous)
+    assert (preset_dir(preset_env) / "profiles/cloud-rerank.toml").stat().st_mode & 0o777 == 0o600
+
+
+def test_save_as_with_model_tuning(preset_env: dict[str, str]) -> None:
+    edits = ProfileUpdate.model_validate(
+        {"use": {"score": "rerank"}, "llm": {"reasoning": {"write": "high"}, "context_tokens": 120000}}
+    )
+    presets.save_profile("cloud-rerank", "cloud", edits, preset_env)
+    profile = read_profile("cloud-rerank", preset_env)
+    assert profile.description == "Hosted models."
+    assert profile.use == {"prefilter": "bm25", "llm": "openrouter", "score": "rerank"}
+    assert profile.data["select"]["max_context_tokens"] == 120000
+    assert profile.models == {"claude-sonnet-5-5": {"reasoning": {"write": "high"}}}
+    assert resolve("cloud-rerank", [], preset_env).llm.reasoning.write == "high"
+
+
+def test_base_keys_kept(preset_env: dict[str, str]) -> None:
+    presets.save_profile("copy", "cloud", ProfileUpdate(), preset_env)
+    data = read_profile("copy", preset_env).data
+    assert (data["search"]["language"], data["run"]["gpu_policy"]) == ("es", "exclusive")
+
+
+def test_tuning_for_entry_default_model(preset_env: dict[str, str]) -> None:
+    edits = ProfileUpdate.model_validate({"llm": {"max_output_tokens": 12288}})
+    (preset_dir(preset_env) / "profiles/local.toml").write_text('[use]\nllm = "agents"\n')
+    presets.update_profile("local", edits, preset_env)
+    assert read_profile("local", preset_env).models == {"qwen3-14b": {"max_output_tokens": 12288}}
+
+
+def test_save_edits_into_the_profile(preset_env: dict[str, str]) -> None:
+    root = preset_dir(preset_env)
+    (root / "profiles/low-vram.toml").write_text('[use]\nprefilter = "bm25"\n[llm]\nmodel = "qwen3-14b"\n')
+    presets.update_profile("low-vram", ProfileUpdate.model_validate({"llm": {"max_output_tokens": 12288}}), preset_env)
+    profile = read_profile("low-vram", preset_env)
+    assert profile.models == {"qwen3-14b": {"max_output_tokens": 12288}}
+    assert (profile.use, profile.data) == ({"prefilter": "bm25"}, {"llm": {"model": "qwen3-14b"}})
+
+
+def test_update_a_managed_profile(preset_env: dict[str, str]) -> None:
+    root = preset_dir(preset_env)
+    (root / "profiles/.nix-managed").write_text("workstation.toml\n")
+    before = (root / "profiles/workstation.toml").read_text()
+    with pytest.raises(PresetError) as error:
+        presets.update_profile("workstation", ProfileUpdate(description="x"), preset_env)
+    assert error.value.code == "managed"
+    assert (root / "profiles/workstation.toml").read_text() == before
+
+
+def test_save_as_from_a_managed_profile(preset_env: dict[str, str]) -> None:
+    (preset_dir(preset_env) / "profiles/.nix-managed").write_text("workstation.toml\n")
+    presets.save_profile("ws-fast", "workstation", ProfileUpdate(), preset_env)
+    assert (preset_dir(preset_env) / "profiles/ws-fast.toml").exists()
+
+
+def test_active_profile_not_deleted(preset_env: dict[str, str]) -> None:
+    store_profile("cloud", preset_env)
+    with pytest.raises(PresetError) as error:
+        presets.delete_profile("cloud", preset_env)
+    assert error.value.code == "active_profile"
+    assert (preset_dir(preset_env) / "profiles/cloud.toml").exists()
+
+
+def test_save_a_depth(preset_env: dict[str, str]) -> None:
+    presets.save_depth("wide", DEPTH, preset_env)
+    depth, description, data = read_depth("wide", preset_env)
+    assert (depth.source, description) == ("user", DEPTH.description)
+    assert data == {
+        "plan": {"max_sub_queries": 10},
+        "search": {"max_results": 12},
+        "fetch": {"max_pages": 200},
+        "score": {"top_k": 8},
+        "research": {"rounds": 1, "queries_per_round": 3},
+        "write": {"words": 1500},
+    }
+    presets.replace_depth("wide", DepthUpdate(values=DEPTH.values.model_copy(update={"words": None})), preset_env)
+    assert "write" not in read_depth("wide", preset_env)[2]
+    presets.delete_depth("wide", preset_env)
+    assert "wide" not in list_depths(preset_env)
+
+
+def test_update_a_builtin_depth(preset_env: dict[str, str]) -> None:
+    with pytest.raises(PresetError) as error:
+        presets.replace_depth("quick", DEPTH, preset_env)
+    assert error.value.code == "builtin"
+    assert read_depth("quick", preset_env)[0].source == "builtin"
+
+
+def test_delete_a_managed_depth(preset_env: dict[str, str]) -> None:
+    presets.save_depth("wide", DEPTH, preset_env)
+    (preset_dir(preset_env) / "profiles/.nix-managed").write_text("../depths/wide.toml\n")
+    with pytest.raises(PresetError) as error:
+        presets.delete_depth("wide", preset_env)
+    assert error.value.code == "managed"
+    assert read_depth("wide", preset_env)[0].name == "wide"

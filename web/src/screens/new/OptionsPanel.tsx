@@ -3,6 +3,7 @@
 import { ArrowCounterClockwise, CaretDown, CaretRight } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type {
+  DepthInfo,
   DomainLists,
   ProfileInfo,
   ProviderEntry,
@@ -21,9 +22,9 @@ import {
 } from "../../components/WritingOptionsForm";
 import { type Depth, depthLabel } from "../../run/depth";
 import { changedCount, type ProfileChoice } from "../../run/profileValues";
-import { DepthGroup } from "./DepthGroup";
+import { type DepthActions, DepthGroup } from "./DepthGroup";
 import css from "./OptionsPanel.module.css";
-import { ProfileAdvanced } from "./ProfileAdvanced";
+import { type ProfileActions, ProfileAdvanced } from "./ProfileAdvanced";
 
 /** The fields of `value` that differ from `defaults`. */
 export function overriddenFields(
@@ -62,12 +63,16 @@ export type DomainView = {
 
 /** What the Depth row shows; `wordsSet` is false when the depth leaves Length to Settings. */
 export type DepthView = {
-  depths: Depth[];
+  /** Every preset from `GET /api/depths`. */
+  presets: DepthInfo[];
+  /** The preset Custom's values came from by an edit. */
+  customFrom?: string;
   description: string;
   values: ResearchValues;
   wordsSet: boolean;
   onPick: (depth: Depth) => void;
   onEdit: (field: keyof ResearchValues, value: number) => void;
+  actions: DepthActions;
 };
 
 /** The profile's Advanced values: every entry, the run's choice, and the llm's model IDs. */
@@ -76,6 +81,7 @@ export type ProfileView = {
   choice: ProfileChoice;
   models: string[];
   onChange: (choice: ProfileChoice) => void;
+  actions: ProfileActions;
 };
 
 type Props = {
@@ -135,12 +141,14 @@ export function OptionsPanel(props: Props) {
           <div className={css.group}>Run</div>
           <DepthGroup
             depth={options.depth}
-            depths={depth.depths}
+            presets={depth.presets}
+            customFrom={depth.customFrom}
             description={depth.description}
             values={depth.values}
             filesOnly={options.sources === "files"}
             onPick={depth.onPick}
             onEdit={depth.onEdit}
+            actions={depth.actions}
           />
           <Row label="Recipe" help="recipe">
             <Seg
@@ -191,6 +199,7 @@ export function OptionsPanel(props: Props) {
                 words={writing.words}
                 rounds={rounds}
                 onChange={props.profile.onChange}
+                actions={props.profile.actions}
               />
             </div>
           </Row>

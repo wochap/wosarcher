@@ -45,6 +45,8 @@ export type Draft = {
   searchLanguage: string;
   /** The Custom depth's values and its default Length, once Custom was picked or edited. */
   custom?: { values: ResearchValues; words: number };
+  /** The preset Custom's values came from when an edit switched it to Custom. */
+  customFrom?: string;
   /** The blocks whose entry differs from the profile's, for this run only. */
   use: Use;
   /** The profile's Model and Budgets fields edited for this run. */

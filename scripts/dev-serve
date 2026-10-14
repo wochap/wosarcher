@@ -9,8 +9,9 @@
 # It reads the live wosarcher.service unit (environment and secrets file)
 # and the lazy proxy socket named by $WOSARCHER_DEV_SOCKET (default
 # wosarcher-proxy.socket; its address and port), stops that socket,
-# wosarcher.socket, and the service, copies the Nix-managed profiles,
-# hooks.toml, and auth.json into a dev data directory (auth.json on the
+# wosarcher.socket, and the service, copies the service's profiles (with the
+# stored default), provider entries, depth presets, hooks.toml, and
+# auth.json into a dev data directory (auth.json on the
 # first run only; the dev server keeps its own password after that), and runs
 # `uv run wosarcherd serve` on the proxy socket's address and port, so
 # https://wosarcher.<domain> reaches the dev server through nginx, and on
@@ -41,6 +42,10 @@ for arg in "$@"; do
   esac
 done
 
+if [[ $EUID -eq 0 ]]; then
+  echo "dev-serve: run as your user, not root; it calls sudo where it needs it" >&2
+  exit 2
+fi
 # `sudo` may be a doas shim, so no `sudo -v`.
 sudo true
 
@@ -55,12 +60,25 @@ host=${listen%:*}
 port=${listen##*:}
 
 # --- Dev data directory ------------------------------------------------------
-mkdir -p "$data/config/wosarcher/profiles" "$data/share" "$data/cache"
+mkdir -p "$data/config/wosarcher" "$data/share" "$data/cache"
 chmod 700 "$data"
 owner="$(id -u):$(id -g)"
-rm -f "$data"/config/wosarcher/profiles/*.toml
-sudo rsync -a --chown="$owner" --include='*.toml' --exclude='*' \
-  "$service_data/config/wosarcher/profiles/" "$data/config/wosarcher/profiles/"
+# Profiles (with the module's .nix-managed manifest), provider entries, and
+# depth presets follow the service's on every start; profiles and presets
+# saved in a dev session do not survive a restart.
+for dir in profiles providers depths; do
+  rm -rf "${data:?}/config/wosarcher/$dir"
+  if sudo test -d "$service_data/config/wosarcher/$dir"; then
+    sudo rsync -a --chown="$owner" --include='*/' --include='*.toml' --include='.nix-managed' \
+      --exclude='*' "$service_data/config/wosarcher/$dir/" "$data/config/wosarcher/$dir/"
+  fi
+done
+# The stored default profile (`wosarcherd profile use`).
+current="$data/config/wosarcher/current"
+rm -f "$current"
+if sudo test -f "$service_data/config/wosarcher/current"; then
+  sudo cat "$service_data/config/wosarcher/current" > "$current"
+fi
 # The service's runs (history) and caches (pages, embeddings), copied in one
 # way: dev runs stay in the dev directory and never reach the service.
 sudo rsync -a --chown="$owner" "$service_data/share/" "$data/share/"
@@ -107,8 +125,12 @@ sudo systemctl stop "${sockets[@]}" "$proxy" "$service"
 
 # The service's environment, then the secrets file. Secrets stay in this
 # process and the daemon it starts; nothing is written to disk.
+# The unit's PATH (Nix store tools only) is dropped: uv and sudo come from
+# this shell.
+user_path=$PATH
 set -a
 eval "export $env_line"
+PATH=$user_path
 if [[ -n "$env_file" ]]; then
   if [[ -r "$env_file" ]]; then
     # shellcheck disable=SC1090

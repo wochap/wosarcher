@@ -1436,8 +1436,49 @@ filter replaces images with their alt text, so no file or URL is read.
   the profile (or the environment) sets, or null when it sets none, so a
   client can tell a profile's list from the global default; `settings`,
   the resolved configuration with secrets as `***`, which `wosarcher
-  profile show` prints; and `error`, why it does not resolve (the resolved
-  values are then null). Model limits come from `GET /api/providers`.
+  profile show` prints; `models`, the profile's own `models` table as
+  `ModelInfo` items (null where it sets no value); `managed`, whether the
+  NixOS manifest lists it; and `error`, why it does not resolve (the
+  resolved values are then null). The entries' model limits come from
+  `GET /api/providers`; the profile's tuning of a model comes from
+  `models` and applies above the entry's.
+- `POST /api/profiles` (`ProfileSave`: `name`, `from`, optional
+  `description`, and the run-style edits `use` and `llm`) writes
+  `profiles/<name>.toml` from the base profile's own keys with the edits
+  applied and answers 201 with its `ProfileInfo`; `PATCH
+  /api/profiles/{name}` (`ProfileUpdate`) applies the same edits to that
+  profile's file (200); `DELETE /api/profiles/{name}` removes it (204). An
+  edit's `use` replaces those blocks of the base's `[use]` (blocks the base
+  leaves out stay out, so the server's `WOSARCHER_USE__*` is never baked
+  in); `llm.model` sets `[llm] model`, `llm.context_tokens` sets `[select]
+  max_context_tokens`, and the model-owned fields (`context_window`,
+  `max_output_tokens`, `reasoning.*`, `gap_context_tokens`) merge into
+  `[models."<id>"]`, `<id>` being the edited model, else the base's
+  `llm.model`, else the chosen llm entry's default model. The file is
+  rewritten from its parsed keys (comments and key order are not kept)
+  and checked to load as a profile before it is written.
+- `POST /api/depths` (`DepthSave`: `name`, optional `description`, and
+  `values`: the six research values in the run request's ranges and
+  `words`, a positive integer or null), `PUT /api/depths/{name}`
+  (`DepthUpdate`, replaces a user preset's file), and `DELETE
+  /api/depths/{name}` write and remove `depths/<name>.toml` (201, 200,
+  204).
+- Saved names (`store/presets.py`): `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`,
+  checked before any path is built, else 422 `invalid_name`; `custom`
+  (both kinds) and the built-in depth names are reserved (422
+  `invalid_name`); a name equal, ignoring case, to an existing one of its
+  kind is 409 `name_taken`. Files the NixOS manifest lists are 409
+  `managed` for update and delete (a managed profile may still be the base
+  of a new one), built-in presets 409 `builtin`, the active profile 409
+  `active_profile` on delete, unknown names 404 `profile_not_found` or
+  `depth_not_found`, and an unknown entry in `use` or an invalid `llm`
+  field 422 naming it. Writes go to `.<name>.toml.tmp` in the same
+  directory, opened with mode 0600, then replace the target; the
+  directories are created when missing. Runs that used a deleted profile
+  or preset keep their records (a rerun then fails with "unknown
+  profile"). Two saves of one name race; the last write wins. When the
+  NixOS module later declares a name saved from the UI, it overwrites the
+  file at the next start and lists it as managed.
 - `GET /api/providers`: `ProvidersReport`, sends no probe: the active
   `profile`, its `gpu_policy`, the last check's `warnings`, and `entries`,
   every entry in block order (search, fetch, prefilter, score, llm), then
@@ -1476,7 +1517,8 @@ filter replaces images with their alt text, so no file or URL is read.
   (`sub_queries`, `results_per_query`, `max_pages`, `passages_per_query`,
   `rounds`, `queries_per_round`, the built-in default where the preset sets
   none, and `words`, null when the preset leaves it to the global
-  setting).
+  setting), and `managed` (the NixOS manifest lists it; false for
+  built-in presets).
 - `POST /api/login`, `POST /api/logout`, `GET /api/session`
   (`SessionInfo`): see Authentication.
 - `GET /api/tokens` (`TokenInfo`: ID, name, masked last 4 characters,
@@ -1684,6 +1726,7 @@ Precedence, lowest first:
 defaults
  < entries      (each block replaced whole by its chosen entry)
  < model        (models.<id> of the llm entry, when it lists the model)
+ < profile model (models.<id> of the profile, when it lists the model)
  < profile      (its own keys)
  < environment  (profile-owned keys and WOSARCHER_USE__<BLOCK>)
  < server global settings (server runs only)
@@ -1752,7 +1795,7 @@ file, the key, and its owner:
 | Owner | Keys |
 |---|---|
 | depth (preset or run) | `plan.max_sub_queries`, `search.max_results`, `fetch.max_pages`, `score.top_k`, `research.rounds`, `research.queries_per_round`, `write.words` (`DEPTH_KEYS`) |
-| model (`models.<id>`) | `llm.context_window`, `llm.max_output_tokens`, `llm.reasoning.*`, `research.gap_context_tokens` |
+| model (`models.<id>` of the llm entry or the profile) | `llm.context_window`, `llm.max_output_tokens`, `llm.reasoning.*`, `research.gap_context_tokens` |
 | profile | `use.*`, `llm.model`, `search.allow_domains`, `search.block_domains`, `search.language`, `search.time_range`, `search.filter_pages` (`PROFILE_BLOCK_KEYS`), and every key outside the five blocks that no row above owns |
 | entry | every other key of its block, and `llm.model` as the default |
 
@@ -1761,7 +1804,15 @@ hatch, and the API already refuses `*_file` and `*_command` in it.
 
 **Profiles** are thin: TOML files in
 `$XDG_CONFIG_HOME/wosarcher/profiles/` that name one entry per block in
-`[use]` and set only profile-owned keys. The package ships none.
+`[use]` and set only profile-owned keys. The package ships none. A
+profile may also tune models in its own `[models."<id>"]` table, with the
+keys and checks of an llm entry's (`check_models`); it applies just above
+the entry's `models.<id>`, only when the run's model is `<id>`, so a
+profile never sets a bare model-owned key that would apply to whichever
+model a run picks. `wosarcher profile show` prints it as
+`models.<id>.<key> = <value>` among the profile's own values. Profiles
+and depth presets saved from the web UI are ordinary files here (see
+Server, `POST /api/profiles`).
 
 ```toml
 # profiles/default.toml
@@ -1790,7 +1841,10 @@ with no profile file a command fails with "no profiles; add one in
 settings with `resolve_server` (defaults < the active profile's own keys,
 when a profile exists < environment), without entries, so a fresh install
 can serve. `fork_settings` rebuilds a fork's settings from the parent's
-saved ones (see Commands).
+saved ones (see Commands); with `--use llm=...` the chosen model's values
+apply again: built-in defaults, the entry's `models.<id>`, then the
+parent profile's `models.<id>` as its file is now (nothing when the
+profile is gone).
 
 The run slot limit is not a profile key: `max_concurrent_runs` (1 to 8,
 default 1) lives in the global settings file
@@ -2340,9 +2394,26 @@ These override the prototype where they differ:
 - **Depth control:** the segmented control lists Quick, Standard, Deep,
   Exhaustive, then the user presets from `GET /api/depths` by name (labelled
   with the name as written), then Custom, wrapping onto more rows when it
-  does not fit. Its Advanced disclosure holds only the six depth fields:
-  Sub-queries, Results per query, Max pages, Rounds, Follow-ups per round,
-  and Passages per query.
+  does not fit. With more than three user presets, the first two are
+  segments and the rest are options of a "More…" select before Custom
+  (scenario `new-depth-many`). Its Advanced disclosure holds only the six
+  depth fields: Sub-queries, Results per query, Max pages, Rounds,
+  Follow-ups per round, and Passages per query.
+- **Save actions** (scenarios `new-save-depth`, `new-save-profile`,
+  `new-profile-custom`, `new-delete`): Depth's Advanced ends with "Save
+  depth as…" for Custom, plus "Save to <preset>" when an edit turned a user
+  preset into Custom (the draft's `customFrom`), and "Delete <preset>" for
+  a selected user preset; the profile's Advanced ends with "Save to
+  <profile>" and "Save profile as…" when it has edits, else "Delete
+  <profile>" (disabled for the active profile). Managed files show a lock
+  note instead of Save to and Delete. The server composes every file: the
+  UI sends the same `use` and `llm` a run request carries (`PATCH` or
+  `POST /api/profiles`) or the six values with Length (`PUT` or `POST
+  /api/depths`). The Save dialog (`SaveDialog.tsx`) checks the name as the
+  server does (`run/presets.ts`), lists what is saved, and shows a server
+  refusal as the name error; the Delete dialog (`DeleteDialog.tsx`)
+  switches a deleted selection to Standard or the active profile. The
+  unnamed Custom depth stays in browser storage.
 - **Follow-ups per round:** an Advanced depth value like the others, locked
   while Rounds is 1; the estimate reads it from the values, not the preset.
 - **Profile row and its Advanced values** (scenarios `new-profile`,
@@ -2360,7 +2431,11 @@ These override the prototype where they differ:
   context tokens (empty means Auto, with the "Auto · <budget>" note; the
   budget follows Length, Context window, and Max output; Gap locked while
   Rounds is 1). Edits apply to this run only: an edited field gets the
-  "overridden" tag, "Reset to profile" removes every edit, switching the
+  "overridden" tag (Model-group fields and Gap context tokens carry a
+  source tag instead: "edited", "from profile" when the profile's
+  `llm.model` or `models` table sets it, else "from entry"; the profile's
+  `models` values for the chosen model are layered over the entry's in
+  `run/profileValues.ts`), "Reset to profile" removes every edit, switching the
   profile removes them all, and switching the LLM entry resets Model to
   that entry's default and drops the model-owned edits. The request sends
   `use` only for changed blocks and `llm` only with edited fields, so an

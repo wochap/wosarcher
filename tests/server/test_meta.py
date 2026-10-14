@@ -286,3 +286,143 @@ def test_models_endpoint_down(client: TestClient) -> None:
 
 def test_models_unknown_entry(client: TestClient) -> None:
     assert client.get("/api/models?llm=nope").status_code == 400
+
+
+# Saved profiles and depth presets
+
+OPENROUTER = 'provider = "openai"\nbase_url = "http://or.test/v1"\nmodel = "claude-sonnet-5-5"\n'
+CLOUD = 'description = "Hosted."\n[use]\nprefilter = "bm25"\nllm = "openrouter"\n'
+WIDE_VALUES: dict[str, int] = {
+    "sub_queries": 10,
+    "results_per_query": 12,
+    "max_pages": 200,
+    "passages_per_query": 8,
+    "rounds": 1,
+    "queries_per_round": 3,
+    "words": 1500,
+}
+WIDE: dict[str, Any] = {
+    "name": "wide",
+    "description": "Your preset: 10 sub-queries, 1 round, 1,500 words.",
+    "values": WIDE_VALUES,
+}
+
+
+@pytest.fixture
+def cloud(config_dir: Path) -> None:
+    add(config_dir, "providers/llm/openrouter.toml", OPENROUTER)
+    add(config_dir, "providers/score/rerank.toml", RERANK)
+    add(config_dir, "profiles/cloud.toml", CLOUD)
+    add(config_dir, "profiles/workstation.toml", '[use]\nprefilter = "bm25"\nllm = "agents"\n')
+
+
+def test_save_profile_route(client: TestClient, config_dir: Path, cloud: None) -> None:
+    store_profile("workstation", {"XDG_CONFIG_HOME": str(config_dir.parent)})
+    body = {
+        "name": "cloud-rerank",
+        "from": "cloud",
+        "use": {"score": "rerank"},
+        "llm": {"reasoning": {"write": "high"}, "context_tokens": 120000},
+    }
+    response = client.post("/api/profiles", json=body)
+    assert response.status_code == 201, response.text
+    saved = response.json()
+    assert (saved["name"], saved["description"], saved["use"]["score"]) == ("cloud-rerank", "Hosted.", "rerank")
+    assert saved["context_tokens"] == 120000
+    assert saved["models"] == [
+        {
+            "id": "claude-sonnet-5-5",
+            "context_window": None,
+            "max_output_tokens": None,
+            "reasoning": {"plan": None, "gap": None, "write": "high"},
+            "gap_context_tokens": None,
+        }
+    ]
+    assert saved["settings"]["llm"]["reasoning"]["write"] == "high"
+    assert client.delete("/api/profiles/cloud-rerank").status_code == 204
+    assert "cloud-rerank" not in {p["name"] for p in client.get("/api/profiles").json()}
+
+
+@pytest.mark.parametrize(
+    ("body", "status", "error"),
+    [
+        ({"name": "../x", "from": "cloud"}, 422, "invalid_name"),
+        ({"name": "Cloud", "from": "cloud"}, 409, "name_taken"),
+        ({"name": "x", "from": "nope"}, 404, "profile_not_found"),
+        ({"name": "x", "from": "cloud", "use": {"score": "nope"}}, 422, "invalid_request"),
+        ({"name": "x", "from": "cloud", "llm": {"context_window": 0}}, 422, "invalid_request"),
+    ],
+)
+def test_save_profile_errors(
+    client: TestClient, config_dir: Path, cloud: None, body: dict[str, Any], status: int, error: str
+) -> None:
+    response = client.post("/api/profiles", json=body)
+    assert (response.status_code, response.json()["error"]) == (status, error)
+    assert not (config_dir / "profiles/x.toml").exists()
+    if error == "invalid_request":
+        assert ("use.score" if "use" in body else "llm.context_window") in response.json()["detail"]
+
+
+def test_update_profile_route(client: TestClient, config_dir: Path, cloud: None) -> None:
+    response = client.patch("/api/profiles/workstation", json={"llm": {"max_output_tokens": 12288}})
+    assert response.status_code == 200, response.text
+    assert response.json()["models"][0]["max_output_tokens"] == 12288
+    assert client.patch("/api/profiles/nope", json={}).json()["error"] == "profile_not_found"
+
+
+def test_managed_profile(client: TestClient, config_dir: Path, cloud: None) -> None:
+    add(config_dir, "profiles/.nix-managed", "workstation.toml\n")
+    found = {p["name"]: p["managed"] for p in client.get("/api/profiles").json()}
+    assert found == {"cloud": False, "workstation": True}
+    response = client.patch("/api/profiles/workstation", json={"description": "x"})
+    assert (response.status_code, response.json()["error"]) == (409, "managed")
+    assert client.post("/api/profiles", json={"name": "ws-fast", "from": "workstation"}).status_code == 201
+
+
+def test_active_profile_route(client: TestClient, config_dir: Path, cloud: None) -> None:
+    store_profile("cloud", {"XDG_CONFIG_HOME": str(config_dir.parent)})
+    response = client.delete("/api/profiles/cloud")
+    assert (response.status_code, response.json()["error"]) == (409, "active_profile")
+    assert (config_dir / "profiles/cloud.toml").exists()
+
+
+def test_depth_routes(client: TestClient, config_dir: Path) -> None:
+    response = client.post("/api/depths", json=WIDE)
+    assert response.status_code == 201, response.text
+    assert (response.json()["source"], response.json()["values"]["words"]) == ("user", 1500)
+    changed = {**WIDE_VALUES, "max_pages": 120}
+    response = client.put("/api/depths/wide", json={"description": "d", "values": changed})
+    assert (response.status_code, response.json()["values"]["max_pages"]) == (200, 120)
+    assert client.delete("/api/depths/wide").status_code == 204
+    assert "wide" not in {d["name"] for d in client.get("/api/depths").json()}
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body", "status", "error"),
+    [
+        ("post", "/api/depths", {**WIDE, "name": "Deep"}, 422, "invalid_name"),
+        ("post", "/api/depths", {**WIDE, "values": {**WIDE_VALUES, "rounds": 9}}, 422, "invalid_request"),
+        ("put", "/api/depths/quick", {"values": WIDE_VALUES}, 409, "builtin"),
+        ("put", "/api/depths/nope", {"values": WIDE_VALUES}, 404, "depth_not_found"),
+        ("delete", "/api/depths/quick", None, 409, "builtin"),
+    ],
+)
+def test_depth_errors(
+    client: TestClient, config_dir: Path, method: str, path: str, body: Any, status: int, error: str
+) -> None:
+    response = client.request(method.upper(), path, json=body)
+    assert (response.status_code, response.json()["error"]) == (status, error)
+    if error == "invalid_name":
+        assert "Deep" in response.json()["detail"]
+    if error == "invalid_request":
+        assert "values.rounds" in response.json()["detail"]
+    assert not (config_dir / "depths").exists() or not list((config_dir / "depths").glob("*.toml"))
+
+
+def test_managed_preset(client: TestClient, config_dir: Path) -> None:
+    assert client.post("/api/depths", json=WIDE).status_code == 201
+    add(config_dir, "profiles/.nix-managed", "../depths/wide.toml\n")
+    found = {d["name"]: d["managed"] for d in client.get("/api/depths").json()}
+    assert (found["wide"], found["standard"]) == (True, False)
+    response = client.delete("/api/depths/wide")
+    assert (response.status_code, response.json()["error"]) == (409, "managed")

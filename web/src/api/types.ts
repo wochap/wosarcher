@@ -31,6 +31,12 @@ export type SlotState = Required<G.SlotState>;
 export type RunQueuedData = G.RunQueuedData;
 export type ProfileInfo = G.ProfileInfo;
 export type DepthInfo = G.DepthInfo;
+export type ProfileSave = G.ProfileSave;
+export type ProfileUpdate = G.ProfileUpdate;
+export type DepthSave = G.DepthSave;
+export type DepthUpdate = G.DepthUpdate;
+/** A depth preset's values as saved: the six research values and Length (null: global default). */
+export type DepthSaveValues = G.DepthSaveValues;
 /** A token budget: a number, or "auto" for all the room the model window leaves. */
 export type TokenBudget = number | "auto";
 export type ResearchValues = { [K in keyof G.ResearchPatch]-?: number };

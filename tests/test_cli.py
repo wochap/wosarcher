@@ -103,6 +103,14 @@ def test_profile_show_redacts_key_file(daemon: Daemon, config_dir: Path, tmp_pat
     assert "sk-file-secret" not in result.output
 
 
+def test_profile_show_model_table(daemon: Daemon, config_dir: Path) -> None:
+    table = '[use]\nprefilter = "bm25"\n[models."claude-sonnet-5-5"]\nreasoning = { write = "high" }\n'
+    (config_dir / "profiles" / "cloud-rerank.toml").write_text(table)
+    result = runner.invoke(app, ["profile", "show", "cloud-rerank"])
+    assert result.exit_code == 0, result.output
+    assert 'models.claude-sonnet-5-5.reasoning.write = "high"' in result.output.splitlines()
+
+
 def test_providers_list(daemon: Daemon, config_dir: Path) -> None:
     (config_dir / "providers" / "score").mkdir()
     (config_dir / "providers" / "score" / "rerank.toml").write_text('provider = "rerank"\n')

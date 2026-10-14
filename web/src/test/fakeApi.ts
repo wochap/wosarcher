@@ -157,9 +157,64 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       record("listProfiles");
       return structuredClone(data.profiles);
     },
+    async saveProfile(body) {
+      record("saveProfile", body);
+      const base = data.profiles.find((p) => p.name === body.from);
+      if (!base) throw new ApiError(404, "profile_not_found", `no profile '${body.from}'`);
+      takenName("profile", body.name, data.profiles);
+      const saved: ProfileInfo = {
+        ...structuredClone(base),
+        name: body.name,
+        active: false,
+        managed: false,
+        description: body.description ?? base.description,
+        use: { ...base.use, ...body.use },
+      };
+      data.profiles.push(saved);
+      data.profiles.sort((a, b) => a.name.localeCompare(b.name));
+      return structuredClone(saved);
+    },
+    async updateProfile(name, body) {
+      record("updateProfile", name, body);
+      const found = data.profiles.find((p) => p.name === name);
+      if (!found) throw new ApiError(404, "profile_not_found", `no profile '${name}'`);
+      if (found.managed) throw new ApiError(409, "managed", `profile '${name}' is managed`);
+      if (body.description != null) found.description = body.description;
+      found.use = { ...found.use, ...body.use };
+      return structuredClone(found);
+    },
+    async deleteProfile(name) {
+      record("deleteProfile", name);
+      data.profiles = data.profiles.filter((p) => p.name !== name);
+    },
     async listDepths() {
       record("listDepths");
       return structuredClone(data.depths);
+    },
+    async saveDepth(body) {
+      record("saveDepth", body);
+      takenName("depth", body.name, data.depths);
+      const saved: DepthInfo = {
+        name: body.name,
+        description: body.description ?? "",
+        source: "user",
+        managed: false,
+        values: { ...body.values },
+      };
+      data.depths.push(saved);
+      return structuredClone(saved);
+    },
+    async replaceDepth(name, body) {
+      record("replaceDepth", name, body);
+      const found = data.depths.find((d) => d.name === name);
+      if (!found) throw new ApiError(404, "depth_not_found", `no depth preset '${name}'`);
+      found.description = body.description ?? "";
+      found.values = { ...body.values };
+      return structuredClone(found);
+    },
+    async deleteDepth(name) {
+      record("deleteDepth", name);
+      data.depths = data.depths.filter((d) => d.name !== name);
     },
     async listModels(llm) {
       record("listModels", llm);
@@ -215,6 +270,12 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     },
   };
   return api;
+}
+
+function takenName(kind: string, name: string, existing: { name: string }[]): void {
+  const taken = existing.find((e) => e.name.toLowerCase() === name.toLowerCase());
+  if (taken)
+    throw new ApiError(409, "name_taken", `a ${kind} named '${taken.name}' already exists`);
 }
 
 export function callsTo(api: FakeApi, method: keyof ApiClient): unknown[][] {

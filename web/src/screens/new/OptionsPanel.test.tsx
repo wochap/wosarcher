@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { RunCreate } from "../../api/types";
+import { ApiError } from "../../api/client";
+import type { DepthInfo, RunCreate } from "../../api/types";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { renderApp } from "../../test/renderApp";
 
@@ -34,6 +35,23 @@ function setWords(value: string) {
 }
 
 beforeEach(() => localStorage.clear());
+
+/** A user depth preset with wide-ish values. */
+const userDepth = (name: string): DepthInfo => ({
+  name,
+  description: `Your preset ${name}.`,
+  source: "user",
+  managed: false,
+  values: {
+    sub_queries: 10,
+    results_per_query: 8,
+    max_pages: 90,
+    passages_per_query: 8,
+    rounds: 1,
+    queries_per_round: 3,
+    words: null,
+  },
+});
 
 describe("OptionsPanel", () => {
   it("summarizes the options and offers the profiles from the server", async () => {
@@ -159,6 +177,135 @@ describe("Depth", () => {
     const request = await start(api);
     expect(request.depth).toBe("wide");
     expect(request.research).toBeUndefined();
+  });
+
+  it("Many user presets: the extras go into a More… select", async () => {
+    const api = fakeApi();
+    for (const name of ["lit-review", "news-scan", "survey-fast", "wide"])
+      api.data.depths.push(userDepth(name));
+    await openOptions(api);
+    const more = screen.getByLabelText("More depth presets") as HTMLSelectElement;
+    expect([...more.options].map((o) => o.textContent)).toEqual(["More…", "survey-fast", "wide"]);
+    expect(screen.getByLabelText("lit-review")).toBeTruthy();
+    expect(screen.getByLabelText("news-scan")).toBeTruthy();
+    fireEvent.change(more, { target: { value: "wide" } });
+    expect(more.value).toBe("wide");
+    expect([...more.options].map((o) => o.textContent)).toEqual(["survey-fast", "wide"]);
+    const radio = more.parentElement?.querySelector("input") as HTMLInputElement;
+    expect(radio.checked).toBe(true);
+    expect(header()).toContain("wide · report");
+  });
+
+  it("Save to a user preset: sends PUT and selects the preset", async () => {
+    const api = fakeApi();
+    api.data.depths.push(userDepth("wide"));
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("wide"));
+    depthAdvanced();
+    fireEvent.change(field("Max pages"), { target: { value: "120" } });
+    expect((screen.getByLabelText("Custom") as HTMLInputElement).checked).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save to wide" }));
+    });
+    const [[name, body]] = callsTo(api, "replaceDepth") as [string, { values: object }][];
+    expect(name).toBe("wide");
+    expect(body.values).toMatchObject({ max_pages: 120, sub_queries: 10, words: 1200 });
+    expect((screen.getByLabelText("wide") as HTMLInputElement).checked).toBe(true);
+    expect(field("Max pages").value).toBe("120");
+    expect(screen.getByText("Saved depth “wide”")).toBeTruthy();
+  });
+
+  it("Managed preset edited: no Save to, a lock note instead", async () => {
+    const api = fakeApi();
+    api.data.depths.push({ ...userDepth("lit-review"), managed: true });
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("lit-review"));
+    depthAdvanced();
+    expect(screen.getByText("Managed by NixOS config · read-only")).toBeTruthy();
+    fireEvent.change(field("Max pages"), { target: { value: "120" } });
+    expect(screen.getByText("lit-review is managed by NixOS config")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save depth as…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Save to/ })).toBeNull();
+  });
+
+  it("built-in presets show no action row", async () => {
+    await openOptions();
+    depthAdvanced();
+    expect(screen.queryByRole("button", { name: /^Delete|^Save/ })).toBeNull();
+  });
+
+  it("Save a depth: posts the values, Length, and description, then selects it", async () => {
+    const api = await openOptions();
+    fireEvent.click(screen.getByLabelText("Custom"));
+    fireEvent.change(field("Sub-queries"), { target: { value: "10" } });
+    setWords("1500");
+    fireEvent.click(screen.getByRole("button", { name: "Save depth as…" }));
+    expect(screen.getByText("Length")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "wide-short" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save depth" }));
+    });
+    const [[body]] = callsTo(api, "saveDepth") as [{ description: string; values: object }][];
+    expect(body.description).toBe("Your preset: 10 sub-queries, 1 round, 1,500 words.");
+    expect(body.values).toMatchObject({ sub_queries: 10, rounds: 1, words: 1500 });
+    expect((screen.getByLabelText("wide-short") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText("Saved depth “wide-short”")).toBeTruthy();
+  });
+
+  it("Name taken: names the clash and sends nothing", async () => {
+    const api = fakeApi();
+    api.data.depths.push(userDepth("wide"));
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("Custom"));
+    fireEvent.click(screen.getByRole("button", { name: "Save depth as…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save depth" }));
+    expect(screen.getByText("Enter a name.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Wide" } });
+    expect(screen.getByText("A depth named “Wide” already exists.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "_x" } });
+    expect(screen.getByText("Start with a letter or digit.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Deep" } });
+    expect(screen.getByText("“Deep” is reserved for a built-in depth.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save depth" }));
+    expect(callsTo(api, "saveDepth")).toEqual([]);
+  });
+
+  it("shows the server's refusal as the name error", async () => {
+    const api = fakeApi();
+    api.saveDepth = async () => {
+      throw new ApiError(409, "name_taken", "a depth preset named 'x' already exists");
+    };
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("Custom"));
+    fireEvent.click(screen.getByRole("button", { name: "Save depth as…" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "x" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save depth" }));
+    });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("a depth preset named 'x' already exists")).toBeTruthy();
+  });
+
+  it("Delete the selected preset: confirms, deletes, and switches to Standard", async () => {
+    const api = fakeApi();
+    api.data.depths.push(userDepth("wide"));
+    await openOptions(api);
+    fireEvent.click(screen.getByLabelText("wide"));
+    depthAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: "Delete wide" }));
+    expect(screen.getByText("Delete depth “wide”?")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Runs that used it keep the values they ran with. Depth switches to Standard. This can’t be undone.",
+      ),
+    ).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Delete depth" }));
+    });
+    expect(callsTo(api, "deleteDepth")).toEqual([["wide"]]);
+    expect((screen.getByLabelText("Standard") as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByLabelText("wide")).toBeNull();
+    expect(screen.getByText("Deleted depth “wide”")).toBeTruthy();
   });
 
   it("No budgets in Depth: Advanced has the six research values only", async () => {
@@ -318,8 +465,9 @@ describe("Profile advanced values", () => {
     expect(screen.getAllByRole("button", { name: /^Advanced/ })[1].textContent).toBe(
       "Advanced· 3 changed",
     );
-    expect(screen.getAllByText("overridden")).toHaveLength(3);
-    expect(screen.getAllByRole("button", { name: "Help: Overridden" })).toHaveLength(3);
+    expect(screen.getAllByText("overridden")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Help: Overridden" })).toHaveLength(2);
+    expect(screen.getByText("edited")).toBeTruthy();
     expect(screen.getByText("60,000 → 32,000 (model window)")).toBeTruthy();
     expect(
       screen.getByText("Changed for this run only; the low-vram profile itself is unchanged."),
@@ -355,6 +503,107 @@ describe("Profile advanced values", () => {
     expect(field("Context window").value).toBe("32768");
     expect(field("Max output").value).toBe("8192");
     expect(screen.getAllByText("Fallback: no limits set for this model.")).toHaveLength(2);
+    expect(screen.getAllByText("from profile")).toHaveLength(1);
+    expect(screen.queryByText("from entry")).toBeNull();
+  });
+
+  it("Profile tuning shown: the profile's model table over the entry's", async () => {
+    const api = fakeApi();
+    api.data.profiles.push({
+      ...api.data.profiles[1],
+      name: "tuned",
+      models: [{ id: "qwen3-14b", reasoning: { write: "high" } }],
+    });
+    await openOptions(api);
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "tuned" } });
+    profileAdvanced();
+    expect(field("Write thinking").value).toBe("high");
+    expect(field("Context window").value).toBe("32768");
+    const tagOf = (label: string) =>
+      field(label).parentElement?.querySelector("span[data-edited]")?.textContent;
+    expect(tagOf("Write thinking")).toBe("from profile");
+    expect(tagOf("Context window")).toBe("from entry");
+    expect(tagOf("Max output")).toBe("from entry");
+    expect(tagOf("Plan thinking")).toBeUndefined();
+  });
+
+  it("Save edits into a profile: sends PATCH, reloads, and clears the edits", async () => {
+    const api = await openOptions();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
+    fireEvent.change(field("Write thinking"), { target: { value: "high" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save to workstation" }));
+    });
+    expect(callsTo(api, "updateProfile")).toEqual([
+      ["workstation", { use: { score: "rerank" }, llm: { reasoning: { write: "high" } } }],
+    ]);
+    expect(screen.getAllByRole("button", { name: /^Advanced/ })[1].textContent).toBe(
+      "Advanced· workstation values",
+    );
+    expect(screen.getByText("Saved profile “workstation”")).toBeTruthy();
+  });
+
+  it("Active profile not deletable", async () => {
+    await openOptions();
+    profileAdvanced();
+    const remove = screen.getByRole("button", { name: "Delete low-vram" }) as HTMLButtonElement;
+    expect(remove.disabled).toBe(true);
+    expect(screen.getByText("The default profile can’t be deleted")).toBeTruthy();
+  });
+
+  it("Managed profile: read-only, saved only as a new profile", async () => {
+    const api = fakeApi();
+    api.data.profiles[1].managed = true;
+    await openOptions(api);
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    profileAdvanced();
+    expect(screen.getByText("Managed by NixOS config · read-only")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
+    fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
+    expect(screen.getByText("workstation is managed by NixOS config")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save to workstation" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Save profile as…" })).toBeTruthy();
+  });
+
+  it("Save a profile: posts the edits from the selected profile and selects it", async () => {
+    const api = await openOptions();
+    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
+    fireEvent.change(field("Write thinking"), { target: { value: "medium" } });
+    fireEvent.change(field("Context tokens"), { target: { value: "120000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile as…" }));
+    expect(
+      screen.getByText(
+        "Saves a new profile based on workstation, with your 3 edits. workstation itself is unchanged.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Model tuning for qwen3-14b")).toBeTruthy();
+    expect(screen.getByText("plan none · gap none · write medium")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "cloud-rerank" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), {
+      target: { value: "Hosted models with the local reranker." },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+    });
+    expect(callsTo(api, "saveProfile")).toEqual([
+      [
+        {
+          name: "cloud-rerank",
+          from: "workstation",
+          description: "Hosted models with the local reranker.",
+          use: { score: "rerank" },
+          llm: { reasoning: { write: "medium" }, context_tokens: 120000 },
+        },
+      ],
+    ]);
+    expect((screen.getByLabelText("Profile") as HTMLSelectElement).value).toBe("cloud-rerank");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("Saved profile “cloud-rerank”")).toBeTruthy();
+    expect(header()).not.toContain("(modified)");
   });
 
   it("drops the limit edits when the model changes", async () => {

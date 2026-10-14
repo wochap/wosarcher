@@ -1,13 +1,16 @@
-"""`/api/settings`, `/api/profiles`, `/api/providers` (and `/check`), `/api/models`, and `/api/depths`."""
+"""`/api/settings`, `/api/profiles`, `/api/providers` (and `/check`), `/api/models`, and `/api/depths`.
+
+Profiles and depth presets are also saved and deleted here (`store.presets`).
+"""
 
 import asyncio
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import ValidationError
 
 from wosarcher.adapters.llm import ChatLLM
@@ -36,11 +39,15 @@ from wosarcher.config import (
 from wosarcher.http import ProviderClient, UsageLedger
 from wosarcher.models import (
     DepthInfo,
+    DepthSave,
+    DepthUpdate,
     DepthValues,
     DoctorReport,
     ModelInfo,
     ModelList,
     ProfileInfo,
+    ProfileSave,
+    ProfileUpdate,
     ProviderEntryInfo,
     ProvidersCheck,
     ProvidersReport,
@@ -50,6 +57,7 @@ from wosarcher.models import (
 )
 from wosarcher.server.errors import RouteError
 from wosarcher.server.state import ServerState, get_state
+from wosarcher.store import presets
 from wosarcher.store import settings as global_settings
 
 router = APIRouter(prefix="/api")
@@ -93,8 +101,8 @@ def profile_use(use: Mapping[str, str], entries: Mapping[str, Mapping[str, Entry
     return chosen
 
 
-def profile_info(name: str, active: str | None) -> ProfileInfo:
-    info = ProfileInfo(name=name, active=name == active)
+def profile_info(name: str, active: str | None, managed: set[str]) -> ProfileInfo:
+    info = ProfileInfo(name=name, active=name == active, managed=name in managed)
     try:
         profile = read_profile(name, os.environ)
         model = profile.data.get("llm", {}).get("model")
@@ -103,6 +111,7 @@ def profile_info(name: str, active: str | None) -> ProfileInfo:
                 "description": profile.description,
                 "use": profile_use(profile.use, list_entries(os.environ)),
                 "model": model if isinstance(model, str) else None,
+                "models": [model_info(model, profile.models[model]) for model in profile.models],
             }
         )
         settings = resolve(name, [], os.environ)
@@ -122,23 +131,69 @@ def profile_info(name: str, active: str | None) -> ProfileInfo:
 @router.get("/profiles")
 async def profiles() -> list[ProfileInfo]:
     active = active_profile()
-    return [profile_info(name, active) for name in list_profiles(os.environ)]
+    managed = presets.managed_names(os.environ)[0]
+    return [profile_info(name, active, managed) for name in list_profiles(os.environ)]
+
+
+PRESET_STATUS = {
+    "invalid_name": 422,
+    "invalid_request": 422,
+    "name_taken": 409,
+    "managed": 409,
+    "builtin": 409,
+    "active_profile": 409,
+    "profile_not_found": 404,
+    "depth_not_found": 404,
+}
+
+
+def saving(action: Callable[[], None]) -> None:
+    """Run a preset write, its errors as the saved-presets statuses."""
+    try:
+        action()
+    except presets.PresetError as error:
+        raise RouteError(PRESET_STATUS[error.code], error.code, error.detail) from None
+    except ConfigError as error:
+        raise RouteError(422, "invalid_request", str(error)) from None
+
+
+def saved_profile(name: str) -> ProfileInfo:
+    return profile_info(name, active_profile(), presets.managed_names(os.environ)[0])
+
+
+@router.post("/profiles", status_code=201)
+async def save_profile(body: ProfileSave) -> ProfileInfo:
+    saving(lambda: presets.save_profile(body.name, body.from_profile, body, os.environ))
+    return saved_profile(body.name)
+
+
+@router.patch("/profiles/{name}")
+async def update_profile(name: str, body: ProfileUpdate) -> ProfileInfo:
+    saving(lambda: presets.update_profile(name, body, os.environ))
+    return saved_profile(name)
+
+
+@router.delete("/profiles/{name}", status_code=204)
+async def delete_profile(name: str) -> Response:
+    saving(lambda: presets.delete_profile(name, os.environ))
+    return Response(status_code=204)
+
+
+def model_info(model: str, values: Mapping[str, Any]) -> ModelInfo:
+    return ModelInfo(
+        id=model,
+        context_window=values.get("context_window"),
+        max_output_tokens=values.get("max_output_tokens"),
+        reasoning=ReasoningPatch.model_validate(values.get("reasoning", {})),
+        gap_context_tokens=values.get("gap_context_tokens"),
+    )
 
 
 def model_infos(default: str, models: Mapping[str, Mapping[str, Any]]) -> list[ModelInfo]:
     """The listed models, the default first (also when it is not listed)."""
     ids = [default] if default else []
     ids += [model for model in models if model != default]
-    return [
-        ModelInfo(
-            id=model,
-            context_window=models.get(model, {}).get("context_window"),
-            max_output_tokens=models.get(model, {}).get("max_output_tokens"),
-            reasoning=ReasoningPatch.model_validate(models.get(model, {}).get("reasoning", {})),
-            gap_context_tokens=models.get(model, {}).get("gap_context_tokens"),
-        )
-        for model in ids
-    ]
+    return [model_info(model, models.get(model, {})) for model in ids]
 
 
 def entry_info(entry: Entry) -> ProviderEntryInfo:
@@ -253,7 +308,7 @@ async def models(llm: str | None = None) -> ModelList:
         return ModelList(models=await chat.models())
 
 
-def depth_info(name: str) -> DepthInfo:
+def depth_info(name: str, managed: set[str]) -> DepthInfo:
     """The preset's values, the built-in default where it sets none; `words` stays None then."""
     depth, description, data = read_depth(name, os.environ)
     values = depth_values(data)
@@ -263,12 +318,36 @@ def depth_info(name: str) -> DepthInfo:
         for field, key in RESEARCH_KEYS.items()
     }
     found = DepthValues(**research, words=values.get("write.words"))
-    return DepthInfo(name=name, description=description, source=depth.source, values=found)
+    is_managed = depth.source == "user" and name in managed
+    return DepthInfo(name=name, description=description, source=depth.source, managed=is_managed, values=found)
 
 
 @router.get("/depths")
 async def depths() -> list[DepthInfo]:
     try:
-        return [depth_info(name) for name in list_depths(os.environ)]
+        managed = presets.managed_names(os.environ)[1]
+        return [depth_info(name, managed) for name in list_depths(os.environ)]
     except ConfigError as error:
         raise RouteError(500, "invalid_depths", str(error)) from None
+
+
+def saved_depth(name: str) -> DepthInfo:
+    return depth_info(name, presets.managed_names(os.environ)[1])
+
+
+@router.post("/depths", status_code=201)
+async def save_depth(body: DepthSave) -> DepthInfo:
+    saving(lambda: presets.save_depth(body.name, body, os.environ))
+    return saved_depth(body.name)
+
+
+@router.put("/depths/{name}")
+async def replace_depth(name: str, body: DepthUpdate) -> DepthInfo:
+    saving(lambda: presets.replace_depth(name, body, os.environ))
+    return saved_depth(name)
+
+
+@router.delete("/depths/{name}", status_code=204)
+async def delete_depth(name: str) -> Response:
+    saving(lambda: presets.delete_depth(name, os.environ))
+    return Response(status_code=204)

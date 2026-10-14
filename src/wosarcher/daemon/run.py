@@ -379,7 +379,7 @@ def fork(
 
         def restored() -> Resolved:
             parent_use = parent.use or resolve_run(parent.profile, without_use(parent.overrides), env).use
-            resolved, pruned = fork_settings(parent.settings, parent_use, chosen, new, env)
+            resolved, pruned = fork_settings(parent.settings, parent_use, chosen, new, env, parent.profile)
             dropped.extend(pruned)
             return resolved
 

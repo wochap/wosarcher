@@ -77,4 +77,56 @@ describe("httpApi", () => {
     stubFetch(500, { error: "internal", detail: "boom" });
     await expect(httpApi(() => {}).cancelRun("r1")).rejects.toBeInstanceOf(ApiError);
   });
+  it("saves, updates, and deletes profiles and depth presets", async () => {
+    const calls = stubFetch(200, {});
+    const api = httpApi(() => {});
+    await api.saveProfile({ name: "cloud-rerank", from: "cloud", use: { score: "rerank" } });
+    await api.updateProfile("low vram", { llm: { max_output_tokens: 12288 } });
+    const values = {
+      sub_queries: 10,
+      results_per_query: 12,
+      max_pages: 200,
+      passages_per_query: 8,
+      rounds: 1,
+      queries_per_round: 3,
+      words: 1500,
+    };
+    await api.saveDepth({ name: "wide", values });
+    await api.replaceDepth("wide", { values });
+    const sent = calls.map((c) => [
+      c.init.method,
+      c.url,
+      c.init.body && JSON.parse(c.init.body as string),
+    ]);
+    expect(sent).toEqual([
+      ["POST", "/api/profiles", { name: "cloud-rerank", from: "cloud", use: { score: "rerank" } }],
+      ["PATCH", "/api/profiles/low%20vram", { llm: { max_output_tokens: 12288 } }],
+      ["POST", "/api/depths", { name: "wide", values }],
+      ["PUT", "/api/depths/wide", { values }],
+    ]);
+    const deleted = stubFetch(204, undefined);
+    await api.deleteProfile("cloud-rerank");
+    await api.deleteDepth("wide");
+    expect(deleted.map((c) => [c.init.method, c.url])).toEqual([
+      ["DELETE", "/api/profiles/cloud-rerank"],
+      ["DELETE", "/api/depths/wide"],
+    ]);
+  });
+
+  it("turns a refused save into ApiError with the server's detail", async () => {
+    stubFetch(409, { error: "name_taken", detail: "a depth named 'wide' already exists" });
+    const values = {
+      sub_queries: 1,
+      results_per_query: 1,
+      max_pages: 5,
+      passages_per_query: 1,
+      rounds: 1,
+      queries_per_round: 1,
+    };
+    const error = await httpApi(() => {})
+      .saveDepth({ name: "Wide", values })
+      .catch((e: unknown) => e);
+    expect((error as ApiError).code).toBe("name_taken");
+    expect((error as ApiError).message).toBe("a depth named 'wide' already exists");
+  });
 });

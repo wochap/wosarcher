@@ -12,6 +12,24 @@ describe("fakeApi", () => {
     expect((await api.listRuns()).length).toBe(runs.length - 1);
   });
 
+  it("saves and deletes profiles and depth presets", async () => {
+    const api = fakeApi();
+    await api.saveProfile({ name: "lv2", from: "low-vram", use: { score: "jev-strict" } });
+    const saved = (await api.listProfiles()).find((p) => p.name === "lv2");
+    expect(saved?.use?.score).toBe("jev-strict");
+    await expect(api.saveProfile({ name: "LV2", from: "low-vram" })).rejects.toMatchObject({
+      code: "name_taken",
+    });
+    await api.deleteProfile("lv2");
+    expect((await api.listProfiles()).map((p) => p.name)).not.toContain("lv2");
+    const values = { ...(await api.listDepths())[0].values, words: 900 };
+    await api.saveDepth({ name: "wide", values });
+    await api.replaceDepth("wide", { values: { ...values, max_pages: 120 } });
+    expect((await api.listDepths()).find((d) => d.name === "wide")?.values.max_pages).toBe(120);
+    await api.deleteDepth("wide");
+    expect(callsTo(api, "deleteDepth")).toEqual([["wide"]]);
+  });
+
   it("answers scripted logins in order, then succeeds", async () => {
     const api = fakeApi({ logins: [{ kind: "wrong", attemptsLeft: 3 }] });
     expect((await api.login("a")).kind).toBe("wrong");

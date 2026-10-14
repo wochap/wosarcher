@@ -1,11 +1,16 @@
 // The profile's Advanced values on New run: the entry per block, the model with its limits and
-// thinking, and the context budgets. Edits apply to this run only and are marked "overridden".
+// thinking, and the context budgets. Edits apply to this run only: a Providers field or Context
+// tokens is marked "overridden", a model value carries its source ("edited", "from profile",
+// "from entry"). The action row saves the edits into a profile or deletes the profile.
 import {
   ArrowCounterClockwise,
   CaretDown,
   CaretRight,
+  FloppyDisk,
   Info,
   LockSimple,
+  Plus,
+  Trash,
 } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
 import type { Block, Effort, ProfileInfo, ProviderEntry, TokenBudget } from "../../api/types";
@@ -19,11 +24,13 @@ import {
   editField,
   entriesOf,
   limitsOf,
+  type ModelField,
   type ProfileChoice,
   type ProfileField,
   type ProfileFields,
   pickEntry,
   profileBase,
+  sourceTag,
 } from "../../run/profileValues";
 import { EFFORT_LABELS, EFFORTS, STEP_LABELS, STEPS } from "../../run/thinking";
 import css from "./OptionsPanel.module.css";
@@ -51,6 +58,14 @@ type Props = {
   /** The depth's rounds; gap fields are used only between rounds. */
   rounds: number;
   onChange: (choice: ProfileChoice) => void;
+  actions: ProfileActions;
+};
+
+/** The action row's handlers: save the edits into the profile, save as a new one, delete. */
+export type ProfileActions = {
+  onSaveTo: () => void;
+  onSaveAs: () => void;
+  onDelete: () => void;
 };
 
 export function ProfileAdvanced({
@@ -61,6 +76,7 @@ export function ProfileAdvanced({
   words,
   rounds,
   onChange,
+  actions,
 }: Props) {
   const [open, setOpen] = useState(false);
   const name = profile?.name ?? "";
@@ -73,6 +89,7 @@ export function ProfileAdvanced({
   const Caret = open ? CaretDown : CaretRight;
   const edit = <F extends ProfileField>(field: F, value: ProfileFields[F]) =>
     onChange(editField(choice, field, value, context));
+  const tag = (field: ModelField) => sourceTag(base, choice.edits, field);
 
   /** "Auto · <budget>", or the clamp when a number above the window is asked. */
   const budgetNote = (asked: TokenBudget, budget: number | null): string => {
@@ -148,7 +165,7 @@ export function ProfileAdvanced({
             })}
           </FieldGroup>
           <FieldGroup title="Model">
-            <Field id="pa-model" label="Model" help="p-model" over={"model" in choice.edits}>
+            <Field id="pa-model" label="Model" help="p-model" source={tag("model")}>
               <input
                 id="pa-model"
                 className={`input ${css.advInput} ${css.mono}`}
@@ -176,8 +193,8 @@ export function ProfileAdvanced({
                 id={`pa-${field}`}
                 label={label}
                 help="p-limits"
-                over={field in choice.edits}
-                note={field in choice.edits || base.listed[field] ? "" : FALLBACK_NOTE}
+                source={tag(field)}
+                note={field in choice.edits || base.sources[field] ? "" : FALLBACK_NOTE}
               >
                 <input
                   id={`pa-${field}`}
@@ -201,7 +218,7 @@ export function ProfileAdvanced({
                   id={`pa-${step}`}
                   label={label}
                   help="p-think"
-                  over={step in choice.edits}
+                  source={tag(step)}
                   note={locked ? ROUNDS_LOCK : ""}
                   locked
                 >
@@ -242,7 +259,7 @@ export function ProfileAdvanced({
               id="pa-gap_context_tokens"
               label="Gap context tokens"
               help="p-gapctx"
-              over={"gap_context_tokens" in choice.edits}
+              source={tag("gap_context_tokens")}
               note={
                 lockGap
                   ? ROUNDS_LOCK
@@ -259,9 +276,70 @@ export function ProfileAdvanced({
               />
             </Field>
           </FieldGroup>
+          {profile && <ProfileActionRow profile={profile} changed={changed} actions={actions} />}
         </div>
       )}
     </>
+  );
+}
+
+type ActionRowProps = { profile: ProfileInfo; changed: number; actions: ProfileActions };
+
+/** With edits: Save to and Save as; without: Delete. A managed profile is read-only. */
+function ProfileActionRow({ profile, changed, actions }: ActionRowProps) {
+  const name = profile.name;
+  const managed = !!profile.managed;
+  const lock = changed
+    ? managed && `${name} is managed by NixOS config`
+    : managed && "Managed by NixOS config · read-only";
+  return (
+    <div className={css.actionRow}>
+      {lock && (
+        <span className={css.lockNote}>
+          <LockSimple aria-hidden="true" />
+          {lock}
+        </span>
+      )}
+      {changed > 0 && !managed && (
+        <button
+          type="button"
+          className={`btn btn-secondary ${css.actionBtn}`}
+          onClick={actions.onSaveTo}
+        >
+          <FloppyDisk aria-hidden="true" />
+          Save to {name}
+        </button>
+      )}
+      {changed > 0 && (
+        <button
+          type="button"
+          className={`btn btn-secondary ${css.actionBtn}`}
+          onClick={actions.onSaveAs}
+        >
+          <Plus aria-hidden="true" />
+          Save profile as…
+        </button>
+      )}
+      {!changed && !managed && (
+        <span className={css.deleteSlot}>
+          {profile.active && (
+            <span id="pdel-why" className={css.deleteWhy}>
+              The default profile can’t be deleted
+            </span>
+          )}
+          <button
+            type="button"
+            className={`btn btn-ghost ${css.deleteBtn}`}
+            disabled={profile.active}
+            aria-describedby={profile.active ? "pdel-why" : undefined}
+            onClick={actions.onDelete}
+          >
+            <Trash aria-hidden="true" />
+            Delete {name}
+          </button>
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -278,20 +356,28 @@ type FieldProps = {
   id: string;
   label: string;
   help: string;
-  over: boolean;
+  /** Marks a Providers field or Context tokens edited for this run. */
+  over?: boolean;
+  /** A model value's source tag ("edited", "from profile", "from entry"), shown instead. */
+  source?: string;
   /** The note under the control; `locked` shows it with the lock icon. */
   note?: string;
   locked?: boolean;
   children: ReactNode;
 };
 
-function Field({ id, label, help, over, note, locked, children }: FieldProps) {
+function Field({ id, label, help, over, source, note, locked, children }: FieldProps) {
   const NoteIcon = locked ? LockSimple : Info;
   return (
     <div className={css.advField}>
       <div className={`${css.advLabel} ${css.advLabelWrap}`}>
         <label htmlFor={id}>{label}</label>
         <HelpTip help={help} label={label} />
+        {source && (
+          <span className={css.sourceTag} data-edited={source === "edited"}>
+            {source}
+          </span>
+        )}
         {over && (
           <span className={css.overMark}>
             <Tag variant="outline" small>

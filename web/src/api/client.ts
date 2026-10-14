@@ -1,8 +1,12 @@
 // Typed client for the server's /api routes. Everything goes to the page's own origin.
 import type {
   DepthInfo,
+  DepthSave,
+  DepthUpdate,
   ForkCreate,
   ProfileInfo,
+  ProfileSave,
+  ProfileUpdate,
   ProvidersReport,
   RunCreate,
   RunCreated,
@@ -44,7 +48,16 @@ export interface ApiClient {
   putSettings(settings: ServerSettings): Promise<ServerSettings>;
   getSlots(): Promise<SlotState>;
   listProfiles(): Promise<ProfileInfo[]>;
+  /** Saves a new profile from `from` plus run-style edits (`POST /api/profiles`). */
+  saveProfile(body: ProfileSave): Promise<ProfileInfo>;
+  /** Saves run-style edits into the profile (`PATCH /api/profiles/{name}`). */
+  updateProfile(name: string, body: ProfileUpdate): Promise<ProfileInfo>;
+  deleteProfile(name: string): Promise<void>;
   listDepths(): Promise<DepthInfo[]>;
+  saveDepth(body: DepthSave): Promise<DepthInfo>;
+  /** Replaces a user preset's values (`PUT /api/depths/{name}`). */
+  replaceDepth(name: string, body: DepthUpdate): Promise<DepthInfo>;
+  deleteDepth(name: string): Promise<void>;
   /** The model IDs the llm entry's endpoint lists; empty when it lists none. */
   listModels(llm: string): Promise<string[]>;
   /** Every provider entry with its stored check; sends no probe. */
@@ -161,7 +174,14 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
     putSettings: (settings) => json("PUT", "/settings", settings),
     getSlots: () => json("GET", "/slots"),
     listProfiles: () => json("GET", "/profiles"),
+    saveProfile: (body) => json("POST", "/profiles", body),
+    updateProfile: (name, body) => json("PATCH", `/profiles/${encodeURIComponent(name)}`, body),
+    deleteProfile: async (name) =>
+      void (await send("DELETE", `/profiles/${encodeURIComponent(name)}`)),
     listDepths: () => json("GET", "/depths"),
+    saveDepth: (body) => json("POST", "/depths", body),
+    replaceDepth: (name, body) => json("PUT", `/depths/${encodeURIComponent(name)}`, body),
+    deleteDepth: async (name) => void (await send("DELETE", `/depths/${encodeURIComponent(name)}`)),
     listModels: async (llm) =>
       (await json<{ models: string[] }>("GET", `/models?llm=${encodeURIComponent(llm)}`)).models,
     listProviders: () => json("GET", "/providers"),

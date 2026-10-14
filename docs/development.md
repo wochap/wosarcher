@@ -64,7 +64,10 @@ service on the same host: it reads the live `wosarcher.service` unit
 (environment and secrets file) and the lazy proxy socket named by
 `WOSARCHER_DEV_SOCKET` (default `wosarcher-proxy.socket`; address and
 port), stops them and `wosarcher.socket`, copies (with sudo, since the
-service's data is its user's alone) the Nix-managed profiles, `hooks.toml`
+service's data is its user's alone) the profiles (with the module's
+`.nix-managed` manifest and the stored default), provider entries, and
+depth presets (each replaced on every start, so ones saved in a dev
+session do not survive a restart), `hooks.toml`
 (mode 0600; removed when the service has none), runs, and caches into `~/.local/state/wosarcher-dev` (one way: dev runs never reach
 the service; and the service's `auth.json` on the first run; after that the
 dev server keeps its own password, set with

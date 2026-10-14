@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -285,6 +286,20 @@ def test_model_key_in_profile(env: dict[str, str]) -> None:
         resolve(None, [], env)
 
 
+def test_model_table_in_profile(env: dict[str, str]) -> None:
+    table = '[models."claude-sonnet-5-5"]\ncontext_window = 200000\nreasoning = { write = "high" }\n'
+    user_profile(env, "p", BASE_PROFILE + table)
+    profile = read_profile("p", env)
+    assert profile.models == {"claude-sonnet-5-5": {"context_window": 200000, "reasoning": {"write": "high"}}}
+    resolve(None, [], env)
+
+
+def test_unknown_key_in_profile_model_table(env: dict[str, str]) -> None:
+    path = user_profile(env, "p", BASE_PROFILE + "[models.research-smart]\ntimeout = 900\n")
+    with pytest.raises(ConfigError, match=rf"profile {path}: models.research-smart: timeout"):
+        resolve(None, [], env)
+
+
 def test_depth_key_in_profile(env: dict[str, str]) -> None:
     user_profile(env, "p", BASE_PROFILE + "[plan]\nmax_sub_queries = 1\n")
     with pytest.raises(ConfigError, match=r"plan.max_sub_queries .*depth presets own"):
@@ -381,6 +396,26 @@ def test_profile_over_entry(env: dict[str, str]) -> None:
     user_profile(env, "p", BASE_PROFILE + '[llm]\nmodel = "research-fast"\n')
     llm = resolve(None, [], env).llm
     assert (llm.model, llm.context_window) == ("research-fast", 131072)
+
+
+def test_profile_model_table_over_entry_model_table(env: dict[str, str]) -> None:
+    entry(env, "llm", "agents", OMNIROUTE)
+    user_profile(env, "p", BASE_PROFILE + '[models.research-smart]\nreasoning = { write = "high" }\n')
+    llm = resolve(None, [], env).llm
+    assert (llm.reasoning.write, llm.max_output_tokens) == ("high", 131072)
+
+
+def test_profile_model_table_for_another_model(env: dict[str, str]) -> None:
+    entry(env, "llm", "agents", OMNIROUTE)
+    user_profile(env, "p", BASE_PROFILE + "[models.research-smart]\ncontext_window = 200000\n")
+    llm = resolve(None, ['llm.model="research-fast"'], env).llm
+    assert llm.context_window == 131072
+
+
+def test_run_edit_over_profile_model_table(env: dict[str, str]) -> None:
+    entry(env, "llm", "agents", OMNIROUTE)
+    user_profile(env, "p", BASE_PROFILE + "[models.research-smart]\ncontext_window = 200000\n")
+    assert resolve(None, ["llm.context_window=100000"], env).llm.context_window == 100000
 
 
 def test_environment_overrides_profile(env: dict[str, str]) -> None:
@@ -851,3 +886,23 @@ def test_fork_replaces_block(env: dict[str, str]) -> None:
     assert resolved.settings.research.gap_context_tokens == "auto"
     assert resolved.use["llm"] == "omniroute"
     assert resolved.settings.search.language == "es"
+
+
+def test_fork_applies_profile_model_table(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    user_profile(env, "p", BASE_PROFILE + '[models.research-smart]\nreasoning = { write = "high" }\n')
+    current = resolve_run(None, ["use.llm=agents"], env)
+    resolved, _ = fork_settings(redact(current.settings), current.use, {"llm": "omniroute"}, [], env, "p")
+    assert resolved.settings.llm.reasoning.write == "high"
+
+
+def test_fork_profile_gone(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    current = resolve_run(None, ["use.llm=agents"], env)
+    resolved, _ = fork_settings(redact(current.settings), current.use, {"llm": "omniroute"}, [], env, "gone")
+    assert resolved.settings.llm.reasoning.write == "low"
+
+
+def test_toml_quotes_model_ids() -> None:
+    tree = {"models": {"qwen3.5:9b": {"reasoning": {"write": "high"}}}, "llm": {"model": "qwen3.5:9b"}}
+    assert tomllib.loads(to_toml(tree)) == tree

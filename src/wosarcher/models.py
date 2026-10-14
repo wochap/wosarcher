@@ -841,11 +841,15 @@ class ProfileInfo(Contract):
     name: str
     source: Literal["user"] = "user"
     active: bool
+    managed: bool = False
+    """The NixOS module wrote it; the API does not update or delete it."""
     description: str = ""
     use: dict[str, str | None] | None = None
     """The entry chosen for each block; a block that cannot be resolved is None."""
     model: str | None = None
     """The profile's `llm.model`; None: the llm entry's default model."""
+    models: list["ModelInfo"] = []
+    """The profile's own `models` table; its values apply above the llm entry's."""
     context_tokens: int | Literal["auto"] | None = None
     """The resolved `select.max_context_tokens`; None when the profile does not resolve."""
     prompt_reserve_tokens: int | None = None
@@ -875,7 +879,57 @@ class DepthInfo(Contract):
     name: str
     description: str
     source: Literal["builtin", "user"] = "builtin"
+    managed: bool = False
+    """The NixOS module wrote it; the API does not update or delete it."""
     values: DepthValues
+
+
+class ProfileUpdate(Contract):
+    """The body of `PATCH /api/profiles/{name}`: run-style edits saved into the profile."""
+
+    description: str | None = Field(default=None, max_length=120)
+    use: dict[str, str] = {}
+    llm: LLMPatch = LLMPatch()
+
+    @field_validator("use")
+    @classmethod
+    def check_use(cls, value: dict[str, str]) -> dict[str, str]:
+        return entry_choices(value)
+
+
+class ProfileSave(ProfileUpdate):
+    """The body of `POST /api/profiles`: a new profile from `from` plus run-style edits."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", serialize_by_alias=True)
+
+    name: str
+    from_profile: str = Field(validation_alias=AliasChoices("from", "from_profile"), serialization_alias="from")
+
+
+class DepthSaveValues(Contract):
+    """A depth preset's values, in the ranges of a run request's `research`."""
+
+    sub_queries: int = Field(gt=0)
+    results_per_query: int = Field(gt=0)
+    max_pages: int = Field(gt=0)
+    passages_per_query: int = Field(gt=0)
+    rounds: int = Field(gt=0, le=8)
+    queries_per_round: int = Field(gt=0)
+    words: int | None = Field(default=None, gt=0)
+    """None: the preset leaves the length to the global default."""
+
+
+class DepthUpdate(Contract):
+    """The body of `PUT /api/depths/{name}`."""
+
+    description: str = ""
+    values: DepthSaveValues
+
+
+class DepthSave(DepthUpdate):
+    """The body of `POST /api/depths`."""
+
+    name: str
 
 
 class ModelInfo(Contract):
@@ -1376,6 +1430,11 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ProfileInfo,
     DepthValues,
     DepthInfo,
+    ProfileUpdate,
+    ProfileSave,
+    DepthSaveValues,
+    DepthUpdate,
+    DepthSave,
     ModelInfo,
     ProviderEntryInfo,
     ProvidersReport,

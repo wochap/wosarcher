@@ -1,8 +1,10 @@
 // The profile's Advanced values on New run: what the profile gives (its `use`, model, and the
-// chosen model's limits from `GET /api/providers`), the run's edits, and the request they send.
+// chosen model's values: the profile's `models` over the entry's from `GET /api/providers`), the
+// run's edits, and the request they send.
 import type {
   Block,
   Effort,
+  ModelInfo,
   ProfileInfo,
   ProviderEntry,
   RunCreate,
@@ -39,10 +41,24 @@ export type ProfileField = keyof ProfileFields;
 /** The fields edited for this run; an unedited field follows the profile. */
 export type ProfileEdits = Partial<ProfileFields>;
 
-/** The values the profile gives, with the chosen entries; `listed` per limit from the entry. */
+/** The fields that carry a source tag instead of "overridden". */
+export const MODEL_FIELDS = [
+  "model",
+  "context_window",
+  "max_output_tokens",
+  "plan",
+  "gap",
+  "write",
+  "gap_context_tokens",
+] as const;
+export type ModelField = (typeof MODEL_FIELDS)[number];
+/** Where an unedited Model-group value comes from; "" for a built-in default. */
+export type ValueSource = "profile" | "entry" | "";
+
+/** The values the profile gives, with the chosen entries and where each model value comes from. */
 export type ProfileBase = ProfileFields & {
   use: Record<Block, string>;
-  listed: { context_window: boolean; max_output_tokens: boolean };
+  sources: Record<ModelField, ValueSource>;
 };
 
 /** The entries of one block, in the order the server lists them. */
@@ -75,23 +91,51 @@ export function profileBase(
 ): ProfileBase {
   const chosen = { ...profileUse(profile), ...use };
   const llm = entries.find((e) => e.block === "llm" && e.name === chosen.llm);
-  const base = use.llm ? defaultModel(llm) : (profile?.model ?? defaultModel(llm));
-  const info = llm?.models?.find((m) => m.id === (model ?? base));
+  const own = use.llm ? "" : (profile?.model ?? "");
+  const base = own || defaultModel(llm);
+  const shown = model ?? base;
+  const entry = llm?.models?.find((m) => m.id === shown);
+  const tuned = profile?.models?.find((m) => m.id === shown);
+  /** The profile's value for the model, else the entry's, with its source. */
+  const pick = <T>(of: (m: ModelInfo) => T | null | undefined): [T | undefined, ValueSource] => {
+    const mine = tuned ? of(tuned) : undefined;
+    if (mine != null) return [mine, "profile"];
+    const listed = entry ? of(entry) : undefined;
+    return listed != null ? [listed, "entry"] : [undefined, ""];
+  };
+  const [window, windowFrom] = pick((m) => m.context_window);
+  const [output, outputFrom] = pick((m) => m.max_output_tokens);
+  const [plan, planFrom] = pick((m) => m.reasoning?.plan);
+  const [gap, gapFrom] = pick((m) => m.reasoning?.gap);
+  const [write, writeFrom] = pick((m) => m.reasoning?.write);
+  const [gapBudget, gapBudgetFrom] = pick((m) => m.gap_context_tokens);
   return {
     use: chosen,
     model: base,
-    context_window: info?.context_window ?? FALLBACK_WINDOW,
-    max_output_tokens: info?.max_output_tokens ?? FALLBACK_OUTPUT,
-    plan: info?.reasoning?.plan ?? "none",
-    gap: info?.reasoning?.gap ?? "none",
-    write: info?.reasoning?.write ?? "none",
+    context_window: window ?? FALLBACK_WINDOW,
+    max_output_tokens: output ?? FALLBACK_OUTPUT,
+    plan: plan ?? "none",
+    gap: gap ?? "none",
+    write: write ?? "none",
     context_tokens: profile?.context_tokens ?? "auto",
-    gap_context_tokens: info?.gap_context_tokens ?? "auto",
-    listed: {
-      context_window: info?.context_window != null,
-      max_output_tokens: info?.max_output_tokens != null,
+    gap_context_tokens: gapBudget ?? "auto",
+    sources: {
+      model: own ? "profile" : base ? "entry" : "",
+      context_window: windowFrom,
+      max_output_tokens: outputFrom,
+      plan: planFrom,
+      gap: gapFrom,
+      write: writeFrom,
+      gap_context_tokens: gapBudgetFrom,
     },
   };
+}
+
+/** The tag of a Model-group field: "edited", "from profile", "from entry", or none. */
+export function sourceTag(base: ProfileBase, edits: ProfileEdits, field: ModelField): string {
+  if (field in edits) return "edited";
+  const from = base.sources[field];
+  return from ? `from ${from}` : "";
 }
 
 /** The limits the auto budgets follow. */
@@ -122,15 +166,7 @@ function normalize({ use, edits }: ProfileChoice, { profile, entries }: Context)
 }
 
 /** Switching the LLM drops the edits its models own; the Model follows the new entry. */
-const MODEL_OWNED: ProfileField[] = [
-  "model",
-  "context_window",
-  "max_output_tokens",
-  "plan",
-  "gap",
-  "write",
-  "gap_context_tokens",
-];
+const MODEL_OWNED: readonly ProfileField[] = MODEL_FIELDS;
 
 export function pickEntry(
   choice: ProfileChoice,

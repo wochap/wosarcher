@@ -62,6 +62,10 @@ def profile_show(name: Annotated[str | None, typer.Argument()] = None) -> None:
         raise fail(f"profile '{info.name}' does not resolve on the daemon: {info.error}", 2)
     own = {"llm.model": info.model, "search.allow_domains": info.allow_domains}
     own |= {"search.block_domains": info.block_domains}
+    for model in info.models:
+        tuning = model.model_dump(exclude={"id", "reasoning"}, exclude_none=True)
+        tuning |= {f"reasoning.{step}": level for step, level in model.reasoning.model_dump(exclude_none=True).items()}
+        own |= {f"models.{model.id}.{key}": value for key, value in tuning.items()}
     for key, value in own.items():
         if value is not None:
             typer.echo(f"{key} = {json.dumps(value)}")
