@@ -544,12 +544,18 @@ at the next slot decision, with no restart.
 - its `name`;
 - its `source` (`user`);
 - whether it is `active`;
+- `managed`: whether the NixOS module wrote it (saved-presets "Managed
+  files");
 - its `description` (empty when the profile sets none);
 - `use`: the entry name it chooses for each of the five blocks, after
   run-config "Entry selection" (environment included), or null for a
   block that cannot be resolved;
 - `model`: the profile's `llm.model`, or null when it sets none (the
   entry's default model applies);
+- `models`: the profile's own `models` table as a list with the shape of
+  an entry's models in `GET /api/providers` (`id`, `context_window`,
+  `max_output_tokens`, `reasoning`, `gap_context_tokens`, null where the
+  profile sets no value), empty when it has none;
 - `context_tokens`: the resolved `select.max_context_tokens` (a positive
   integer or `auto`), and `prompt_reserve_tokens`;
 - `allow_domains` and `block_domains`: the list the profile (or the
@@ -557,8 +563,11 @@ at the next slot decision, with no restart.
   profile's own list from the global default;
 - `error`: why the profile does not resolve, or null.
 
-The model limits and defaults SHALL come from `GET /api/providers`, not
-from this route.
+The entries' model limits and defaults SHALL come from `GET
+/api/providers`; the profile's own tuning of a model SHALL come from this
+route's `models`, and applies above the entry's (run-config
+"Precedence"). Writing and deleting profiles is saved-presets "Save a
+profile", "Update a profile", and "Delete a profile".
 
 #### Scenario: Active profile marked
 - **WHEN** the stored default profile is `cloud`
@@ -583,6 +592,14 @@ from this route.
 #### Scenario: Limits
 - **WHEN** the profile `workstation` sets `select.max_context_tokens = 12000` and leaves `select.prompt_reserve_tokens` at its default
 - **THEN** its entry has `context_tokens = 12000` and `prompt_reserve_tokens = 2000`, and no `context_window` or `max_output_tokens`
+
+#### Scenario: Model table
+- **WHEN** the profile `cloud-rerank` sets `models."claude-sonnet-5-5".reasoning.write = "high"`
+- **THEN** its entry has `models` with one item: `id` `claude-sonnet-5-5`, `reasoning.write` `high`, and null `context_window`, `max_output_tokens`, and `gap_context_tokens`
+
+#### Scenario: Managed profile
+- **WHEN** the NixOS module's manifest lists `workstation.toml`
+- **THEN** the `workstation` entry has `managed = true` and a hand-made profile has `managed = false`
 
 ### Requirement: Provider health
 Each item of `GET /api/providers` (provider-entries "Providers route")
@@ -692,12 +709,15 @@ unchanged. Local entries SHALL be probed one at a time as provider-doctor
 `GET /api/depths` SHALL return the depth presets: `quick`, `standard`,
 `deep`, `exhaustive`, then the user presets by name. Each entry SHALL have:
 - its `name`, `description`, and `source` (`builtin` or `user`);
+- `managed`: whether the NixOS module wrote it (saved-presets "Managed
+  files"; false for built-in presets);
 - `values` with `sub_queries`, `results_per_query`, `max_pages`,
   `passages_per_query`, `rounds`, `queries_per_round`, and `words`.
 
 Each value SHALL be the one the preset sets, or the built-in default when
 it sets none. The exception is `words`: it SHALL be null when the preset
-does not set it (the global default applies). Run summaries from
+does not set it (the global default applies). Writing and deleting user
+presets is saved-presets "Save a depth preset". Run summaries from
 `GET /api/runs` and `GET /api/runs/{id}` SHALL include:
 - the run's `depth` (a preset name, `custom`, or null);
 - `rounds_planned` (the resolved `research.rounds`);
@@ -707,11 +727,15 @@ does not set it (the global default applies). Run summaries from
 
 #### Scenario: Standard values
 - **WHEN** a client requests `GET /api/depths`
-- **THEN** the `standard` entry has `source` `builtin`, `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `rounds` 1, `queries_per_round` 3, and `words` null
+- **THEN** the `standard` entry has `source` `builtin`, `managed` false, `sub_queries` 3, `results_per_query` 10, `max_pages` 40, `passages_per_query` 10, `rounds` 1, `queries_per_round` 3, and `words` null
 
 #### Scenario: User preset
 - **WHEN** `depths/wide.toml` sets `plan.max_sub_queries = 10` and `write.words = 1500`
 - **THEN** the last entry is `wide` with `source` `user`, `sub_queries` 10, `words` 1500, and the defaults for the other values
+
+#### Scenario: Managed preset
+- **WHEN** the NixOS module's manifest lists `../depths/wide.toml`
+- **THEN** the `wide` entry has `managed = true`
 
 #### Scenario: Summary depth
 - **WHEN** a run was started with `"depth": "quick"`

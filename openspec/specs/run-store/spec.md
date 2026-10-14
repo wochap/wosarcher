@@ -126,10 +126,12 @@ in `use`. A recorded entry that no longer exists SHALL fail the fork
 before it is created, naming the block and the entry and listing that
 block's entries, unless the fork replaces that block with `--use`. A
 `--use BLOCK=NAME` SHALL replace the whole saved block with the current
-entry; for `llm`, the chosen model's entry values SHALL apply again below
-the fork's overrides. The fork SHALL record the entries it used. Forking
-from a stage whose earlier stages are not all finished SHALL fail and name
-the first unfinished stage.
+entry; for `llm`, the chosen model's values SHALL apply again below the
+fork's overrides: the built-in model defaults, then the entry's
+`models.<id>`, then the `models.<id>` of the parent's recorded profile as
+its file is now (none when that profile no longer exists). The fork SHALL
+record the entries it used. Forking from a stage whose earlier stages are
+not all finished SHALL fail and name the first unfinished stage.
 
 #### Scenario: Rewrite only
 - **WHEN** the user forks a finished run from `write` with `--set write.tone=critical`
@@ -150,6 +152,14 @@ the first unfinished stage.
 #### Scenario: Entry gone, replaced
 - **WHEN** the same parent is forked from `write` with `--use llm=omniroute`
 - **THEN** the fork runs the write stage with the `omniroute` entry and its default model's values, and records `use.llm` `omniroute`
+
+#### Scenario: Profile model table applies again
+- **WHEN** the parent ran with profile `cloud-rerank`, whose `models."claude-sonnet-5-5"` sets `reasoning.write = "high"`, and the user forks from `write` with `--use llm=openrouter`, whose default model is `claude-sonnet-5-5`
+- **THEN** the fork resolves `llm.reasoning.write` `high`
+
+#### Scenario: Profile gone
+- **WHEN** the same parent's profile `cloud-rerank` was deleted and the user forks from `write` with `--use llm=openrouter`
+- **THEN** the fork resolves the model values from the `openrouter` entry alone
 
 ### Requirement: Lineage
 A new run SHALL have version 1 and no parent. A fork SHALL record its

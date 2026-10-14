@@ -1166,13 +1166,18 @@ saved results of earlier stages."
 
 ### Requirement: Depth control
 The Options panel SHALL show the Depth group of scenarios `new-depth`,
-`new-custom`, and `new-preset`:
+`new-custom`, `new-preset`, and `new-depth-many`:
 - A "Depth" label with its help button.
 - A segmented control: Quick, Standard, Deep, Exhaustive, then the user
   presets by name as the server lists them (their label is the name as
   written, for example `wide`), then Custom. Standard is preselected.
-  Every preset comes from `GET /api/depths`. The control SHALL wrap onto
-  more rows when it does not fit, as in the prototype at phone width.
+  Every preset comes from `GET /api/depths`. With more than three user
+  presets, only the first two SHALL be segments; the others SHALL be
+  options of a "More…" select placed after them and before Custom, which
+  reads "More…" until one of its presets is selected and then shows that
+  preset's name, marked selected like a segment (scenario
+  `new-depth-many`). The control SHALL wrap onto more rows when it does
+  not fit, as in the prototype at phone width.
 - Under it, the selected depth's description ("Set every value yourself."
   for Custom).
 - An estimate line: "~<P> pages · <R> round(s) · ~<C> LLM calls".
@@ -1199,6 +1204,8 @@ The Options panel SHALL show the Depth group of scenarios `new-depth`,
   - Picking Custom opens Advanced. Its fields start with the last Custom
     values saved in browser storage, or else with the values of the depth
     selected before.
+  - Below the fields, the save actions of Requirement: Save depth and
+    profile actions.
 - When Sources is `files`, Rounds is disabled with the lock icon at 1 and
   the note "Files-only runs use 1 round.", and the estimate counts 1 round.
 
@@ -1215,6 +1222,10 @@ and `w-words-def`.
 #### Scenario: Pick a user preset
 - **WHEN** `GET /api/depths` lists the user preset `wide` and the user picks it (scenario `new-preset`)
 - **THEN** the control shows `wide` between Exhaustive and Custom, the description and the Advanced values are `wide`'s, and starting sends `depth` = `wide` and no `research`
+
+#### Scenario: Many user presets
+- **WHEN** `GET /api/depths` lists the user presets `lit-review`, `news-scan`, `survey-fast`, and `wide` (scenario `new-depth-many`)
+- **THEN** `lit-review` and `news-scan` are segments, a "More…" select after them offers `survey-fast` and `wide`, and picking `wide` there shows `wide` in the select, marked selected
 
 #### Scenario: Edit switches to Custom
 - **WHEN** Deep is selected and the user changes Max pages to 80
@@ -1536,36 +1547,47 @@ groups, each with an uppercase heading, in the prototype's field grid:
   preselected with the profile's `model` or else the entry's default
   model; "Context window" (1024 to 4194304, step 1024) and "Max output"
   (256 to 4194304, step 1024), preselected with the chosen model's limits
-  from `GET /api/providers`, or with 32768 and 8192 and the info note
-  "Fallback: no limits set for this model." when the entry does not list
-  the model; "Plan thinking", "Gap thinking", and "Write thinking" selects
-  with None, Low, Medium, High, and Default, preselected with the model's
-  `reasoning` or None. Gap thinking is disabled with the lock note "Used
-  between rounds; needs 2+ rounds." while the depth's Rounds is 1.
+  from the profile's `models` (`GET /api/profiles`), else from the entry's
+  (`GET /api/providers`), or with 32768 and 8192 and the info note
+  "Fallback: no limits set for this model." when neither lists the model;
+  "Plan thinking", "Gap thinking", and "Write thinking" selects with None,
+  Low, Medium, High, and Default, preselected with the model's
+  `reasoning` from the profile's `models`, else the entry's, or None. Gap
+  thinking is disabled with the lock note "Used between rounds; needs 2+
+  rounds." while the depth's Rounds is 1.
 - **Budgets**: "Context tokens" and "Gap context tokens", number inputs
   (step 1000, min 1000) with the placeholder "Auto", preselected with the
-  profile's `context_tokens` and the model's `gap_context_tokens` (empty
-  for `auto`). Empty means Auto and shows the note "Auto · <budget>". A
-  number above the budget shows "<asked> → <budget rounded down to
-  thousands> (model window)". The Context tokens budget is the context
-  window minus the profile's `prompt_reserve_tokens` minus the output
-  limit, where the output limit is the larger of 1024 and twice the
-  words, capped at Max output. The Gap context tokens budget is the
-  context window minus `prompt_reserve_tokens` minus 768. Both follow the
-  current Length, Context window, and Max output. Gap context tokens is
-  disabled with the lock note while Rounds is 1.
+  profile's `context_tokens` and the model's `gap_context_tokens` (from
+  the profile's `models`, else the entry's; empty for `auto`). Empty means
+  Auto and shows the note "Auto · <budget>". A number above the budget
+  shows "<asked> → <budget rounded down to thousands> (model window)". The
+  Context tokens budget is the context window minus the profile's
+  `prompt_reserve_tokens` minus the output limit, where the output limit
+  is the larger of 1024 and twice the words, capped at Max output. The
+  Gap context tokens budget is the context window minus
+  `prompt_reserve_tokens` minus 768. Both follow the current Length,
+  Context window, and Max output. Gap context tokens is disabled with the
+  lock note while Rounds is 1.
 
-A field whose value differs from the profile's value SHALL be drawn solid
-with a small outline "overridden" tag and the help button `p-over` beside
-its label; an unedited field SHALL look read-only (dashed, muted) but
-accept typing. A value edited back to the profile's value SHALL no longer
-count as edited. Switching the profile SHALL remove every edit. Switching
-the LLM entry SHALL set Model to that entry's default model and remove
-the edits of Model, Context window, Max output, the thinking levels, and
-Gap context tokens; editing Model SHALL remove the Context window and Max
-output edits. Help texts SHALL be verbatim from the prototype's entries
-`profile`, `p-search`, `p-fetch`, `p-prefilter`, `p-scorer`, `p-llm`,
-`p-model`, `p-limits`, `p-think`, `p-ctx`, `p-gapctx`, and `p-over`.
+A Providers field or Context tokens whose value differs from the
+profile's value SHALL be drawn solid with a small outline "overridden" tag
+and the help button `p-over` beside its label. Model, Context window, Max
+output, the three thinking levels, and Gap context tokens SHALL instead
+carry a faint source tag after their help button: "edited" (drawn solid)
+when the run edits the value, else "from profile" when the profile sets it
+(its `llm.model`, or its `models` table for the chosen model), else "from
+entry" when the llm entry sets it, else no tag (scenarios
+`new-profile-custom`, `new-profile-nolimits`). An unedited field SHALL
+look read-only (dashed, muted) but accept typing. A value edited back to
+the profile's value SHALL no longer count as edited. Switching the
+profile SHALL remove every edit. Switching the LLM entry SHALL set Model
+to that entry's default model and remove the edits of Model, Context
+window, Max output, the thinking levels, and Gap context tokens; editing
+Model SHALL remove the Context window and Max output edits. Below the
+groups, the save actions of Requirement: Save depth and profile actions.
+Help texts SHALL be verbatim from the prototype's entries `profile`,
+`p-search`, `p-fetch`, `p-prefilter`, `p-scorer`, `p-llm`, `p-model`,
+`p-limits`, `p-think`, `p-ctx`, `p-gapctx`, and `p-over`.
 
 The run request SHALL send `use` with only the blocks whose entry differs
 from the profile's, and `llm` with only the edited fields (`model`,
@@ -1581,15 +1603,19 @@ starts.
 
 #### Scenario: Three edits
 - **WHEN** the user changes Scorer to `jev-strict`, Write thinking to High, and Context tokens to 60000 on a 32768-token model (scenario `new-profile-over`)
-- **THEN** the hint reads "· 3 changed", those three fields carry "overridden", Context tokens shows "60,000 → 32,000 (model window)", and starting sends `use` = `{"score": "jev-strict"}` and `llm` = `{"reasoning": {"write": "high"}, "context_tokens": 60000}`
+- **THEN** the hint reads "· 3 changed", Scorer and Context tokens carry "overridden", Write thinking carries "edited", Context tokens shows "60,000 → 32,000 (model window)", and starting sends `use` = `{"score": "jev-strict"}` and `llm` = `{"reasoning": {"write": "high"}, "context_tokens": 60000}`
 
 #### Scenario: Model without limits
-- **WHEN** the profile `nixos` uses an llm entry whose default model is not listed in its `models` (scenario `new-profile-nolimits`)
-- **THEN** Context window shows 32,768 and Max output 8,192, each with "Fallback: no limits set for this model."
+- **WHEN** the profile `nixos` uses an llm entry whose default model is not listed in its `models`, and the profile lists none (scenario `new-profile-nolimits`)
+- **THEN** Context window shows 32,768 and Max output 8,192, each with "Fallback: no limits set for this model." and no source tag
+
+#### Scenario: Profile tuning shown
+- **WHEN** the profile `cloud-rerank` sets `models."claude-sonnet-5-5".reasoning.write = "high"`, its entry lists that model's limits, and the user opens its Advanced
+- **THEN** Write thinking shows High with "from profile", and Context window and Max output show the entry's limits with "from entry"
 
 #### Scenario: Reset
 - **WHEN** the user presses "Reset to profile"
-- **THEN** every field shows the profile's value, no "overridden" tag remains, and the hint reads "· <profile> values"
+- **THEN** every field shows the profile's value, no "overridden" or "edited" tag remains, and the hint reads "· <profile> values"
 
 #### Scenario: LLM switch
 - **WHEN** the user switches LLM from `agents` to `omniroute`
@@ -1623,3 +1649,118 @@ SHALL show no profile line.
 #### Scenario: Phone collapse
 - **WHEN** the same run is shown at phone width
 - **THEN** the line shows "low-vram · agents/qwen3-14b" and "All providers", and pressing it shows every entry and "Fewer"
+
+### Requirement: Save depth and profile actions
+Depth's and the profile's Advanced panels SHALL end with an action row as
+in scenarios `new-save-depth`, `new-save-profile`, `new-profile-custom`,
+and `new-delete`:
+- Depth, with Custom selected: a "Save depth as…" secondary button (plus
+  icon). When the Custom values came from editing a user preset (the
+  depth selected when the edit switched to Custom), also a "Save to
+  <preset>" secondary button (floppy disk icon) before it, or, when that
+  preset is managed, the lock note "<preset> is managed by NixOS config"
+  instead of that button.
+- Depth, with a user preset selected: a "Delete <preset>" ghost button
+  (trash icon) at the row's end, or, for a managed preset, only the lock
+  note "Managed by NixOS config · read-only". A built-in preset shows no
+  action row.
+- Profile, with edits: "Save to <profile>" and "Save profile as…", or,
+  for a managed profile, the lock note "<profile> is managed by NixOS
+  config" and "Save profile as…".
+- Profile, without edits: "Delete <profile>", disabled for the active
+  profile with the faint reason "The default profile can’t be deleted"
+  before it, or, for a managed profile, only the lock note "Managed by
+  NixOS config · read-only".
+
+"Save to <preset>" SHALL send `PUT /api/depths/<preset>` with the six
+values, Length, and the generated description of Requirement: Save
+dialog, then select that preset. "Save to <profile>" SHALL send `PATCH
+/api/profiles/<profile>` with the run's edits (the `use` and `llm` a run
+request would send), then reload the profiles and clear the edits. Both
+SHALL show the toast "Saved depth “<name>”" or "Saved profile “<name>”"
+without Undo. Managed, built-in, and active state SHALL come from
+`managed`, `source`, and `active` in `GET /api/depths` and
+`GET /api/profiles`. A failed request SHALL show its `detail` in an error
+toast and change nothing.
+
+#### Scenario: Save to a user preset
+- **WHEN** the user selected the user preset `wide`, changed Max pages to 120, and presses "Save to wide"
+- **THEN** the client sends `PUT /api/depths/wide`, Depth shows `wide` selected with Max pages 120, and the toast reads "Saved depth “wide”"
+
+#### Scenario: Managed preset edited
+- **WHEN** the user edits the managed preset `lit-review` into Custom
+- **THEN** the row shows "lit-review is managed by NixOS config" and "Save depth as…", and no "Save to" button
+
+#### Scenario: Save edits into a profile
+- **WHEN** the user profile `cloud` has two edits and the user presses "Save to cloud" (scenario `new-profile-custom`)
+- **THEN** the client sends `PATCH /api/profiles/cloud` with those edits, the hint reads "· cloud values", and the toast reads "Saved profile “cloud”"
+
+#### Scenario: Active profile not deletable
+- **WHEN** the active profile `low-vram` is selected with no edits
+- **THEN** "Delete low-vram" is disabled and "The default profile can’t be deleted" shows before it
+
+### Requirement: Save dialog
+"Save depth as…" and "Save profile as…" SHALL open the dialog of
+scenarios `new-save-depth` and `new-save-profile`: an icon (sliders for a
+depth, stack for a profile), the title "Save depth as…" or "Save profile
+as…", a close button, and an intro: "Saves the six depth values and the
+report length as a new depth. It appears in Depth after the built-in
+presets." or "Saves a new profile based on <profile>, with your <N>
+edit(s). <profile> itself is unchanged." (without the edits clause when
+there are none). Then:
+- a "Name" input with the placeholder "e.g. wide-short" or "e.g.
+  cloud-rerank" and the hint "Letters, digits, - and _ · up to 64
+  characters", replaced by an error with the warning icon once the user
+  has typed or submitted: "Enter a name.", "Use 64 characters or fewer.",
+  "Use letters, digits, - and _ only.", "Start with a letter or digit.",
+  "“<name>” is reserved." (`custom`), "“<name>” is reserved for a built-in
+  depth.", or "A <depth|profile> named “<name>” already exists." (ignoring
+  case), matching saved-presets "Saved names";
+- for a profile, an optional "Description" input (at most 120
+  characters, placeholder "One line, shown under the profile");
+- a "What is saved" group: for a depth, "Depth values" with the six
+  values and Length in words; for a profile, "Entries" (the five blocks),
+  "Model and budget" (Model as `<llm entry> / <model>`, Context tokens or
+  "Auto · <budget>"), and "Model tuning for <model>" (Context window, Max
+  output, Thinking as "plan <level> · gap <level> · write <level>", Gap
+  context or "Auto · <budget>") with the info note "Applies only when this
+  profile runs <model>. With any other model, that model’s own entry
+  limits apply.";
+- Cancel and a primary "Save depth" or "Save profile" button (floppy
+  disk icon). Escape and a backdrop click close the dialog.
+
+Saving a depth SHALL send `POST /api/depths` with the name, the six
+values, Length, and the description "Your preset: <S> sub-queries, <R>
+round(s), <W> words." (W with thousands separators), then select the new
+preset. Saving a profile SHALL send `POST /api/profiles` with the name,
+`from` = the selected profile, the description (or "Based on
+<profile>." when empty), and the run's edits, then reload the profiles,
+select the new one, and clear the edits. Each SHALL close the dialog and
+show "Saved depth “<name>”" or "Saved profile “<name>”". An error answer
+SHALL keep the dialog open and show its `detail` as the name error.
+
+#### Scenario: Save a depth
+- **WHEN** Custom has Sub-queries 10 and Rounds 1, Length is 1500, and the user saves it as `wide-short` (scenario `new-save-depth`)
+- **THEN** the client posts the depth with description "Your preset: 10 sub-queries, 1 round, 1,500 words.", Depth shows `wide-short` selected, and the toast reads "Saved depth “wide-short”"
+
+#### Scenario: Save a profile
+- **WHEN** the profile `cloud` has the edits Scorer `rerank`, Write thinking Medium, and Context tokens 120000, and the user saves it as `cloud-rerank` with the description "Hosted models with the local reranker." (scenario `new-save-profile`)
+- **THEN** the client posts `from` = `cloud` with `use.score` = `rerank` and those `llm` edits, Profile shows `cloud-rerank` with no edits, and the toast reads "Saved profile “cloud-rerank”"
+
+#### Scenario: Name taken
+- **WHEN** the user types `Wide` while the preset `wide` exists
+- **THEN** the dialog shows "A depth named “Wide” already exists." and Save does not send a request
+
+### Requirement: Delete dialog
+"Delete <name>" SHALL open the alert dialog of scenario `new-delete`: the
+title "Delete <depth|profile> “<name>”?", the body "Runs that used it keep
+the values they ran with." followed, when the item is selected, by " Depth
+switches to Standard." or " New run switches to <active profile>.", and
+" This can’t be undone.", then Cancel and a "Delete <depth|profile>"
+button (trash icon). Confirming SHALL send `DELETE /api/depths/<name>` or
+`DELETE /api/profiles/<name>`, reload the list, switch a selected item as
+the body says, and show the toast "Deleted <depth|profile> “<name>”".
+
+#### Scenario: Delete the selected preset
+- **WHEN** the user preset `wide` is selected and the user confirms "Delete depth" (scenario `new-delete`)
+- **THEN** the client sends `DELETE /api/depths/wide`, Depth shows Standard, `wide` is no longer offered, and the toast reads "Deleted depth “wide”"

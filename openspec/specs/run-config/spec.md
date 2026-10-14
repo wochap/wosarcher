@@ -84,6 +84,7 @@ error naming the profiles directory.
 Each setting SHALL be resolved with this precedence, lowest first: built-in
 defaults, the chosen provider entries (each block replaced whole by its
 entry), the chosen model's values from its entry's `models` table, the
+chosen model's values from the active profile's `models` table, the
 active profile, environment variables, the server's global settings (runs
 started by the server only), the run's depth preset, then command-line or
 request overrides. The chosen model SHALL be the run's `llm.model`
@@ -94,6 +95,18 @@ nesting separator (for example `WOSARCHER_SELECT__MAX_CONTEXT_TOKENS=auto`).
 #### Scenario: Profile over entry
 - **WHEN** the `omniroute` entry has `model = "research-smart"` and the profile sets `llm.model = "research-fast"`
 - **THEN** the resolved `llm.model` is `research-fast` and the model values come from `models.research-fast`
+
+#### Scenario: Profile model table over entry model table
+- **WHEN** the entry lists `models.research-smart` with `max_output_tokens = 131072` and `reasoning = { write = "low" }`, and the profile's `models.research-smart` sets `reasoning = { write = "high" }`
+- **THEN** a run with model `research-smart` resolves `llm.reasoning.write` `high` and `llm.max_output_tokens` 131072
+
+#### Scenario: Profile model table for another model
+- **WHEN** the profile's `models` table lists only `research-smart` and a run uses `--model research-fast`
+- **THEN** the model values come from the entry's `models.research-fast` (or the built-in defaults), not from the profile
+
+#### Scenario: Run edit over profile model table
+- **WHEN** the profile's `models.research-smart` sets `context_window = 200000` and the run request's `llm` sets `context_window = 100000`
+- **THEN** the resolved `llm.context_window` is 100000
 
 #### Scenario: Environment overrides profile
 - **WHEN** the profile sets `select.max_context_tokens = 12000` and `WOSARCHER_SELECT__MAX_CONTEXT_TOKENS=auto` is set
@@ -301,8 +314,10 @@ The CLI SHALL provide `wosarcher profile list` (one line per profile: a `*`
 marking the active one, the name, the source `user` in parentheses, the
 entries it uses as `search · fetch · prefilter · score · llm`, and the
 description when it is not empty), `wosarcher profile show [name]` (the
-entries it uses, then the profile's own values, then the fully resolved
-configuration with secrets redacted), and `wosarcher profile use <name>`.
+entries it uses, then the profile's own values, including each
+`models.<id>` value as `models.<id>.<key> = <value>`, then the fully
+resolved configuration with secrets redacted), and `wosarcher profile use
+<name>`.
 
 #### Scenario: List marks active profile
 - **WHEN** the active profile is `cloud` and the user runs `wosarcher profile list`
@@ -315,6 +330,10 @@ configuration with secrets redacted), and `wosarcher profile use <name>`.
 #### Scenario: Show lists entries first
 - **WHEN** the user runs `wosarcher profile show default`
 - **THEN** the output starts with the five `use` lines, then the profile's own keys, then the resolved configuration
+
+#### Scenario: Show prints the model table
+- **WHEN** the profile `cloud-rerank` sets `models."claude-sonnet-5-5".reasoning.write = "high"` and the user runs `wosarcher profile show cloud-rerank`
+- **THEN** its own values include the line `models.claude-sonnet-5-5.reasoning.write = "high"`
 
 #### Scenario: List shows descriptions
 - **WHEN** the user runs `wosarcher profile list` and the profile `low-vram` describes itself as "Models take turns on one small GPU; slower, fits 8 GB."
@@ -421,15 +440,21 @@ blocks.
 ### Requirement: Keys a profile may set
 A profile SHALL set only `description`, `[use]`, `llm.model`,
 `search.allow_domains`, `search.block_domains`, `search.language`,
-`search.time_range`, `search.filter_pages`, and keys outside the five
-provider blocks. It SHALL NOT set the keys a depth preset owns (depth-presets
-"Allowed preset keys") or the keys a model owns (`llm.context_window`,
-`llm.max_output_tokens`, `llm.reasoning.*`, `research.gap_context_tokens`;
-provider-entries "LLM entries and models"). Any other key SHALL fail when
-the profile loads, naming the profile file, the key, and its owner (entry,
-depth, or model). Environment variables SHALL follow the same rule, and
-`WOSARCHER_USE__<BLOCK>` SHALL be allowed. `--set` and a request's `set`
-SHALL stay able to set any key.
+`search.time_range`, `search.filter_pages`, a `models` table, and keys
+outside the five provider blocks. The `models` table SHALL be keyed by
+model ID and each model SHALL set only the keys an llm entry's model may
+set (provider-entries "LLM entries and models": `context_window`,
+`max_output_tokens`, `reasoning`, `gap_context_tokens`), validated the same
+way; any other key SHALL fail naming the profile file, the model, and the
+key. A profile SHALL NOT set the keys a depth preset owns (depth-presets
+"Allowed preset keys") or the keys a model owns at their own place
+(`llm.context_window`, `llm.max_output_tokens`, `llm.reasoning.*`,
+`research.gap_context_tokens`); a profile sets those only through
+`models.<id>`. Any other key SHALL fail when the profile loads, naming the
+profile file, the key, and its owner (entry, depth, or model). Environment
+variables SHALL follow the same rule (they cannot set a `models` table),
+and `WOSARCHER_USE__<BLOCK>` SHALL be allowed. `--set` and a request's
+`set` SHALL stay able to set any key.
 
 #### Scenario: Provider key in a profile
 - **WHEN** a profile sets `score.base_url = "http://desktop.lan:8001/v1"`
@@ -438,6 +463,14 @@ SHALL stay able to set any key.
 #### Scenario: Model key in a profile
 - **WHEN** a profile sets `llm.reasoning.write = "high"`
 - **THEN** loading fails naming the profile file, `llm.reasoning.write`, and that the model owns it
+
+#### Scenario: Model table in a profile
+- **WHEN** a profile sets `models."claude-sonnet-5-5" = { context_window = 200000, reasoning = { write = "high" } }`
+- **THEN** the profile loads without error
+
+#### Scenario: Unknown key in a profile model table
+- **WHEN** a profile's `models.research-smart` sets `timeout = 900`
+- **THEN** loading fails naming the profile file, `research-smart`, and `timeout`
 
 #### Scenario: Environment cannot set a block key
 - **WHEN** `WOSARCHER_SCORE__PROVIDER=jev` is set
