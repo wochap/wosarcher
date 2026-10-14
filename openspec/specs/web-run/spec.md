@@ -15,7 +15,12 @@ research run", the intro "wosarcher searches the web and your files, scores
 passages for relevance, and writes a cited report.", the Question textarea
 (focused when the screen opens), the hint "Ctrl + Enter to run", and the
 "Run research" button, disabled while the question is blank. Ctrl+Enter or
-Cmd+Enter in the question SHALL submit.
+Cmd+Enter in the question SHALL submit. The screen SHALL also show the
+Recent & pinned list (Requirement: Recent and pinned runs). While the form
+still equals what a row filled in, a neutral tag with the arrow-u-up-left
+icon and "from: <row name>" SHALL follow the Question label, titled "The
+form matches this run. Edit anything to clear."; any edit SHALL remove it
+(scenario `new-recent`).
 
 #### Scenario: Blank question
 - **WHEN** the question contains only spaces
@@ -25,6 +30,10 @@ Cmd+Enter in the question SHALL submit.
 - **WHEN** the user types a question and presses Ctrl+Enter
 - **THEN** the run is started as if "Run research" was pressed
 
+#### Scenario: From chip clears on edit
+- **WHEN** the form was filled from the row "RAG chunking" and the user changes Sources
+- **THEN** the "from: RAG chunking" tag is no longer shown
+
 ### Requirement: Attachments
 The New run screen (scenario `new`) SHALL offer the prototype's drop zone:
 click, Enter, or Space opens the file picker; dragging files over it
@@ -32,7 +41,11 @@ highlights it; dropping or picking adds the files. Only `.md` and `.txt`
 files SHALL be added; others SHALL be skipped with the alert "Skipped
 <names> — only .md and .txt are supported." A file with the name of an
 already added file SHALL be ignored. Added files SHALL be listed with name,
-size (`B` or `KB` with one decimal), and a remove button.
+size (`B` or `KB` with one decimal), and a remove button. A file taken
+from an earlier run (Requirement: Recent and pinned runs) SHALL show,
+after its name, the recycle icon and "reused from <run name>" (scenario
+`new-recent`), and SHALL be sent as `reuse_attachments` instead of being
+uploaded; removing it works like removing any file.
 
 #### Scenario: Mixed drop
 - **WHEN** the user drops `notes.md` and `paper.pdf`
@@ -42,21 +55,34 @@ size (`B` or `KB` with one decimal), and a remove button.
 - **WHEN** the user presses the remove button of `notes.md`
 - **THEN** `notes.md` is no longer listed
 
+#### Scenario: Reused attachment sent by name
+- **WHEN** the form was filled from run `r1` with `notes.md`, the user adds `extra.md`, and starts the run
+- **THEN** the request uploads only `extra.md` and has `reuse_attachments` = `{"run_id": "r1", "names": ["notes.md"]}`
+
 ### Requirement: Run options
 The New run screen (scenario `new`) SHALL show the collapsible "Options"
 panel, collapsed by default. Its header SHALL show the summary "<Depth> ·
 <recipe> · <sources> · <profile> · <N> words · <Tone>", as in scenario
-`new-depth`, where <profile> is followed by " (modified)" when the
-profile's Advanced values have edits (Requirement: Profile advanced
-values). The panel SHALL start with the Depth group (Requirement: Depth
-control), then the Run group. The Run group SHALL offer:
+`new-depth`, where <profile> reads "custom (<profile>)" when the profile's
+Advanced values have edits (Requirement: Profile advanced values). The
+panel SHALL start with the Depth group (Requirement: Depth control), then
+the Run group. The Run group SHALL offer:
 - Recipe (segmented, `report`, `answer`, then `context`);
 - Sources (segmented, `web`, `files`, `both`);
-- Profile: a select `min(260px, 100%)` wide listing the profiles from
-  `GET /api/profiles` by name, the active one preselected. The selected
-  profile's `description` is shown under the select (12px, muted, 4px
-  above) when it is not empty, followed by the profile's Advanced toggle
-  (Requirement: Profile advanced values);
+- Profile: with six or fewer profiles from `GET /api/profiles`, a
+  segmented control with one segment per profile by name, as Depth's
+  (scenario `new-profile-custom`); with more (prototype setting
+  `profiles = many`), a select `min(260px, 100%)` wide listing them. The
+  active profile is preselected. While the profile's Advanced values have
+  edits, the segmented control SHALL add a selected `custom` segment last
+  (no profile segment is selected), or the select a selected option
+  "custom (<profile>)", and the line "based on **<profile>** · <N>
+  edit(s)" SHALL show under the control. Picking a named profile while
+  edits exist SHALL drop them (Requirement: Profile advanced values) and
+  show the toast "Dropped <N> edit(s) to <profile>" with Undo, which
+  restores the profile and its edits. The selected profile's
+  `description` is shown under the control (12px, muted, 4px above) when
+  it is not empty, followed by the profile's Advanced toggle;
 - Allow domains and Block domains (Requirement: Domain rows);
 - Search language: a text input `min(260px, 100%)` wide with the
   placeholder "Any language" and a help button reading "Search language" /
@@ -99,7 +125,23 @@ count.
 
 #### Scenario: Profile description
 - **WHEN** `GET /api/profiles` returns `low-vram` with the description "Models take turns on one small GPU; slower, fits 8 GB." and the user selects it (scenario `new-profile`)
-- **THEN** the select shows `low-vram` and the description is shown under it
+- **THEN** the control shows `low-vram` selected and the description is shown under it
+
+#### Scenario: Profiles as segments
+- **WHEN** `GET /api/profiles` returns four profiles
+- **THEN** the Profile row shows a segmented control with the four names and no select
+
+#### Scenario: Many profiles
+- **WHEN** `GET /api/profiles` returns seven profiles (prototype setting `profiles = many`)
+- **THEN** the Profile row shows a select listing the seven names
+
+#### Scenario: Custom segment
+- **WHEN** the profile `cloud` has three Advanced edits (scenario `new-profile-custom`)
+- **THEN** the segmented control ends with a selected `custom` segment, no profile segment is selected, and "based on cloud · 3 edits" shows under it
+
+#### Scenario: Dropping edits can be undone
+- **WHEN** `cloud` has three edits and the user picks the `low-vram` segment
+- **THEN** `low-vram` is selected without edits, the toast reads "Dropped 3 edits to cloud", and Undo selects `cloud` with its three edits again
 
 #### Scenario: Summary
 - **WHEN** the depth is Deep, recipe `report`, sources `both`, profile `workstation` without edits, tone objective, and words 2000
@@ -107,7 +149,7 @@ count.
 
 #### Scenario: Summary with profile edits
 - **WHEN** the same options are set and the Scorer was changed for this run
-- **THEN** the collapsed header reads "Deep · report · both · workstation (modified) · 2000 words · Objective"
+- **THEN** the collapsed header reads "Deep · report · both · custom (workstation) · 2000 words · Objective"
 
 #### Scenario: Domain rows in the Run group
 - **WHEN** the user opens the Options panel (scenario `new-domains`)
@@ -127,7 +169,7 @@ count.
 
 #### Scenario: User profile marked
 - **WHEN** `GET /api/profiles` returns a profile `nixos`
-- **THEN** its option reads "nixos", with no "(user profile)" suffix since every profile is a user file, and selecting it sends `profile` = `nixos`
+- **THEN** its segment reads "nixos", with no "(user profile)" suffix since every profile is a user file, and selecting it sends `profile` = `nixos`
 
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
@@ -282,13 +324,14 @@ attachments, a new run) and show the new run on the Live run screen.
 - **THEN** the cancel request is sent with no dialog
 
 ### Requirement: Phase timeline
-The Live run screen (scenario `live`) SHALL show the phases Plan, Search,
-Fetch, Load, Chunk, Prefilter, Score, Select, and Write as the prototype's
-cards. A multi-round run (resolved `research.rounds` > 1) SHALL also show
-a Gap card between Score and Select (scenarios `rounds-live`,
-`rounds-done`). Each card has an icon, the full label (never truncated)
-followed by the phase's help button, progress text, and a 3px progress
-bar. Cards are styled per state:
+The Live run screen (scenario `live`) SHALL show the phases Load, Plan,
+Search, Fetch, Chunk, Prefilter, Score, Select, and Write, in the order the
+pipeline runs them, as the prototype's cards. A multi-round run (resolved
+`research.rounds` > 1) SHALL also show a Gap card between Score and Select
+(scenarios `rounds-live`, `rounds-done`). Each card has an icon, the full
+label (never truncated) followed by the phase's help button, progress
+text, a time row (Requirement: Time per stage), and a 3px progress bar.
+Cards are styled per state:
 - pending;
 - waiting: warn dashed border, stripes, CPU icon, text "waiting for GPU ·
   <reason>";
@@ -298,10 +341,11 @@ bar. Cards are styled per state:
 - failed: danger, with the error;
 - cancelled.
 
-Cards SHALL have no title tooltip. On desktop each card SHALL be at least
-98px wide, and the row SHALL scroll sideways when the cards do not fit. On
-phone the cards use two columns. Waiting SHALL never look like running.
-Phases that a run's recipe skips SHALL show done with "skipped".
+Cards SHALL have no title tooltip on the card itself. On desktop each card
+SHALL be at least 98px wide, and the row SHALL scroll sideways when the
+cards do not fit. On phone the cards use two columns. Waiting SHALL never
+look like running. Phases that a run's recipe skips SHALL show done with
+"skipped"; Load skipped in a run with sources `web` SHALL read "web only".
 
 In a multi-round run, loop cards (Search to Score) SHALL show "round
 <k>/<N>" while running, "round <k> done" between rounds, and "<n> rounds"
@@ -328,6 +372,10 @@ The Gap help text SHALL be verbatim from the prototype's `ph-gap` entry.
 #### Scenario: Single round
 - **WHEN** a run has `research.rounds = 1`
 - **THEN** no Gap card is shown
+
+#### Scenario: Load first
+- **WHEN** a run with sources `web` is shown (scenario `done-quick`)
+- **THEN** Load is the first card and reads "web only"
 
 ### Requirement: Phase method tags
 On the Live run screen (scenario `live`), the Plan, Prefilter, Score, and
@@ -1635,20 +1683,20 @@ header SHALL show, below the meta line, a profile line: the stack icon,
 the run's profile name in the mono font, " · ", and the entries of the
 run summary's `use` joined by " · " in the order search, fetch,
 prefilter, score, llm, the llm entry followed by "/<model>" (11.5px,
-mono, muted). When the summary has `modified = true`, a small outline tag
-"modified" SHALL follow. On a phone, the line SHALL show only the profile
-and "<llm>/<model>", with an "All providers" ghost toggle (caret-down)
-that shows the full list and becomes "Fewer" (caret-up), with
-`aria-expanded`. A run without `use` (recorded before entries existed)
-SHALL show no profile line.
+mono, muted). When the summary has `modified = true`, the profile name
+SHALL read "custom (<profile>)". On a phone, the line SHALL show only the
+profile and "<llm>/<model>", with an "All providers" ghost toggle
+(caret-down) that shows the full list and becomes "Fewer" (caret-up),
+with `aria-expanded`. A run without `use` (recorded before entries
+existed) SHALL show no profile line.
 
 #### Scenario: CLI run with a changed scorer
 - **WHEN** a CLI run on `low-vram` used `searxng`, `firecrawl`, `embeddings`, `jev-strict`, and `agents` with model `qwen3-14b`, and its summary has `modified = true` (scenario `live-cli`)
-- **THEN** the line reads "low-vram · searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14b" followed by the "modified" tag
+- **THEN** the line reads "custom (low-vram) · searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14b"
 
 #### Scenario: Phone collapse
 - **WHEN** the same run is shown at phone width
-- **THEN** the line shows "low-vram · agents/qwen3-14b" and "All providers", and pressing it shows every entry and "Fewer"
+- **THEN** the line shows "custom (low-vram) · agents/qwen3-14b" and "All providers", and pressing it shows every entry and "Fewer"
 
 ### Requirement: Save depth and profile actions
 Depth's and the profile's Advanced panels SHALL end with an action row as
@@ -1764,3 +1812,135 @@ the body says, and show the toast "Deleted <depth|profile> “<name>”".
 #### Scenario: Delete the selected preset
 - **WHEN** the user preset `wide` is selected and the user confirms "Delete depth" (scenario `new-delete`)
 - **THEN** the client sends `DELETE /api/depths/wide`, Depth shows Standard, `wide` is no longer offered, and the toast reads "Deleted depth “wide”"
+
+### Requirement: Recent and pinned runs
+New run SHALL show a "Recent & pinned" list (scenarios `new-recent`,
+`new-recent-empty`), built from `GET /api/runs`:
+- **Pinned**: the pinned runs that still exist, in the order they were
+  pinned.
+- **Recent**: the 20 newest runs that are not pinned and have no
+  `parent_run_id` (forks and rewrites are left out). Runs whose question,
+  `form`, and attachment names are equal collapse into the newest one,
+  marked "×<n>" with the title "<n> runs with this question and options;
+  showing the newest".
+
+A group with no row is not shown; with no row at all, the list shows the
+clock icon, "No runs yet", and "Runs you start show up here. Pin the ones
+you repeat to keep them on top." Each row SHALL be a button (32px tall on
+desktop, 44px on phone) labelled "Fill the form from: <name>" with the
+full question as its title, showing the name (the user's name for it,
+else the question, cut with "…"), a summary "<Depth> · <recipe> ·
+<sources> · <profile or custom (profile)> · <N> words", the paperclip
+icon and "<n> file(s)" when it has attachments, the relative creation
+date, and the "×<n>" mark. A row's "…" menu button ("Actions for
+<name>") SHALL open a menu with Rename (pencil), Pin or Unpin (push-pin,
+push-pin-slash), and Open run (arrow-square-out, opens the run as History
+does). Rename turns the name into an input (at most 120 characters,
+placeholder the question): Enter or leaving it saves, Escape cancels, and
+an empty name or the question removes the custom name. Names and pins
+SHALL be kept in browser storage by run ID, and IDs of runs the server no
+longer lists SHALL be dropped.
+
+Pressing a row SHALL fill the form and SHALL NOT start a run: the question;
+Recipe, Sources, Depth (Custom with the run's research values, or
+Standard when the preset no longer exists), and Length; the writing
+overrides; the profile (the active profile when it no longer exists) and
+its Advanced edits (`use` and `llm`); the domain lists and search
+language; and the run's attachments as reused files (Requirement:
+Attachments). Values come from the run summary's `form`; a run without
+`form` fills the question, Sources, Recipe, profile, and Depth from its
+summary. When the form had a question or edits before, the toast "Filled
+from “<name>”" (name cut at 28 characters) SHALL offer Undo, which
+restores the previous form. The pressed row SHALL be marked (accent ring,
+`aria-current`) while the form still matches it.
+
+On windows at least 1200px wide (not phone) the list SHALL be a column
+beside the form (the form at most 800px, the list 260 to 320px), sticky,
+with the heading "Recent & pinned", its help button (`recent`), and the
+row count. Otherwise it SHALL be a disclosure under the question,
+collapsed by default: a caret, "Recent & pinned", "· <count>", and the
+help button. The help text SHALL be verbatim from the prototype's `recent`
+entry.
+
+#### Scenario: Fill from a recent run
+- **WHEN** the user presses the row of a run with depth Custom, recipe `report`, sources `both`, profile `low-vram`, Length 1500, and the attachments `notes/rag-chunking.md` and `notes/api-docs-sample.md` (scenario `new-recent`)
+- **THEN** the form shows that question, Custom with the run's six values, `report`, `both`, `low-vram`, 1500 words, and both files marked "reused from" the row's name, and no run is started
+
+#### Scenario: Undo a fill
+- **WHEN** the question box holds a typed question and the user presses a row
+- **THEN** the toast "Filled from “<name>”" appears, and Undo brings back the typed question and the previous options
+
+#### Scenario: Collapsed duplicates
+- **WHEN** two runs asked the same question with the same form and attachment names
+- **THEN** Recent shows one row for the newer run, marked "×2"
+
+#### Scenario: Pin and rename
+- **WHEN** the user pins a row and renames it "Weekly LLM digest"
+- **THEN** the row moves to Pinned, shows "Weekly LLM digest", and keeps both after a reload of the page
+
+#### Scenario: Forks left out
+- **WHEN** a run was rewritten into a version 2
+- **THEN** the version 2 run has no row of its own
+
+#### Scenario: No runs
+- **WHEN** `GET /api/runs` returns no run (scenario `new-recent-empty`)
+- **THEN** the list shows "No runs yet" and the hint text
+
+#### Scenario: Narrow window
+- **WHEN** New run is shown 1000px wide
+- **THEN** the list is a collapsed "Recent & pinned · <count>" disclosure under the question
+
+### Requirement: Time per stage
+Each phase card's time row (mono, 11px) SHALL show:
+- "—" (faint) for a pending or reused phase;
+- "skipped" (faint) for a skipped phase;
+- while waiting for the GPU, "—" and the wait so far in a warn chip with
+  the CPU icon;
+- otherwise the stage's time: the sum of its `stage.done` `seconds` over
+  its rounds, plus, while it runs, the time since its `stage.started`,
+  counting up (accent while running, danger when failed), followed by a
+  warn chip "+<wait>" when it waited for the GPU at least 0.05 s (from
+  `resource.waiting` to the stage's `stage.started`).
+
+The row's title SHALL be "Stage time <t>", or "Round 1 <a> · Round 2 <b> ·
+total <t>" for a stage that ran more than one round, plus " · plus <w>
+waiting for the GPU" when it waited. Times SHALL read "<s.s>s" under a
+minute and "<m>m <ss>s" from a minute on.
+
+Below the timeline, a "Time per stage" section (scenarios `live`,
+`done-quick`) SHALL show the timer icon, "Time", its help button (`time`),
+the total, and "so far" while the run is running; an 8px stacked bar of
+the queue time (`run.started` minus the run's creation time, muted
+stripes), each GPU wait (warn stripes, before its stage), and each stage
+that ran (the prototype's per-stage colors), each segment as wide as its
+share of the total (at least 2px), titled "<label> · <time> · <percent>";
+the three largest parts (GPU wait summed) with color, label, time, and
+percent ("<1%" for a share under one percent); and an "All stages" ghost
+toggle (caret-down, "Fewer" with caret-up when open) that lists Queue
+("waiting for a free run slot"), every phase in order ("skipped" for a
+skipped one, "<label> · running" for the running one, and the per-round
+times "a + b + c" under a stage with several rounds), and "GPU wait" with
+"before <stages>". The bar SHALL fill its track at any point of the run.
+The Report screen's aside SHALL show, above Sources, "Time <total>" with
+its help button, the bar, and the full list for a finished run. The help
+text SHALL be verbatim from the prototype's `time` entry.
+
+#### Scenario: Finished quick run
+- **WHEN** a finished web-only quick run has plan 14.4s, search 12.9s, fetch 10.7s, chunk 0.2s, prefilter 0.1s, score 3.3s, select 0.0s, and write 11.9s (scenario `done-quick`)
+- **THEN** the Plan card's time row reads "14.4s", Load reads "skipped", and the time section's total reads "53.5s" with Plan, Search, and Write as the three largest parts
+
+#### Scenario: Running stage
+- **WHEN** the fetch stage started 8 seconds ago and has not finished
+- **THEN** the Fetch card's time row reads about "8.0s" in the accent color and counts up, and the time section shows "so far"
+
+#### Scenario: GPU wait
+- **WHEN** the score stage waited 4.8 seconds for prefilter to unload and then ran 3.3 seconds
+- **THEN** the Score card reads "3.3s" with the chip "+4.8s", and the all-stages list has "GPU wait 4.8s" with "before Score"
+
+#### Scenario: Several rounds
+- **WHEN** the search stage ran three rounds of 4.1s, 3.0s, and 2.2s
+- **THEN** the Search card reads "9.3s" titled "Round 1 4.1s · Round 2 3.0s · Round 3 2.2s · total 9.3s", and its all-stages entry shows "4.1s + 3.0s + 2.2s"
+
+#### Scenario: Report aside
+- **WHEN** the user opens the report of a finished run
+- **THEN** the aside shows "Time" with the run's total, the bar, and every phase's time

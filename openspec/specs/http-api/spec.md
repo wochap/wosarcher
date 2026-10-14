@@ -74,6 +74,9 @@ SHALL have `query` (required, non-empty), and these optional fields:
   `zh-Hans-CN`. The CLI, the web form, and the `search.language`
   configuration key SHALL use this same rule.
 - `set` (a list of `dotted.key=value` overrides)
+- `reuse_attachments`: `run_id` (an earlier run) and `names` (file names
+  among that run's attachments), copied into the new run as attachments
+  with nothing uploaded again
 
 An unknown `depth` SHALL be rejected with 422 that names `depth`. A `use`
 key that is not a block, or a name that is not an entry of its block,
@@ -84,7 +87,11 @@ or `domains.block` and the entry. An invalid `search_language` SHALL be
 rejected with 422 that names `search_language`. The
 response SHALL be 201 with the new `run_id` and its status (`queued` or
 `running`). Attachment file names SHALL be reduced to their base name; two
-attachments with the same base name SHALL be rejected with 422. A request
+attachments with the same base name SHALL be rejected with 422, also when
+one is uploaded and the other reused. A `reuse_attachments.run_id` that
+names no run SHALL answer 404 `run_not_found`; a name that is not one of
+that run's attachments SHALL answer 422 `invalid_attachment` naming it.
+Reused files SHALL count as attachments for the rule that follows. A request
 whose resolved sources are `files` with no attachment SHALL be rejected
 with 422 `invalid_attachment` before anything is staged.
 
@@ -164,6 +171,22 @@ with 422 `invalid_attachment` before anything is staged.
 - **WHEN** a client posts `request = {"query": "q", "depth": "custom", "research": {"rounds": 3}, "llm": {"gap_context_tokens": "auto"}}`
 - **THEN** the run resolves `research.gap_context_tokens` to `auto` and `research.rounds` to 3
 
+#### Scenario: Reuse an earlier run's attachment
+- **WHEN** run `r1` has the attachment `notes.md` and a client posts `request = {"query": "q", "sources": "files", "reuse_attachments": {"run_id": "r1", "names": ["notes.md"]}}` with no upload
+- **THEN** the response is 201 and the new run's process receives a copy of `notes.md` as an attachment
+
+#### Scenario: Reused name not found
+- **WHEN** a client reuses `paper.md` from run `r1`, which has only `notes.md`
+- **THEN** the response is 422 with `error = "invalid_attachment"` naming `paper.md`, and no run is queued
+
+#### Scenario: Reused run not found
+- **WHEN** a client reuses attachments from a run ID that does not exist
+- **THEN** the response is 404 with `error = "run_not_found"`
+
+#### Scenario: Reused and uploaded name clash
+- **WHEN** a client reuses `notes.md` from run `r1` and also uploads a file named `notes.md`
+- **THEN** the response is 422 and no run is queued
+
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does
 (defaults, the chosen entries, the chosen model's values, profile,
@@ -237,7 +260,10 @@ unless queued), `error` (the `run.failed` error text; null unless failed),
 `end_stage` (the stage named by `run.failed` or `run.cancelled`; null
 otherwise), `origin` (`web`, `api`, or `cli`, from `request.json` or the
 staged request), and `token_name` (the API token's name for origin `api`;
-null otherwise). Status SHALL be one of `queued`, `running`, `done`,
+null otherwise), `form` (the request the run was created with, as
+run-store "Request record" stores it; null for runs created without one),
+and `attachments` (each attachment's `name` and `size` in bytes, in the
+order stored; empty when it has none). Status SHALL be one of `queued`, `running`, `done`,
 `failed`, `cancelled`, or `interrupted`, following run-store "Status of a
 live run" for runs with no terminal event, whichever process started them.
 `queue_position` SHALL be the run's place in the shared run queue (1 for
@@ -280,6 +306,14 @@ when the run has no logged event).
 #### Scenario: Failed run
 - **WHEN** a run's log ends with `run.failed` with stage `fetch` and error `no output`
 - **THEN** its summary has `status = "failed"`, `error = "no output"`, and `end_stage = "fetch"`
+
+#### Scenario: Form and attachments in the summary
+- **WHEN** a run was created with `request = {"query": "q", "depth": "quick", "writing": {"tone": "critical"}}` and the attachment `notes.md` of 6120 bytes
+- **THEN** its summary has `form` with that query, depth, and writing, and `attachments` = `[{"name": "notes.md", "size": 6120}]`
+
+#### Scenario: Older run without a form
+- **WHEN** a run's `request.json` was written before forms were recorded
+- **THEN** its summary has `form = null`
 
 ### Requirement: Delete a run
 `DELETE /api/runs/{id}` SHALL remove a finished, failed, cancelled, or
@@ -438,7 +472,8 @@ unknown stage name SHALL answer 422 listing the stages; an unknown entry in
 `wosarcher run` with the original run's request (query, sources, `until`,
 profile, the five recorded entries, depth, and its saved overrides,
 including writing options) and a copy of the original run directory's
-attachments, with nothing uploaded again. The entries SHALL be resolved
+attachments, with nothing uploaded again. The new run SHALL record the original run's
+`form` (null when it has none). The entries SHALL be resolved
 again by name, so edits made to them since apply. The new run SHALL have
 version 1 and no parent run; it is not a fork. The response SHALL be 201
 with the new `run_id` and its status. An unknown run SHALL answer 404, a
@@ -470,6 +505,10 @@ new run before its first stage, naming the block and the entry.
 #### Scenario: Entry removed since
 - **WHEN** the original run used the llm entry `sonnet` and `providers/llm/sonnet.toml` no longer exists
 - **THEN** the rerun is created and fails before its first stage with an error naming `llm` and `sonnet`
+
+#### Scenario: Rerun keeps the form
+- **WHEN** a client reruns a run whose `form` has depth `custom` and `research.rounds` 2
+- **THEN** the rerun's summary has the same `form`
 
 ### Requirement: Secret source overrides are rejected
 `POST /api/runs`, `POST /api/runs/{id}/fork`, and `POST /api/runs/{id}/rerun`

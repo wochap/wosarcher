@@ -59,6 +59,11 @@ time.
 - the stage a fork started from;
 - the version;
 - the creation time;
+- `form`: for a run created through `POST /api/runs`, the request as
+  the client sent it (query, sources, `until`, profile, `use`, depth,
+  `research`, `writing`, `domains`, `llm`, `search_language`, and
+  `reuse_attachments`) without `set`; for a rerun, the original run's
+  `form`; absent for a fork and for a run started with `wosarcherd run`;
 - the origin: `web` (started in the browser), `api` (started with an API
   token) with the token's name, or `cli` (started with `wosarcher run` or
   `wosarcher fork` by a person or an agent).
@@ -93,6 +98,14 @@ record the origin of the request that started it, not its parent's.
 #### Scenario: API origin
 - **WHEN** a run is created through `POST /api/runs` with the API token named `ci-runner`
 - **THEN** `request.json` has origin `api` and token name `ci-runner`
+
+#### Scenario: Form recorded
+- **WHEN** a client creates a run with `request = {"query": "q", "depth": "custom", "research": {"rounds": 2}, "set": ["score.api_key=\"k\""]}`
+- **THEN** `request.json` has `form` with that query, depth, and research, and no `set` and no `k` in `form`
+
+#### Scenario: Fork has no form
+- **WHEN** a run is forked from `write`
+- **THEN** the fork's `request.json` has no `form`
 
 ### Requirement: Attachments copied
 Attachment files, directories (recursively), and glob matches SHALL be
