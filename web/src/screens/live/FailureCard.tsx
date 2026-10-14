@@ -9,8 +9,10 @@ import { PHASES, type PhaseId, type RunView } from "../../run/reducer";
 import css from "./FailureCard.module.css";
 import { INTERRUPTED, stageLabel, stoppedAt } from "./model";
 
-function keptHint(stage: PhaseId): string {
-  const earlier = PHASES.slice(0, PHASES.indexOf(stage));
+/** Load counts only when it loaded files; a web-only run starts at Plan. */
+function keptHint(stage: PhaseId, run: RunView): string {
+  const loaded = run.phases.load.state === "done" && !run.phases.load.skipped;
+  const earlier = PHASES.slice(0, PHASES.indexOf(stage)).filter((id) => id !== "load" || loaded);
   const retry = `Retry from ${stageLabel(stage)}.`;
   if (!earlier.length) return retry;
   if (earlier.length === 1) return `${stageLabel(earlier[0])} is cached. ${retry}`;
@@ -45,7 +47,7 @@ export function FailureCard({ run }: { run: RunView }) {
         Run failed at {stageLabel(stage)}
       </div>
       <pre className={css.error}>{error}</pre>
-      <p className={css.hint}>{keptHint(stage)}</p>
+      <p className={css.hint}>{keptHint(stage, run)}</p>
       <div className={css.actions}>
         <span className={css.withHelp}>
           <button

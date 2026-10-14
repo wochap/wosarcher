@@ -4,6 +4,7 @@ import { ev, stageDone, usage } from "../test/events";
 import { roundsLog, roundTwoFetching } from "../test/rounds";
 import { isFallback } from "./providers";
 import { applySummary, initialRunView, type RunView, runReducer } from "./reducer";
+import { fmtDuration, stageTime, timeBar, timeRow } from "./stageTimes";
 
 const fold = (events: RunEvent[], from: RunView = initialRunView("r1")) =>
   events.reduce(runReducer, from);
@@ -316,5 +317,80 @@ describe("research rounds", () => {
     state = runReducer(state, ev(999, "run.cancelled", { stage: "fetch" }));
     expect(state.rounds[1].state).toBe("cancelled");
     expect(state.phases.fetch.state).toBe("cancelled");
+  });
+});
+
+describe("stage times", () => {
+  const at = (seq: number) => Date.UTC(2026, 9, 3, 14, 0, seq);
+  const start = (seq: number, stage: string, round = 1) =>
+    ev(seq, "stage.started", { device: null, provider: null, round } as never, stage as never);
+
+  it("counts a running stage from its start", () => {
+    const state = fold([started, start(2, "fetch")]);
+    const time = stageTime(state, "fetch", false, at(10));
+    expect(time).toMatchObject({ kind: "time", seconds: 8, live: true });
+    expect(timeRow(time)).toMatchObject({ text: "8.0s", tone: "accent" });
+    expect(timeBar(state, ["fetch"], () => false, undefined, at(10)).running).toBe(true);
+  });
+
+  it("keeps a GPU wait apart from the stage time", () => {
+    const waiting = ev(
+      2,
+      "resource.waiting",
+      { device: "gpu0", released_stage: "prefilter" } as never,
+      "score",
+    );
+    let state = fold([started, waiting]);
+    expect(timeRow(stageTime(state, "score", false, at(4)))).toMatchObject({
+      text: "—",
+      wait: "2.0s",
+    });
+    state = fold([start(7, "score"), stageDone(8, "score", { seconds: 3.3 })], state);
+    const row = timeRow(stageTime(state, "score", false, at(20)));
+    expect(row).toMatchObject({ text: "3.3s", wait: "+5.0s" });
+    expect(row.title).toBe("Stage time 3.3s · plus 5.0s waiting for the GPU");
+    const bar = timeBar(state, ["score"], () => false, undefined, at(20));
+    expect(bar.all.at(-1)).toMatchObject({ label: "GPU wait", time: "5.0s", note: "before Score" });
+  });
+
+  it("sums the rounds of a stage and lists them", () => {
+    const state = fold([
+      started,
+      start(2, "search"),
+      stageDone(3, "search", { seconds: 4.1, round: 1 }),
+      start(4, "search", 2),
+      stageDone(5, "search", { seconds: 3.0, round: 2 }),
+      start(6, "search", 3),
+      stageDone(7, "search", { seconds: 2.2, round: 3 }),
+    ]);
+    const row = timeRow(stageTime(state, "search", false, at(30)));
+    expect(row.text).toBe("9.3s");
+    expect(row.title).toBe("Round 1 4.1s · Round 2 3.0s · Round 3 2.2s · total 9.3s");
+    const bar = timeBar(state, ["search"], () => false, undefined, at(30));
+    expect(bar.all[0].note).toBe("4.1s + 3.0s + 2.2s");
+  });
+
+  it("totals a replayed finished log with the queue time", () => {
+    const state = fold([
+      started,
+      start(2, "plan"),
+      stageDone(3, "plan", { seconds: 14.4 }),
+      start(4, "write"),
+      stageDone(5, "write", { seconds: 11.9 }),
+      stageDone(6, "load", { seconds: 0, skipped: true }),
+      ev(7, "run.done", { until: null, totals: usage(0) } as never),
+    ]);
+    const created = new Date(at(-4)).toISOString();
+    const bar = timeBar(state, ["load", "plan", "write"], (id) => id === "load", created, at(99));
+    expect(fmtDuration(bar.total)).toBe("31.3s");
+    expect(bar.running).toBe(false);
+    expect(bar.top.map((p) => p.label)).toEqual(["Plan", "Write", "Queue"]);
+    expect(bar.all.map((p) => [p.label, p.time])).toEqual([
+      ["Queue", "5.0s"],
+      ["Load", "skipped"],
+      ["Plan", "14.4s"],
+      ["Write", "11.9s"],
+    ]);
+    expect(fmtDuration(125)).toBe("2m 05s");
   });
 });

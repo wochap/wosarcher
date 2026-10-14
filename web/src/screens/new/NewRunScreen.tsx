@@ -1,5 +1,5 @@
 // New run: the question, attachments, and options; starts the run and opens it on Live run.
-import { Play, WarningCircle } from "@phosphor-icons/react";
+import { ArrowUUpLeft, Play, WarningCircle } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import type {
@@ -9,6 +9,7 @@ import type {
   ProviderEntry,
   ResearchValues,
   RunCreate,
+  RunSummary,
   ServerSettings,
   WritingOptions,
 } from "../../api/types";
@@ -30,7 +31,22 @@ import {
   saveCustom,
 } from "../../run/depth";
 import { depthDescription, type PresetKind } from "../../run/presets";
-import { type ProfileChoice, profileBase, profilePatch } from "../../run/profileValues";
+import {
+  changedCount,
+  type ProfileChoice,
+  profileBase,
+  profilePatch,
+} from "../../run/profileValues";
+import {
+  draftFromRun,
+  draftSignature,
+  loadMarks,
+  type Marks,
+  pruneMarks,
+  recentGroups,
+  rowName,
+  saveMarks,
+} from "../../run/recent";
 import { Attachments } from "./Attachments";
 import { DeleteDialog } from "./DeleteDialog";
 import css from "./NewRunScreen.module.css";
@@ -40,6 +56,7 @@ import {
   overriddenDomains,
   overriddenFields,
 } from "./OptionsPanel";
+import { RecentRuns, useWide } from "./RecentRuns";
 import { depthGroups, profileGroups, profileIntro, SaveDialog } from "./SaveDialog";
 
 /** The message of a failed save or delete, as the server wrote it. */
@@ -109,7 +126,7 @@ export function runRequest(
 
 export function NewRunScreen() {
   const api = useApi();
-  const { draft, setDraft, follow, toast } = useUi();
+  const { draft, setDraft, follow, toast, isPhone } = useUi();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [profiles, setProfiles] = useState<ProfileInfo[]>([]);
   const [depths, setDepths] = useState<DepthInfo[]>([]);
@@ -121,6 +138,11 @@ export function NewRunScreen() {
   const [focusField, setFocusField] = useState<DomainKind | null>(null);
   const [saving, setSaving] = useState<PresetKind | null>(null);
   const [deleting, setDeleting] = useState<{ kind: PresetKind; name: string } | null>(null);
+  const [runs, setRuns] = useState<RunSummary[]>([]);
+  const [marks, setMarks] = useState<Marks>(loadMarks);
+  /** The run a row filled the form from, and the form's signature right after. */
+  const [from, setFrom] = useState<{ id: string; sig: string } | null>(null);
+  const wide = useWide() && !isPhone;
   const question = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -134,6 +156,17 @@ export function NewRunScreen() {
     api.getSettings().then(setSettings, () => {});
     api.listProfiles().then(setProfiles, () => {});
     api.listDepths().then(setDepths, () => {});
+    api.listRuns().then(
+      (listed) => {
+        setRuns(listed);
+        setMarks((m) => {
+          const kept = pruneMarks(m, listed);
+          saveMarks(kept);
+          return kept;
+        });
+      },
+      () => {},
+    );
     api.listProviders().then(
       (report) => setEntries(report.entries),
       () => {},
@@ -178,6 +211,33 @@ export function NewRunScreen() {
     api.listModels(llmEntry).then(setModels, () => setModels([]));
   }, [api, llmEntry]);
 
+  const groups = recentGroups(runs, marks.pins);
+  const fromRun =
+    from && draftSignature(draft) === from.sig ? runs.find((r) => r.run_id === from.id) : undefined;
+
+  function changeMarks(next: Marks) {
+    setMarks(next);
+    saveMarks(next);
+  }
+
+  /** Fills the form from a run; Undo brings back a form that had a question or edits. */
+  function fill(run: RunSummary) {
+    const name = rowName(run, marks.names);
+    const next = draftFromRun(run, name, { profiles, depths, saved });
+    const previous = { draft, from };
+    setDraft(() => next);
+    setFrom({ id: run.run_id, sig: draftSignature(next) });
+    setError(null);
+    if (draftSignature(draft) === draftSignature(EMPTY_DRAFT)) return;
+    const cut = name.length > 28 ? `${name.slice(0, 28)}…` : name;
+    toast(`Filled from “${cut}”`, {
+      undo: () => {
+        setDraft(() => previous.draft);
+        setFrom(previous.from);
+      },
+    });
+  }
+
   async function start() {
     if (blank || busy || languageInvalid || !defaults || !writing) return;
     const invalid = invalidDomain(domains);
@@ -189,20 +249,22 @@ export function NewRunScreen() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createRun(
-        runRequest(
-          draft.query.trim(),
-          options,
-          writing,
-          defaults,
-          saved ?? defaults,
-          values,
-          overriddenDomains(domains, domainDefaults),
-          draft.searchLanguage,
-          choice,
-        ),
-        draft.files,
+      const request = runRequest(
+        draft.query.trim(),
+        options,
+        writing,
+        defaults,
+        saved ?? defaults,
+        values,
+        overriddenDomains(domains, domainDefaults),
+        draft.searchLanguage,
+        choice,
       );
+      if (draft.reused.length) {
+        const names = draft.reused.map((f) => f.name);
+        request.reuse_attachments = { run_id: draft.reused[0].runId, names };
+      }
+      const created = await api.createRun(request, draft.files);
       setDraft(() => EMPTY_DRAFT);
       follow(created.run_id);
       go({ screen: "live", runId: created.run_id });
@@ -353,6 +415,23 @@ export function NewRunScreen() {
     });
   }
 
+  /** Picks a named profile; dropped Advanced edits can be brought back with Undo. */
+  function pickProfile(name: string) {
+    const count = changedCount(choice);
+    const previous = { profile: options.profile, use: draft.use, edits: draft.profileEdits };
+    setOption("profile", name);
+    if (!count) return;
+    toast(`Dropped ${count} ${count === 1 ? "edit" : "edits"} to ${previous.profile}`, {
+      undo: () =>
+        setDraft((d) => ({
+          ...d,
+          options: { ...d.options, profile: previous.profile },
+          use: previous.use,
+          profileEdits: previous.edits,
+        })),
+    });
+  }
+
   /** A value equal to its default is no override, so later default changes reach it. */
   function setWriting<F extends WritingField>(field: F, value: WritingOptions[F]) {
     setDraft((d) => {
@@ -367,155 +446,188 @@ export function NewRunScreen() {
     : [{ name: options.profile, source: "user", active: true, description: "" }];
   const depthNames = depths.map((info) => info.name);
   const depthSave = savedDepth();
+  const recent = (
+    <RecentRuns
+      groups={groups}
+      marks={marks}
+      onMarks={changeMarks}
+      current={fromRun?.run_id ?? null}
+      onFill={fill}
+      wide={wide}
+      phone={isPhone}
+    />
+  );
   return (
     <div className={css.page}>
-      <div className={css.inner}>
-        <div>
-          <h1 className={css.h1}>New research run</h1>
-          <p className={css.intro}>
-            wosarcher searches the web and your files, scores passages for relevance, and writes a
-            cited report.
-          </p>
-        </div>
-        <div className="field">
-          <label htmlFor="q">Question</label>
-          <textarea
-            id="q"
-            ref={question}
-            className={`input ${css.question}`}
-            rows={6}
-            value={draft.query}
-            placeholder="e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?"
-            onChange={(e) => setDraft((d) => ({ ...d, query: e.target.value }))}
-            onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                e.preventDefault();
-                void start();
-              }
-            }}
-          />
-          <div className={css.actions}>
-            <span className={css.hint}>
-              <kbd>Ctrl</kbd>+<kbd>Enter</kbd>to run
-            </span>
-            <button
-              type="button"
-              className={`btn btn-primary ${css.run}`}
-              disabled={blank || busy || languageInvalid}
-              onClick={() => void start()}
-            >
-              <Play aria-hidden="true" />
-              Run research
-            </button>
+      <div className={css.layout} data-wide={wide}>
+        <div className={css.inner}>
+          <div>
+            <h1 className={css.h1}>New research run</h1>
+            <p className={css.intro}>
+              wosarcher searches the web and your files, scores passages for relevance, and writes a
+              cited report.
+            </p>
           </div>
-          {error && (
-            <div role="alert" className={css.error}>
-              <WarningCircle aria-hidden="true" className={css.errorIcon} />
-              <div className={css.errorText}>
-                <div className={css.errorTitle}>Couldn’t start the run</div>
-                <div className={css.errorMessage}>{error.message}</div>
-                {error.field && (
-                  <button
-                    type="button"
-                    className={`btn btn-ghost ${css.fix}`}
-                    onClick={() => {
-                      setOptionsOpen(true);
-                      setFocusField(error.field ?? null);
-                    }}
-                  >
-                    Fix in Options
-                  </button>
-                )}
-              </div>
+          <div className="field">
+            <div className={css.questionHead}>
+              <label htmlFor="q">Question</label>
+              {fromRun && (
+                <span
+                  className={`tag tag-neutral ${css.from}`}
+                  title="The form matches this run. Edit anything to clear."
+                >
+                  <ArrowUUpLeft aria-hidden="true" className={css.fromIcon} />
+                  <span className={css.fromName}>from: {rowName(fromRun, marks.names)}</span>
+                </span>
+              )}
             </div>
+            <textarea
+              id="q"
+              ref={question}
+              className={`input ${css.question}`}
+              rows={6}
+              value={draft.query}
+              placeholder="e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?"
+              onChange={(e) => setDraft((d) => ({ ...d, query: e.target.value }))}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void start();
+                }
+              }}
+            />
+            <div className={css.actions}>
+              <span className={css.hint}>
+                <kbd>Ctrl</kbd>+<kbd>Enter</kbd>to run
+              </span>
+              <button
+                type="button"
+                className={`btn btn-primary ${css.run}`}
+                disabled={blank || busy || languageInvalid}
+                onClick={() => void start()}
+              >
+                <Play aria-hidden="true" />
+                Run research
+              </button>
+            </div>
+            {error && (
+              <div role="alert" className={css.error}>
+                <WarningCircle aria-hidden="true" className={css.errorIcon} />
+                <div className={css.errorText}>
+                  <div className={css.errorTitle}>Couldn’t start the run</div>
+                  <div className={css.errorMessage}>{error.message}</div>
+                  {error.field && (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost ${css.fix}`}
+                      onClick={() => {
+                        setOptionsOpen(true);
+                        setFocusField(error.field ?? null);
+                      }}
+                    >
+                      Fix in Options
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          {!wide && recent}
+          <Attachments
+            files={draft.files}
+            reused={draft.reused}
+            onChange={(files) => setDraft((d) => ({ ...d, files }))}
+            onReused={(reused) => setDraft((d) => ({ ...d, reused }))}
+          />
+          {defaults && writing && values && (
+            <OptionsPanel
+              open={optionsOpen}
+              onOpen={setOptionsOpen}
+              options={options}
+              profiles={profileList}
+              depth={{
+                presets: depths,
+                customFrom: draft.customFrom,
+                description:
+                  options.depth === "custom"
+                    ? CUSTOM_DESCRIPTION
+                    : (presetOf(options.depth)?.description ?? ""),
+                values,
+                wordsSet:
+                  options.depth === "custom" || presetOf(options.depth)?.values.words != null,
+                onPick: pickDepth,
+                onEdit: editResearch,
+                actions: {
+                  onSaveTo: (name) => void saveDepthTo(name),
+                  onSaveAs: () => setSaving("depth"),
+                  onDelete: (name) => setDeleting({ kind: "depth", name }),
+                },
+              }}
+              profile={{
+                entries,
+                choice,
+                models,
+                onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
+                actions: {
+                  onSaveTo: () => void saveProfileTo(),
+                  onSaveAs: () => setSaving("profile"),
+                  onDelete: () => setDeleting({ kind: "profile", name: options.profile }),
+                },
+              }}
+              onOption={setOption}
+              onProfile={pickProfile}
+              writing={writing}
+              defaults={defaults}
+              onWriting={setWriting}
+              onResetWriting={() => setDraft((d) => ({ ...d, writing: {} }))}
+              domains={{
+                lists: domains,
+                defaults: domainDefaults,
+                invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
+                onChange: setDomains,
+              }}
+              searchLanguage={draft.searchLanguage}
+              onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
+            />
+          )}
+          {saving === "depth" && depthSave && (
+            <SaveDialog
+              kind="depth"
+              existing={depthNames}
+              groups={depthGroups(depthSave)}
+              onSave={saveDepthAs}
+              onClose={() => setSaving(null)}
+            />
+          )}
+          {saving === "profile" && writing && (
+            <SaveDialog
+              kind="profile"
+              existing={profiles.map((p) => p.name)}
+              intro={profileIntro(options.profile, choice)}
+              groups={profileGroups(selected, entries, choice, writing.words)}
+              onSave={saveProfileAs}
+              onClose={() => setSaving(null)}
+            />
+          )}
+          {deleting && (
+            <DeleteDialog
+              kind={deleting.kind}
+              name={deleting.name}
+              switchNote={
+                deleting.kind === "depth"
+                  ? options.depth === deleting.name
+                    ? " Depth switches to Standard."
+                    : ""
+                  : options.profile === deleting.name
+                    ? ` New run switches to ${active}.`
+                    : ""
+              }
+              onConfirm={() => void confirmDelete()}
+              onClose={() => setDeleting(null)}
+            />
           )}
         </div>
-        <Attachments files={draft.files} onChange={(files) => setDraft((d) => ({ ...d, files }))} />
-        {defaults && writing && values && (
-          <OptionsPanel
-            open={optionsOpen}
-            onOpen={setOptionsOpen}
-            options={options}
-            profiles={profileList}
-            depth={{
-              presets: depths,
-              customFrom: draft.customFrom,
-              description:
-                options.depth === "custom"
-                  ? CUSTOM_DESCRIPTION
-                  : (presetOf(options.depth)?.description ?? ""),
-              values,
-              wordsSet: options.depth === "custom" || presetOf(options.depth)?.values.words != null,
-              onPick: pickDepth,
-              onEdit: editResearch,
-              actions: {
-                onSaveTo: (name) => void saveDepthTo(name),
-                onSaveAs: () => setSaving("depth"),
-                onDelete: (name) => setDeleting({ kind: "depth", name }),
-              },
-            }}
-            profile={{
-              entries,
-              choice,
-              models,
-              onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
-              actions: {
-                onSaveTo: () => void saveProfileTo(),
-                onSaveAs: () => setSaving("profile"),
-                onDelete: () => setDeleting({ kind: "profile", name: options.profile }),
-              },
-            }}
-            onOption={setOption}
-            writing={writing}
-            defaults={defaults}
-            onWriting={setWriting}
-            onResetWriting={() => setDraft((d) => ({ ...d, writing: {} }))}
-            domains={{
-              lists: domains,
-              defaults: domainDefaults,
-              invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
-              onChange: setDomains,
-            }}
-            searchLanguage={draft.searchLanguage}
-            onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
-          />
-        )}
-        {saving === "depth" && depthSave && (
-          <SaveDialog
-            kind="depth"
-            existing={depthNames}
-            groups={depthGroups(depthSave)}
-            onSave={saveDepthAs}
-            onClose={() => setSaving(null)}
-          />
-        )}
-        {saving === "profile" && writing && (
-          <SaveDialog
-            kind="profile"
-            existing={profiles.map((p) => p.name)}
-            intro={profileIntro(options.profile, choice)}
-            groups={profileGroups(selected, entries, choice, writing.words)}
-            onSave={saveProfileAs}
-            onClose={() => setSaving(null)}
-          />
-        )}
-        {deleting && (
-          <DeleteDialog
-            kind={deleting.kind}
-            name={deleting.name}
-            switchNote={
-              deleting.kind === "depth"
-                ? options.depth === deleting.name
-                  ? " Depth switches to Standard."
-                  : ""
-                : options.profile === deleting.name
-                  ? ` New run switches to ${active}.`
-                  : ""
-            }
-            onConfirm={() => void confirmDelete()}
-            onClose={() => setDeleting(null)}
-          />
-        )}
+        {wide && <aside className={css.aside}>{recent}</aside>}
       </div>
     </div>
   );

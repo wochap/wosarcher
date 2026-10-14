@@ -32,8 +32,9 @@ from wosarcher.server import staging
 from wosarcher.server.errors import RouteError, invalid, not_found
 from wosarcher.server.guard import Auth
 from wosarcher.server.manager import ActiveRun
-from wosarcher.server.staging import OverrideError, StagedRun, StagingError
+from wosarcher.server.staging import OverrideError, StagedRun, StagingError, UnknownRunError
 from wosarcher.server.state import ServerState, get_state
+from wosarcher.store import attachment_infos
 from wosarcher.store import settings as global_settings
 
 router = APIRouter(prefix="/api/runs")
@@ -100,6 +101,8 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         modified=bool(staged.use) or staged.llm != LLMPatch(),
         origin=staged.origin,
         token_name=staged.token_name,
+        form=staged.form,
+        attachments=attachment_infos(staging.staging_dir(state.runs_dir, staged.run_id) / "attachments"),
     )
 
 
@@ -194,6 +197,9 @@ async def create_run(
         staged = staging.stage_run(state.runs_dir, body, uploads, defaults, default_profile, own, origin, token_name)
     except OverrideError as error:
         raise RouteError(422, "invalid_override", str(error)) from None
+    except UnknownRunError:
+        assert body.reuse_attachments is not None
+        raise not_found(body.reuse_attachments.run_id) from None
     except StagingError as error:
         raise RouteError(422, "invalid_attachment", str(error)) from None
     return await submit(state, staged)

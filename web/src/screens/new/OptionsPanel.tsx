@@ -92,6 +92,8 @@ type Props = {
   depth: DepthView;
   profile: ProfileView;
   onOption: <K extends keyof RunOptions>(key: K, value: RunOptions[K]) => void;
+  /** Picks a named profile; drops the Advanced edits of the current one. */
+  onProfile: (name: string) => void;
   writing: WritingOptions;
   defaults: WritingOptions;
   onWriting: <F extends WritingField>(field: F, value: WritingOptions[F]) => void;
@@ -112,12 +114,12 @@ export function OptionsPanel(props: Props) {
   const selected = profiles.find((p) => p.name === options.profile);
   const label = depthLabel(options.depth);
   const rounds = options.sources === "files" ? 1 : depth.values.rounds;
-  const modified = changedCount(props.profile.choice) > 0;
+  const edits = changedCount(props.profile.choice);
   const summary = [
     label,
     options.recipe,
     options.sources,
-    modified ? `${options.profile} (modified)` : options.profile,
+    edits ? `custom (${options.profile})` : options.profile,
     `${writing.words} words`,
     describeValue("tone", writing.tone),
   ].join(" · ");
@@ -172,21 +174,25 @@ export function OptionsPanel(props: Props) {
               onChange={(v) => onOption("sources", v)}
             />
           </Row>
-          <Row label="Profile" help="profile" htmlFor="opt-profile">
+          <Row
+            label="Profile"
+            help="profile"
+            htmlFor={profiles.length > SEGMENT_PROFILES ? "opt-profile" : undefined}
+          >
             <div className={css.profileRow}>
               <div className={css.profileSelect}>
-                <select
-                  id="opt-profile"
-                  className={`input ${css.profile}`}
-                  value={options.profile}
-                  onChange={(e) => onOption("profile", e.target.value)}
-                >
-                  {profiles.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                <ProfileControl
+                  profiles={profiles}
+                  profile={options.profile}
+                  edits={edits}
+                  onPick={props.onProfile}
+                />
+                {edits > 0 && (
+                  <div className={css.based}>
+                    based on <strong>{options.profile}</strong> · {edits}{" "}
+                    {edits === 1 ? "edit" : "edits"}
+                  </div>
+                )}
                 {selected?.description && (
                   <div className={css.description}>{selected.description}</div>
                 )}
@@ -261,6 +267,53 @@ export function OptionsPanel(props: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Up to this many profiles show as segments; more use a select. */
+const SEGMENT_PROFILES = 6;
+const CUSTOM = "__custom";
+
+type ProfileControlProps = {
+  profiles: ProfileInfo[];
+  profile: string;
+  /** The Advanced edits of the profile; with any, `custom` is the selected choice. */
+  edits: number;
+  onPick: (name: string) => void;
+};
+
+function ProfileControl({ profiles, profile, edits, onPick }: ProfileControlProps) {
+  const value = edits ? CUSTOM : profile;
+  const pick = (name: string) => {
+    if (name !== CUSTOM) onPick(name);
+  };
+  if (profiles.length <= SEGMENT_PROFILES)
+    return (
+      <Seg
+        label="Profile"
+        name="opt-profile"
+        value={value}
+        options={[
+          ...profiles.map((p) => ({ value: p.name, label: p.name })),
+          ...(edits ? [{ value: CUSTOM, label: "custom" }] : []),
+        ]}
+        onChange={pick}
+      />
+    );
+  return (
+    <select
+      id="opt-profile"
+      className={`input ${css.profile}`}
+      value={value}
+      onChange={(e) => pick(e.target.value)}
+    >
+      {profiles.map((p) => (
+        <option key={p.name} value={p.name}>
+          {p.name}
+        </option>
+      ))}
+      {edits > 0 && <option value={CUSTOM}>custom ({profile})</option>}
+    </select>
   );
 }
 

@@ -893,7 +893,7 @@ trusted values (query, options). Scraped text never goes through templates.
 ```
 runs/<id>/
   .lock              # held with LOCK_EX by the run process until it exits
-  request.json       # RunRecord: request, profile, use (the entry per block), depth, overrides (per-run choices as use.<block>=<name>), resolved config (secrets "***"), lineage, origin
+  request.json       # RunRecord: request, profile, use (the entry per block), depth, overrides (per-run choices as use.<block>=<name>), resolved config (secrets "***"), lineage, origin, form
   attachments/       # copies of --attach files, directories, and globs
   files.jsonl        # load: attachment pages
   plan.json          # plan, then each round's follow-up queries
@@ -923,6 +923,13 @@ Directories starting with `.` (the server's `.queue/`) are not runs.
 over the daemon's Unix socket, by `wosarcher run` or `wosarcher fork`, or a
 direct `wosarcherd run`). A fork, rerun, or rewrite records the origin of
 the request that started it; a record without the field reads as `web`.
+
+`request.json` `form` is the `RunCreate` a run was created with through
+`POST /api/runs`, with `set` cleared (a `set` value may carry a secret);
+the server passes it to `wosarcherd run` as the hidden `--form` JSON. A
+rerun records the original's `form`; a fork, a direct `wosarcherd run`, and
+a run recorded before forms have none. The web form fills from it (Recent
+& pinned), so it is what the client sent, never rebuilt from overrides.
 
 Run lock: the run process opens `<run>/.lock` with `LOCK_EX | LOCK_NB`
 right after it creates the run directory, before `request.json` is
@@ -1278,7 +1285,12 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   positive integers; `context_tokens` and `gap_context_tokens`, a positive
   integer or `auto`, setting `select.max_context_tokens` and
   `research.gap_context_tokens`; an invalid value is 422 naming
-  `llm.<field>`), and `set`. Request precedence, each later layer
+  `llm.<field>`), `set`, and `reuse_attachments` (`run_id` and `names`:
+  base names of that run's attachments, read from its run directory or its
+  staged directory while queued, copied into the new run's staging
+  directory next to the uploads; an unknown run is 404 `run_not_found`, an
+  unknown name 422 `invalid_attachment` naming it; the duplicate rule and
+  the files-only rule count reused and uploaded files together). Request precedence, each later layer
   winning: defaults, the chosen entries, the chosen model's values,
   profile, environment, global settings, the depth preset, the request's
   `sources`, `research`, `writing`, `domains`, and `llm`, then its `set`;
@@ -1307,7 +1319,10 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   and `write` levels, `none` for older runs; `use`, the entry of each block
   from `request.json`, null for runs recorded without it; `modified`, true
   when the request or its saved overrides changed a block choice or an
-  `llm` field of the profile's Advanced values), and for one
+  `llm` field of the profile's Advanced values; `form`, the recorded
+  request (see Run directory), null without one; `attachments`, each
+  attachment's `name` and `size` from the run directory, or the staged
+  directory while queued), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
   Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
@@ -1398,8 +1413,9 @@ filter replaces images with their alt text, so no file or URL is read.
   without their `use.*` entries, and a copy of its `attachments/`; global
   settings are not applied. The entries are resolved again by name, so
   edits to them apply, and a recorded entry that is gone fails the new run
-  before its first stage. 404 for an unknown run, 409 for a queued one, 422
-  `invalid_attachment` for sources `files` without attachments.
+  before its first stage. The new run records the original's `form`. 404
+  for an unknown run, 409 for a queued one, 422 `invalid_attachment` for
+  sources `files` without attachments.
 - `WS /api/runs/{id}/events?since=<seq>`: replays logged events after
   `seq`, sends a `report.snapshot` when the report is not empty and
   `run.queued` while queued, then live events and `report.delta` until a
@@ -2417,7 +2433,12 @@ These override the prototype where they differ:
 - **Follow-ups per round:** an Advanced depth value like the others, locked
   while Rounds is 1; the estimate reads it from the values, not the preset.
 - **Profile row and its Advanced values** (scenarios `new-profile`,
-  `new-profile-over`, `new-profile-nolimits`): the Profile select is
+  `new-profile-over`, `new-profile-nolimits`, `new-profile-custom`): the
+  Profile control is a segmented control for six or fewer profiles and a
+  select for more; while the profile has Advanced edits it adds a selected
+  `custom` segment (or option "custom (<profile>)") and the line "based on
+  <profile> · N edit(s)". Picking a named profile then drops the edits with
+  the toast "Dropped N edit(s) to <profile>" and Undo. The control is
   followed by an "Advanced" toggle ("· <profile> values", or "· N changed")
   whose panel has three groups. **Providers**: Search, Fetch, Prefilter,
   Scorer, and LLM selects with the block's entries from
@@ -2440,14 +2461,38 @@ These override the prototype where they differ:
   that entry's default and drops the model-owned edits. The request sends
   `use` only for changed blocks and `llm` only with edited fields, so an
   untouched run resolves as the profile says. The edits live in the New
-  run draft and clear after Start; the Options summary marks the profile
-  "(modified)".
+  run draft and clear after Start; the Options summary reads
+  "custom (<profile>)".
 - **Profile line in run headers:** the Live and Report headers show, below
   the meta line, the stack icon, the profile name, and the run summary's
   `use` joined by " · " in block order, the llm entry followed by
-  "/<model>", with an outline "modified" tag when the summary's `modified`
-  is true. On a phone it shows the profile and "<llm>/<model>" with an "All
+  "/<model>"; the profile reads "custom (<profile>)" when the summary's
+  `modified` is true. On a phone it shows the profile and "<llm>/<model>" with an "All
   providers" toggle. A run without `use` shows no profile line.
+- **Recent & pinned** (scenarios `new-recent`, `new-recent-empty`): New
+  run lists pinned runs, then the 20 newest runs without `parent_run_id`,
+  runs with equal question, `form`, and attachment names collapsed into the
+  newest ("×N"), built from one `GET /api/runs` by `run/recent.ts`. Names
+  and pins are browser-only (`wosarcher-run-names`, `wosarcher-run-pins`,
+  by run ID, pruned to runs the server lists). A row fills the draft with
+  `draftFromRun`: from `form`, else the summary's question, sources,
+  recipe, profile, and depth; a gone profile or depth falls back to the
+  active profile and Standard. The run's attachments become reused files
+  sent as `reuse_attachments`. Filling a form that had content offers Undo;
+  the "from: <name>" tag shows while the draft's signature still equals the
+  one taken after filling. At 1200px and wider (not phone) the list is a
+  sticky column beside the form, else a collapsed disclosure under the
+  question.
+- **Time per stage** (scenarios `live`, `done-quick`): the reducer keeps
+  each stage's `stage.done` seconds per round, the running round's
+  `stage.started` time, and its GPU waits (`resource.waiting` to the next
+  `stage.started`); `run/stageTimes.ts` builds the card time rows and the
+  stacked bar (queue = `run.started` minus the summary's `created`, then
+  each wait before its stage, then each stage, in pipeline order). Live
+  times use the browser clock minus the smallest receive-minus-event time
+  seen on the connection. The phase cards follow the pipeline order (Load
+  first; a skipped Load reads "web only"). The Report aside shows the same
+  bar and list for a finished run.
 - **Thinking tags:** the Live and Report headers show, after the depth
   tag, one outline tag per step whose summary level is not `none`, in
   order plan, gap, write: "Write thinking high".

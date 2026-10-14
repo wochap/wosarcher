@@ -69,16 +69,16 @@ const cliRun = (extra: Partial<RunDetail> = {}) =>
   }) as RunDetail;
 
 describe("Profile line", () => {
-  const line = () => screen.getByText("low-vram").parentElement as HTMLElement;
+  const line = () => screen.getByText(/low-vram/).parentElement as HTMLElement;
 
-  it("names the profile and every entry, the llm with its model, and the modified tag", () => {
+  it("names the profile as custom, every entry, and the llm with its model", () => {
     header(
       upTo(all, (e) => e.type === "run.started"),
       false,
       cliRun(),
     );
     expect(line().textContent).toBe(
-      "low-vram·searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14bmodified",
+      "custom (low-vram)·searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14b",
     );
     expect(screen.queryByRole("button", { name: "All providers" })).toBeNull();
   });
@@ -89,7 +89,7 @@ describe("Profile line", () => {
       true,
       cliRun(),
     );
-    expect(line().textContent).toContain("low-vram·agents/qwen3-14b");
+    expect(line().textContent).toContain("custom (low-vram)·agents/qwen3-14b");
     expect(line().textContent).not.toContain("searxng");
     const toggle = screen.getByRole("button", { name: "All providers" });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");

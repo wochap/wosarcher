@@ -20,6 +20,7 @@ from wosarcher.config import LLM_KEYS, Settings, redact
 from wosarcher.models import (
     LOOP_STAGES,
     STAGES,
+    AttachmentInfo,
     Event,
     Origin,
     Plan,
@@ -27,6 +28,7 @@ from wosarcher.models import (
     ResearchDone,
     RunCancelled,
     RunCosts,
+    RunCreate,
     RunFailed,
     RunRecord,
     RunRequest,
@@ -121,6 +123,14 @@ def settings_llm(record: RunRecord) -> tuple[str, ReasoningOptions]:
     return (model if isinstance(model, str) else ""), options
 
 
+def attachment_infos(folder: Path) -> list[AttachmentInfo]:
+    """Each file under `folder` by its path relative to it, with its size; empty when the folder is missing."""
+    if not folder.is_dir():
+        return []
+    files = sorted(path for path in folder.rglob("*") if path.is_file())
+    return [AttachmentInfo(name=path.relative_to(folder).as_posix(), size=path.stat().st_size) for path in files]
+
+
 def free_name(name: Path, taken: set[Path]) -> Path:
     candidate, n = name, 1
     while candidate in taken:
@@ -191,6 +201,7 @@ class RunStore:
         token_name: str | None = None,
         lock: bool = False,
         use: Mapping[str, str] | None = None,
+        form: RunCreate | None = None,
     ) -> RunRecord:
         """With `lock`, this process holds the run lock (the engine); tests create runs without it."""
         copies: list[tuple[Path, Path]] = []
@@ -214,6 +225,7 @@ class RunStore:
             settings=redact(settings),
             origin=origin,
             token_name=token_name,
+            form=form,
         )
         self.write_artifact(run_id, "request.json", record)
         return record
@@ -483,6 +495,8 @@ class RunStore:
             modified=modified(record.overrides),
             origin=record.origin,
             token_name=record.token_name,
+            form=record.form,
+            attachments=attachment_infos(self.run_dir(record.run_id) / "attachments"),
         )
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:

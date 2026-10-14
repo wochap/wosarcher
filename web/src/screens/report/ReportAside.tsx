@@ -1,14 +1,18 @@
-// The Report aside: the sources with kept counts and the citations that use them, and the
+// The Report aside: the time per stage of a finished run, the sources with kept counts and the citations that use them, and the
 // selected passages.
 import type { Context } from "../../api/generated";
 import type { WritingOptions } from "../../api/types";
 import { domain, label } from "../../run/citations";
 import type { RunView } from "../../run/reducer";
 import type { FileRow } from "../../run/useRunData";
+import { TimeAside } from "../live/TimeSection";
 import css from "./ReportScreen.module.css";
 
 type Props = {
   run: RunView | null;
+  /** The run's creation time and planned rounds, for its time per stage. */
+  created?: string;
+  rounds?: number;
   files: FileRow[];
   context: Context | null;
   marker: WritingOptions["citation_marker"];
@@ -35,7 +39,7 @@ export function SelectedPassages({ context, marker }: Pick<Props, "context" | "m
   );
 }
 
-export function ReportAside({ run, files, context, marker }: Props) {
+export function ReportAside({ run, created, rounds = 1, files, context, marker }: Props) {
   const web = Object.values(run?.sources ?? {}).filter((s) => s.kind === "web");
   const failed = web.filter((s) => s.state === "failed").length;
   const cites: Record<string, string[]> = {};
@@ -50,6 +54,9 @@ export function ReportAside({ run, files, context, marker }: Props) {
   ].sort((a, b) => (cites[b.id]?.length ?? 0) - (cites[a.id]?.length ?? 0));
   return (
     <aside className={css.aside}>
+      {run && run.status === "done" && (
+        <TimeAside run={run} created={created} rounds={run.research?.planned ?? rounds} />
+      )}
       <section>
         <h2 className={css.asideTitle}>
           Sources{" "}

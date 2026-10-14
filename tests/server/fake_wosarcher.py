@@ -75,6 +75,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
         command.add_argument("--use", action="append", default=[])
         command.add_argument("--origin")
         command.add_argument("--token-name")
+    run.add_argument("--form")
     run.add_argument("--depth")
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
@@ -157,6 +158,7 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
             "settings": redact(resolved.settings),
             "origin": args.origin or "cli",
             "token_name": args.token_name,
+            "form": json.loads(args.form) if getattr(args, "form", None) else None,
             **lineage,
         }
     )

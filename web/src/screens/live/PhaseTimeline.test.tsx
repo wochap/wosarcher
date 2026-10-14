@@ -6,6 +6,7 @@ import { live } from "../../test/fixtures/live";
 import { RUN_ID, upTo } from "../../test/fixtures/sample";
 import { REWRITE_ID, versions } from "../../test/fixtures/versions";
 import { renderWithHelp } from "../../test/help";
+import { quickLog } from "../../test/quick";
 import { roundsLog, roundTwoFetching } from "../../test/rounds";
 import { viewOf } from "../../test/views";
 import { PhaseTimeline } from "./PhaseTimeline";
@@ -158,5 +159,28 @@ describe("PhaseTimeline rounds", () => {
     render(<PhaseTimeline run={viewOf(all)} />);
     expect(screen.queryByText("Gap")).toBeNull();
     expect(card("Fetch").textContent).not.toContain("round");
+  });
+});
+
+describe("PhaseTimeline time rows", () => {
+  it("puts Load first and reads web only when it is skipped", () => {
+    render(<PhaseTimeline run={viewOf(quickLog())} />);
+    const items = screen.getAllByRole("listitem");
+    expect(items[0].textContent).toContain("Load");
+    expect(card("Load").textContent).toContain("web only");
+  });
+
+  it("shows each finished stage's time and skipped for Load", () => {
+    render(<PhaseTimeline run={viewOf(quickLog())} />);
+    expect(card("Plan").textContent).toContain("14.4s");
+    expect(card("Write").textContent).toContain("11.9s");
+    expect(card("Load").textContent).toContain("skipped");
+    const time = [...card("Plan").querySelectorAll("div[title]")].at(-1) as HTMLElement;
+    expect(time.title).toBe("Stage time 14.4s");
+  });
+
+  it("shows a dash for a pending phase", () => {
+    render(<PhaseTimeline run={viewOf(quickLog().slice(0, 3))} />);
+    expect(card("Write").textContent).toContain("—");
   });
 });

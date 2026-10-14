@@ -287,7 +287,7 @@ def test_slot_state(make_app: MakeApp, runs_dir: Path, config_dir: Path, passwor
             finished(client, run_id)
     args = argv(runs_dir, runs[2])
     at = args.index("--origin")
-    assert args[at:] == ["--origin", "api", "--token-name", "ci-runner"]
+    assert args[at : at + 4] == ["--origin", "api", "--token-name", "ci-runner"]
 
 
 def test_cli_run_listed_as_running(client: TestClient, runs_dir: Path) -> None:

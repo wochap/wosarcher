@@ -5,6 +5,7 @@ import { callsTo, fakeApi } from "../../test/fakeApi";
 import { finished } from "../../test/fixtures/finished";
 import { MD1, QUERY, RUN_ID, reportJson, summary } from "../../test/fixtures/sample";
 import { versions } from "../../test/fixtures/versions";
+import { quickLog } from "../../test/quick";
 import { renderApp } from "../../test/renderApp";
 import { openScenario } from "../../test/scenario";
 
@@ -397,5 +398,42 @@ describe("ReportScreen thinking tags", () => {
     expect(line.textContent).toBe(
       "low-vram·searxng · firecrawl · embeddings · rerank · agents/qwen3-14b",
     );
+  });
+
+  it("names a run with a changed scorer custom (profile)", async () => {
+    const api = fakeApi(finished.data);
+    api.data.runs[0] = summary({
+      profile: "low-vram",
+      model: "qwen3-14b",
+      modified: true,
+      use: {
+        search: "searxng",
+        fetch: "firecrawl",
+        prefilter: "embeddings",
+        score: "jev-strict",
+        llm: "agents",
+      },
+    });
+    await openScenario(finished, { api });
+    await screen.findByRole("heading", { level: 1, name: QUERY });
+    const line = screen.getByText("agents", { exact: false }).parentElement as HTMLElement;
+    expect(line.textContent).toBe(
+      "custom (low-vram)·searxng · firecrawl · embeddings · jev-strict · agents/qwen3-14b",
+    );
+    expect(screen.queryByText("modified")).toBeNull();
+  });
+});
+
+describe("Report aside time", () => {
+  it("shows Time with the run's total, the bar, and every phase's time", async () => {
+    const api = fakeApi(finished.data);
+    api.data.events[RUN_ID] = quickLog(RUN_ID);
+    api.data.runs[0] = { ...api.data.runs[0], created: "2026-10-03T14:00:01.000Z" };
+    await openScenario(finished, { api });
+    const section = await screen.findByRole("region", { name: "Time per stage" });
+    expect(within(section).getByRole("heading").textContent).toContain("Time 53.5s");
+    expect(within(section).getByRole("img")).toBeTruthy();
+    expect(within(section).getAllByRole("listitem")).toHaveLength(9);
+    expect(section.textContent).toContain("14.4s");
   });
 });

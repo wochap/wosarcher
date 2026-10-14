@@ -1,11 +1,10 @@
 // The profile line of the Live run and Report headers: the profile and the entries the run used,
-// the llm entry with its model. A phone shows the profile and the llm until "All providers".
+// the llm entry with its model; a run that changed its profile reads `custom (<profile>)`. A phone shows the profile and the llm until "All providers".
 import { CaretDown, CaretUp, Stack } from "@phosphor-icons/react";
 import { useState } from "react";
 import type { RunSummary } from "../api/types";
 import { BLOCKS } from "../run/profileValues";
 import css from "./ProfileLine.module.css";
-import { Tag } from "./Tag";
 
 type Props = {
   run: Pick<RunSummary, "profile" | "use" | "model" | "modified">;
@@ -22,14 +21,9 @@ export function ProfileLine({ run, isPhone }: Props) {
   return (
     <div className={css.line}>
       <Stack className={css.icon} aria-hidden="true" />
-      <span className={css.name}>{run.profile}</span>
+      <span className={css.name}>{run.modified ? `custom (${run.profile})` : run.profile}</span>
       <span aria-hidden="true">·</span>
       <span className={css.entries}>{isPhone && !open ? llm : all}</span>
-      {run.modified && (
-        <Tag variant="outline" small>
-          modified
-        </Tag>
-      )}
       {isPhone && (
         <button
           type="button"

@@ -14,15 +14,24 @@ import {
   runReducer,
 } from "./reducer";
 
-type Action = { reset: string } | { event: RunEvent } | { summary: RunEnd };
+type Action = { reset: string } | { event: RunEvent; received?: number } | { summary: RunEnd };
 
 function reduce(state: RunView, action: Action): RunView {
   if ("reset" in action) return initialRunView(action.reset);
   if ("summary" in action) return applySummary(state, action.summary);
-  const next = runReducer(state, action.event);
+  const next = withOffset(runReducer(state, action.event), action.event, action.received);
   // A summary can arrive before the replayed log, whose events cannot reopen an ended run.
   const open = next.status === "running" || next.status === "queued";
   return isEnded(state.status) && open ? { ...next, status: state.status } : next;
+}
+
+/** Keeps the smallest receive-minus-event time, so a skewed browser clock does not inflate timers. */
+function withOffset(state: RunView, event: RunEvent, received: number | undefined): RunView {
+  if (received === undefined || !event.ts) return state;
+  const offset = received - Date.parse(event.ts);
+  if (Number.isNaN(offset) || (state.clockOffset ?? Number.POSITIVE_INFINITY) <= offset)
+    return state;
+  return { ...state, clockOffset: offset };
 }
 
 const IDLE: Conn = { state: "closed", attempt: 0, replayed: 0, notFound: false };
@@ -53,7 +62,7 @@ export function useRun(runId: string | null, services?: Services): LiveRun {
       runId,
       api,
       (update) => {
-        if (update.kind === "event") dispatch({ event: update.event });
+        if (update.kind === "event") dispatch({ event: update.event, received: Date.now() });
         else if (update.kind === "summary") dispatch({ summary: update.detail });
         else setConn(update.conn);
       },

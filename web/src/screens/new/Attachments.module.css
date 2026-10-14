@@ -106,3 +106,26 @@
   height: 30px;
   color: var(--muted);
 }
+
+.reused {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+}
+
+.reused svg {
+  font-size: 12px;
+  flex: none;
+}
+
+.reusedFrom {
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -246,6 +246,16 @@
   margin-top: 0;
 }
 
+.based {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.based strong {
+  font-weight: 500;
+  color: var(--color-text);
+}
+
 .profileSelect {
   display: flex;
   flex-direction: column;

@@ -15,6 +15,25 @@
   padding: 16px 14px 24px;
 }
 
+.layout[data-wide="true"] {
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: minmax(0, 800px) minmax(260px, 320px);
+  gap: 24px;
+  align-items: start;
+}
+
+.layout[data-wide="true"] .inner {
+  padding-right: 0;
+}
+
+.aside {
+  padding-top: 28px;
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+
 .h1 {
   font-size: 26px;
   margin: 0 0 4px;
@@ -103,4 +122,37 @@
   font-size: 12px;
   padding: 1px 4px;
   margin-left: -4px;
+}
+
+.questionHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 5px;
+  min-width: 0;
+}
+
+.questionHead label {
+  margin-bottom: 0;
+}
+
+.from {
+  gap: 5px;
+  padding: 1px 8px;
+  font-size: 11px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.fromIcon {
+  font-size: 12px;
+  flex: none;
+}
+
+.fromName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }

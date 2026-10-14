@@ -38,3 +38,20 @@ describe("Attachments", () => {
     expect(screen.getByText("a.txt")).toBeTruthy();
   });
 });
+
+describe("Reused attachments", () => {
+  it("lists a reused file with its run and removes it", () => {
+    function Reused() {
+      const [reused, setReused] = useState([
+        { runId: "r1", runName: "RAG chunking", name: "notes.md", size: 6120 },
+      ]);
+      return <Attachments files={[]} reused={reused} onChange={() => {}} onReused={setReused} />;
+    }
+    render(<Reused />);
+    expect(screen.getByText("notes.md")).toBeTruthy();
+    expect(screen.getByText(/reused from/).textContent).toBe("reused from RAG chunking");
+    expect(screen.getByText("6.0 KB")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove notes.md" }));
+    expect(screen.queryByText("notes.md")).toBeNull();
+  });
+});

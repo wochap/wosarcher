@@ -1,5 +1,5 @@
-// The nine phase cards with progress text and a 3px bar; waiting for a device never looks like
-// running.
+// The phase cards in pipeline order with progress text, the stage's time, and a 3px bar; waiting
+// for a device never looks like running.
 import {
   Check,
   Circle,
@@ -23,7 +23,8 @@ import {
   type PhaseState,
   type RunView,
 } from "../../run/reducer";
-import { skippedByRecipe, stageLabel } from "./model";
+import { stageTime, timeRow } from "../../run/stageTimes";
+import { skippedByRecipe, stageLabel, useNow } from "./model";
 import css from "./PhaseTimeline.module.css";
 
 const ICONS: Record<PhaseState, Icon> = {
@@ -103,15 +104,25 @@ export function roundDetail(id: PhaseId, run: RunView, planned: number): string 
 
 export type PhaseCard = { id: PhaseId; state: PhaseState; text: string; pct: number };
 
+/** A phase the run skipped, or one its recipe never runs. */
+export function skippedPhase(id: PhaseId, run: RunView): boolean {
+  const phase = run.phases[id];
+  if (id === "gap" && phase.state === "pending") return false;
+  if (phase.state === "done" && phase.skipped && !(id === "gap" && run.research)) return true;
+  return phase.state === "pending" && skippedByRecipe(run, id);
+}
+
 export function phaseCard(id: PhaseId, run: RunView): PhaseCard {
   const phase = run.phases[id];
   if (id === "gap" && phase.state === "pending")
     return { id, state: "pending", text: gapText(phase, run), pct: 0 };
-  if (phase.state === "done" && phase.skipped && !(id === "gap" && run.research))
-    return { id, state: "done", text: "skipped", pct: 100 };
-  if (phase.state === "pending" && skippedByRecipe(run, id)) {
-    return { id, state: "done", text: "skipped", pct: 100 };
-  }
+  if (skippedPhase(id, run))
+    return {
+      id,
+      state: "done",
+      text: id === "load" && phase.skipped ? "web only" : "skipped",
+      pct: 100,
+    };
   const { done, total } = phase.counters;
   const ratio = total ? Math.round((Math.min(done ?? 0, total) / total) * 100) : 0;
   switch (phase.state) {
@@ -276,6 +287,27 @@ export function filteredDetail(run: RunView): string {
   return run.filtered > 0 ? `${run.filtered} filtered by domain` : "";
 }
 
+/** The browser time on the server's clock. */
+export const serverNow = (run: RunView, now: number) => now - (run.clockOffset ?? 0);
+
+/** A card's time row; it ticks once a second while the stage runs or waits. */
+function TimeRowView({ run, id }: { run: RunView; id: PhaseId }) {
+  const state = run.phases[id].state;
+  const now = useNow(run.status === "running" && (state === "running" || state === "waiting"));
+  const row = timeRow(stageTime(run, id, skippedPhase(id, run), serverNow(run, now)));
+  return (
+    <div className={css.time} title={row.title || undefined}>
+      <span data-tone={row.tone}>{row.text}</span>
+      {row.wait && (
+        <span className={css.wait}>
+          <Cpu aria-hidden="true" />
+          {row.wait}
+        </span>
+      )}
+    </div>
+  );
+}
+
 type Props = {
   run: RunView;
   /** The run's `score.candidates`, from its request settings. */
@@ -284,8 +316,12 @@ type Props = {
   rounds?: number;
 };
 
+/** The phases a run shows: Gap only with more than one round. */
+export const shownPhases = (rounds: number): readonly PhaseId[] =>
+  rounds > 1 ? PHASES : PHASES.filter((id) => id !== "gap");
+
 export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
-  const phases = rounds > 1 ? PHASES : PHASES.filter((id) => id !== "gap");
+  const phases = shownPhases(rounds);
   return (
     <ol aria-label="Phases" className={css.timeline}>
       {phases.map((id) => {
@@ -320,6 +356,7 @@ export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
               </HelpTip>
             )}
             <div className={css.text}>{card.text}</div>
+            <TimeRowView run={run} id={id} />
             {detail && <div className={css.detail}>{detail}</div>}
             {filtered && (
               <div className={css.detail} title={filtered}>

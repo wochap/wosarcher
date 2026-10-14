@@ -8,6 +8,7 @@ import { live } from "../../test/fixtures/live";
 import { loading } from "../../test/fixtures/loading";
 import { liveApi, liveCli, queued } from "../../test/fixtures/origins";
 import { otherRuns, RUN_ID, upTo } from "../../test/fixtures/sample";
+import { quickLog } from "../../test/quick";
 import { renderApp } from "../../test/renderApp";
 import { openScenario, play, socketsFor } from "../../test/scenario";
 
@@ -205,5 +206,40 @@ describe("LiveScreen", () => {
     await play(RUN_ID, [all[before.length]]);
     await vi.waitFor(() => expect(callsTo(api, "source")).toHaveLength(2));
     expect(chosen()).toBe(picked);
+  });
+});
+
+describe("LiveScreen time per stage", () => {
+  it("shows the finished quick run's total, top three, and every stage", async () => {
+    const api = fakeApi(live.data);
+    const own = api.data.runs.find((r) => r.run_id === RUN_ID);
+    if (own) own.created = "2026-10-03T14:00:01.000Z";
+    await openScenario(live, { api, events: quickLog(RUN_ID) });
+    const section = await screen.findByRole("region", { name: "Time per stage" });
+    expect(section.textContent).toContain("53.5s");
+    expect(section.textContent).not.toContain("so far");
+    const top = section.textContent ?? "";
+    expect(top.indexOf("Plan")).toBeLessThan(top.indexOf("Search"));
+    expect(top.indexOf("Search")).toBeLessThan(top.indexOf("Write"));
+    expect(within(section).getByRole("img").getAttribute("aria-label")).toContain(
+      "Time per stage, 53.5s total",
+    );
+    fireEvent.click(within(section).getByRole("button", { name: "All stages" }));
+    const items = within(section).getAllByRole("listitem");
+    expect(
+      items.map((i) => i.textContent?.replace("skipped", "").match(/^[A-Z][a-z]+/)?.[0]),
+    ).toEqual([
+      "Load",
+      "Plan",
+      "Search",
+      "Fetch",
+      "Chunk",
+      "Prefilter",
+      "Score",
+      "Select",
+      "Write",
+    ]);
+    expect(items[0].textContent).toContain("skipped");
+    expect(within(section).getByRole("button", { name: "Fewer" })).toBeTruthy();
   });
 });

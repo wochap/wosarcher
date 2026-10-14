@@ -217,7 +217,7 @@ describe("NewRunScreen profile values", () => {
     });
     fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
     expect(screen.getByRole("button", { name: /Options/ }).textContent).toContain(
-      "low-vram (modified)",
+      "custom (low-vram)",
     );
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "q" } });
     await ctrlEnter(screen.getByLabelText("Question") as HTMLTextAreaElement);
@@ -228,6 +228,142 @@ describe("NewRunScreen profile values", () => {
       window.location.hash = "#/new";
     });
     fireEvent.click(await screen.findByRole("button", { name: /Options/ }));
-    expect(screen.getByRole("button", { name: /Options/ }).textContent).not.toContain("(modified)");
+    expect(screen.getByRole("button", { name: /Options/ }).textContent).not.toContain("custom (");
+  });
+});
+
+const RAG = "How should RAG pipelines chunk Markdown docs?";
+const research = {
+  sub_queries: 4,
+  results_per_query: 8,
+  max_pages: 50,
+  passages_per_query: 9,
+  rounds: 2,
+  queries_per_round: 3,
+};
+
+function ragApi() {
+  const api = fakeApi();
+  const [base] = api.data.runs;
+  api.data.runs.unshift({
+    ...base,
+    run_id: "r1",
+    query: RAG,
+    status: "done",
+    created: "2026-10-04T10:00:00Z",
+    depth: "custom",
+    profile: "workstation",
+    form: {
+      query: RAG,
+      sources: "both",
+      profile: "workstation",
+      depth: "custom",
+      research,
+      writing: { format: "report", words: 1500 },
+    },
+    attachments: [
+      { name: "rag-chunking.md", size: 6120 },
+      { name: "api-docs-sample.md", size: 900 },
+    ],
+  });
+  return api;
+}
+
+const recentToggle = () => screen.getByRole("button", { name: /^Recent & pinned/ });
+const fillRow = (name: string) => {
+  if (recentToggle().getAttribute("aria-expanded") === "false") fireEvent.click(recentToggle());
+  fireEvent.click(screen.getByRole("button", { name: `Fill the form from: ${name}` }));
+};
+
+describe("Recent & pinned", () => {
+  it("is a collapsed disclosure with the row count on a narrow window", async () => {
+    await open(ragApi());
+    await screen.findByText("· 8");
+    expect(recentToggle().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
+  });
+
+  it("shows No runs yet when there is no run", async () => {
+    await open(fakeApi({ runs: [] }));
+    fireEvent.click(recentToggle());
+    expect(screen.getByText("No runs yet")).toBeTruthy();
+    expect(
+      screen.getByText("Runs you start show up here. Pin the ones you repeat to keep them on top."),
+    ).toBeTruthy();
+  });
+
+  it("fills the form from a run without starting it", async () => {
+    const { api, question } = await open(ragApi());
+    await screen.findByText("· 8");
+    fillRow(RAG);
+    expect(question.value).toBe(RAG);
+    expect(callsTo(api, "createRun")).toHaveLength(0);
+    expect(screen.getByText(`from: ${RAG}`)).toBeTruthy();
+    expect(screen.getAllByText(/reused from/)).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    expect(screen.getByRole("button", { name: /Options/ }).textContent).toContain(
+      "Custom · report · both · workstation · 1500 words",
+    );
+    expect((screen.getByLabelText("Max pages") as HTMLInputElement).value).toBe("50");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("offers Undo when the form had a question", async () => {
+    await open(ragApi());
+    await screen.findByText("· 8");
+    const question = screen.getByLabelText("Question") as HTMLTextAreaElement;
+    fireEvent.change(question, { target: { value: "my own question" } });
+    fillRow(RAG);
+    expect(screen.getByRole("status").textContent).toContain(
+      "Filled from “How should RAG pipelines chu…”",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(question.value).toBe("my own question");
+    expect(screen.queryByText(/reused from/)).toBeNull();
+  });
+
+  it("drops the from tag when the form is edited", async () => {
+    await open(ragApi());
+    await screen.findByText("· 8");
+    fillRow(RAG);
+    expect(screen.getByText(`from: ${RAG}`)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Options/ }));
+    fireEvent.click(screen.getByLabelText("web"));
+    expect(screen.queryByText(`from: ${RAG}`)).toBeNull();
+  });
+
+  it("sends reused attachments by name and uploads only new files", async () => {
+    const { api } = await open(ragApi());
+    await screen.findByText("· 8");
+    fillRow(RAG);
+    fireEvent.click(screen.getByRole("button", { name: "Remove api-docs-sample.md" }));
+    const extra = new File(["x"], "extra.md");
+    fireEvent.change(screen.getByTestId("attachments-input"), { target: { files: [extra] } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run research" }));
+    });
+    const [request, files] = callsTo(api, "createRun")[0] as [RunCreate, File[]];
+    expect(request.reuse_attachments).toEqual({ run_id: "r1", names: ["rag-chunking.md"] });
+    expect(request.research).toEqual(research);
+    expect(files).toEqual([extra]);
+  });
+
+  it("pins and renames a row, kept in browser storage", async () => {
+    await open(ragApi());
+    await screen.findByText("· 8");
+    fireEvent.click(recentToggle());
+    fireEvent.click(screen.getByRole("button", { name: `Actions for ${RAG.slice(0, 40)}…` }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
+    fireEvent.click(screen.getByRole("button", { name: `Actions for ${RAG.slice(0, 40)}…` }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Weekly LLM digest" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    const pinned = screen.getByRole("group", { name: "Pinned" });
+    expect(pinned.textContent).toContain("Weekly LLM digest");
+    expect(JSON.parse(localStorage.getItem("wosarcher-run-pins") ?? "[]")).toEqual(["r1"]);
+    expect(JSON.parse(localStorage.getItem("wosarcher-run-names") ?? "{}")).toEqual({
+      r1: "Weekly LLM digest",
+    });
   });
 });

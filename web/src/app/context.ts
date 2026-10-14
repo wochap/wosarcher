@@ -7,6 +7,7 @@ import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
 import type { Recipe } from "../run/format";
 import type { ProfileEdits } from "../run/profileValues";
+import type { ReusedFile } from "../run/recent";
 import type { LiveRun } from "../run/useRun";
 import type { Theme } from "./theme";
 
@@ -37,6 +38,8 @@ export type RunOptions = {
 export type Draft = {
   query: string;
   files: File[];
+  /** Attachments taken from an earlier run (Recent & pinned), sent by name. */
+  reused: ReusedFile[];
   options: Partial<RunOptions>;
   writing: Partial<WritingOptions>;
   /** Domain lists the user edited; an unedited list follows its default. */
@@ -55,6 +58,7 @@ export type Draft = {
 export const EMPTY_DRAFT: Draft = {
   query: "",
   files: [],
+  reused: [],
   options: {},
   writing: {},
   domains: {},

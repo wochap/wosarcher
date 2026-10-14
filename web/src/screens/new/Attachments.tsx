@@ -1,15 +1,22 @@
 // The New run drop zone: drag and drop or browse for .md and .txt files, listed with size.
-import { FileArrowUp, FileText, Warning, X } from "@phosphor-icons/react";
+import { FileArrowUp, FileText, Recycle, Warning, X } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 import { HelpTip } from "../../components/HelpTip";
 import { fmtBytes } from "../../run/format";
+import type { ReusedFile } from "../../run/recent";
 import css from "./Attachments.module.css";
 
 const ALLOWED = /\.(md|txt)$/i;
 
-type Props = { files: File[]; onChange: (files: File[]) => void };
+type Props = {
+  files: File[];
+  /** Files taken from an earlier run; listed first, sent by name. */
+  reused?: ReusedFile[];
+  onChange: (files: File[]) => void;
+  onReused?: (reused: ReusedFile[]) => void;
+};
 
-export function Attachments({ files, onChange }: Props) {
+export function Attachments({ files, reused = [], onChange, onReused }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [skipped, setSkipped] = useState("");
@@ -18,7 +25,7 @@ export function Attachments({ files, onChange }: Props) {
     const picked = [...(list ?? [])];
     const ok = picked.filter((f) => ALLOWED.test(f.name));
     const bad = picked.filter((f) => !ALLOWED.test(f.name));
-    const names = new Set(files.map((f) => f.name));
+    const names = new Set([...reused, ...files].map((f) => f.name));
     const added: File[] = [];
     for (const f of ok) {
       if (names.has(f.name)) continue;
@@ -91,8 +98,27 @@ export function Attachments({ files, onChange }: Props) {
           {skipped}
         </div>
       )}
-      {files.length > 0 && (
+      {files.length + reused.length > 0 && (
         <ul className={css.list}>
+          {reused.map((f) => (
+            <li key={f.name} className={css.file}>
+              <FileText className={css.fileIcon} aria-hidden="true" />
+              <span className={css.name}>{f.name}</span>
+              <span className={css.reused}>
+                <Recycle aria-hidden="true" />
+                reused from <span className={css.reusedFrom}>{f.runName}</span>
+              </span>
+              <span className={css.size}>{fmtBytes(f.size)}</span>
+              <button
+                type="button"
+                className={`btn btn-ghost btn-icon ${css.remove}`}
+                aria-label={`Remove ${f.name}`}
+                onClick={() => onReused?.(reused.filter((x) => x.name !== f.name))}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </li>
+          ))}
           {files.map((f) => (
             <li key={f.name} className={css.file}>
               <FileText className={css.fileIcon} aria-hidden="true" />

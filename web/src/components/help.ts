@@ -65,7 +65,7 @@ export const HELP: Record<string, Help> = {
   },
   profile: {
     title: "Profile",
-    body: "A saved choice of providers and model. Advanced shows its values; edits apply to this run only.",
+    body: "A saved choice of providers, model and budgets. Advanced shows its values; edits apply to this run only until you save them. Edited values show as custom.",
   },
   "p-search": { title: "Search", body: "Where sub-queries are searched." },
   "p-fetch": {
@@ -107,6 +107,14 @@ export const HELP: Record<string, Help> = {
   "p-over": {
     title: "Overridden",
     body: "This value differs from the selected profile and applies to this run only.",
+  },
+  recent: {
+    title: "Recent & pinned",
+    body: "Click a run to fill the form with its question, options and attachments. Nothing starts until you press Run research. Names and pins are kept in this browser only.",
+  },
+  time: {
+    title: "Time per stage",
+    body: "Each stage’s own working time. Waiting for the GPU (a model unloading) and time in the queue are counted separately. With several research rounds, a stage’s time is the sum of its rounds.",
   },
   attach: {
     title: "Attachments",

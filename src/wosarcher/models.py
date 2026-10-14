@@ -558,6 +558,8 @@ class RunRecord(Contract):
     """Who started the run; records written before origins existed read as `web`."""
     token_name: str | None = None
     """The API token's name for origin `api`."""
+    form: "RunCreate | None" = None
+    """The request the run was created with through the API, `set` cleared; a rerun copies it; None for forks."""
 
 
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interrupted"]
@@ -632,6 +634,16 @@ class RunSummary(Contract):
     origin: Origin = "web"
     token_name: str | None = None
     """The API token's name for origin `api`; None otherwise."""
+    form: "RunCreate | None" = None
+    """The request the run was created with; None for forks and older runs."""
+    attachments: list["AttachmentInfo"] = []
+    """The run's attachments, in the order stored."""
+
+
+class AttachmentInfo(Contract):
+    name: str
+    size: int
+    """Bytes."""
 
 
 class SlotEntry(Contract):
@@ -754,6 +766,13 @@ class DomainDefaults(Contract):
         return domain_list(value)
 
 
+class ReuseAttachments(Contract):
+    """Attachments copied from an earlier run instead of uploaded."""
+
+    run_id: str
+    names: list[str] = []
+
+
 class RunCreate(Contract):
     """The `request` field of `POST /api/runs`."""
 
@@ -774,6 +793,7 @@ class RunCreate(Contract):
     """Sets `search.language`; None keeps the configured value."""
     set: list[str] = []
     """`dotted.key=value` overrides, applied last."""
+    reuse_attachments: ReuseAttachments | None = None
 
     @field_validator("search_language")
     @classmethod
@@ -1411,6 +1431,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     DoctorReport,
     RunRecord,
     RunSummary,
+    AttachmentInfo,
     RunOutput,
     RunCosts,
     WritingPatch,
@@ -1418,6 +1439,7 @@ CONTRACTS: tuple[type[Contract], ...] = (
     ReasoningOptions,
     ReasoningPatch,
     LLMPatch,
+    ReuseAttachments,
     RunCreate,
     ForkCreate,
     RunCreated,

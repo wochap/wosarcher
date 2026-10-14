@@ -59,6 +59,44 @@
   text-overflow: ellipsis;
 }
 
+.time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--muted);
+}
+
+.time [data-tone="faint"] {
+  color: var(--faint);
+}
+
+.time [data-tone="accent"] {
+  color: var(--color-accent-300);
+}
+
+.time [data-tone="danger"] {
+  color: var(--color-danger);
+}
+
+.wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--color-warn);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wait svg {
+  font-size: 11px;
+  flex: none;
+}
+
 .track {
   height: 3px;
   margin: 3px -9px 0;

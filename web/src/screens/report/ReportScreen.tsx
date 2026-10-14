@@ -215,7 +215,14 @@ export function ReportScreen({ runId }: { runId: string }) {
               </>
             )}
           </article>
-          <ReportAside run={view} files={files} context={context} marker={marker} />
+          <ReportAside
+            run={view}
+            created={detail?.created}
+            rounds={detail?.rounds_planned ?? 1}
+            files={files}
+            context={context}
+            marker={marker}
+          />
         </div>
       </div>
       {rewriting && (

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import type { DepthInfo, RunCreate } from "../../api/types";
@@ -17,6 +17,8 @@ const depthAdvanced = () =>
   fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[0]);
 const profileAdvanced = () =>
   fireEvent.click(screen.getAllByRole("button", { name: /^Advanced/ })[1]);
+const profileGroup = () => screen.getByRole("radiogroup", { name: "Profile" });
+const pickProfile = (name: string) => fireEvent.click(within(profileGroup()).getByLabelText(name));
 const field = (label: string) =>
   screen.getByLabelText(label, { selector: "input, select" }) as HTMLInputElement;
 
@@ -57,13 +59,11 @@ describe("OptionsPanel", () => {
   it("summarizes the options and offers the profiles from the server", async () => {
     await openOptions();
     expect(header()).toContain("Standard · report · both · low-vram · 1200 words · Analytical");
-    const profile = screen.getByLabelText("Profile") as HTMLSelectElement;
-    expect(profile.value).toBe("low-vram");
-    expect([...profile.options].map((o) => o.textContent)).toEqual([
-      "low-vram",
-      "workstation",
-      "nixos",
-    ]);
+    expect(profileGroup().textContent).toBe("low-vramworkstationnixos");
+    expect((within(profileGroup()).getByLabelText("low-vram") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(document.getElementById("opt-profile")).toBeNull();
   });
 
   it("lists report, answer, then context", async () => {
@@ -75,9 +75,9 @@ describe("OptionsPanel", () => {
   it("shows the selected profile's description", async () => {
     await openOptions();
     expect(screen.getByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "nixos" } });
+    pickProfile("nixos");
     expect(screen.queryByText("Models take turns on one small GPU; slower, fits 8 GB.")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     expect(screen.getByText("One GPU fits all models; models stay loaded.")).toBeTruthy();
   });
 
@@ -413,7 +413,7 @@ describe("Depth", () => {
     api.data.settings.domains.allow = ["gob.pe"];
     await openOptions(api);
     expect(screen.queryByRole("button", { name: "Remove quora.com" })).toBeNull();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     expect(screen.getByRole("button", { name: "Remove quora.com" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Remove gob.pe" })).toBeTruthy();
     expect(screen.queryByText("overridden")).toBeNull();
@@ -472,7 +472,7 @@ describe("Profile advanced values", () => {
     expect(
       screen.getByText("Changed for this run only; the low-vram profile itself is unchanged."),
     ).toBeTruthy();
-    expect(header()).toContain("both · low-vram (modified) · 1200 words");
+    expect(header()).toContain("both · custom (low-vram) · 1200 words");
     const request = await start(api);
     expect(request.use).toEqual({ score: "jev-strict" });
     expect(request.llm).toEqual({ reasoning: { write: "high" }, context_tokens: 60000 });
@@ -497,7 +497,7 @@ describe("Profile advanced values", () => {
 
   it("notes the fallback limits of a model the entry does not list", async () => {
     await openOptions();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "nixos" } });
+    pickProfile("nixos");
     profileAdvanced();
     expect(field("Model").value).toBe("qwen3-30b-a3b");
     expect(field("Context window").value).toBe("32768");
@@ -515,7 +515,7 @@ describe("Profile advanced values", () => {
       models: [{ id: "qwen3-14b", reasoning: { write: "high" } }],
     });
     await openOptions(api);
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "tuned" } });
+    pickProfile("tuned");
     profileAdvanced();
     expect(field("Write thinking").value).toBe("high");
     expect(field("Context window").value).toBe("32768");
@@ -529,7 +529,7 @@ describe("Profile advanced values", () => {
 
   it("Save edits into a profile: sends PATCH, reloads, and clears the edits", async () => {
     const api = await openOptions();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     profileAdvanced();
     fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
     fireEvent.change(field("Write thinking"), { target: { value: "high" } });
@@ -557,7 +557,7 @@ describe("Profile advanced values", () => {
     const api = fakeApi();
     api.data.profiles[1].managed = true;
     await openOptions(api);
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     profileAdvanced();
     expect(screen.getByText("Managed by NixOS config · read-only")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
@@ -569,7 +569,7 @@ describe("Profile advanced values", () => {
 
   it("Save a profile: posts the edits from the selected profile and selects it", async () => {
     const api = await openOptions();
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     profileAdvanced();
     fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
     fireEvent.change(field("Write thinking"), { target: { value: "medium" } });
@@ -600,10 +600,12 @@ describe("Profile advanced values", () => {
         },
       ],
     ]);
-    expect((screen.getByLabelText("Profile") as HTMLSelectElement).value).toBe("cloud-rerank");
+    expect(
+      (within(profileGroup()).getByLabelText("cloud-rerank") as HTMLInputElement).checked,
+    ).toBe(true);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Saved profile “cloud-rerank”")).toBeTruthy();
-    expect(header()).not.toContain("(modified)");
+    expect(header()).not.toContain("custom (");
   });
 
   it("drops the limit edits when the model changes", async () => {
@@ -636,14 +638,63 @@ describe("Profile advanced values", () => {
     fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
     fireEvent.change(field("Scorer"), { target: { value: "rerank" } });
     expect(screen.queryByText("overridden")).toBeNull();
-    expect(header()).not.toContain("(modified)");
+    expect(header()).not.toContain("custom (");
+  });
+
+  it("ends the segments with a selected custom while the profile has edits", async () => {
+    await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    fireEvent.change(field("Write thinking"), { target: { value: "high" } });
+    fireEvent.change(field("Context tokens"), { target: { value: "60000" } });
+    expect(profileGroup().textContent).toBe("low-vramworkstationnixoscustom");
+    expect((within(profileGroup()).getByLabelText("custom") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((within(profileGroup()).getByLabelText("low-vram") as HTMLInputElement).checked).toBe(
+      false,
+    );
+    expect(screen.getByText(/^based on/).textContent).toBe("based on low-vram · 3 edits");
+  });
+
+  it("offers Undo for the edits a profile switch drops", async () => {
+    await openOptions();
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    fireEvent.change(field("Write thinking"), { target: { value: "high" } });
+    fireEvent.change(field("Context tokens"), { target: { value: "60000" } });
+    pickProfile("workstation");
+    expect(screen.getByRole("status").textContent).toContain("Dropped 3 edits to low-vram");
+    expect((within(profileGroup()).getByLabelText("workstation") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect((within(profileGroup()).getByLabelText("custom") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(header()).toContain("custom (low-vram)");
+    expect(field("Scorer").value).toBe("jev-strict");
+  });
+
+  it("uses a select for more than six profiles", async () => {
+    const api = fakeApi();
+    for (const n of [1, 2, 3, 4])
+      api.data.profiles.push({ ...api.data.profiles[1], name: `extra-${n}`, active: false });
+    await openOptions(api);
+    expect(screen.queryByRole("radiogroup", { name: "Profile" })).toBeNull();
+    const select = screen.getByLabelText("Profile") as HTMLSelectElement;
+    expect([...select.options].map((o) => o.value)).toHaveLength(7);
+    profileAdvanced();
+    fireEvent.change(field("Scorer"), { target: { value: "jev-strict" } });
+    expect(select.value).toBe("__custom");
+    expect(select.selectedOptions[0].textContent).toBe("custom (low-vram)");
   });
 
   it("drops the edits when the profile changes", async () => {
     await openOptions();
     profileAdvanced();
     fireEvent.change(field("Scorer"), { target: { value: "bm25" } });
-    fireEvent.change(screen.getByLabelText("Profile"), { target: { value: "workstation" } });
+    pickProfile("workstation");
     expect(field("Scorer").value).toBe("jev-strict");
     expect(screen.queryByText("overridden")).toBeNull();
   });

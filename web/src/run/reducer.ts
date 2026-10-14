@@ -11,13 +11,13 @@ import type {
   Stage,
 } from "../api/types";
 
-/** The prototype's phases, in display order. The initial search runs inside `plan`; `gap` shows
- * only for multi-round runs. */
+/** The phases in the order the pipeline runs them. The initial search runs inside `plan`; `gap`
+ * shows only for multi-round runs. */
 export const PHASES = [
+  "load",
   "plan",
   "search",
   "fetch",
-  "load",
   "chunk",
   "prefilter",
   "score",
@@ -63,6 +63,14 @@ export type Phase = {
   round: number;
   /** Rounds this stage finished (not skipped). */
   roundsDone: number;
+  /** `stage.done` seconds of each round it ran (not skipped or copied). */
+  seconds: number[];
+  /** The `stage.started` time of the round that has not finished. */
+  startedTs?: string;
+  /** The `resource.waiting` time while it waits for the device. */
+  waitTs?: string;
+  /** Seconds of each finished wait for the device, up to the stage's start. */
+  waits: number[];
 };
 
 export type StopReason = G.ResearchDoneData["reason"];
@@ -153,12 +161,22 @@ export type RunView = {
   tokensIn: number;
   tokensOut: number;
   cost: number;
+  /** The smallest receive time minus event time seen on this connection, in ms. */
+  clockOffset?: number;
 };
 
 export function initialRunView(runId: string): RunView {
   const phases = {} as Record<PhaseId, Phase>;
   for (const id of PHASES)
-    phases[id] = { state: "pending", counters: {}, warnings: [], round: 1, roundsDone: 0 };
+    phases[id] = {
+      state: "pending",
+      counters: {},
+      warnings: [],
+      round: 1,
+      roundsDone: 0,
+      seconds: [],
+      waits: [],
+    };
   return {
     runId,
     lastSeq: 0,
@@ -178,6 +196,10 @@ export function initialRunView(runId: string): RunView {
     cost: 0,
   };
 }
+
+/** Seconds from one event time to another. */
+const seconds = (from: string, to: string) =>
+  Math.max(0, (Date.parse(to) - Date.parse(from)) / 1000);
 
 function isPhase(stage: string | null | undefined): stage is PhaseId {
   return !!stage && (PHASES as readonly string[]).includes(stage);
@@ -297,7 +319,12 @@ function apply(state: RunView, event: RunEvent): RunView {
       return { ...stopRunning(state, "cancelled"), status: "cancelled", endedAt: event.ts };
     case "stage.started": {
       const round = event.data.round ?? 1;
+      const phase = isPhase(event.stage) ? state.phases[event.stage] : undefined;
+      const waited = phase?.waitTs ? [seconds(phase.waitTs, event.ts)] : [];
       const next = withPhase(state, event.stage, {
+        startedTs: event.ts,
+        waitTs: undefined,
+        waits: [...(phase?.waits ?? []), ...waited],
         state: "running",
         device: event.data.device ?? undefined,
         configuredProvider: event.data.provider ?? undefined,
@@ -327,6 +354,8 @@ function apply(state: RunView, event: RunEvent): RunView {
         warnings: d.warnings ?? [],
         round,
         roundsDone: (phase?.roundsDone ?? 0) + (d.skipped || d.copied_from ? 0 : 1),
+        seconds: [...(phase?.seconds ?? []), ...(d.skipped || d.copied_from ? [] : [d.seconds])],
+        startedTs: undefined,
       });
       if (event.stage === "prefilter") {
         const earlier = round > 1 ? state.passthrough : [];
@@ -354,6 +383,7 @@ function apply(state: RunView, event: RunEvent): RunView {
     case "resource.waiting":
       return withPhase(state, event.stage, {
         state: "waiting",
+        waitTs: event.ts,
         device: event.data.device,
         waitReason: `${event.data.released_stage} unloading`,
       });

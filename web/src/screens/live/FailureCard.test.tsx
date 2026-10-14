@@ -18,7 +18,7 @@ describe("failed run", () => {
     const alert = screen.getByRole("alert");
     expect(alert.textContent).toContain("Run failed at Score");
     expect(alert.textContent).toContain("CUDA out of memory");
-    expect(alert.textContent).toContain("Plan through prefilter are cached.");
+    expect(alert.textContent).toContain("Load through prefilter are cached.");
     expect(screen.getByRole("button", { name: "Help: Retry from Score" })).toBeTruthy();
     await press("Retry from Score");
     expect(callsTo(api, "forkRun")).toEqual([[RUN_ID, { from: "score" }]]);

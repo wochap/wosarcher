@@ -83,7 +83,17 @@ from wosarcher.config import (
     without_use,
 )
 from wosarcher.http import UsageLedger
-from wosarcher.models import Context, Origin, Report, RunFailed, RunOutput, RunRecord, RunRequest, Stage
+from wosarcher.models import (
+    Context,
+    Origin,
+    Report,
+    RunCreate,
+    RunFailed,
+    RunOutput,
+    RunRecord,
+    RunRequest,
+    Stage,
+)
 from wosarcher.runner import Runner
 from wosarcher.runner.events import Listener
 from wosarcher.store import RunStore, RunStoreError
@@ -94,6 +104,7 @@ EXIT: dict[Status, int] = {"done": 0, "failed": 1, "cancelled": 130}
 RunIdOption = Annotated[str | None, typer.Option("--run-id", help="Create the run under this ID.")]
 OriginOption = Annotated[str, typer.Option("--origin", hidden=True)]
 TokenNameOption = Annotated[str | None, typer.Option("--token-name", hidden=True)]
+FormOption = Annotated[str | None, typer.Option("--form", hidden=True, help="The API request as JSON.")]
 
 
 def writing_overrides(**fields: str | int | None) -> list[str]:
@@ -258,6 +269,7 @@ def run(
     as_json: JsonOption = False,
     origin: OriginOption = "cli",
     token_name: TokenNameOption = None,
+    form: FormOption = None,
 ) -> None:
     """Research QUERY in this process and write the run directory (or stop early with --until)."""
     stop = stage_option(until)
@@ -305,6 +317,7 @@ def run(
             token,
             lock=True,
             use=entries,
+            form=RunCreate.model_validate_json(form) if form else None,
         )
     except (ValidationError, RunStoreError) as error:
         raise fail(error, 2) from None

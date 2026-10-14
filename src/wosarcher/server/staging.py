@@ -7,7 +7,7 @@ survives a restart with no other state.
 import json
 import os
 import shutil
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
@@ -19,6 +19,7 @@ from wosarcher.models import (
     Attachment,
     ForkCreate,
     Origin,
+    ReuseAttachments,
     RunCreate,
     RunRecord,
     ServerSettings,
@@ -70,6 +71,8 @@ class StagedRun(RunCreate):
     version: int = 1
     origin: Origin = "web"
     token_name: str | None = None
+    form: RunCreate | None = None
+    """Recorded in the run's `request.json`; None for forks."""
 
 
 def queue_dir(runs_dir: Path) -> Path:
@@ -123,15 +126,44 @@ def base_name(name: str) -> str:
     return name
 
 
-def write(runs_dir: Path, staged: StagedRun, uploads: list[Attachment]) -> StagedRun:
-    names = [base_name(upload.name) for upload in uploads]
+class UnknownRunError(StagingError):
+    """`reuse_attachments` names a run that does not exist."""
+
+
+def attachments_dir(runs_dir: Path, run_id: str) -> Path | None:
+    """The run directory's `attachments/`, or the staged one while the run is queued; None for no such run."""
+    if run_id != base_name(run_id) or run_id.startswith("."):
+        return None
+    for path in (runs_dir / run_id, staging_dir(runs_dir, run_id)):
+        if (path / "request.json").is_file():
+            return path / "attachments"
+    return None
+
+
+def reused_files(runs_dir: Path, reuse: ReuseAttachments | None) -> list[Path]:
+    """The files `reuse_attachments` names, checked to exist."""
+    if reuse is None:
+        return []
+    folder = attachments_dir(runs_dir, reuse.run_id)
+    if folder is None:
+        raise UnknownRunError(f"run {reuse.run_id} not found")
+    missing = [name for name in reuse.names if name != base_name(name) or not (folder / name).is_file()]
+    if missing:
+        raise StagingError(f"run {reuse.run_id} has no attachment named {', '.join(missing)}")
+    return [folder / name for name in reuse.names]
+
+
+def write(runs_dir: Path, staged: StagedRun, uploads: list[Attachment], reused: Sequence[Path] = ()) -> StagedRun:
+    names = [base_name(upload.name) for upload in uploads] + [file.name for file in reused]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise StagingError(f"two attachments are named {', '.join(duplicates)}")
     path = staging_dir(runs_dir, staged.run_id)
     (path / "attachments").mkdir(parents=True, exist_ok=True)
-    for name, upload in zip(names, uploads, strict=True):
+    for name, upload in zip(names[: len(uploads)], uploads, strict=True):
         (path / "attachments" / name).write_bytes(upload.data)
+    for file in reused:
+        shutil.copyfile(file, path / "attachments" / file.name)
     (path / "request.json").write_text(staged.model_dump_json(indent=2) + "\n", encoding="utf-8")
     return staged
 
@@ -151,7 +183,8 @@ def stage_run(
     `own`: what the run's profile and the environment set; a global domain list yields to it.
     """
     check_overrides(request.set)
-    if (request.sources or defaults.sources) == "files" and not uploads:
+    reused = reused_files(runs_dir, request.reuse_attachments)
+    if (request.sources or defaults.sources) == "files" and not uploads and not reused:
         raise StagingError(NO_ATTACHMENT)
     writing = merged(merged(defaults.writing, preset_words(request.depth)), request.writing)
     staged = StagedRun(
@@ -166,8 +199,9 @@ def stage_run(
         domain_flags=domain_lists(request, defaults, own),
         origin=origin,
         token_name=token_name,
+        form=request.model_copy(update={"set": []}),
     )
-    return write(runs_dir, staged, uploads)
+    return write(runs_dir, staged, uploads, reused)
 
 
 def stage_fork(
@@ -222,6 +256,7 @@ def stage_rerun(
         writing_options=WritingOptions.model_validate(original.settings.get("write", {})),
         origin=origin,
         token_name=token_name,
+        form=original.form,
     )
     path = staging_dir(runs_dir, staged.run_id)
     attachments = runs_dir / original.run_id / "attachments"
@@ -328,7 +363,8 @@ def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[
 
 def origin_flags(staged: StagedRun) -> list[str]:
     token = ["--token-name", staged.token_name] if staged.token_name else []
-    return ["--origin", staged.origin, *token]
+    form = ["--form", staged.form.model_dump_json(exclude_defaults=True)] if staged.form else []
+    return ["--origin", staged.origin, *token, *form]
 
 
 def build_argv(command: list[str], staged: StagedRun, runs_dir: Path) -> list[str]:

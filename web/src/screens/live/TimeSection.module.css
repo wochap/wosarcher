@@ -1,0 +1,231 @@
+.section {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  min-width: 0;
+}
+
+.head {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.timer {
+  font-size: 13px;
+}
+
+.total {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--color-text);
+}
+
+.barBox {
+  flex: 1 1 200px;
+  min-width: 140px;
+  max-width: 560px;
+}
+
+.bar {
+  height: 8px;
+  display: flex;
+  gap: 1px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line);
+}
+
+.part {
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-width: 2px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.topPart {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.topTime {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--color-text);
+}
+
+.topPct {
+  color: var(--faint);
+}
+
+.toggle {
+  font-size: 12px;
+  padding: 1px 4px;
+  gap: 4px;
+}
+
+.panel {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+.all {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px 16px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.item[data-skipped="true"] {
+  opacity: 0.7;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemTime {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.itemPct {
+  font-size: 11px;
+  color: var(--faint);
+  min-width: 28px;
+  text-align: right;
+}
+
+.itemNote {
+  font-size: 11px;
+  color: var(--muted);
+  padding-left: 14px;
+  overflow-wrap: anywhere;
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.item[data-skipped="true"] .swatch {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-divider);
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asideTitle {
+  font-size: 13px;
+  letter-spacing: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asideTotal {
+  font-weight: 400;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The prototype's per-stage colors on the Nocturne scales; striped GPU waits and queue. */
+[data-kind="load"] {
+  background: var(--color-neutral-600);
+}
+
+[data-kind="plan"] {
+  background: var(--color-accent-200);
+}
+
+[data-kind="search"] {
+  background: var(--color-accent-400);
+}
+
+[data-kind="fetch"] {
+  background: var(--color-accent-600);
+}
+
+[data-kind="chunk"] {
+  background: var(--color-neutral-400);
+}
+
+[data-kind="prefilter"] {
+  background: var(--color-neutral-500);
+}
+
+[data-kind="score"] {
+  background: var(--color-accent-300);
+}
+
+[data-kind="gap"] {
+  background: var(--color-accent-700);
+}
+
+[data-kind="select"] {
+  background: var(--color-neutral-300);
+}
+
+[data-kind="write"] {
+  background: var(--color-accent);
+}
+
+[data-kind="wait"] {
+  background: repeating-linear-gradient(135deg, var(--color-warn) 0 2px, transparent 2px 4px);
+}
+
+[data-kind="queue"] {
+  background: repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 4px);
+}

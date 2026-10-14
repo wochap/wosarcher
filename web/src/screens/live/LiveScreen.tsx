@@ -22,6 +22,7 @@ import { SourceDialog } from "./SourceDialog";
 import { SourcesPanel } from "./SourcesPanel";
 import { StatusBanner } from "./StatusBanner";
 import { SubQueriesPanel } from "./SubQueriesPanel";
+import { TimeSection } from "./TimeSection";
 
 /** The run's configured `score.provider`, from the settings in its `request.json`. */
 function configuredScorer(detail: RunDetail | null | undefined): string | undefined {
@@ -195,7 +196,10 @@ export function LiveScreen() {
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
       {shows("progress") && (
-        <PhaseTimeline run={run} candidates={candidates(detail)} rounds={rounds} />
+        <>
+          <PhaseTimeline run={run} candidates={candidates(detail)} rounds={rounds} />
+          <TimeSection run={run} created={detail?.created} rounds={rounds} now={now} />
+        </>
       )}
       <div className={css.grid}>
         {(shows("progress") || shows("sources")) && (

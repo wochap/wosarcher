@@ -595,3 +595,86 @@ def test_rerun_entry_removed_since(client: TestClient, runs_dir: Path) -> None:
     found = client.get(f"/api/runs/{rerun}").json()
     assert found["status"] == "failed"
     assert "unknown llm entry 'sonnet'" in found["error"]
+
+
+def test_form_recorded_without_set(client: TestClient, runs_dir: Path) -> None:
+    request = {"query": "q", "depth": "custom", "research": {"rounds": 2}, "set": ['search.language="kk"']}
+    run_id = create(client, request)
+    finished(client, run_id)
+    form = json.loads((runs_dir / run_id / "request.json").read_text())["form"]
+    assert (form["query"], form["depth"], form["research"]["rounds"]) == ("q", "custom", 2)
+    assert form["set"] == []
+    assert "kk" not in json.dumps(form)
+
+
+def test_fork_has_no_form(client: TestClient, runs_dir: Path) -> None:
+    parent = create(client, {"query": "q"})
+    finished(client, parent)
+    child = client.post(f"/api/runs/{parent}/fork", json={"from": "write"}).json()["run_id"]
+    finished(client, child)
+    assert json.loads((runs_dir / child / "request.json").read_text()).get("form") is None
+
+
+def test_rerun_keeps_the_form(client: TestClient) -> None:
+    original = create(client, {"query": "q", "depth": "custom", "research": {"rounds": 2}})
+    finished(client, original)
+    rerun = client.post(f"/api/runs/{original}/rerun").json()["run_id"]
+    finished(client, rerun)
+    assert summary(client, rerun)["form"] == summary(client, original)["form"]
+    assert summary(client, rerun)["form"]["research"]["rounds"] == 2
+
+
+def test_reuse_an_earlier_runs_attachment(client: TestClient, runs_dir: Path) -> None:
+    first = create(client, {"query": "q"}, [("notes.md", b"n")])
+    finished(client, first)
+    reuse = {"run_id": first, "names": ["notes.md"]}
+    run_id = create(client, {"query": "q", "sources": "files", "reuse_attachments": reuse})
+    finished(client, run_id)
+    args = argv(runs_dir, run_id)
+    assert args[args.index("--attach") + 1].endswith("/notes.md")
+    assert (runs_dir / run_id / "attachments" / "notes.md").read_bytes() == b"n"
+
+
+def test_reused_name_not_found_422(client: TestClient) -> None:
+    first = create(client, {"query": "q"}, [("notes.md", b"n")])
+    finished(client, first)
+    body = json.dumps({"query": "q", "reuse_attachments": {"run_id": first, "names": ["paper.md"]}})
+    response = client.post("/api/runs", files={"request": (None, body)})
+    assert response.status_code == 422
+    assert response.json()["error"] == "invalid_attachment"
+    assert "paper.md" in response.json()["detail"]
+
+
+def test_reused_run_not_found_404(client: TestClient) -> None:
+    body = json.dumps({"query": "q", "reuse_attachments": {"run_id": "missing", "names": ["notes.md"]}})
+    response = client.post("/api/runs", files={"request": (None, body)})
+    assert response.status_code == 404
+    assert response.json()["error"] == "run_not_found"
+
+
+def test_reused_and_uploaded_name_clash_422(client: TestClient, runs_dir: Path) -> None:
+    first = create(client, {"query": "q"}, [("notes.md", b"n")])
+    finished(client, first)
+    body = json.dumps({"query": "q", "reuse_attachments": {"run_id": first, "names": ["notes.md"]}})
+    response = client.post("/api/runs", files=[("request", (None, body)), ("attachments", ("notes.md", b"x"))])
+    assert response.status_code == 422
+    assert [run["run_id"] for run in client.get("/api/runs").json()] == [first]
+
+
+def test_form_and_attachments_in_the_summary(client: TestClient) -> None:
+    request = {"query": "q", "depth": "quick", "writing": {"tone": "critical"}}
+    run_id = create(client, request, [("notes.md", b"x" * 6120)])
+    finished(client, run_id)
+    found = summary(client, run_id)
+    assert (found["form"]["query"], found["form"]["depth"], found["form"]["writing"]["tone"]) == (
+        "q",
+        "quick",
+        "critical",
+    )
+    assert found["attachments"] == [{"name": "notes.md", "size": 6120}]
+
+
+def test_older_run_without_a_form(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "r", ends=True)
+    found = summary(client, "r")
+    assert (found["form"], found["attachments"]) == (None, [])

@@ -1,0 +1,289 @@
+.column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 40px);
+}
+
+.disclosure {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.count {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding-right: 10px;
+}
+
+.toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.toggle:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+
+[data-phone="true"] .toggle {
+  min-height: 44px;
+}
+
+.caret {
+  color: var(--muted);
+}
+
+.toggleTitle {
+  font-weight: 500;
+}
+
+.toggleCount {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 0;
+}
+
+.column .body {
+  overflow: auto;
+  padding: 0;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  font-size: 12.5px;
+}
+
+.emptyIcon {
+  font-size: 18px;
+  color: var(--faint);
+}
+
+.emptyTitle {
+  font-weight: 500;
+}
+
+.emptyText {
+  color: var(--muted);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.groupTitle {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 2px 8px 4px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+
+.row:hover {
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.row[data-current="true"] {
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.fill {
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 4px 6px 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-phone="true"] .fill {
+  min-height: 44px;
+}
+
+.name,
+.summary {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.name {
+  font-size: 13px;
+}
+
+.summary {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.files {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--muted);
+}
+
+.files svg {
+  font-size: 12px;
+}
+
+.rename {
+  flex: 1;
+  min-width: 0;
+  margin: 4px;
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.menuBox {
+  position: relative;
+  flex: none;
+}
+
+.more {
+  width: 28px;
+  height: 28px;
+  margin: 3px 2px;
+  color: var(--muted);
+}
+
+[data-phone="true"] .more {
+  width: 44px;
+  height: 44px;
+}
+
+.menu {
+  position: absolute;
+  z-index: 15;
+  top: calc(100% + 2px);
+  right: 0;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+}
+
+.menu[data-up="true"] {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+[data-phone="true"] .item {
+  min-height: 44px;
+}
+
+.item:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.itemIcon {
+  color: var(--muted);
+  font-size: 15px;
+}
