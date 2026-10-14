@@ -62,13 +62,13 @@ html,body{margin:0;height:100%}
 
 <sc-if value="{{ scrNew }}" hint-placeholder-val="{{ false }}">
 <div style="flex:1;overflow:auto">
-<div style="max-width:800px;padding:{{ pagePad }};display:flex;flex-direction:column;gap:18px">
-  <div>
+<div style="max-width:{{ nr.maxW }};padding:{{ pagePad }};display:grid;grid-template-columns:{{ nr.cols }};grid-template-areas:{{ nr.areas }};grid-template-rows:{{ nr.rows }};gap:18px 28px;align-items:start">
+  <div style="grid-area:head;min-width:0">
     <h1 style="font-size:26px;margin:0 0 4px">New research run</h1>
     <p style="margin:0;color:var(--muted)">wosarcher searches the web and your files, scores passages for relevance, and writes a cited report.</p>
   </div>
-  <div class="field">
-    <label for="q">Question</label>
+  <div class="field" style="grid-area:q;min-width:0">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;margin-bottom:5px;min-width:0"><label for="q" style="font-size:12px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Question</label><sc-if value="{{ fromShow }}" hint-placeholder-val="{{ false }}"><span class="tag tag-neutral" title="{{ fromTitle }}" style="gap:5px;padding:1px 8px;font-size:11px;max-width:100%;min-width:0"><i class="ph ph-arrow-u-up-left" style="font-size:12px;flex:none"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">from: {{ fromName }}</span></span></sc-if></div>
     <textarea id="q" class="input" ref="{{ qRef }}" rows="6" value="{{ query }}" onChange="{{ onQuery }}" onKeyDown="{{ onQueryKey }}" placeholder="e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?" style="font-size:16px;line-height:1.5;padding:12px 14px;min-height:150px"></textarea>
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:8px">
       <span style="font-size:12px;color:var(--muted);display:flex;gap:4px;align-items:center"><kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--color-divider);border-radius:4px">Ctrl</kbd>+<kbd style="font-family:var(--mono);font-size:11px;padding:1px 5px;border:1px solid var(--color-divider);border-radius:4px">Enter</kbd>to run</span>
@@ -77,7 +77,38 @@ html,body{margin:0;height:100%}
     <sc-if value="{{ startErr }}" hint-placeholder-val="{{ false }}"><div role="alert" style="margin-top:8px;display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-danger) 9%,transparent);border:1px solid color-mix(in srgb,var(--color-danger) 40%,transparent);font-size:12.5px"><i class="ph ph-warning-circle" style="color:var(--color-danger);font-size:16px;margin-top:1px"></i><div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><div style="font-weight:500">Couldn’t start the run</div><div style="font-family:var(--mono);font-size:11.5px;color:var(--muted);overflow-wrap:anywhere">{{ startErr.msg }}</div><sc-if value="{{ startErr.k }}" hint-placeholder-val="{{ false }}"><button class="btn btn-ghost" onClick="{{ fixStartErr }}" style="align-self:flex-start;font-size:12px;padding:1px 4px;margin-left:-4px">Fix in Options</button></sc-if></div></div></sc-if>
   </div>
 
-  <div style="display:flex;flex-direction:column;gap:8px">
+  <section aria-labelledby="rp-h" style="grid-area:list;min-width:0;display:flex;flex-direction:column;gap:4px;position:{{ rp.pos }};top:12px;max-height:{{ rp.maxH }}">
+    <sc-if value="{{ rp.wide }}" hint-placeholder-val="{{ false }}"><div style="flex:none;display:flex;align-items:center;gap:5px;padding:4px 8px"><h2 id="rp-h" style="margin:0;font-size:13px;letter-spacing:0">Recent &amp; pinned</h2><button type="button" data-help="recent" aria-label="Help: Recent and pinned" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><span style="font-size:12px;color:var(--faint)">{{ rp.count }}</span></div></sc-if>
+    <sc-if value="{{ rp.disc }}" hint-placeholder-val="{{ true }}"><div style="flex:none;display:flex;align-items:center;gap:6px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);padding-right:10px"><button type="button" onClick="{{ rp.toggle }}" aria-expanded="{{ rp.exp }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;min-height:{{ rp.btnH }};padding:6px 12px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text);font:inherit;cursor:pointer;text-align:left" style-hover="background:color-mix(in srgb,var(--color-text) 4%,transparent)"><i class="ph {{ rp.caret }}" style="color:var(--muted)"></i><span id="rp-h" style="font-weight:500">Recent &amp; pinned</span><span style="font-size:12px;color:var(--muted)">· {{ rp.count }}</span></button><button type="button" data-help="recent" aria-label="Help: Recent and pinned" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div></sc-if>
+    <sc-if value="{{ rp.open }}" hint-placeholder-val="{{ false }}">
+    <div style="min-height:0;overflow:{{ rp.ovf }};display:flex;flex-direction:column;gap:10px;padding:{{ rp.pad }}">
+      <sc-if value="{{ rp.empty }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:3px;padding:8px;font-size:12.5px"><i class="ph ph-clock-counter-clockwise" style="font-size:18px;color:var(--faint)"></i><span style="font-weight:500">No runs yet</span><span style="color:var(--muted)">Runs you start show up here. Pin the ones you repeat to keep them on top.</span></div></sc-if>
+      <sc-for list="{{ rp.groups }}" as="g" hint-placeholder-count="2">
+      <div role="group" aria-label="{{ g.t }}" style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:2px 8px 4px">{{ g.t }}</span>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px">
+          <sc-for list="{{ g.rows }}" as="x" hint-placeholder-count="4">
+          <li style="position:relative;display:flex;align-items:flex-start;gap:2px;min-width:0;border-radius:var(--radius-md);background:{{ x.bg }};box-shadow:{{ x.ring }}" style-hover="background:color-mix(in srgb,var(--color-text) 5%,transparent)">
+            <sc-if value="{{ x.editing }}" hint-placeholder-val="{{ false }}"><input class="input" aria-label="Name" value="{{ x.editVal }}" placeholder="{{ x.q }}" onChange="{{ x.onEdit }}" onKeyDown="{{ x.onEditKey }}" onBlur="{{ x.commit }}" autoFocus="{{ true }}" maxLength="120" style="flex:1;min-width:0;margin:4px;font-size:13px;padding:4px 8px"></sc-if>
+            <sc-if value="{{ x.notEditing }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ x.fill }}" title="{{ x.q }}" aria-current="{{ x.cur }}" aria-label="{{ x.aria }}" style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;padding:6px 4px 6px 8px;border:0;border-radius:var(--radius-md);background:transparent;color:var(--color-text);font:inherit;text-align:left;cursor:pointer">
+              <span style="max-width:100%;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ x.name }}</span>
+              <span style="max-width:100%;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ x.sum }}</span>
+              <span style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--faint)"><sc-if value="{{ x.files }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:3px;color:var(--muted)"><i class="ph ph-paperclip" style="font-size:12px"></i>{{ x.files }}</span></sc-if><span>{{ x.rel }}</span><sc-if value="{{ x.dup }}" hint-placeholder-val="{{ false }}"><span title="{{ x.dupTitle }}">{{ x.dup }}</span></sc-if></span>
+            </button></sc-if>
+            <div data-rpmenu="1" style="position:relative;flex:none">
+              <button type="button" class="btn btn-ghost btn-icon" aria-label="{{ x.menuLabel }}" aria-haspopup="menu" aria-expanded="{{ x.menuExp }}" onClick="{{ x.toggleMenu }}" style="width:{{ rp.kb }};height:{{ rp.kb }};margin:3px 2px;color:var(--muted)"><i class="ph ph-dots-three"></i></button>
+              <sc-if value="{{ x.menuOpen }}" hint-placeholder-val="{{ false }}"><div role="menu" aria-label="{{ x.menuLabel }}" style="position:absolute;z-index:15;top:{{ x.mTop }};bottom:{{ x.mBot }};right:0;min-width:160px;padding:4px;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-md);display:flex;flex-direction:column"><sc-for list="{{ x.menu }}" as="m" hint-placeholder-count="3"><button type="button" role="menuitem" onClick="{{ m.go }}" style="display:flex;align-items:center;gap:8px;min-height:{{ rp.itemH }};padding:0 10px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--color-text);font:inherit;font-size:13px;text-align:left;cursor:pointer;white-space:nowrap" style-hover="background:color-mix(in srgb,var(--color-accent) 10%,transparent)"><i class="ph {{ m.icon }}" style="color:var(--muted);font-size:15px"></i>{{ m.l }}</button></sc-for></div></sc-if>
+            </div>
+          </li>
+          </sc-for>
+        </ul>
+      </div>
+      </sc-for>
+    </div>
+    </sc-if>
+  </section>
+
+  <div style="grid-area:att;min-width:0;display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Attachments<button type="button" data-help="attach" aria-label="Help: Attachments" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
     <div role="button" tabIndex="0" aria-label="Add .md or .txt files" onClick="{{ browse }}" onKeyDown="{{ dropKey }}" onDragOver="{{ onDragOver }}" onDragLeave="{{ onDragLeave }}" onDrop="{{ onDrop }}" style="display:flex;align-items:center;gap:12px;padding:16px;border:1px dashed {{ dropBorder }};border-radius:var(--radius-md);background:{{ dropBg }};cursor:pointer" style-hover="border-color:var(--color-accent)">
       <i class="ph ph-file-arrow-up" style="font-size:22px;color:var(--color-accent)"></i>
@@ -88,13 +119,13 @@ html,body{margin:0;height:100%}
     <sc-if value="{{ hasFiles }}" hint-placeholder-val="{{ false }}">
     <ul style="list-style:none;margin:0;padding:0;border-radius:var(--radius-md);background:var(--color-surface);box-shadow:var(--shadow-sm)">
       <sc-for list="{{ files }}" as="f" hint-placeholder-count="2">
-        <li style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--line)"><i class="ph ph-file-text" style="color:var(--muted);font-size:16px"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><span style="font-size:12px;color:var(--muted)">{{ f.size }}</span><button class="btn btn-ghost btn-icon" aria-label="{{ f.removeLabel }}" onClick="{{ f.remove }}" style="width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></li>
+        <li style="display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;border-bottom:1px solid var(--line)"><i class="ph ph-file-text" style="color:var(--muted);font-size:16px"></i><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span><sc-if value="{{ f.reused }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--faint);white-space:nowrap"><i class="ph ph-recycle" style="font-size:12px"></i>reused from <span style="font-family:var(--mono)">{{ f.from }}</span></span></sc-if><span style="font-size:12px;color:var(--muted)">{{ f.size }}</span><button class="btn btn-ghost btn-icon" aria-label="{{ f.removeLabel }}" onClick="{{ f.remove }}" style="width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></li>
       </sc-for>
     </ul>
     </sc-if>
   </div>
 
-  <div style="border-radius:var(--radius-md);box-shadow:var(--shadow-sm)">
+  <div style="grid-area:opts;min-width:0;border-radius:var(--radius-md);box-shadow:var(--shadow-sm)">
     <button onClick="{{ toggleOpts }}" aria-expanded="{{ optsOpen }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border:0;background:transparent;color:var(--color-text);font:inherit;cursor:pointer;text-align:left;border-radius:var(--radius-md)" style-hover="background:color-mix(in srgb,var(--color-text) 4%,transparent)">
       <i class="ph {{ optsCaret }}" style="color:var(--muted)"></i><span style="font-weight:500">Options</span>
       <span style="font-size:12px;color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ optSummary }}</span>
@@ -106,7 +137,7 @@ html,body{margin:0;height:100%}
       <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:4px 0 6px">
         <div style="display:flex;align-items:center;gap:5px;padding-top:6px"><span id="depth-l" style="font-size:12.5px">Depth</span><button type="button" data-help="depth" aria-label="Help: Depth" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
         <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
-          <div class="seg" role="radiogroup" aria-labelledby="depth-l" style="display:flex;flex-wrap:wrap;width:fit-content;max-width:100%"><sc-for list="{{ depthOpts }}" as="o" hint-placeholder-count="7"><label class="seg-opt" style="flex:1 0 auto;justify-content:center;margin:0 0 -1px -1px;border-left:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)"><input type="radio" name="opt-depth" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
+          <div class="seg" role="radiogroup" aria-labelledby="depth-l" style="display:flex;flex-wrap:wrap;width:fit-content;max-width:100%"><sc-for list="{{ depthOpts }}" as="o" hint-placeholder-count="7"><label class="seg-opt" style="flex:1 0 auto;justify-content:center;margin:0 0 -1px -1px;border-left:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)"><input type="radio" name="opt-depth" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for><sc-if value="{{ depthMore.show }}" hint-placeholder-val="{{ false }}"><label class="seg-opt" style="flex:1 0 auto;justify-content:center;margin:0 0 -1px -1px;border-left:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)"><input type="radio" name="opt-depth" checked="{{ depthMore.checked }}" onChange="{{ depthMore.noop }}" tabIndex="-1"><select aria-label="More depth presets" value="{{ depthMore.value }}" onChange="{{ depthMore.onChange }}" style="border:0;background:transparent;color:inherit;font:inherit;font-size:13px;padding:0;cursor:pointer;appearance:auto"><sc-for list="{{ depthMore.options }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label></sc-if><sc-for list="{{ depthTail }}" as="o" hint-placeholder-count="1"><label class="seg-opt" style="flex:1 0 auto;justify-content:center;margin:0 0 -1px -1px;border-left:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)"><input type="radio" name="opt-depth" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div>
           <div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px">{{ depthDesc }}</span><span aria-live="polite" style="font-size:12px;color:var(--muted)">{{ depthEst }}</span></div>
           <button type="button" class="btn btn-ghost" onClick="{{ toggleAdv }}" aria-expanded="{{ advExp }}" style="align-self:flex-start;font-size:12px;padding:1px 4px;gap:4px;margin-left:-4px"><i class="ph {{ advCaret }}"></i>Advanced<span style="color:var(--faint)">{{ advHint }}</span></button>
           <sc-if value="{{ advOpen }}" hint-placeholder-val="{{ false }}">
@@ -121,6 +152,14 @@ html,body{margin:0;height:100%}
                 </div>
               </sc-for>
             </div>
+            <sc-if value="{{ dAct.show }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding-top:4px">
+              <sc-if value="{{ dAct.lock }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><i class="ph ph-lock-simple" style="font-size:13px"></i>{{ dAct.lock }}</span></sc-if>
+              <sc-if value="{{ dAct.upd }}" hint-placeholder-val="{{ false }}"><button type="button" class="btn btn-secondary" onClick="{{ dAct.update }}" style="font-size:12px;padding:3px 10px"><i class="ph ph-floppy-disk"></i>{{ dAct.upd }}</button></sc-if>
+              <sc-if value="{{ dAct.saveAs }}" hint-placeholder-val="{{ false }}"><button type="button" class="btn btn-secondary" onClick="{{ dAct.openSave }}" style="font-size:12px;padding:3px 10px"><i class="ph ph-plus"></i>{{ dAct.saveAs }}</button></sc-if>
+              <sc-if value="{{ dAct.del }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;display:inline-flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:4px 8px"><sc-if value="{{ dAct.delWhy }}" hint-placeholder-val="{{ false }}"><span id="{{ dAct.whyId }}" style="font-size:11.5px;color:var(--faint)">{{ dAct.delWhy }}</span></sc-if><button type="button" class="btn btn-ghost" onClick="{{ dAct.openDel }}" disabled="{{ dAct.delDis }}" aria-describedby="{{ dAct.whyId }}" style="font-size:12px;padding:3px 8px;color:var(--muted)"><i class="ph ph-trash"></i>{{ dAct.del }}</button></span></sc-if>
+            </div>
+            </sc-if>
           </div>
           </sc-if>
         </div>
@@ -135,9 +174,14 @@ html,body{margin:0;height:100%}
         </div>
       </sc-for>
       <div style="display:grid;grid-template-columns:{{ formCols }};gap:6px 16px;align-items:start;padding:4px 0">
-        <div style="display:flex;align-items:center;gap:5px;padding-top:6px"><label for="opt-profile" style="font-size:12.5px">Profile</label><button type="button" data-help="profile" aria-label="Help: Profile" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
+        <div style="display:flex;align-items:center;gap:5px;padding-top:6px"><label id="prof-l" for="opt-profile" style="font-size:12.5px">Profile</label><button type="button" data-help="profile" aria-label="Help: Profile" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
         <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
-          <div style="display:flex;flex-direction:column;gap:4px"><select id="opt-profile" class="input" value="{{ profVal }}" onChange="{{ onProfile }}" style="width:min(260px,100%)"><sc-for list="{{ profOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select><span style="font-size:12px;color:var(--muted)">{{ profDescNew }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <sc-if value="{{ profSeg }}" hint-placeholder-val="{{ true }}"><div class="seg" role="radiogroup" aria-labelledby="prof-l" style="display:flex;flex-wrap:wrap;width:fit-content;max-width:100%"><sc-for list="{{ profSegOpts }}" as="o" hint-placeholder-count="4"><label class="seg-opt" style="flex:1 0 auto;justify-content:center;margin:0 0 -1px -1px;border-left:1px solid var(--color-divider);border-bottom:1px solid var(--color-divider)"><input type="radio" name="opt-profile" checked="{{ o.checked }}" onChange="{{ o.onPick }}">{{ o.label }}</label></sc-for></div></sc-if>
+            <sc-if value="{{ profSel }}" hint-placeholder-val="{{ false }}"><select id="opt-profile" class="input" value="{{ profVal }}" onChange="{{ onProfile }}" style="width:min(260px,100%)"><sc-for list="{{ profOptions }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></sc-if>
+            <sc-if value="{{ profCustom }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px">based on <strong style="font-weight:500;font-family:var(--mono);font-size:12px">{{ profBase }}</strong> · {{ profEdits }}</span></sc-if>
+            <span style="font-size:12px;color:var(--muted)">{{ profDescNew }}</span>
+          </div>
           <button type="button" class="btn btn-ghost" onClick="{{ togglePAdv }}" aria-expanded="{{ pAdvExp }}" style="align-self:flex-start;font-size:12px;padding:1px 4px;gap:4px;margin-left:-4px"><i class="ph {{ pAdvCaret }}"></i>Advanced<span style="color:var(--faint)">{{ pAdvHint }}</span></button>
           <sc-if value="{{ pAdvOpen }}" hint-placeholder-val="{{ false }}">
           <div style="display:flex;flex-direction:column;gap:12px;padding:8px 10px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-text) 3%,transparent)">
@@ -148,7 +192,7 @@ html,body{margin:0;height:100%}
               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 14px">
               <sc-for list="{{ g.fields }}" as="d" hint-placeholder-count="3">
                 <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
-                  <div style="display:flex;align-items:center;gap:4px 5px;flex-wrap:wrap"><label for="{{ d.id }}" style="font-size:12px">{{ d.label }}</label><button type="button" data-help="{{ d.help }}" aria-label="{{ d.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><sc-if value="{{ d.over }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:3px"><span class="tag tag-outline" style="font-size:10px;padding:0 6px">overridden</span><button type="button" data-help="p-over" aria-label="Help: Overridden" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span></sc-if></div>
+                  <div style="display:flex;align-items:center;gap:4px 5px;flex-wrap:wrap"><label for="{{ d.id }}" style="font-size:12px">{{ d.label }}</label><button type="button" data-help="{{ d.help }}" aria-label="{{ d.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><sc-if value="{{ d.srcTag }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;line-height:14px;padding:0 5px;border-radius:4px;border:1px {{ d.srcBs }} var(--color-divider);color:{{ d.srcCol }};white-space:nowrap">{{ d.srcTag }}</span></sc-if><sc-if value="{{ d.ovTag }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:3px"><span class="tag tag-outline" style="font-size:10px;padding:0 6px">overridden</span><button type="button" data-help="p-over" aria-label="Help: Overridden" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span></sc-if></div>
                   <sc-if value="{{ d.isSel }}" hint-placeholder-val="{{ true }}"><select id="{{ d.id }}" class="input" value="{{ d.value }}" onChange="{{ d.onChange }}" disabled="{{ d.dis }}" style="width:100%;max-width:150px;border-style:{{ d.bs }};color:{{ d.col }}"><sc-for list="{{ d.options }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></sc-if>
                   <sc-if value="{{ d.isText }}" hint-placeholder-val="{{ false }}"><input id="{{ d.id }}" class="input" list="{{ d.listId }}" value="{{ d.value }}" onChange="{{ d.onChange }}" autocomplete="off" spellcheck="false" style="width:100%;max-width:150px;border-style:{{ d.bs }};color:{{ d.col }};font-family:var(--mono);font-size:12px"><datalist id="{{ d.listId }}"><sc-for list="{{ d.list }}" as="o"><option value="{{ o.v }}"></option></sc-for></datalist></sc-if>
                   <sc-if value="{{ d.isNum }}" hint-placeholder-val="{{ false }}"><input id="{{ d.id }}" class="input" type="number" min="{{ d.min }}" max="{{ d.max }}" step="{{ d.step }}" value="{{ d.value }}" placeholder="{{ d.ph }}" onChange="{{ d.onChange }}" disabled="{{ d.dis }}" style="width:100%;max-width:150px;border-style:{{ d.bs }};color:{{ d.col }}"></sc-if>
@@ -158,6 +202,14 @@ html,body{margin:0;height:100%}
               </div>
             </div>
             </sc-for>
+            <sc-if value="{{ pAct.show }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding-top:4px">
+              <sc-if value="{{ pAct.lock }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)"><i class="ph ph-lock-simple" style="font-size:13px"></i>{{ pAct.lock }}</span></sc-if>
+              <sc-if value="{{ pAct.upd }}" hint-placeholder-val="{{ false }}"><button type="button" class="btn btn-secondary" onClick="{{ pAct.update }}" style="font-size:12px;padding:3px 10px"><i class="ph ph-floppy-disk"></i>{{ pAct.upd }}</button></sc-if>
+              <sc-if value="{{ pAct.saveAs }}" hint-placeholder-val="{{ false }}"><button type="button" class="btn btn-secondary" onClick="{{ pAct.openSave }}" style="font-size:12px;padding:3px 10px"><i class="ph ph-plus"></i>{{ pAct.saveAs }}</button></sc-if>
+              <sc-if value="{{ pAct.del }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;display:inline-flex;align-items:center;flex-wrap:wrap;justify-content:flex-end;gap:4px 8px"><sc-if value="{{ pAct.delWhy }}" hint-placeholder-val="{{ false }}"><span id="{{ pAct.whyId }}" style="font-size:11.5px;color:var(--faint)">{{ pAct.delWhy }}</span></sc-if><button type="button" class="btn btn-ghost" onClick="{{ pAct.openDel }}" disabled="{{ pAct.delDis }}" aria-describedby="{{ pAct.whyId }}" style="font-size:12px;padding:3px 8px;color:var(--muted)"><i class="ph ph-trash"></i>{{ pAct.del }}</button></span></sc-if>
+            </div>
+            </sc-if>
           </div>
           </sc-if>
         </div>
@@ -248,12 +300,28 @@ html,body{margin:0;height:100%}
         <div style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:{{ p.lc }}"><i class="ph {{ p.icon }}" style="color:{{ p.ic }};font-size:14px;flex:none;animation:{{ p.anim }}"></i><span style="flex:1;min-width:max-content;white-space:nowrap">{{ p.label }}</span><button type="button" data-help="{{ p.help }}" aria-label="{{ p.helpLabel }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></div>
         <sc-if value="{{ p.hasTag }}" hint-placeholder-val="{{ false }}"><button type="button" data-help="{{ p.tagHelp }}" aria-label="{{ p.tagAria }}" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="align-self:flex-start;max-width:100%;display:inline-flex;align-items:center;gap:3px;margin:1px 0;padding:0 5px;border-radius:4px;border:1px {{ p.tagBs }} {{ p.tagBd }};background:transparent;color:{{ p.tagCol }};font-family:var(--mono);font-size:10.5px;line-height:16px;cursor:help;white-space:nowrap;min-width:0;padding-right:6px" style-hover="background:color-mix(in srgb,var(--color-text) 7%,transparent)"><sc-if value="{{ p.tagFb }}" hint-placeholder-val="{{ false }}"><i class="ph ph-warning" style="font-size:11px;flex:none"></i></sc-if><span style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis">{{ p.tag }}</span></button></sc-if>
         <div style="font-size:11.5px;color:{{ p.tc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.text }}</div>
+        <div title="{{ p.tTitle }}" style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden"><span style="color:{{ p.timeCol }}">{{ p.time }}</span><sc-if value="{{ p.wait }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:2px;color:var(--color-warn);min-width:0;overflow:hidden"><i class="ph ph-cpu" aria-hidden="true" style="font-size:11px;flex:none"></i>{{ p.wait }}</span></sc-if></div>
         <sc-if value="{{ p.detail }}" hint-placeholder-val="{{ false }}"><div title="{{ p.detail }}" style="font-size:11px;color:{{ p.dc }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.detail }}</div></sc-if>
         <sc-if value="{{ p.detail2 }}" hint-placeholder-val="{{ false }}"><div title="{{ p.detail2 }}" style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.detail2 }}</div></sc-if>
         <div style="height:3px;margin:3px -9px 0;background:var(--line)"><div style="height:100%;width:{{ p.pct }}%;background:{{ p.bar }};transition:width .2s linear"></div></div>
       </li>
     </sc-for>
   </ol>
+  </sc-if>
+  <sc-if value="{{ showTimeline }}" hint-placeholder-val="{{ true }}">
+  <section aria-label="Time per stage" style="flex:none;display:flex;flex-direction:column;gap:6px;min-width:0">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px 12px;min-width:0">
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap"><i class="ph ph-timer" style="font-size:13px"></i>Time<button type="button" data-help="time" aria-label="Help: Time per stage" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button><span style="font-family:var(--mono);font-size:11.5px;color:var(--color-text)">{{ L.tb.total }}</span><sc-if value="{{ L.tb.sub }}" hint-placeholder-val="{{ false }}"><span>{{ L.tb.sub }}</span></sc-if></span>
+      <div style="flex:1 1 200px;min-width:140px;max-width:560px"><div role="img" aria-label="{{ L.tb.aria }}" style="height:8px;display:flex;gap:1px;border-radius:4px;overflow:hidden;background:var(--line)"><sc-for list="{{ L.tb.segs }}" as="g" hint-placeholder-count="8"><span title="{{ g.title }}" style="flex:{{ g.flex }} 1 0px;min-width:2px;background:{{ g.bg }}"></span></sc-for></div></div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:3px 12px;font-size:11.5px;color:var(--muted);min-width:0">
+        <sc-for list="{{ L.tb.top }}" as="g" hint-placeholder-count="3"><span style="display:inline-flex;align-items:center;gap:5px;white-space:nowrap"><span aria-hidden="true" style="width:8px;height:8px;border-radius:2px;flex:none;background:{{ g.bg }}"></span>{{ g.label }}<span style="font-family:var(--mono);font-size:11px;color:var(--color-text)">{{ g.time }}</span><span style="color:var(--faint)">{{ g.pct }}</span></span></sc-for>
+        <button type="button" class="btn btn-ghost" onClick="{{ toggleTb }}" aria-expanded="{{ tbExp }}" style="font-size:12px;padding:1px 4px;gap:4px"><i class="ph {{ tbCaret }}"></i>{{ tbLabel }}</button>
+      </div>
+    </div>
+    <sc-if value="{{ tbOpen }}" hint-placeholder-val="{{ false }}"><div style="padding:8px 10px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-text) 3%,transparent)"><ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 16px">
+        <sc-for list="{{ L.tb.all }}" as="g" hint-placeholder-count="10"><li style="display:flex;flex-direction:column;min-width:0;opacity:{{ g.op }}"><span style="display:flex;align-items:center;gap:6px;font-size:12px;min-width:0"><span aria-hidden="true" style="width:8px;height:8px;border-radius:2px;flex:none;background:{{ g.bg }};box-shadow:{{ g.sw }}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.label }}</span><span style="font-family:var(--mono);font-size:11.5px">{{ g.time }}</span><span style="font-size:11px;color:var(--faint);min-width:28px;text-align:right">{{ g.pct }}</span></span><sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--muted);padding-left:14px;overflow-wrap:anywhere">{{ g.note }}</span></sc-if></li></sc-for>
+      </ul></div></sc-if>
+  </section>
   </sc-if>
 
   <div style="flex:{{ gridFlex }};min-height:{{ gridMinH }};display:grid;grid-template-columns:{{ liveCols }};gap:10px">
@@ -277,7 +345,7 @@ html,body{margin:0;height:100%}
         <ol style="list-style:none;margin:0;padding:0;flex:1;min-height:0;overflow:auto">
           <sc-for list="{{ L.rounds }}" as="x" hint-placeholder-count="2">
             <li style="display:flex;flex-direction:column;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line)">
-              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px"><i class="ph {{ x.icon }}" style="color:{{ x.ic }};font-size:14px;flex:none;animation:{{ x.anim }}"></i><span style="font-weight:500">{{ x.title }}</span><span style="font-size:11.5px;color:var(--faint)">{{ x.kind }}</span><span style="margin-left:auto;font-size:11.5px;color:{{ x.statCol }};white-space:nowrap">{{ x.stat }}</span></div>
+              <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px"><i class="ph {{ x.icon }}" style="color:{{ x.ic }};font-size:14px;flex:none;animation:{{ x.anim }}"></i><span style="font-weight:500">{{ x.title }}</span><span style="font-size:11.5px;color:var(--faint)">{{ x.kind }}</span><span style="font-family:var(--mono);font-size:11px;color:var(--muted)">{{ x.dur }}</span><span style="margin-left:auto;font-size:11.5px;color:{{ x.statCol }};white-space:nowrap">{{ x.stat }}</span></div>
               <sc-if value="{{ x.note }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;line-height:1.45;color:var(--muted);padding-left:21px;text-wrap:pretty">{{ x.note }}</div></sc-if>
               <ol style="list-style:none;margin:0;padding:0 0 0 21px;display:flex;flex-direction:column;gap:1px">
                 <sc-for list="{{ x.qs }}" as="q" hint-placeholder-count="2"><li style="display:flex;align-items:flex-start;gap:7px;font-size:12px"><span style="font-family:var(--mono);font-size:11px;color:var(--faint);width:22px;flex:none;padding-top:1px">{{ q.n }}</span><span style="flex:1;min-width:0"><sc-if value="{{ q.topic }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--muted);line-height:16px">Topic line<button type="button" data-help="q0" aria-label="Help: Topic line" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></span></sc-if>{{ q.text }}</span><span style="font-size:11px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:3px"><i class="ph {{ q.icon }}" style="animation:{{ q.anim }}"></i>{{ q.st }}</span></li></sc-for>
@@ -439,6 +507,15 @@ html,body{margin:0;height:100%}
       </ol>
     </article>
     <aside style="display:flex;flex-direction:column;gap:18px;min-width:0">
+      <sc-if value="{{ R.hasTb }}" hint-placeholder-val="{{ false }}">
+      <section aria-label="Time per stage" style="display:flex;flex-direction:column;gap:8px">
+        <h2 style="font-size:13px;letter-spacing:0;margin:0;display:flex;align-items:center;gap:6px">Time <span style="font-weight:400;font-family:var(--mono);font-size:12px;color:var(--muted)">{{ R.tb.total }}</span><button type="button" data-help="time" aria-label="Help: Time per stage" aria-describedby="wa-help" onMouseEnter="{{ hEnter }}" onMouseLeave="{{ hLeave }}" onFocus="{{ hEnter }}" onBlur="{{ hLeave }}" onClick="{{ hTap }}" style="position:relative;width:16px;height:16px;flex:none;display:inline-grid;place-items:center;padding:0;margin:0;border:0;border-radius:50%;background:transparent;color:var(--faint);cursor:help;vertical-align:middle;font:inherit;text-transform:none" style-hover="color:var(--color-text);background:color-mix(in srgb,var(--color-text) 8%,transparent)" style-before="content:'';position:absolute;inset:-6px"><i class="ph ph-question" style="font-size:15px;line-height:1"></i></button></h2>
+        <div role="img" aria-label="{{ R.tb.aria }}" style="height:8px;display:flex;gap:1px;border-radius:4px;overflow:hidden;background:var(--line)"><sc-for list="{{ R.tb.segs }}" as="g" hint-placeholder-count="8"><span title="{{ g.title }}" style="flex:{{ g.flex }} 1 0px;min-width:2px;background:{{ g.bg }}"></span></sc-for></div>
+        <ul style="list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px 16px">
+        <sc-for list="{{ R.tb.all }}" as="g" hint-placeholder-count="10"><li style="display:flex;flex-direction:column;min-width:0;opacity:{{ g.op }}"><span style="display:flex;align-items:center;gap:6px;font-size:12px;min-width:0"><span aria-hidden="true" style="width:8px;height:8px;border-radius:2px;flex:none;background:{{ g.bg }};box-shadow:{{ g.sw }}"></span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ g.label }}</span><span style="font-family:var(--mono);font-size:11.5px">{{ g.time }}</span><span style="font-size:11px;color:var(--faint);min-width:28px;text-align:right">{{ g.pct }}</span></span><sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px;color:var(--muted);padding-left:14px;overflow-wrap:anywhere">{{ g.note }}</span></sc-if></li></sc-for>
+      </ul>
+      </section>
+      </sc-if>
       <section>
         <h2 style="font-size:13px;letter-spacing:0;margin:0 0 6px">Sources <span style="font-weight:400;color:var(--muted)">{{ R.srcCount }}</span></h2>
         <ol style="list-style:none;margin:0;padding:0">
@@ -673,6 +750,40 @@ html,body{margin:0;height:100%}
 </div>
 </sc-if>
 
+<sc-if value="{{ svOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" onClick="{{ sv.backdrop }}" style="position:absolute;z-index:20">
+  <form class="dialog" role="dialog" aria-modal="true" aria-labelledby="sv-t" onSubmit="{{ sv.submit }}" noValidate="{{ true }}" style="width:min(520px,100%);max-height:calc(100% - 24px);overflow:auto">
+    <div style="display:flex;align-items:center;gap:8px"><i class="ph {{ sv.icon }}" style="color:var(--color-accent);font-size:18px"></i><div id="sv-t" class="dialog-title">{{ sv.title }}</div><button type="button" class="btn btn-ghost btn-icon" aria-label="Close" onClick="{{ sv.close }}" style="margin-left:auto;width:30px;height:30px;color:var(--muted)"><i class="ph ph-x"></i></button></div>
+    <p style="margin:0;font-size:12.5px;color:var(--muted)">{{ sv.intro }}</p>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <label for="sv-name" style="font-size:12px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Name</label>
+      <input id="sv-name" class="input" value="{{ sv.name }}" onChange="{{ sv.onName }}" autoFocus="{{ true }}" autocomplete="off" spellcheck="false" aria-invalid="{{ sv.invalid }}" aria-describedby="sv-msg" placeholder="{{ sv.ph }}" style="font-family:var(--mono);font-size:13px;border-color:{{ sv.bd }}">
+      <sc-if value="{{ sv.err }}" hint-placeholder-val="{{ false }}"><span id="sv-msg" role="alert" style="display:flex;align-items:flex-start;gap:5px;font-size:12px;color:var(--color-danger)"><i class="ph ph-warning-circle" style="margin-top:2px"></i>{{ sv.err }}</span></sc-if>
+      <sc-if value="{{ sv.ok }}" hint-placeholder-val="{{ true }}"><span id="sv-msg" style="font-size:12px;color:var(--muted)">Letters, digits, - and _ · up to 64 characters</span></sc-if>
+    </div>
+    <sc-if value="{{ sv.isProf }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:4px"><label for="sv-desc" style="font-size:12px;color:color-mix(in srgb,var(--color-text) 70%,transparent)">Description <span style="color:var(--faint)">· optional</span></label><input id="sv-desc" class="input" value="{{ sv.desc }}" onChange="{{ sv.onDesc }}" maxLength="120" placeholder="One line, shown under the profile" style="font-size:13px"></div></sc-if>
+    <div role="group" aria-label="What is saved" style="display:flex;flex-direction:column;gap:10px;padding:10px 12px;border-radius:var(--radius-md);background:color-mix(in srgb,var(--color-text) 4%,transparent)">
+      <sc-for list="{{ sv.groups }}" as="g" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">{{ g.t }}</span>
+        <sc-for list="{{ g.rows }}" as="x" hint-placeholder-count="4"><div style="display:grid;grid-template-columns:minmax(110px,40%) minmax(0,1fr);gap:12px;font-size:12px;line-height:1.5"><span style="color:var(--muted)">{{ x.k }}</span><span style="font-family:var(--mono);font-size:11.5px;overflow-wrap:anywhere">{{ x.v }}</span></div></sc-for>
+        <sc-if value="{{ g.note }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:flex-start;gap:5px;margin-top:2px;font-size:11.5px;color:var(--muted)"><i class="ph ph-info" style="margin-top:2px"></i>{{ g.note }}</span></sc-if>
+      </div>
+      </sc-for>
+    </div>
+    <div class="dialog-actions"><button type="button" class="btn btn-secondary" onClick="{{ sv.close }}">Cancel</button><button type="submit" class="btn btn-primary"><i class="ph ph-floppy-disk"></i>{{ sv.cta }}</button></div>
+  </form>
+</div>
+</sc-if>
+<sc-if value="{{ delOpen }}" hint-placeholder-val="{{ false }}">
+<div class="dialog-backdrop" style="position:absolute;z-index:21">
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dx-t" aria-describedby="dx-b">
+    <div id="dx-t" class="dialog-title">{{ del.title }}</div>
+    <div id="dx-b" class="dialog-body">{{ del.body }}</div>
+    <div class="dialog-actions"><button type="button" class="btn btn-secondary" onClick="{{ del.close }}">Cancel</button><button type="button" class="btn btn-secondary" onClick="{{ del.confirm }}" style="color:var(--color-danger);border-color:var(--color-danger)"><i class="ph ph-trash"></i>{{ del.cta }}</button></div>
+  </div>
+</div>
+</sc-if>
 <sc-if value="{{ cancelOpen }}" hint-placeholder-val="{{ false }}">
 <div class="dialog-backdrop" style="position:absolute;z-index:20">
   <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="cx-t" aria-describedby="cx-b">
@@ -802,11 +913,11 @@ html,body{margin:0;height:100%}
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc-logic" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;queued&quot;,&quot;queued-cli&quot;,&quot;live-cli&quot;,&quot;cancel-cli&quot;,&quot;live-api&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;rounds-live&quot;,&quot;rounds-done&quot;,&quot;rounds-nofollow&quot;,&quot;rounds-nonew&quot;,&quot;rounds-max&quot;,&quot;live-domains&quot;,&quot;long-brief&quot;,&quot;finished&quot;,&quot;finished-answer&quot;,&quot;report-cut&quot;,&quot;rewrite-format&quot;,&quot;export-menu&quot;,&quot;export-busy&quot;,&quot;export-error&quot;,&quot;dig-deeper&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;new-depth&quot;,&quot;new-custom&quot;,&quot;new-preset&quot;,&quot;new-profile&quot;,&quot;new-profile-over&quot;,&quot;new-profile-nolimits&quot;,&quot;new-domains&quot;,&quot;new-domain-error&quot;,&quot;new-error&quot;,&quot;history&quot;,&quot;settings&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;downloads&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;buttons&quot;,&quot;menu&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;iterative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+<script type="text/x-dc-logic" data-dc-script data-props="{&quot;profiles&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;few&quot;,&quot;many&quot;],&quot;default&quot;:&quot;few&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;device&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;phone&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;live&quot;,&quot;loading&quot;,&quot;queued&quot;,&quot;queued-cli&quot;,&quot;live-cli&quot;,&quot;cancel-cli&quot;,&quot;live-api&quot;,&quot;reconnecting&quot;,&quot;failure&quot;,&quot;cancelled&quot;,&quot;passages&quot;,&quot;source&quot;,&quot;source-loading&quot;,&quot;source-truncated&quot;,&quot;source-file&quot;,&quot;rounds-live&quot;,&quot;rounds-done&quot;,&quot;rounds-nofollow&quot;,&quot;rounds-nonew&quot;,&quot;rounds-max&quot;,&quot;live-domains&quot;,&quot;long-brief&quot;,&quot;finished&quot;,&quot;finished-answer&quot;,&quot;report-cut&quot;,&quot;rewrite-format&quot;,&quot;export-menu&quot;,&quot;export-busy&quot;,&quot;export-error&quot;,&quot;dig-deeper&quot;,&quot;versions&quot;,&quot;empty&quot;,&quot;new&quot;,&quot;new-depth&quot;,&quot;new-custom&quot;,&quot;new-preset&quot;,&quot;new-profile&quot;,&quot;new-profile-over&quot;,&quot;new-profile-nolimits&quot;,&quot;new-domains&quot;,&quot;new-domain-error&quot;,&quot;new-error&quot;,&quot;new-recent&quot;,&quot;new-recent-empty&quot;,&quot;new-profile-custom&quot;,&quot;new-save-profile&quot;,&quot;new-save-depth&quot;,&quot;new-depth-many&quot;,&quot;new-delete&quot;,&quot;done-quick&quot;,&quot;history&quot;,&quot;settings&quot;,&quot;help&quot;,&quot;login&quot;,&quot;login-wrong&quot;,&quot;login-limited&quot;],&quot;default&quot;:&quot;live&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;downloads&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;auto&quot;,&quot;buttons&quot;,&quot;menu&quot;],&quot;default&quot;:&quot;auto&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;fallback&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:0.5,&quot;max&quot;:6,&quot;step&quot;:0.5,&quot;default&quot;:1,&quot;tsType&quot;:&quot;number&quot;},&quot;emptyHistory&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;iterative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
 const PH=[
  {id:'plan',l:'Plan',s:0,r:0,e:2.5,gpu:'LLM'},
  {id:'search',l:'Search',s:2.5,r:2.5,e:6.5},
- {id:'fetch',l:'Fetch',s:3.5,r:3.5,e:16.2},
+ {id:'fetch',l:'Fetch',s:6.5,r:6.5,e:16.2},
  {id:'load',l:'Load',s:2.5,r:2.5,e:3.6},
  {id:'chunk',l:'Chunk',s:16.2,r:16.2,e:17.6},
  {id:'prefilter',l:'Prefilter',s:17.6,r:19.2,e:21,gpu:'embeddings',wait:'planner LLM unloading'},
@@ -932,7 +1043,7 @@ Quality is unchanged: verification preserves the target distribution [9].`;
 const WDEF={tone:'Objective',custom:'',words:1200,lang:'English',cite:'numeric',ref:'APA'};
 const TONES=[['Objective','neutral and evidence-first'],['Formal','precise, impersonal register'],['Analytical','breaks the question into causes and factors'],['Persuasive','argues for a recommendation'],['Informative','a plain, broad overview'],['Explanatory','teaches how and why, step by step'],['Descriptive','a detailed account of what exists'],['Critical','weighs strengths, weaknesses and gaps'],['Comparative','sets the options side by side'],['Speculative','explores likely futures and open questions'],['Reflective','considers implications and trade-offs']];
 const REFS=['APA','MLA','Chicago','IEEE'];
-const PROFILES=[{id:'workstation',desc:'One GPU fits all models; models stay loaded.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'agents',model:'qwen3-14b',scorer:'jev-strict',gpuDev:'workstation:gpu0',cpuDev:'workstation:cpu'},{id:'low-vram',desc:'Models take turns on one small GPU; slower, fits 8 GB.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'agents',model:'qwen3-14b',scorer:'rerank',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'},{id:'cloud',desc:'Hosted models through omniroute; needs API keys.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'omniroute',model:'research-smart',scorer:'jev-strict',gpuDev:'cloud',cpuDev:'cloud'},{id:'nixos',desc:'Keyword prefilter, MoE model through omniroute.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'bm25',llm:'omniroute',model:'qwen3-30b-a3b',scorer:'jev-strict',gpuDev:'desktop:gpu0',cpuDev:'homelab',user:true}];
+const PROFILES=[{id:'workstation',nix:true,desc:'One GPU fits all models; models stay loaded.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'agents',model:'qwen3-14b',scorer:'jev-strict',gpuDev:'workstation:gpu0',cpuDev:'workstation:cpu'},{id:'low-vram',tune:{'qwen3-14b':{cw:24576,gapctx:3000}},desc:'Models take turns on one small GPU; slower, fits 8 GB.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'agents',model:'qwen3-14b',scorer:'rerank',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'},{id:'cloud',nix:true,tune:{'research-smart':{write:'high'}},desc:'Hosted models through omniroute; needs API keys.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'omniroute',model:'research-smart',scorer:'jev-strict',gpuDev:'cloud',cpuDev:'cloud'},{id:'moe-lab',desc:'Keyword prefilter, MoE model through omniroute.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'bm25',llm:'omniroute',model:'qwen3-30b-a3b',scorer:'jev-strict',gpuDev:'desktop:gpu0',cpuDev:'homelab',user:true}];
 const ARB='1px solid var(--wa-ring)';
 const LANGS=['English','German','French','Spanish','Portuguese','Japanese','Chinese (Simplified)'];
 const CITES=[['numeric','[1] Numeric'],['super','¹ Superscript'],['authoryear','(Author, year)']];
@@ -972,7 +1083,7 @@ const fmtW=(k,v)=>k==='cite'?citeName(v):k==='custom'?(v?'“'+(v.length>28?v.sl
 const wDiff=(a,b)=>Object.keys(WLABEL).filter(k=>String(a[k])!==String(b[k])).map(k=>k==='custom'?'custom instructions':fmtW(k,b[k])).join(' · ');
 const B62='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 function sources(files){
- const out=WEB.map(([u,t,f,ay],i)=>{const found=2.7+i*.17,fs=Math.max(found+.3,3.5+i*.45);let fe=fs+1.2+((i*37)%10)/5;if(f.startsWith('Timed'))fe=fs+3.6;return {i,u,t,fail:f,ay,found,fs,fe,dom:u.split('/')[0],file:false};});
+ const out=WEB.map(([u,t,f,ay],i)=>{const found=2.7+i*.17,fs=Math.max(found+.3,6.5+i*.3);let fe=fs+1.2+((i*37)%10)/5;if(f.startsWith('Timed'))fe=fs+3.6;return {i,u,t,fail:f,ay,found,fs,fe,dom:u.split('/')[0],file:false};});
  const fl=files&&files.length?files.slice(0,2).map(f=>[f.name,f.bytes]):DFILES.slice();
  while(fl.length<2)fl.push(DFILES[fl.length]);
  fl.forEach(([n,b],k)=>out.push({i:22+k,u:n,t:n.split('/').pop(),fail:'',ay:n.split('/').pop(),found:2.6,fs:2.6+k*.4,fe:3.0+k*.4,dom:'local file',size:fmtB(b),file:true}));
@@ -997,7 +1108,7 @@ const llmE=n=>ENT.llm.find(e=>e.n===n)||ENT.llm[0];
 const mdlOf=(l,m)=>llmE(l).models.find(x=>x.m===m);
 const defModel=l=>llmE(l).models.find(x=>x.def).m;
 const limVals=(l,m)=>{const md=mdlOf(l,m);const th=(md&&md.th)||['medium','low','medium'];return {cw:(md&&md.cw)||FB_CW,mo:(md&&md.mo)||FB_MO,plan:th[0],gap:th[1],write:th[2],gapctx:(md&&md.gc)||''};};
-const profVals=pid=>{const p=PROFILES.find(x=>x.id===pid)||PROFILES[1];return {search:p.search,fetch:p.fetch,prefilter:p.prefilter,scorer:p.scorer,llm:p.llm,model:p.model,ctx:'',...limVals(p.llm,p.model)};};
+const profVals=pid=>{const p=PROFILES.find(x=>x.id===pid)||PROFILES[1];return {search:p.search,fetch:p.fetch,prefilter:p.prefilter,scorer:p.scorer,llm:p.llm,model:p.model,ctx:p.ctx??'',...limVals(p.llm,p.model),...((p.tune||{})[p.model]||{})};};
 const fmtN=n=>Number(n).toLocaleString('en-US');const fmtKT=n=>Math.round(n/1000)+'k';
 const llmCalls=(rounds,words)=>1+Math.max(0,rounds-1)+Math.max(1,Math.ceil(words/800));
 const FQ2=['speculative decoding acceptance rate measured on 8 GB GPUs','EAGLE-2 draft head VRAM overhead','prompt lookup decoding llama.cpp code benchmark'],FQ3=['speculative decoding production latency p50 p99','draft model quantization effect on acceptance rate'];
@@ -1008,7 +1119,7 @@ const RV={coverage:{stop:'max rounds',endNote:'',rounds:[{pages:16,kept:13,qs:SU
  nonew:{stop:'no new sources',endNote:'Rounds 2 and 3 returned only pages fetched in round 1.',rounds:[{pages:22,kept:19,qs:SUBQ,w:1.9,gap:true,unc:1,res:[8,7,6,5,6]},{pages:0,kept:0,known:9,qs:FQ2.slice(0,2),w:.45,gap:true,unc:1,note:'Missing: benchmarks on 8 GB cards and at long context.',res:[5,4]},{pages:0,kept:0,known:7,qs:FQ4,w:.45,gap:false,note:'Missing: long-context numbers on 8 GB cards.',res:[4,3]}]},
  max:{stop:'max rounds',endNote:'',rounds:[{pages:12,kept:10,qs:SUBQ,w:1.3,gap:true,unc:3,res:[6,5,5,4,4]},{pages:6,kept:6,qs:FQ2,w:1,gap:true,unc:2,note:NA,res:[4,3,3]},{pages:4,kept:3,qs:FQ3,w:.8,gap:false,note:'Missing: production latency numbers; nothing on how draft quantization affects acceptance.',res:[3,2]}]}};
 function isched(R){const gw=.35;let tot=0;R.rounds.forEach(x=>tot+=x.w+(x.gap?gw:0));const u=28.5/tot;let c=2.5;const W={search:[],fetch:[],chunk:[],prefilter:[],score:[],gap:[]},rs=[];
- R.rounds.forEach((x,i)=>{const a=c,L=x.w*u;const F=x.pages?{search:[0,.22],fetch:[.08,.62],chunk:[.62,.7],prefilter:[.7,.8],score:[.8,1]}:{search:[0,.45],fetch:[.2,1]};
+ R.rounds.forEach((x,i)=>{const a=c,L=x.w*u;const F=x.pages?{search:[0,.22],fetch:[.22,.62],chunk:[.62,.7],prefilter:[.7,.8],score:[.8,1]}:{search:[0,.45],fetch:[.45,1]};
   Object.keys(F).forEach(k=>W[k].push({s:a+F[k][0]*L,e:a+F[k][1]*L,k:i+1}));c+=L;rs.push({a,b:c,k:i+1});
   if(x.gap){W.gap.push({s:c,e:c+gw*u,k:i+1});c+=gw*u;}});
  return {W,rs,R};}
@@ -1058,19 +1169,61 @@ Object.assign(HELP,{recipe:{t:'Recipe',b:'Report writes a cited report. Answer r
  rdefaults:{t:'Run defaults',b:'Preselected on every new run. A profile can set its own domain lists; runs on that profile use those instead.'},
  'ph-search':{...HELP['ph-search'],b:HELP['ph-search'].b+' Results outside Allow domains, or on Block domains, are dropped here.'}});
 
+const BUILTIN_D=['quick','standard','deep','exhaustive'],RESERVED=['custom',...BUILTIN_D],UNIX={'lit-review':true};
+Object.assign(DPRE,{'survey-fast':{subq:8,rpq:8,pages:60,rounds:1,fpr:3,ppq:6,words:900},'news-scan':{subq:5,rpq:15,pages:50,rounds:1,fpr:3,ppq:5,words:700}});
+Object.assign(DL,{'survey-fast':'survey-fast','news-scan':'news-scan'});Object.assign(DD,{'survey-fast':'Your preset: broad, shallow, short report.','news-scan':'Your preset: recent pages, short digest.'});
+PROFILES.push({id:'laptop',extra:true,desc:'CPU only: keyword prefilter and scorer, hosted LLM.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'bm25',llm:'omniroute',model:'research-fast',scorer:'bm25',gpuDev:'laptop:cpu',cpuDev:'laptop:cpu'},{id:'eval-strict',extra:true,nix:true,desc:'Strict JEV scorer for evaluation runs.',th:.6,search:'searxng',fetch:'firecrawl',prefilter:'embeddings',llm:'agents',model:'qwen3-14b',scorer:'jev-strict',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'},{id:'offline',extra:true,desc:'Files only; nothing leaves the machine.',th:.5,search:'searxng',fetch:'firecrawl',prefilter:'bm25',llm:'agents',model:'gemma-3-12b',scorer:'rerank',gpuDev:'desktop:gpu0',cpuDev:'desktop:cpu'});
+const fmtD=s=>{s=Math.max(0,s);if(s<60)return s.toFixed(1)+'s';return Math.floor(s/60)+'m '+String(Math.floor(s%60)).padStart(2,'0')+'s';};
+const QT={plan:[14.4],search:[12.9],fetch:[10.7],chunk:[.2],prefilter:[.1],score:[3.3],select:[0],write:[11.9,.5]};
+const TCOL={plan:'var(--color-accent-200)',search:'var(--color-accent-400)',fetch:'var(--color-accent-600)',chunk:'var(--color-neutral-400)',prefilter:'var(--color-neutral-500)',score:'var(--color-accent-300)',gap:'var(--color-accent-700)',select:'var(--color-neutral-300)',write:'var(--color-accent)'};
+const TW='repeating-linear-gradient(135deg,var(--color-warn) 0 2px,transparent 2px 4px)',TQ='repeating-linear-gradient(135deg,var(--muted) 0 2px,transparent 2px 4px)';
+const SNM={plan:'Plan',search:'Search',fetch:'Fetch',load:'Load',chunk:'Chunk',prefilter:'Prefilter',score:'Score',gap:'Gap',select:'Select',write:'Write'};
+const RUNS=[
+{id:'r_8b90',q:CLIQ,rel:'12m ago',depth:'deep',recipe:'context',sources:'web',profile:'low-vram',words:2000,status:'running'},
+{id:'r_7f3a',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',rel:'Oct 2',depth:'deep',recipe:'report',sources:'both',profile:'workstation',words:2000,files:[['notes/pgvector-bench.md',6120]],status:'completed',dur:'3:12'},
+{id:'r_7f41',parent:'r_7f3a',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',rel:'Oct 2',depth:'deep',recipe:'report',sources:'both',profile:'workstation',words:300,status:'completed'},
+{id:'r_7e55',q:'Does PostgreSQL 17 support incremental backups without extensions?',rel:'Oct 2',depth:'quick',recipe:'answer',sources:'web',profile:'cloud',words:400,status:'completed',dur:'1:12'},
+{id:'r_7e90',q:'What changed in the Python 3.13 free-threaded build for C extensions?',rel:'Oct 2',depth:'quick',recipe:'context',sources:'web',profile:'low-vram',words:600,status:'completed',dur:'1:48'},
+{id:'r_7e2c',q:'llama.cpp KV cache quantization quality impact, q8_0 vs q4_0',rel:'Oct 1',depth:'standard',recipe:'report',sources:'both',profile:'low-vram',words:1200,status:'failed'},
+{id:'r_7d11',q:'Rust async cancellation safety patterns with tokio::select!',rel:'Oct 1',depth:'exhaustive',recipe:'report',sources:'web',profile:'cloud',words:3000,status:'completed',dur:'4:05'},
+{id:'r_7c08',q:'Summarize my notes on WebGPU compute shader limits',rel:'Sep 30',depth:'quick',recipe:'context',sources:'files',profile:'low-vram',words:600,files:[['webgpu/limits.md',8410],['webgpu/workgroups.md',3120],['webgpu/bench.txt',1900]],status:'completed',dur:'0:52'},
+{id:'r_7b77',q:'Is SQLite WAL mode safe on network filesystems?',rel:'Sep 29',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'cancelled'},
+{id:'r_7a3e',q:'Chunk size best practices for RAG over API reference docs',rel:'Sep 28',depth:'custom',dv:{subq:5,rpq:10,pages:60,rounds:2,fpr:3,ppq:12},recipe:'report',sources:'both',profile:'low-vram',words:1500,files:[['notes/rag-chunking.md',5230],['notes/api-docs-sample.md',12400]],status:'completed',dur:'2:58'},
+{id:'r_79d0',q:'Embedding models under 500M params ranked on MTEB retrieval',rel:'Sep 25',depth:'standard',recipe:'context',sources:'web',profile:'low-vram',words:1200,status:'failed'},
+{id:'r_7955',q:'Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows',rel:'Sep 24',depth:'deep',recipe:'report',sources:'both',profile:'workstation',words:2000,files:[['notes/pgvector-bench.md',6120]],status:'completed',dur:'3:40'},
+{id:'r_7902',q:'Tailscale vs WireGuard throughput on a Raspberry Pi 5',rel:'Sep 23',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:21'},
+{id:'r_78c1',q:'Which open-weight models under 15B handle tool calling reliably?',rel:'Sep 21',depth:'deep',recipe:'report',sources:'web',profile:'cloud',pOver:{scorer:'rerank'},words:2000,status:'completed',dur:'3:55'},
+{id:'r_7877',q:'ZFS special vdev sizing for a 40 TB media pool',rel:'Sep 19',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:30'},
+{id:'r_7820',q:'Weekly digest: new local LLM releases, llama.cpp and vLLM changes, and notable benchmarks from the past seven days',rel:'Sep 18',depth:'wide',recipe:'report',sources:'web',profile:'cloud',words:1500,status:'completed',dur:'3:02'},
+{id:'r_77d4',q:'State of Wayland fractional scaling in GNOME 47 and KDE 6.2',rel:'Sep 16',depth:'quick',recipe:'answer',sources:'web',profile:'low-vram',words:400,status:'completed',dur:'0:58'},
+{id:'r_7790',q:'Best practices for structured logging in Go services with slog',rel:'Sep 14',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:16'},
+{id:'r_7741',q:'NixOS impermanence setups: tmpfs root vs btrfs rollback',rel:'Sep 12',depth:'deep',recipe:'report',sources:'both',profile:'moe-lab',words:2000,files:[['nix/configuration.md',7300]],status:'completed',dur:'3:31'},
+{id:'r_76f8',q:'Literature review: evaluation metrics for retrieval-augmented generation, 2023–2025',rel:'Sep 10',depth:'lit-review',recipe:'report',sources:'web',profile:'cloud',words:2500,status:'completed',dur:'5:12'},
+{id:'r_76a2',q:'How does Whisper large-v3 turbo compare to distil-whisper on noisy audio?',rel:'Sep 8',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:44'},
+{id:'r_7655',q:'Self-hosted photo libraries: Immich vs PhotoPrism for 200k photos',rel:'Sep 6',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:19'},
+{id:'r_7610',q:'Do e-ink monitors reduce eye strain for long coding sessions?',rel:'Sep 3',depth:'quick',recipe:'answer',sources:'web',profile:'cloud',words:400,status:'completed',dur:'0:49'},
+{id:'r_75c8',q:'Garbage collector tuning for a JVM service with a 32 GB heap',rel:'Aug 30',depth:'deep',recipe:'report',sources:'web',profile:'workstation',words:2000,status:'completed',dur:'3:47'},
+{id:'r_7580',q:'Kubernetes vs Nomad for a 3-node homelab',rel:'Aug 27',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:25'},
+{id:'r_7533',q:'Postgres logical replication across major versions: gotchas',rel:'Aug 24',depth:'standard',recipe:'report',sources:'web',profile:'low-vram',words:1200,status:'completed',dur:'2:33'}];
+const PINS0=['r_7820','r_76f8','r_7a3e'],NAMES0={r_7820:'Weekly LLM digest',r_76f8:'RAG eval lit review'};
+Object.assign(HELP,{recent:{t:'Recent & pinned',b:'Click a run to fill the form with its question, options and attachments. Nothing starts until you press Run research. Names and pins are kept in this browser only.'},
+ time:{t:'Time per stage',b:'Each stage’s own working time. Waiting for the GPU (a model unloading) and time in the queue are counted separately. With several research rounds, a stage’s time is the sum of its rounds. Load runs alongside Search, so it is listed but not added to the bar.'},
+ profile:{t:'Profile',b:'A saved choice of providers, model and budgets. Advanced shows its values; edits apply to this run only until you save them. Edited values show as custom.'}});
+
 class Component extends DCLogic {
   state={screen:'live',run:null,query:'',files:[],dragOver:false,dropErr:'',optsOpen:false,opts:{recipe:'report',sources:'both',profile:'low-vram'},wNew:{...WDEF},wDef:{...WDEF},wSaved:false,pf:'kept',tab:'progress',cite:null,toast:null,hq:'',hf:'all',hr:'any',hist:HIST,versions:[],viewId:null,rw:null,theme:null,winW:window.innerWidth,
     health:{'search:searxng':{st:'ok',ms:418,at:Date.now()-180000},'prefilter:embeddings':{st:'down',detail:'ECONNREFUSED 127.0.0.1:11434 · is ollama running?',at:Date.now()-180000}},now:Date.now(),
-    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive',src:null,depth:'standard',dCustom:{...DCDEF},advOpen:false,wordsTouched:false,dWords:1200,dig:null,rqOpen:{},domA:null,domB:null,dDraft:{},startErr:null,runDef:{...RDEF},rdSaved:false,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null};
+    auth:{locked:false,pw:'',err:null,left:5,until:0,show:false},tokens:TOKENS,tokName:'',newTok:null,tokCopied:false,revoke:null,help:null,gpuPolicy:'exclusive',src:null,depth:'standard',dCustom:{...DCDEF},advOpen:false,wordsTouched:false,dWords:1200,dig:null,rqOpen:{},domA:null,domB:null,dDraft:{},startErr:null,runDef:{...RDEF},rdSaved:false,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null,runs:RUNS,pins:PINS0,names:{...NAMES0},rpOpen:false,rpMenu:null,rpEdit:null,fromRun:null,uDepths:['wide','lit-review'],dFrom:null,saveDlg:null,delDlg:null,profRev:0,tbOpen:false,runsEmpty:false};
   qRef=React.createRef();fileRef=React.createRef();hRef=React.createRef();repRef=React.createRef();pwRef=React.createRef();sdRef=React.createRef();sdBodyRef=React.createRef();
   componentDidMount(){
     try{const s=JSON.parse(localStorage.getItem('wosarcher-writing-defaults')||'null');if(s){const wd={...WDEF,...s};this.setState({wDef:wd,wNew:{...wd},dWords:wd.words});}}catch(e){}
     try{const dc=JSON.parse(localStorage.getItem('wosarcher-depth-custom')||'null');if(dc)this.setState({dCustom:{...DCDEF,...dc}});}catch(e){}
     try{const rd=JSON.parse(localStorage.getItem('wosarcher-run-defaults')||'null');if(rd){this.rdC={...RDEF,...rd};this.setState({runDef:this.rdC});}}catch(e){}
+    try{const pn=JSON.parse(localStorage.getItem('wosarcher-run-pins')||'null');const nm=JSON.parse(localStorage.getItem('wosarcher-run-names')||'null');const u={};if(Array.isArray(pn))u.pins=pn;if(nm)u.names=nm;this.setState(u);}catch(e){}
     this.iv=setInterval(()=>this.tick(),100);
     this.onKey=e=>this.key(e);this.onResize=()=>this.setState({winW:window.innerWidth});
     window.addEventListener('keydown',this.onKey);window.addEventListener('resize',this.onResize);
-    this.onPD=e=>{const dl=this.state.dl;if(dl&&dl.open&&!(e.target.closest&&e.target.closest('[data-dlmenu]')))this.setState({dl:{...dl,open:false}});if(this.state.help&&!(e.target.closest&&e.target.closest('[data-help],#wa-help')))this.setState({help:null});};this.onScroll=()=>{if(this.state.help)this.setState({help:null});};
+    this.onPD=e=>{if(this.state.rpMenu&&!(e.target.closest&&e.target.closest('[data-rpmenu]')))this.setState({rpMenu:null});const dl=this.state.dl;if(dl&&dl.open&&!(e.target.closest&&e.target.closest('[data-dlmenu]')))this.setState({dl:{...dl,open:false}});if(this.state.help&&!(e.target.closest&&e.target.closest('[data-help],#wa-help')))this.setState({help:null});};this.onScroll=()=>{if(this.state.help)this.setState({help:null});};
     document.addEventListener('pointerdown',this.onPD);document.addEventListener('scroll',this.onScroll,true);
     this.applyScenario(this.props.scenario||'live');
     this.onHash=()=>{const m=location.hash.match(/^#review=([\w-]+)\/(\w+)\/(\w+)/);if(m){this.setState({theme:m[2],forcePhone:m[3]==='phone'});this.applyScenario(m[1]);}};window.addEventListener('hashchange',this.onHash);this.onHash();
@@ -1089,7 +1242,7 @@ class Component extends DCLogic {
   baseRun(o={}){return {id:'r_8c21',query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},files:[],t:0,t0:0,status:'connecting',conn:'connected',startedReal:Date.now(),md:MD1,kind:'research',depth:'standard',iter:null,o:'web',...o};}
   applyScenario(sc){
     const unlocked={...this.state.auth,locked:false,err:null,pw:'',left:5,until:0};
-    const S={cancelAsk:false,cite:null,toast:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null,depth:'standard',advOpen:false,wordsTouched:false,dWords:this.state.wDef.words,optsOpen:false,dig:null,rqOpen:{},wNew:{...this.state.wDef},opts:{recipe:'report',sources:'both',profile:'low-vram'},domA:null,domB:null,dDraft:{},startErr:null,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null,pOver:{},pAdvOpen:false,pmOpen:false};
+    const S={cancelAsk:false,cite:null,toast:null,rw:null,help:null,tab:'progress',versions:[],auth:unlocked,pf:'kept',src:null,depth:'standard',advOpen:false,wordsTouched:false,dWords:this.state.wDef.words,optsOpen:false,dig:null,rqOpen:{},wNew:{...this.state.wDef},opts:{recipe:'report',sources:'both',profile:'low-vram'},domA:null,domB:null,dDraft:{},startErr:null,qOpen:false,dl:{open:false,busy:null},exFail:false,dlForce:null,pOver:{},pAdvOpen:false,pmOpen:false,fromRun:null,saveDlg:null,delDlg:null,rpMenu:null,rpEdit:null,tbOpen:false,uDepths:['wide','lit-review'],dFrom:null,files:[],query:'',runsEmpty:false,rpOpen:false};
     if(this.rdC)S.opts.recipe=this.rdC.format;
     const v1={id:'r_8c21',v:1,query:DQ,opts:{recipe:'report',sources:'both',profile:'low-vram'},wopts:{...this.state.wDef},md:MD1,dur:fmtT(END*TF),date:'Today, 14:02',files:[]};
     if(sc==='login')return this.setState({...S,run:null,screen:'new',auth:{...unlocked,locked:true}});
@@ -1100,7 +1253,7 @@ class Component extends DCLogic {
     if(SRC){const p=PASS[SRC[0]];this.setState({...S,run:this.baseRun({status:'done',t:END}),screen:'live',tab:'passages',pf:'all'});this.openSrc(p.s,DOCS[p.s].findIndex(c=>c.p===p),SRC[1]);return;}
     if(sc==='new-depth')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'exhaustive',dWords:3000,opts:{...S.opts,profile:'workstation'},wNew:{...this.state.wDef,words:3000}});
     if(sc==='new-profile'||sc==='new-profile-over')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,pAdvOpen:true,pOver:sc==='new-profile-over'?{scorer:'jev-strict',write:'high',ctx:60000}:{}});
-    if(sc==='new-profile-nolimits')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,pAdvOpen:true,depth:'deep',dWords:2000,wNew:{...this.state.wDef,words:2000},opts:{...S.opts,profile:'nixos'}});
+    if(sc==='new-profile-nolimits')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,pAdvOpen:true,depth:'deep',dWords:2000,wNew:{...this.state.wDef,words:2000},opts:{...S.opts,profile:'moe-lab'}});
     if(sc==='new-preset')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'wide',dWords:1500,wNew:{...this.state.wDef,words:1500}});
     if(sc==='new-custom')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'custom'});
     if(sc==='new-domains'||sc==='new-domain-error'){const bad=sc==='new-domain-error';return this.setState({...S,run:null,screen:'new',query:PQ,optsOpen:true,domA:bad?['gob.pe','gob.pe/tramites','sunat.gob.pe']:['gob.pe','sunat.gob.pe'],startErr:bad?{k:'allow',bad:'gob.pe/tramites',msg:DOMERR('allow','gob.pe/tramites')}:null});}
@@ -1112,10 +1265,18 @@ class Component extends DCLogic {
     if(sc==='help')return this.setState({...S,run:null,screen:'helpspec'});
     if(sc==='empty')return this.setState({...S,run:null,screen:'live'});
     if(sc==='new')return this.setState({...S,run:null,screen:'new'});
+    if(sc==='new-recent'){this.setState({...S,run:null,screen:'new'},()=>this.fillFrom(RUNS.find(z=>z.id==='r_7a3e'),true));return;}
+    if(sc==='new-recent-empty')return this.setState({...S,run:null,screen:'new',runsEmpty:true});
+    const CE={scorer:'rerank',write:'medium',ctx:120000};
+    if(sc==='new-profile-custom')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,pAdvOpen:true,opts:{...S.opts,profile:'cloud'},pOver:CE});
+    if(sc==='new-save-profile')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,pAdvOpen:true,opts:{...S.opts,profile:'cloud'},pOver:CE,saveDlg:{kind:'profile',name:'cloud-rerank',desc:'Hosted models with the local reranker.',touched:false}});
+    if(sc==='new-save-depth')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'custom',dFrom:'wide',dCustom:{subq:10,rpq:12,pages:200,rounds:1,fpr:3,ppq:8},dWords:1500,wNew:{...this.state.wDef,words:1500},saveDlg:{kind:'depth',name:'wide',touched:true}});
+    if(sc==='new-depth-many')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,uDepths:['wide','lit-review','survey-fast','news-scan'],depth:'news-scan',dWords:700,wNew:{...this.state.wDef,words:700}});
+    if(sc==='new-delete')return this.setState({...S,run:null,screen:'new',query:DQ,optsOpen:true,advOpen:true,depth:'wide',dWords:1500,wNew:{...this.state.wDef,words:1500},delDlg:{kind:'depth',id:'wide'}});
     const Q1={limit:2,pos:1,busy:[{id:'r_8b90',o:'cli',el:'4:06'},{id:'r_8c0d',o:'web',el:'1:12'}]},Q2={limit:2,pos:1,busy:[{id:'r_8b90',o:'cli',el:'4:06'},{id:'r_8bf2',o:'cli',el:'0:38'}]};
     if(sc==='queued'||sc==='queued-cli')return this.setState({...S,run:this.baseRun({hold:true,queue:sc==='queued'?Q1:Q2}),screen:'live'});
     if(sc==='live-cli'||sc==='cancel-cli')return this.setState({...S,run:this.baseRun({id:'r_8b90',query:CLIQ,status:'running',t:12,o:'cli',opts:{recipe:'context',sources:'web',profile:'low-vram',pv:{...profVals('low-vram'),scorer:'jev-strict'},pMod:true}}),screen:'live',cancelAsk:sc==='cancel-cli'});
-    if(sc==='live-api')return this.setState({...S,run:this.baseRun({id:'r_8b77',status:'running',t:6,o:'api',tok:'ci-runner'}),screen:'live'});
+    if(sc==='live-api')return this.setState({...S,run:this.baseRun({id:'r_8b77',status:'running',t:6,o:'api',tok:'ci-runner',queueS:14}),screen:'live'});
     if(sc==='loading')return this.setState({...S,run:this.baseRun({hold:true}),screen:'live'});
     if(sc==='failure')return this.setState({...S,run:this.baseRun({status:'running',t:18,failAt:25.4}),screen:'live'});
     if(sc==='cancelled')return this.setState({...S,run:this.baseRun({status:'cancelled',t:13.2,stopAt:13.2}),screen:'live'});
@@ -1125,7 +1286,7 @@ class Component extends DCLogic {
     if(sc==='rounds-live')return this.setState({...S,run:deepRun({status:'running',t:17.2}),screen:'live'});
     const RVS={'rounds-done':['coverage',3],'rounds-nofollow':['nofollow',3],'rounds-nonew':['nonew',4],'rounds-max':['max',3]}[sc];
     if(RVS)return this.setState({...S,run:deepRun({status:'done',t:END,iter:{planned:RVS[1],variant:RVS[0]}}),versions:[{...v1d,rounds:RV[RVS[0]].rounds.length+' of '+RVS[1]+' rounds'}],viewId:'r_8c21',screen:'live'});
-    if(sc==='finished-answer'){const oa={recipe:'answer',sources:'web',profile:'cloud'},wa={...v1.wopts,words:400};return this.setState({...S,run:this.baseRun({status:'done',t:END,opts:oa,md:MDA,wopts:wa,depth:'quick'}),versions:[{...v1,opts:oa,wopts:wa,md:MDA,dur:'1:58',depth:'quick'}],viewId:'r_8c21',screen:'report'});}
+    if(sc==='finished-answer'||sc==='done-quick'){const oa={recipe:'answer',sources:'web',profile:'cloud'},wa={...v1.wopts,words:400};return this.setState({...S,run:this.baseRun({status:'done',t:END,opts:oa,md:MDA,wopts:wa,depth:'quick',sample:true}),versions:[{...v1,opts:oa,wopts:wa,md:MDA,dur:'0:54',depth:'quick'}],viewId:'r_8c21',screen:sc==='done-quick'?'live':'report'});}
     const EXS={'export-menu':{dlForce:'menu',dl:{open:true,busy:null}},'export-busy':{dl:{open:false,busy:'pdf'}},'export-error':{exFail:true,toast:{msg:'PDF export needs typst on the server',icon:'ph-warning-circle',ic:'var(--color-danger)'}},'rewrite-format':{rw:{from:'r_8c21',w:{...v1d.wopts,format:'answer',words:400}}}}[sc];
     if(EXS)clearTimeout(this.tt);
     if(sc==='finished'||sc==='report-cut'||sc==='dig-deeper'||EXS)return this.setState({...S,...(EXS||{}),run:deepRun({status:'done',t:END}),versions:[sc==='report-cut'?{...v1d,cont:2,cut:true}:v1d],viewId:'r_8c21',screen:'report',dig:sc==='dig-deeper'?{rounds:1,depth:'deep'}:null});
@@ -1133,6 +1294,64 @@ class Component extends DCLogic {
       return this.setState({...S,run:this.baseRun({status:'done',t:END,id:'r_8c4e',kind:'rewrite',rewriteOf:'r_8c21',t0:32,md:MD2,wopts:v2.wopts}),versions:[v1,v2],viewId:'r_8c4e',screen:'report'});}
     this.setState({...S,run:this.baseRun(),screen:'live'});
   }
+  formSig(s){return JSON.stringify([s.query.trim(),s.depth,s.depth==='custom'?s.dCustom:0,s.opts.recipe,s.opts.sources,s.opts.profile,s.pOver||{},s.wNew,s.files.map(f=>f.name),s.domA,s.domB]);}
+  formDirty(s){return !!(s.query.trim()||s.files.length||s.depth!=='standard'||Object.keys(s.pOver||{}).length||s.domA||s.domB||JSON.stringify(s.wNew)!==JSON.stringify({...s.wDef,words:this.wBase(s)}));}
+  fillFrom(x,quiet){const s=this.state;const name=s.names[x.id]||x.q;const dirty=!quiet&&this.formDirty(s);
+    const snap=dirty?{query:s.query,depth:s.depth,dCustom:s.dCustom,dWords:s.dWords,dFrom:s.dFrom,opts:s.opts,pOver:s.pOver,wNew:s.wNew,wordsTouched:s.wordsTouched,files:s.files,domA:s.domA,domB:s.domB,fromRun:s.fromRun}:null;
+    const depth=x.depth==='custom'||(DPRE[x.depth]&&(BUILTIN_D.includes(x.depth)||s.uDepths.includes(x.depth)))?x.depth:'standard';const base=depth==='custom'?(x.words||1200):depth==='standard'?s.wDef.words:DPRE[depth].words;const w=x.words||base;
+    const u={query:x.q,depth,dFrom:null,dWords:base,wNew:{...s.wDef,words:w},wordsTouched:w!==base,opts:{...s.opts,recipe:x.recipe,sources:x.sources,profile:PROFILES.find(p=>p.id===x.profile)?x.profile:DEFPROF},pOver:{...(x.pOver||{})},files:(x.files||[]).map(([n,b])=>({name:n,bytes:b,from:x.id})),domA:null,domB:null,startErr:null,dropErr:'',rpMenu:null,rpOpen:false};
+    if(depth==='custom')u.dCustom={...DCDEF,...(x.dv||{})};
+    this.setState(u,()=>this.setState(st=>({fromRun:{id:x.id,sig:this.formSig(st)}})));
+    if(dirty)this.toastMsg('Filled from “'+(name.length>28?name.slice(0,28)+'…':name)+'”',()=>this.setState({...snap,toast:null}));}
+  savePN(u){this.setState(u);try{if(u.pins)localStorage.setItem('wosarcher-run-pins',JSON.stringify(u.pins));if(u.names)localStorage.setItem('wosarcher-run-names',JSON.stringify(u.names));}catch(e){}}
+  togglePin(id){const p=this.state.pins;this.savePN({pins:p.includes(id)?p.filter(x=>x!==id):[...p,id]});this.setState({rpMenu:null});}
+  commitName(id,val,q){const e=this.state.rpEdit;if(!e||e.id!==id)return;const v=String(val).trim();const names={...this.state.names};if(!v||v===q)delete names[id];else names[id]=v;this.savePN({names});this.setState({rpEdit:null});}
+  openRun(x){const S=this.state;if(x.live){this.go('live');return;}if(x.status==='running'){this.applyScenario('live-cli');return;}if(x.status==='failed'){this.applyScenario('failure');return;}if(x.status==='cancelled'){this.applyScenario('cancelled');return;}
+    const vs=S.versions.find(v=>v.id===x.id)?S.versions:[...S.versions,{id:x.id,v:1,query:x.q,opts:{recipe:x.recipe,sources:x.sources,profile:x.profile},wopts:{...S.wDef,words:x.words},md:x.recipe==='answer'?MDA:MD1,dur:x.dur||'2:10',date:x.rel,files:(x.files||[]).map(([n,b])=>({name:n,bytes:b})),depth:x.depth}];
+    this.setState({versions:vs,viewId:x.id,screen:'report'});}
+  nameErr(n,kind){const v=String(n).trim();if(!v)return 'Enter a name.';if(v.length>64)return 'Use 64 characters or fewer.';if(!/^[A-Za-z0-9_-]+$/.test(v))return 'Use letters, digits, - and _ only.';const lv=v.toLowerCase();
+    if(RESERVED.includes(lv))return '“'+v+'” is reserved'+(lv==='custom'?'.':' for a built-in depth.');
+    if(kind==='depth'?this.state.uDepths.some(k=>k.toLowerCase()===lv):PROFILES.some(p=>p.id.toLowerCase()===lv))return 'A '+kind+' named “'+v+'” already exists.';return '';}
+  evNow(){const S=this.state;const PO=S.pOver||{};return {...this.pBase(S.opts.profile,PO),...PO};}
+  applyProf(p,ev,PO){['search','fetch','prefilter','scorer','llm','model'].forEach(k=>{if(PO[k]!==undefined)p[k]=ev[k];});if(PO.ctx!==undefined)p.ctx=ev.ctx;const T=['cw','mo','plan','gap','write','gapctx'].filter(k=>PO[k]!==undefined);if(T.length){p.tune={...(p.tune||{})};p.tune[ev.model]={...(p.tune[ev.model]||{})};T.forEach(k=>p.tune[ev.model][k]=ev[k]);}}
+  updateProfile(){const S=this.state;const p=PROFILES.find(x=>x.id===S.opts.profile);if(!p||p.nix)return;const PO={...S.pOver};const snap=JSON.parse(JSON.stringify(p));this.applyProf(p,this.evNow(),PO);
+    this.setState(s=>({pOver:{},profRev:s.profRev+1}));this.toastMsg('Saved profile “'+p.id+'”',()=>{Object.keys(p).forEach(k=>delete p[k]);Object.assign(p,snap);this.setState(s=>({pOver:PO,profRev:s.profRev+1,toast:null}));});}
+  updateDepth(id){const S=this.state;const prev={...DPRE[id]};DPRE[id]={...S.dCustom,words:+S.wNew.words||prev.words};this.setState({depth:id,dFrom:null,dWords:DPRE[id].words,wordsTouched:false});
+    this.toastMsg('Saved depth “'+id+'”',()=>{DPRE[id]=prev;this.setState({depth:'custom',dFrom:id,toast:null});});}
+  saveAs(){const S=this.state;const D=S.saveDlg;const name=D.name.trim();
+    if(D.kind==='depth'){const dv=S.depth==='custom'?S.dCustom:DPRE[S.depth];const words=+S.wNew.words||1200;DPRE[name]={subq:dv.subq,rpq:dv.rpq,pages:dv.pages,rounds:dv.rounds,fpr:dv.fpr,ppq:dv.ppq,words};DL[name]=name;DD[name]='Your preset: '+dv.subq+' sub-queries, '+dv.rounds+' round'+(dv.rounds>1?'s':'')+', '+fmtN(words)+' words.';
+      this.setState(s=>({uDepths:[...s.uDepths.filter(x=>x!==name),name],depth:name,dFrom:null,dWords:words,wordsTouched:false,saveDlg:null}));this.toastMsg('Saved depth “'+name+'”');return;}
+    const base=PROFILES.find(x=>x.id===S.opts.profile)||PROFILES[1];const p=JSON.parse(JSON.stringify(base));delete p.nix;delete p.extra;Object.assign(p,{id:name,user:true,desc:D.desc.trim()||'Based on '+base.id+'.'});this.applyProf(p,this.evNow(),S.pOver||{});PROFILES.push(p);
+    this.setState(s=>({opts:{...s.opts,profile:name},pOver:{},saveDlg:null,profRev:s.profRev+1}));this.toastMsg('Saved profile “'+name+'”');}
+  confirmDel(){const S=this.state;const D=S.delDlg;if(!D)return;
+    if(D.kind==='depth'){this.setState(s=>({uDepths:s.uDepths.filter(x=>x!==D.id),delDlg:null}));if(S.depth===D.id)this.pickDepth('standard');}
+    else{const i=PROFILES.findIndex(x=>x.id===D.id);if(i>=0)PROFILES.splice(i,1);this.setState(s=>({delDlg:null,profRev:s.profRev+1,opts:s.opts.profile===D.id?{...s.opts,profile:DEFPROF}:s.opts,pOver:s.opts.profile===D.id?{}:s.pOver}));}
+    this.toastMsg('Deleted '+D.kind+' “'+D.id+'”');}
+  stTime(p,st,t,r,iter,fb){
+    if(r.sample&&r.status==='done'){const q=QT[p.id];if(!q)return {skip:true};return {sec:q[0],wait:q[1]||0};}
+    if(st==='pending'||st==='reused')return null;if(st==='skipped')return {skip:true};
+    if(iter&&iter.W[p.id]){const rs=iter.W[p.id].filter(w=>w.s<t).map(w=>(Math.min(t,w.e)-w.s)*TF);return {sec:rs.reduce((a,b)=>a+b,0),wait:0,rounds:rs,live:st==='running'};}
+    const rr=(p.id==='prefilter'&&fb)?p.s:p.r;if(st==='waiting')return {sec:0,wait:(t-p.s)*TF,waiting:true};
+    return {sec:Math.max(0,((st==='done'?p.e:t)-rr)*TF),wait:Math.max(0,(rr-p.s)*TF),live:st==='running'};}
+  tmFields(tm,st){if(!tm)return {time:'—',timeCol:'var(--faint)',wait:'',tTitle:''};
+    if(tm.skip)return {time:'skipped',timeCol:'var(--faint)',wait:'',tTitle:'Skipped'};
+    if(tm.waiting)return {time:'—',timeCol:'var(--faint)',wait:fmtD(tm.wait),tTitle:'Waiting for the GPU · '+fmtD(tm.wait)};
+    const w=tm.wait>=.05?'+'+fmtD(tm.wait):'';const many=tm.rounds&&tm.rounds.length>1;
+    return {time:fmtD(tm.sec),timeCol:tm.live?'var(--color-accent-300)':st==='failed'?'var(--color-danger)':'var(--muted)',wait:w,tTitle:(many?tm.rounds.map((x,i)=>'Round '+(i+1)+' '+fmtD(x)).join(' · ')+' · total ':'Stage time ')+fmtD(tm.sec)+(w?' · plus '+fmtD(tm.wait)+' waiting for the GPU':'')};}
+  timeBar(TM,r,running){const ORD=['plan','search','fetch','chunk','prefilter','score','gap','select','write'];const segs=[];let waitT=0;const waitAt=[];const q=r.queueS||0;
+    if(q)segs.push({k:'queue',label:'Queue',sec:q,bg:TQ});
+    ORD.forEach(id=>{const m=TM[id];if(!m||m.skip)return;if(m.wait>=.05){waitT+=m.wait;waitAt.push(SNM[id]);segs.push({k:'wait',label:'GPU wait before '+SNM[id],sec:m.wait,bg:TW});}if(m.sec>0||m.live)segs.push({k:id,label:SNM[id],sec:m.sec,bg:TCOL[id]});});
+    const total=segs.reduce((a,s)=>a+s.sec,0);const pct=s=>{if(!total)return '';const v=s/total*100;return v>0&&v<1?'<1%':Math.round(v)+'%';};
+    segs.forEach(s=>{s.flex=(total?Math.max(s.sec/total*1000,.01):1).toFixed(3);s.title=s.label+' · '+fmtD(s.sec)+' · '+pct(s.sec);});
+    const all=[];if(q)all.push({label:'Queue',time:fmtD(q),pct:pct(q),bg:TQ,sw:'none',op:1,note:'waiting for a free run slot'});
+    ['plan','search','load','fetch','chunk','prefilter','score','gap','select','write'].forEach(id=>{const m=TM[id];if(!m)return;
+      if(m.skip){all.push({label:SNM[id],time:'skipped',pct:'',bg:'transparent',sw:'inset 0 0 0 1px var(--color-divider)',op:.7,note:''});return;}
+      if(id==='load'){all.push({label:'Load',time:fmtD(m.sec),pct:'',bg:'transparent',sw:'inset 0 0 0 1px var(--color-divider)',op:1,note:'alongside Search · not in the bar'});return;}
+      all.push({label:SNM[id]+(m.live?' · running':''),time:fmtD(m.sec),pct:pct(m.sec),bg:TCOL[id],sw:'none',op:1,note:m.rounds&&m.rounds.length>1?m.rounds.map(fmtD).join(' + '):''});});
+    if(waitT)all.push({label:'GPU wait',time:fmtD(waitT),pct:pct(waitT),bg:TW,sw:'none',op:1,note:'before '+waitAt.join(', ')});
+    const tp=segs.filter(s=>s.k!=='wait').map(s=>({label:s.label,sec:s.sec,bg:s.bg}));if(waitT)tp.push({label:'GPU wait',sec:waitT,bg:TW});
+    const top=tp.sort((a,b)=>b.sec-a.sec).slice(0,3).map(s=>({label:s.label,time:fmtD(s.sec),pct:pct(s.sec),bg:s.bg}));
+    return {segs,total:fmtD(total),sub:running?'so far':'',all,top,has:segs.length>0,aria:'Time per stage, '+fmtD(total)+' total: '+segs.map(s=>s.title).join('; ')};}
   setRun(u){this.setState(s=>s.run?{run:{...s.run,...u}}:null);}
   tick(){
     const now=Date.now();const st=this.state;
@@ -1159,7 +1378,7 @@ class Component extends DCLogic {
     if(this.state.auth.locked)return;
     const tag=(e.target&&e.target.tagName)||'';const typing=/INPUT|TEXTAREA|SELECT/.test(tag);
     if(e.altKey&&/^Digit[1-4]$/.test(e.code)){e.preventDefault();this.go(['new','live','history','settings'][+e.code.slice(5)-1]);return;}
-    if(e.key==='Escape'){if(this.state.dl&&this.state.dl.open){this.setState(s=>({dl:{...s.dl,open:false}}));return;}if(this.state.help){this.setState({help:null});return;}if(this.state.dig){this.setState({dig:null});return;}if(this.state.src){this.closeSrc();return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
+    if(e.key==='Escape'){if(this.state.delDlg){this.setState({delDlg:null});return;}if(this.state.saveDlg){this.setState({saveDlg:null});return;}if(this.state.rpMenu){this.setState({rpMenu:null});return;}if(this.state.rpEdit){this.setState({rpEdit:null});return;}if(this.state.dl&&this.state.dl.open){this.setState(s=>({dl:{...s.dl,open:false}}));return;}if(this.state.help){this.setState({help:null});return;}if(this.state.dig){this.setState({dig:null});return;}if(this.state.src){this.closeSrc();return;}if(this.state.revoke)this.setState({revoke:null});else if(this.state.rw)this.setState({rw:null});else if(this.state.cite)this.setState({cite:null});return;}
     if(this.state.src&&!typing&&/^Arrow(Down|Right|Up|Left)$/.test(e.key)){e.preventDefault();this.moveSrc(/Down|Right/.test(e.key)?1:-1);return;}
     if(typing)return;
     if(e.key==='r'&&this.state.screen==='live'&&!this.state.src&&!e.ctrlKey&&!e.metaKey){const o=['cited','kept','all'];this.setState(s=>({pf:o[(o.indexOf(s.pf)+1)%3]}));}
@@ -1236,13 +1455,13 @@ class Component extends DCLogic {
     return out;
   }
   wBase(s){return s.depth==='custom'?s.dWords:s.depth==='standard'?s.wDef.words:DPRE[s.depth].words;}
-  pickDepth(d){this.setState(s=>{const nb=d==='custom'?s.dWords:d==='standard'?s.wDef.words:DPRE[d].words;const u={depth:d,dWords:nb};if(d==='custom')u.advOpen=true;if(!s.wordsTouched)u.wNew={...s.wNew,words:nb};return u;});}
-  pBase(pid,o){const p=profVals(pid);const l=o.llm??p.llm,m=o.model??p.model;return (l===p.llm&&m===p.model)?p:{...p,...limVals(l,m)};}
+  pickDepth(d){this.setState(s=>{const nb=d==='custom'?s.dWords:d==='standard'?s.wDef.words:DPRE[d].words;const u={depth:d,dWords:nb,dFrom:null};if(d==='custom')u.advOpen=true;if(!s.wordsTouched)u.wNew={...s.wNew,words:nb};return u;});}
+  pBase(pid,o){const p=profVals(pid);const l=o.llm??p.llm,m=o.model??p.model;const pf=PROFILES.find(x=>x.id===pid)||{};return (l===p.llm&&m===p.model)?p:{...p,...limVals(l,m),...((pf.tune||{})[m]||{})};}
   setPV(k,v){this.setState(s=>{const o={...(s.pOver||{}),[k]:v};if(k==='llm'){o.model=defModel(v);delete o.cw;delete o.mo;}if(k==='model'){delete o.cw;delete o.mo;}
     const b=this.pBase(s.opts.profile,o);Object.keys(o).forEach(kk=>{if(String(o[kk])===String(b[kk]))delete o[kk];});return {pOver:o};});}
   pmeta(o,phone){const v=o.pv||profVals(o.profile);const llm=v.llm+'/'+v.model;const all=[v.search,v.fetch,v.prefilter,v.scorer,llm].join(' · ');const open=!!this.state.pmOpen;
-    return {name:o.profile,text:phone&&!open?llm:all,mod:!!o.pMod,canT:phone,tLabel:open?'Fewer':'All providers',tExp:open?'true':'false',tIcon:open?'ph-caret-up':'ph-caret-down',toggle:()=>this.setState(s=>({pmOpen:!s.pmOpen}))};}
-  editDepth(k,v){this.setState(s=>{const base=s.depth==='custom'?s.dCustom:DPRE[s.depth];const dCustom={};DF.forEach(([kk])=>dCustom[kk]=base[kk]);dCustom[k]=v;try{localStorage.setItem('wosarcher-depth-custom',JSON.stringify(dCustom));}catch(e){}return {depth:'custom',dCustom,advOpen:true};});}
+    return {name:o.pMod?'custom ('+o.profile+')':o.profile,text:phone&&!open?llm:all,mod:false,canT:phone,tLabel:open?'Fewer':'All providers',tExp:open?'true':'false',tIcon:open?'ph-caret-up':'ph-caret-down',toggle:()=>this.setState(s=>({pmOpen:!s.pmOpen}))};}
+  editDepth(k,v){this.setState(s=>{const base=s.depth==='custom'?s.dCustom:DPRE[s.depth];const dCustom={};DF.forEach(([kk])=>dCustom[kk]=base[kk]);dCustom[k]=v;try{localStorage.setItem('wosarcher-depth-custom',JSON.stringify(dCustom));}catch(e){}return {depth:'custom',dCustom,advOpen:true,dFrom:s.depth==='custom'?s.dFrom:s.depth};});}
   ist(id,t,r,iter){const W=iter.W[id];if(!W)return null;if(!W.length||t<W[0].s)return {st:'pending'};const stop=r.stopAt!=null&&t>=r.stopAt;
     const cur=W.find(w=>t>=w.s&&t<w.e);if(cur)return {st:stop?(r.status==='failed'?'failed':'cancelled'):'running',k:cur.k,pr:(t-cur.s)/(cur.e-cur.s)};
     let last=W[0];W.forEach(w=>{if(t>=w.e)last=w;});return {st:t>=31||r.status==='done'?'done':'idle',k:last.k};}
@@ -1271,7 +1490,7 @@ class Component extends DCLogic {
       const ro=this.state.rqOpen[k];const open=ro==null?inR:ro;const long=qsAll.length>3;
       const gw=W.gap.find(w=>w.k===k),next=R.rounds[i+1];let gap='',gapIcon='ph-arrow-bend-down-right',gapCol='var(--muted)',gapAnim='none';
       if(gw&&t>=gw.s){if(t<gw.e&&!stopped){gap='Gap: reading the best passages so far…';gapIcon='ph-circle-notch';gapCol='var(--color-accent-300)';gapAnim='sx-spin .9s linear infinite';}else if(t>=gw.e&&(next||x.nofollow)){gap=(next?'Gap: '+next.qs.length+' follow-up queries for round '+(k+1):'Gap: no usable follow-up query')+(x.unc!=null?' · '+x.unc+' uncovered':'');if(!next)gapIcon='ph-pencil-slash';}}
-      rounds.push({k,title:'Round '+k,kind:i?'gap follow-ups':'planner queries',icon,ic,anim,stat,statCol,note:x.note||'',qs:long&&!open?qsAll.slice(0,2):qsAll,more:long?(open?'Show fewer':'+'+(qsAll.length-2)+' more'):'',exp:open?'true':'false',toggle:()=>this.setState(s=>({rqOpen:{...s.rqOpen,[k]:!open}})),gap,gapIcon,gapCol,gapAnim});});
+      rounds.push({k,dur:fmtD((Math.min(t,rr.b)-rr.a)*TF),title:'Round '+k,kind:i?'gap follow-ups':'planner queries',icon,ic,anim,stat,statCol,note:x.note||'',qs:long&&!open?qsAll.slice(0,2):qsAll,more:long?(open?'Show fewer':'+'+(qsAll.length-2)+' more'):'',exp:open?'true':'false',toggle:()=>this.setState(s=>({rqOpen:{...s.rqOpen,[k]:!open}})),gap,gapIcon,gapCol,gapAnim});});
     const ci=iter.rs.findIndex(x=>t>=x.a&&t<x.b),gN=W.gap.find(w=>t>=w.s&&t<w.e),reason=ran>=N?'max rounds':R.stop;
     let summary='',stop='',stopIcon='ph-check-circle',stopNote='',next='';
     if(conn||t<iter.rs[0].a)summary='up to '+N+' rounds';else if(stopped)summary='cancelled';else if(ended)summary=ran+' of '+N+' rounds';else if(ci>=0)summary='round '+(ci+1)+'/'+N;else if(gN)summary='gap after round '+gN.k;
@@ -1333,6 +1552,7 @@ class Component extends DCLogic {
       waiting:{icon:'ph-cpu',ic:'var(--color-warn)',bg:'repeating-linear-gradient(135deg,color-mix(in srgb,var(--color-warn) 14%,transparent) 0 5px,transparent 5px 10px)',bd:'1px dashed var(--color-warn)',lc:'var(--color-text)',tc:'var(--color-warn)',bar:'transparent'},
       running:{icon:'ph-circle-notch',ic:'var(--color-accent)',bg:'color-mix(in srgb,var(--color-accent) 10%,transparent)',bd:'1px solid var(--color-accent)',lc:'var(--color-text)',tc:'var(--color-accent-300)',bar:'var(--color-accent)',anim:'sx-spin .9s linear infinite',glow:'0 0 16px -6px var(--color-accent)'},
       done:{icon:'ph-check',ic:'var(--muted)',bg:'transparent',bd:'1px solid var(--color-divider)',lc:'var(--color-text)',tc:'var(--muted)',bar:'var(--faint)'},
+      skipped:{icon:'ph-minus-circle',ic:'var(--faint)',bg:'transparent',bd:'1px dashed var(--line)',lc:'var(--muted)',tc:'var(--faint)',bar:'transparent'},
       reused:{icon:'ph-recycle',ic:'var(--muted)',bg:'transparent',bd:'1px dashed var(--color-divider)',lc:'var(--muted)',tc:'var(--muted)',bar:'var(--line)'},
       failed:{icon:'ph-x-circle',ic:'var(--color-danger)',bg:'color-mix(in srgb,var(--color-danger) 10%,transparent)',bd:'1px solid var(--color-danger)',lc:'var(--color-text)',tc:'var(--color-danger)',bar:'var(--color-danger)'},
       cancelled:{icon:'ph-stop-circle',ic:'var(--muted)',bg:'transparent',bd:'1px dashed var(--muted)',lc:'var(--color-text)',tc:'var(--muted)',bar:'var(--faint)'}};
@@ -1346,15 +1566,16 @@ class Component extends DCLogic {
       'm-prefilter-fb':{t:'Fallback · keyword (BM25)',b:'Configured: embeddings (bge-small-en-v1.5). The embedder was unreachable (ECONNREFUSED 127.0.0.1:11434), so BM25 ran instead. Kept the top 50 per sub-query: 150 of 612. q4 and q5 skipped ranking (small-input passthrough).'},
       'm-score':{t:'Scorer · '+prof.scorer,b:'Ran '+prof.scorer+' as configured in the '+prof.id+' profile. Scores of '+th.toFixed(2)+' or more go on to the query cap.'}};
     let gpuPhase=null,stopLabel='';
-    const PHS=iter?[...PH.slice(0,7),{id:'gap',l:'Gap',s:31,r:31,e:31,gpu:'LLM'},...PH.slice(7)]:PH;const NPL=r.iter?r.iter.planned:1,RAN=iter?iter.R.rounds.length:1;
-    const phases=PHS.map(p=>{const is=iter&&!conn?this.ist(p.id,t,r,iter):null;const st=conn?'pending':is?(is.st==='idle'?'done':is.st):this.phaseSt(p,t,r);const S=ST[st];
+    const PHS=[...PH.slice(0,7),{id:'gap',l:'Gap',s:31,r:31,e:31,gpu:'LLM'},...PH.slice(7)];const TM={};const NPL=r.iter?r.iter.planned:1,RAN=iter?iter.R.rounds.length:1;
+    const phases=PHS.map(p=>{const is=iter&&!conn?this.ist(p.id,t,r,iter):null;let st=conn?'pending':is?(is.st==='idle'?'done':is.st):this.phaseSt(p,t,r);if(!iter&&p.id==='gap'&&st!=='pending')st='skipped';if(p.id==='load'&&r.opts.sources==='web'&&st!=='pending')st='skipped';const S=ST[st];const tm=this.stTime(p,st,t,r,iter,fb);TM[p.id]=tm;
       if((st==='running'||st==='waiting')&&p.gpu)gpuPhase={p,st};if(st==='cancelled'||st==='failed')stopLabel=p.l;
-      const text=p.id==='gap'?(st==='pending'?'pending':is.st==='running'?'reading round '+is.k:is.st==='idle'?(((iter.R.rounds[is.k]||{}).qs||[]).length+' follow-ups'):st==='done'?RAN+' of '+NPL+' rounds':'cancelled'):st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+(fb&&p.id==='score'?'planner LLM unloading':p.wait):st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](is&&is.st==='idle'?'running':st);
+      const text=st==='skipped'?(p.id==='gap'?'1 round · not needed':'no attached files'):p.id==='gap'?(st==='pending'?'pending':is.st==='running'?'reading round '+is.k:is.st==='idle'?(((iter.R.rounds[is.k]||{}).qs||[]).length+' follow-ups'):st==='done'?RAN+' of '+NPL+' rounds':'cancelled'):st==='pending'?'pending':st==='waiting'?'waiting for GPU · '+(fb&&p.id==='score'?'planner LLM unloading':p.wait):st==='failed'?'CUDA out of memory':st==='cancelled'?'cancelled · '+txt[p.id](st):st==='reused'?'reused from '+r.rewriteOf:txt[p.id](is&&is.st==='idle'?'running':st);
       const pct=is&&is.pr!=null&&st!=='done'?Math.round(clamp(is.pr,0,1)*100):st==='done'||st==='reused'?100:(st==='running'||st==='failed'||st==='cancelled')?Math.round(prog(p)*100):0;
-      return {help:(st==='waiting'?'wait-':'ph-')+p.id,helpLabel:'Help: '+p.l+(st==='waiting'?', waiting for GPU':''),label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text,
+      return {...this.tmFields(tm,st),help:(st==='waiting'?'wait-':'ph-')+p.id,helpLabel:'Help: '+p.l+(st==='waiting'?', waiting for GPU':''),label:p.l,icon:S.icon,ic:S.ic,bg:S.bg,bd:S.bd,lc:S.lc,tc:S.tc,bar:S.bar,anim:S.anim||'none',glow:S.glow||'none',text,pct,title:p.l+' — '+text,
         hasTag:!!TG[p.id]&&['running','done','failed','cancelled','reused'].includes(st),tag:TG[p.id]?TG[p.id][0]:'',tagHelp:TG[p.id]?TG[p.id][1]:'',tagFb:!!(TG[p.id]&&TG[p.id][2]),tagAria:TG[p.id]?'Method: '+TG[p.id][0]+', details':'',
         tagBs:TG[p.id]&&TG[p.id][2]?'dashed':'solid',tagBd:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--color-divider)',tagCol:TG[p.id]&&TG[p.id][2]?'var(--color-warn)':'var(--muted)',
-        detail:is&&st!=='pending'?this.idetail(p.id,is,st,iter,NPL):p.id==='prefilter'&&(st==='done'||st==='running'||st==='reused')?(st==='running'?'top 50 per sub-query':'top 50/sub-query · q4, q5 passthrough'):'',dc:is&&is.st==='running'?'var(--color-accent-300)':'var(--muted)',detail2:p.id==='search'&&r.domFiltered&&st!=='pending'?this.domF(r,nfound,web.length):''};});
+        detail:is&&st!=='pending'?this.idetail(p.id,is,st,iter,NPL):p.id==='prefilter'&&(st==='done'||st==='running'||st==='reused')?(st==='running'?'top 50 per sub-query':'top 50/sub-query · q4, q5 passthrough'):'',dc:is&&is.st==='running'?'var(--color-accent-300)':'var(--muted)',detail2:p.id==='search'&&r.domFiltered&&st!=='pending'?this.domF(r,nfound,web.length):(tm&&tm.rounds&&tm.rounds.length>1?tm.rounds.map(fmtD).join(' + '):'')};});
+    const tb=this.timeBar(TM,r,running||conn);
     const keptVisible=t>=P.select.e;
     const sourcesV=conn?[]:src.filter(s=>s.found<=t).map(s=>{let st,icon,ic,sc='var(--muted)',anim='none';
       if(s.file){if(s.fe<=t){st=s.size;icon='ph-file-text';ic='var(--muted)';}else{st='loading…';icon='ph-circle-notch';ic='var(--color-accent)';anim='sx-spin .9s linear infinite';}}
@@ -1419,7 +1640,7 @@ class Component extends DCLogic {
       blocks:this.blocks(r.md.slice(0,chars),r.wopts.cite,running&&chars>0&&chars<r.md.length,files),
       repSummary:chars?(running?`writing · ${fmtK(writeTok)} tokens`:`${fmtK(writeTok)} tokens`):'',repOpts:phone?'':`${r.wopts.tone} · ${r.wopts.words} words · ${r.wopts.lang}`,
       repEmpty:chars===0&&status!=='failed',repEmptyText,repEmptyIcon,repEmptyIc,isFailed:status==='failed',errText:ERR,
-      elapsed:conn?'0:00':fmtT((t-r.t0)*TF),tokens:`${fmtK(tokIn)} in · ${fmtK(tokOut)} out`,tokTitle:'Prompt / completion tokens across all stages',cost:cost?'$'+cost.toFixed(4):'$0.0000 · local',
+      tb,elapsed:conn?'0:00':r.sample&&status==='done'?'0:54':fmtT((t-r.t0)*TF),tokens:`${fmtK(tokIn)} in · ${fmtK(tokOut)} out`,tokTitle:'Prompt / completion tokens across all stages',cost:cost?'$'+cost.toFixed(4):'$0.0000 · local',
       connText,connCol,connAnim,seq:'seq '+Math.floor(t*27),
       tabCounts:{sources:conn?'':String(sourcesV.length),passages:keptVisible?'14':scoreDone?'19':'',report:chars?(running?'…':'✓'):''}};
   }
@@ -1450,18 +1671,21 @@ class Component extends DCLogic {
     const depthEst='~'+dv.pages+' pages · '+effR+' round'+(effR>1?'s':'')+' · ~'+llmCalls(effR,S.wNew.words)+' LLM calls'+(!iterOK&&dv.rounds>1?' · rounds limited to 1':'');
     const PO=S.pOver||{};const pb=this.pBase(S.opts.profile,PO);const ev={...pb,...PO};const pN=Object.keys(PO).length;const mdE=mdlOf(ev.llm,ev.model);const noLim=!(mdE&&mdE.cw);
     const cap=Math.floor(ev.cw/1000)*1000,wOut=Math.min(Math.max(1024,2*(+S.wNew.words||0)),+ev.mo||FB_MO),ctxAuto=Math.max(0,ev.cw-2000-wOut),gapAuto=Math.max(0,ev.cw-2000-768),lockG=effR<2;
-    const mk=(k,label,help,kind,x={})=>{const over=PO[k]!==undefined;const dis=!!x.dis;return {id:'pa-'+k,label,help,helpLabel:'Help: '+label,isSel:kind==='sel',isText:kind==='text',isNum:kind==='num',value:ev[k],over,bs:over?'solid':'dashed',col:over&&!dis?'var(--color-text)':'var(--muted)',note:'',noteIcon:'ph-info',options:[],list:[],listId:'',ph:'',min:0,max:4194304,step:1,
+    const mk=(k,label,help,kind,x={})=>{const over=PO[k]!==undefined;const dis=!!x.dis;return {id:'pa-'+k,ovTag:over,srcTag:'',srcBs:'dashed',srcCol:'var(--faint)',label,help,helpLabel:'Help: '+label,isSel:kind==='sel',isText:kind==='text',isNum:kind==='num',value:ev[k],over,bs:over?'solid':'dashed',col:over&&!dis?'var(--color-text)':'var(--muted)',note:'',noteIcon:'ph-info',options:[],list:[],listId:'',ph:'',min:0,max:4194304,step:1,
       onChange:e=>this.setPV(k,kind==='num'?(e.target.value===''?'':+e.target.value):e.target.value),...x,dis};};
     const fbN=noLim?'Fallback: no limits set for this model.':'';
     const budNote=(v,auto)=>v===''?'Auto · '+fmtN(auto):(v>cap?fmtN(v)+' → '+fmtN(cap)+' (model window)':'');
+    const tuneP=(prof.tune||{})[ev.model]||{};const entM=mdlOf(ev.llm,ev.model);
+    const srcOf=k=>PO[k]!==undefined?'edited':k==='model'||tuneP[k]!==undefined?'from profile':(k==='cw'||k==='mo')?(entM&&entM.cw?'from entry':''):k==='gapctx'?(entM&&entM.gc?'from entry':''):(entM&&entM.th?'from entry':'');
+    const mm=(k,l,hp,kind,x={})=>{const sr=srcOf(k);return mk(k,l,hp,kind,{ovTag:false,srcTag:sr,srcBs:sr==='edited'?'solid':'dashed',srcCol:sr==='edited'?'var(--muted)':'var(--faint)',...x});};
     const pGroups=[{t:'Providers',fields:BLOCKS.map(([b,l])=>{const es=ENT[b];const one=es.length===1;return mk(b,l,'p-'+b,'sel',{options:es.map(e=>({v:e.n,l:e.n})),dis:one,note:one?'Only one configured.':'',noteIcon:'ph-lock-simple'});})},
-      {t:'Model',fields:[mk('model','Model','p-model','text',{list:llmE(ev.llm).models.map(x=>({v:x.m})),listId:'pa-model-list'}),
-        mk('cw','Context window','p-limits','num',{step:1024,min:1024,note:PO.cw===undefined?fbN:''}),mk('mo','Max output','p-limits','num',{step:1024,min:256,note:PO.mo===undefined?fbN:''}),
-        mk('plan','Plan thinking','p-think','sel',{options:THL}),mk('gap','Gap thinking','p-think','sel',{options:THL,dis:lockG,note:lockG?'Used between rounds; needs 2+ rounds.':'',noteIcon:'ph-lock-simple'}),mk('write','Write thinking','p-think','sel',{options:THL})]},
+      {t:'Model',fields:[mm('model','Model','p-model','text',{list:llmE(ev.llm).models.map(x=>({v:x.m})),listId:'pa-model-list'}),
+        mm('cw','Context window','p-limits','num',{step:1024,min:1024,note:PO.cw===undefined?fbN:''}),mm('mo','Max output','p-limits','num',{step:1024,min:256,note:PO.mo===undefined?fbN:''}),
+        mm('plan','Plan thinking','p-think','sel',{options:THL}),mm('gap','Gap thinking','p-think','sel',{options:THL,dis:lockG,note:lockG?'Used between rounds; needs 2+ rounds.':'',noteIcon:'ph-lock-simple'}),mm('write','Write thinking','p-think','sel',{options:THL})]},
       {t:'Budgets',fields:[mk('ctx','Context tokens','p-ctx','num',{ph:'Auto',step:1000,min:1000,note:budNote(ev.ctx,ctxAuto)}),
-        mk('gapctx','Gap context tokens','p-gapctx','num',{ph:'Auto',step:1000,min:1000,dis:lockG,noteIcon:lockG?'ph-lock-simple':'ph-info',note:lockG?'Used between rounds; needs 2+ rounds.':budNote(ev.gapctx,gapAuto)})]}];
+        mm('gapctx','Gap context tokens','p-gapctx','num',{ph:'Auto',step:1000,min:1000,dis:lockG,noteIcon:lockG?'ph-lock-simple':'ph-info',note:lockG?'Used between rounds; needs 2+ rounds.':budNote(ev.gapctx,gapAuto)})]}];
     const submit=()=>{const q=S.query.trim();if(!q)return;for(const k of ['allow','block']){const bad=ndLists[k].find(domBad);if(bad){this.setState({startErr:{k,bad,msg:DOMERR(k,bad)},optsOpen:true});return;}}
-      this.start(q,{...S.opts,allow:ndLists.allow,block:ndLists.block,pv:ev,pMod:pN>0},S.files,{...S.wNew},{depth:S.depth,iter:effR>1?{planned:Math.min(effR,3),variant:'coverage'}:null,md:S.opts.recipe==='answer'?MDA:MD1,domFiltered:ndLists.allow.length||ndLists.block.length?12:0});};
+      this.start(q,{...S.opts,allow:ndLists.allow,block:ndLists.block,pv:ev,pMod:pN>0,pOver:{...PO}},S.files,{...S.wNew},{depth:S.depth,iter:effR>1?{planned:Math.min(effR,3),variant:'coverage'}:null,md:S.opts.recipe==='answer'?MDA:MD1,domFiltered:ndLists.allow.length||ndLists.block.length?12:0});};
     // report view
     let R={};const cur=S.versions.find(v=>v.id===S.viewId)||S.versions[S.versions.length-1];
     if(cur){const root=cur.root||cur.id;const sib=S.versions.filter(v=>(v.root||v.id)===root);const par=cur.parent&&S.versions.find(v=>v.id===cur.parent);
@@ -1476,9 +1700,58 @@ class Component extends DCLogic {
           if(st==='MLA')tx=au+'. “'+s.t+'.” '+s.dom+', '+yr+'.';else if(st==='Chicago')tx=au+'. '+yr+'. “'+s.t+'.” '+s.dom+'.';else if(st==='IEEE')tx=au+', “'+s.t+',” '+s.dom+', '+yr+'.';else tx=au+' ('+yr+'). '+s.t+'. '+s.dom+'.';
           return {mark:st==='IEEE'?'['+(i+1)+']':'',text:tx,url:s.file?s.u:'https://'+s.u};});})(),
         passages:PASS.filter(p=>p.n).map(p=>({label:this.citeLabel(p.n,cur.wopts.cite,cur.files),score:p.v.toFixed(2),heading:p.h,text:p.x,dom:src[p.s].file?src[p.s].u:src[p.s].dom}))};}
+    if(cur){const okTb=!!(r&&r.id===cur.id&&r.status==='done'&&L.tb&&L.tb.has);R.hasTb=okTb;R.tb=okTb?L.tb:{};}
     const rwBase=S.rw&&S.versions.find(v=>v.id===S.rw.from);
     const setRw=(k,v)=>this.setState(s=>({rw:{...s.rw,w:{...s.rw.w,[k]:v}}}));
     const nextV=rwBase?S.versions.filter(v=>(v.root||v.id)===(rwBase.root||rwBase.id)).length+1:2;
+    // recent & pinned, presets
+    const wide=!phone&&S.winW>=1200;
+    const sess=r&&r.kind!=='rewrite'&&!RUNS.find(x=>x.id===r.id)?[{id:r.id,q:r.query,rel:'Just now',depth:r.depth||'standard',recipe:r.opts.recipe,sources:r.opts.sources,profile:r.opts.profile,pOver:r.opts.pOver,words:r.wopts.words,files:(r.files||[]).map(f=>[f.name,f.bytes]),live:true}]:[];
+    const allRuns=S.runsEmpty?[]:[...sess,...S.runs];
+    const fromMatch=!!S.fromRun&&this.formSig(S)===S.fromRun.sig;
+    const pinIds=S.pins.filter(id=>allRuns.find(x=>x.id===id));const seen={};const recent=[];
+    allRuns.forEach(x=>{if(x.parent||pinIds.includes(x.id))return;const k=[x.q,x.depth,x.recipe,x.sources,x.profile,x.words,JSON.stringify(x.pOver||{}),(x.files||[]).length].join('|');if(seen[k]){seen[k].n++;return;}const e={x,n:1};seen[k]=e;recent.push(e);});
+    const rec20=recent.slice(0,20);
+    const mkRow=(x,n,last)=>{const name=S.names[x.id]||x.q;const fl=(x.files||[]).length;const pm=x.pOver&&Object.keys(x.pOver).length;const isCur=fromMatch&&S.fromRun.id===x.id;const ed=!!S.rpEdit&&S.rpEdit.id===x.id;const mo=S.rpMenu===x.id;const pinned=S.pins.includes(x.id);
+      return {name,q:x.q,sum:[DL[x.depth]||x.depth,x.recipe,x.sources,pm?'custom ('+x.profile+')':x.profile,fmtN(x.words)+' words'].join(' · '),files:fl?fl+' file'+(fl>1?'s':''):'',rel:x.rel,dup:n>1?'×'+n:'',dupTitle:n>1?n+' runs with this question and options; showing the newest':'',
+        editing:ed,notEditing:!ed,editVal:ed?S.rpEdit.val:'',onEdit:e=>this.setState({rpEdit:{id:x.id,val:e.target.value}}),commit:e=>this.commitName(x.id,e.target.value,x.q),
+        onEditKey:e=>{if(e.key==='Enter'){e.preventDefault();this.commitName(x.id,e.target.value,x.q);}else if(e.key==='Escape'){e.stopPropagation();this.setState({rpEdit:null});}},
+        fill:()=>this.fillFrom(x),cur:isCur?'true':undefined,bg:isCur?'color-mix(in srgb,var(--color-accent) 9%,transparent)':'transparent',ring:isCur?'inset 0 0 0 1px var(--color-accent)':'none',aria:'Fill the form from: '+name,
+        menuLabel:'Actions for '+(name.length>40?name.slice(0,40)+'…':name),menuExp:mo?'true':'false',menuOpen:mo,toggleMenu:()=>this.setState(s=>({rpMenu:s.rpMenu===x.id?null:x.id,rpEdit:null})),mTop:last?'auto':'calc(100% + 2px)',mBot:last?'calc(100% + 2px)':'auto',
+        menu:[{l:'Rename',icon:'ph-pencil-simple',go:()=>this.setState({rpMenu:null,rpEdit:{id:x.id,val:S.names[x.id]||x.q}})},{l:pinned?'Unpin':'Pin',icon:pinned?'ph-push-pin-slash':'ph-push-pin',go:()=>this.togglePin(x.id)},{l:'Open run',icon:'ph-arrow-square-out',go:()=>{this.setState({rpMenu:null});this.openRun(x);}}]};};
+    const gP=pinIds.map(id=>allRuns.find(x=>x.id===id)),groups=[];
+    if(gP.length)groups.push({t:'Pinned',rows:gP.map((x,i)=>mkRow(x,1,!rec20.length&&i>=gP.length-2))});
+    if(rec20.length)groups.push({t:'Recent',rows:rec20.map((e,i)=>mkRow(e.x,e.n,i>=rec20.length-2))});
+    const fromX=S.fromRun&&allRuns.find(x=>x.id===S.fromRun.id);
+    const uD=S.uDepths.filter(id=>DPRE[id]);const dMany=uD.length>3;const uVis=dMany?uD.slice(0,2):uD,uHid=dMany?uD.slice(2):[];const hidSel=uHid.includes(S.depth);
+    const dOpt=v=>({label:DL[v]||v,checked:S.depth===v,onPick:()=>this.pickDepth(v)});
+    let dAct={show:false};
+    if(S.depth==='custom'){const b=S.dFrom;const nixB=!!(b&&UNIX[b]&&uD.includes(b));const userB=!!(b&&uD.includes(b)&&!UNIX[b]);dAct={show:true,lock:nixB?b+' is managed by NixOS config':'',upd:userB?'Save to '+b:'',update:()=>this.updateDepth(b),saveAs:'Save depth as…',openSave:()=>this.setState({saveDlg:{kind:'depth',name:'',desc:'',touched:false}}),del:''};}
+    else if(uD.includes(S.depth)){const nx=!!UNIX[S.depth];dAct={show:true,lock:nx?'Managed by NixOS config · read-only':'',upd:'',saveAs:'',del:nx?'':'Delete '+S.depth,delDis:false,delWhy:'',whyId:'',openDel:()=>this.setState({delDlg:{kind:'depth',id:S.depth}})};}
+    const pNix=!!prof.nix,isDefP=prof.id===DEFPROF;
+    const pAct=pN>0?{show:true,lock:pNix?prof.id+' is managed by NixOS config':'',upd:pNix?'':'Save to '+prof.id,update:()=>this.updateProfile(),saveAs:'Save profile as…',openSave:()=>this.setState({saveDlg:{kind:'profile',name:'',desc:'',touched:false}}),del:''}
+      :{show:true,lock:pNix?'Managed by NixOS config · read-only':'',upd:'',saveAs:'',del:pNix?'':'Delete '+prof.id,delDis:isDefP,delWhy:isDefP?'The default profile can’t be deleted':'',whyId:isDefP?'pdel-why':'',openDel:()=>this.setState({delDlg:{kind:'profile',id:prof.id}})};
+    const visP=PROFILES.filter(p=>!p.extra||P.profiles==='many');const pSeg=visP.length<=6;
+    const dropTo=v=>{const prevP=S.opts.profile,prevO=S.pOver||{};const n=Object.keys(prevO).length;this.setState(s=>({opts:{...s.opts,profile:v},pOver:{}}));if(n)this.toastMsg('Dropped '+n+' edit'+(n>1?'s':'')+' to '+prevP,()=>this.setState(s=>({opts:{...s.opts,profile:prevP},pOver:prevO,toast:null})));};
+    let sv={};if(S.saveDlg){const D=S.saveDlg;const isP=D.kind==='profile';const full=this.nameErr(D.name,D.kind);const err=full&&(D.name.trim()||D.touched)?full:'';const setD=u=>this.setState(s=>({saveDlg:{...s.saveDlg,...u}}));
+      const dvc=S.depth==='custom'?S.dCustom:(DPRE[S.depth]||S.dCustom);
+      const groups=isP?[{t:'Entries',rows:BLOCKS.map(([b,l])=>({k:l,v:ev[b]}))},{t:'Model and budget',rows:[{k:'Model',v:ev.llm+' / '+ev.model},{k:'Context tokens',v:ev.ctx===''?'Auto · '+fmtN(ctxAuto):fmtN(ev.ctx)}]},
+        {t:'Model tuning for '+ev.model,rows:[{k:'Context window',v:fmtN(ev.cw)},{k:'Max output',v:fmtN(ev.mo)},{k:'Thinking',v:'plan '+ev.plan+' · gap '+ev.gap+' · write '+ev.write},{k:'Gap context',v:ev.gapctx===''?'Auto · '+fmtN(gapAuto):fmtN(ev.gapctx)}],note:'Applies only when this profile runs '+ev.model+'. With any other model, that model’s own entry limits apply.'}]
+        :[{t:'Depth values',rows:DF.map(([k,l])=>({k:l,v:fmtN(dvc[k])})).concat([{k:'Length',v:fmtN(+S.wNew.words||0)+' words'}])}];
+      sv={title:isP?'Save profile as…':'Save depth as…',icon:isP?'ph-stack':'ph-sliders-horizontal',isProf:isP,name:D.name,desc:D.desc||'',ph:isP?'e.g. cloud-rerank':'e.g. wide-short',
+        intro:isP?'Saves a new profile based on '+prof.id+(pN?', with your '+pN+' edit'+(pN>1?'s':''):'')+'. '+prof.id+' itself is unchanged.':'Saves the six depth values and the report length as a new depth. It appears in Depth after the built-in presets.',
+        onName:e=>setD({name:e.target.value}),onDesc:e=>setD({desc:e.target.value}),err,ok:!err,invalid:err?'true':'false',bd:err?'var(--color-danger)':'',groups,cta:isP?'Save profile':'Save depth',
+        close:()=>this.setState({saveDlg:null}),backdrop:e=>{if(e.target===e.currentTarget)this.setState({saveDlg:null});},submit:e=>{e.preventDefault();if(full){setD({touched:true});return;}this.saveAs();}};}
+    const del=S.delDlg?{title:'Delete '+S.delDlg.kind+' “'+S.delDlg.id+'”?',body:'Runs that used it keep the values they ran with.'+(S.delDlg.kind==='profile'&&S.opts.profile===S.delDlg.id?' New run switches to '+DEFPROF+'.':S.delDlg.kind==='depth'&&S.depth===S.delDlg.id?' Depth switches to Standard.':'')+' This can’t be undone.',cta:'Delete '+S.delDlg.kind,close:()=>this.setState({delDlg:null}),confirm:()=>this.confirmDel()}:{};
+    const NR={nr:{maxW:wide?'1180px':'800px',cols:wide?'minmax(0,800px) minmax(260px,320px)':'minmax(0,1fr)',areas:wide?'"head list" "q list" "att list" "opts list"':'"head" "q" "list" "att" "opts"',rows:wide?'auto auto auto 1fr':'auto'},
+      rp:{wide,disc:!wide,open:wide||!!S.rpOpen,count:String(gP.length+rec20.length),caret:S.rpOpen?'ph-caret-down':'ph-caret-right',exp:S.rpOpen?'true':'false',toggle:()=>this.setState(s=>({rpOpen:!s.rpOpen})),pos:wide?'sticky':'static',maxH:wide?'calc(100vh - 40px)':'none',ovf:wide?'auto':'visible',pad:wide?'0':'4px 0 0',kb:phone?'44px':'28px',itemH:phone?'44px':'32px',btnH:phone?'44px':'38px',empty:!allRuns.length,groups},
+      fromShow:fromMatch&&!!fromX,fromName:fromX?(S.names[fromX.id]||fromX.q):'',fromTitle:'The form matches this run. Edit anything to clear.',
+      depthOpts:[...BUILTIN_D,...uVis].map(dOpt),depthTail:[dOpt('custom')],depthMore:{show:dMany,checked:hidSel,value:hidSel?S.depth:'',options:[{v:'',l:'More…'},...uHid.map(v=>({v,l:v}))],onChange:e=>{if(e.target.value)this.pickDepth(e.target.value);},noop:()=>{}},depthDesc:DD[S.depth]||'Your preset.',dAct,pAct,
+      profSeg:pSeg,profSel:!pSeg,profSegOpts:[...visP.map(p=>({label:p.id,checked:!pN&&S.opts.profile===p.id,onPick:()=>dropTo(p.id)})),...(pN?[{label:'custom',checked:true,onPick:()=>{}}]:[])],
+      profVal:pN?'__custom':S.opts.profile,profOptions:[...visP.map(p=>({v:p.id,l:p.id})),...(pN?[{v:'__custom',l:'custom ('+S.opts.profile+')'}]:[])],onProfile:e=>{const v=e.target.value;if(v!=='__custom')dropTo(v);},
+      profCustom:pN>0,profBase:S.opts.profile,profEdits:pN+' edit'+(pN>1?'s':''),
+      svOpen:!!S.saveDlg,sv,delOpen:!!S.delDlg,del,
+      tbOpen:!!S.tbOpen,tbExp:S.tbOpen?'true':'false',tbCaret:S.tbOpen?'ph-caret-up':'ph-caret-down',tbLabel:S.tbOpen?'Fewer':'All stages',toggleTb:()=>this.setState(s=>({tbOpen:!s.tbOpen}))};
     // history
     const session=[];S.versions.forEach(v=>{if(!HIST.find(h=>h.id===v.id))session.push({id:v.id,depth:v.depth,q:v.query,d:v.date,recipe:v.opts.recipe,status:'completed',dur:v.dur,cost:v.parent?'$0.000':'$0.004',parent:v.parent,wnote:v.parent?`${v.wopts.tone} · ${v.wopts.words} words`:''});});
     if(r&&!S.versions.find(v=>v.id===r.id))session.push({id:r.id,depth:r.depth,q:r.query,d:'Today, now',recipe:r.opts.recipe,status:r.status==='connecting'?(r.queue?'queued':'running'):r.status,o:r.o,tok:r.tok,dur:L.elapsed,cost:L.cost.split(' ')[0],live:true,parent:r.rewriteOf,wnote:r.rewriteOf?`${r.wopts.tone} · ${r.wopts.words} words`:''});
@@ -1542,9 +1815,9 @@ class Component extends DCLogic {
       onDragOver:e=>{e.preventDefault();if(!S.dragOver)this.setState({dragOver:true});},onDragLeave:()=>this.setState({dragOver:false}),onDrop:e=>{e.preventDefault();this.addFiles(e.dataTransfer.files);},
       onPick:e=>{this.addFiles(e.target.files);e.target.value='';},
       dropBorder:S.dragOver?'var(--color-accent)':'var(--color-divider)',dropBg:S.dragOver?'color-mix(in srgb,var(--color-accent) 8%,transparent)':'transparent',dropErr:S.dropErr,
-      hasFiles:S.files.length>0,files:S.files.map(f=>({name:f.name,size:fmtB(f.bytes),removeLabel:'Remove '+f.name,remove:()=>this.setState(s=>({files:s.files.filter(x=>x.name!==f.name)}))})),
+      hasFiles:S.files.length>0,files:S.files.map(f=>({name:f.name,size:fmtB(f.bytes),reused:!!f.from,from:f.from||'',removeLabel:'Remove '+f.name,remove:()=>this.setState(s=>({files:s.files.filter(x=>x.name!==f.name)}))})),
       optsOpen:S.optsOpen,toggleOpts:()=>this.setState(s=>({optsOpen:!s.optsOpen})),optsCaret:S.optsOpen?'ph-caret-down':'ph-caret-right',
-      optSummary:[DL[S.depth],S.opts.recipe,S.opts.sources,S.opts.profile+(pN?' (modified)':''),S.wNew.words+' words',S.wNew.tone.toLowerCase()].join(' · '),
+      optSummary:[DL[S.depth],S.opts.recipe,S.opts.sources,(pN?'custom ('+S.opts.profile+')':S.opts.profile),S.wNew.words+' words',S.wNew.tone.toLowerCase()].join(' · '),
       depthOpts:DEPTHS.map(([v,l])=>({label:l,checked:S.depth===v,onPick:()=>this.pickDepth(v)})),depthDesc:DD[S.depth],depthEst,depthFields,
       advOpen:S.advOpen,advExp:S.advOpen?'true':'false',advCaret:S.advOpen?'ph-caret-down':'ph-caret-right',advHint:isPre?'· '+DL[S.depth]+' values':'· your values',toggleAdv:()=>this.setState(s=>({advOpen:!s.advOpen})),
       advNote:isPre?DL[S.depth]+' preset. Edit any value to switch to Custom.':'Your Custom values, saved in this browser.',wOverCount:overN+domOver+pN>0,wOverW:overN>0,wOverLabel:(overN+domOver+pN)+' overridden',
@@ -1628,7 +1901,7 @@ class Component extends DCLogic {
       profName:S.opts.profile,profDesc:prof.desc,
       policyOpts:[['shared','Shared'],['exclusive','Exclusive']].map(([v,l])=>({label:l,checked:S.gpuPolicy===v,onPick:()=>this.setState({gpuPolicy:v})})),
       policyDesc:S.gpuPolicy==='exclusive'?'Each model unloads before the next one loads on '+prof.gpuDev+'.':'All models stay loaded on '+prof.gpuDev+'.',
-      citeOpen:!!S.cite,cite:S.cite||{},toastOpen:!!S.toast,toast:S.toast||{}
+      ...NR,citeOpen:!!S.cite,cite:S.cite||{},toastOpen:!!S.toast,toast:S.toast||{}
     };
   }
 }
