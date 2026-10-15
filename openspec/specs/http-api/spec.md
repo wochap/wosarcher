@@ -68,7 +68,9 @@ SHALL have `query` (required, non-empty), and these optional fields:
   `queries_per_round` (sets `research.queries_per_round`). Each is a
   positive integer, and `rounds` is at most 8.
 - `llm` (Requirement: LLM options in a run request)
-- `writing` (research runs only; any subset of the writing option fields)
+- `writing` (any subset of the writing option fields; on a catalog run,
+  only when the structure's `output` is `report` or `both`, or when no
+  structure is sent)
 - `domains`: `allow` and `block`, each optional, each a list of domain
   entries (run-config "Domain lists") that replaces the configured list
   for this run
@@ -83,13 +85,14 @@ SHALL have `query` (required, non-empty), and these optional fields:
   among that run's attachments), copied into the new run as attachments
   with nothing uploaded again
 
-`depth`, `research`, or `writing` on a catalog run, and `structure` on a
-research run, SHALL be rejected with 422 naming the field and the kind.
-An invalid `structure` SHALL be rejected with 422 naming
-`structure.<path>` and the error. A `structure.language` SHALL follow the
-search language rule and, when set, SHALL set `search.language` for the
-run as `search_language` does; both set is 422 naming `search_language`.
-An unknown `depth` SHALL be rejected with 422 that names `depth`. A `use`
+`depth` or `research` on a catalog run, `writing` on a catalog run whose
+structure's `output` is `table`, and `structure` on a research run, SHALL
+be rejected with 422 naming the field and the kind (or `output`). An
+invalid `structure` SHALL be rejected with 422 naming `structure.<path>`
+and the error. A `structure.language` SHALL follow the search language
+rule and, when set, SHALL set `search.language` for the run as
+`search_language` does; both set is 422 naming `search_language`. An
+unknown `depth` SHALL be rejected with 422 that names `depth`. A `use`
 key that is not a block, or a name that is not an entry of its block,
 SHALL be rejected with 422 that names `use.<block>` and lists that block's
 entries. An invalid domain entry SHALL be rejected with 422 that names
@@ -201,9 +204,13 @@ rejected with 422 `invalid_attachment` before anything is staged.
 - **WHEN** a client posts `request = {"query": "Every public organization…", "kind": "catalog", "structure": {...}, "domains": {"allow": ["gob.pe"]}}`
 - **THEN** the response is 201, the run's `request.json` has `kind` `catalog` and that structure, and the run starts at `load` then `draft`
 
-#### Scenario: Writing on a catalog run
-- **WHEN** a client posts `request = {"query": "q", "kind": "catalog", "writing": {"tone": "critical"}}`
-- **THEN** the response is 422 naming `writing` and `catalog`
+#### Scenario: Writing on a table-only catalog
+- **WHEN** a client posts `request = {"query": "q", "kind": "catalog", "structure": {... "output": "table"}, "writing": {"tone": "critical"}}`
+- **THEN** the response is 422 naming `writing` and `output`
+
+#### Scenario: Writing on a catalog with a report
+- **WHEN** a client posts a catalog request whose structure has `output` `both` and `"writing": {"words": 800}`
+- **THEN** the response is 201 and the run's report is written with 800 words
 
 #### Scenario: Invalid structure
 - **WHEN** a client posts a catalog request whose structure has a seed of a type outside the enum
@@ -275,25 +282,27 @@ newest first, each with `run_id`, `query`, `kind` (`research` or
 `catalog`), `status`, `created`, `parent_run_id`, `version`, `fork_from`
 (the stage a fork started from, or null), `profile`, `sources`, `until`
 (the recipe: null for a full report, `select` for context), `writing`
-(the run's resolved writing options; null for a catalog run),
-`nodes` (catalog runs: the number of extracted records so far from
-`nodes.jsonl`, or `catalog.json`'s record count when done; null for a
-research run), `duration_s` (seconds from `run.started` to the terminal
-run event; null while queued or running, and for interrupted runs), `cost`
-(the total cost in dollars from `costs.json`; null when absent),
-`queue_position` (null unless queued), `error` (the `run.failed` error
-text; null unless failed), `end_stage` (the stage named by `run.failed` or
-`run.cancelled`; null otherwise), `origin` (`web`, `api`, or `cli`, from
-`request.json` or the staged request), and `token_name` (the API token's
-name for origin `api`; null otherwise), `form` (the request the run was
-created with, as run-store "Request record" stores it; null for runs
-created without one), and `attachments` (each attachment's `name` and
-`size` in bytes, in the order stored; empty when it has none). Status
-SHALL be one of `queued`, `running`, `done`, `failed`, `cancelled`, or
-`interrupted`, following run-store "Status of a live run" for runs with
-no terminal event, whichever process started them. `queue_position` SHALL
-be the run's place in the shared run queue (1 for the next run to start).
-`GET /api/runs/{id}` SHALL return the same summary plus the redacted
+(the run's resolved writing options; null for a catalog run with `output`
+`table`), `output` (catalog runs: `table`, `report`, or `both` from the
+structure; null for a research run), `nodes` (catalog runs: the number of
+extracted records so far from `nodes.jsonl`, or `catalog.json`'s record
+count when done; null for a research run), `duration_s` (seconds from
+`run.started` to the terminal run event; null while queued or running,
+and for interrupted runs), `cost` (the total cost in dollars from
+`costs.json`; null when absent), `queue_position` (null unless queued),
+`error` (the `run.failed` error text; null unless failed), `end_stage`
+(the stage named by `run.failed` or `run.cancelled`; null otherwise),
+`origin` (`web`, `api`, or `cli`, from `request.json` or the staged
+request), and `token_name` (the API token's name for origin `api`; null
+otherwise), `form` (the request the run was created with, as run-store
+"Request record" stores it; null for runs created without one), and
+`attachments` (each attachment's `name` and `size` in bytes, in the order
+stored; empty when it has none). Status SHALL be one of `queued`,
+`running`, `done`, `failed`, `cancelled`, or `interrupted`, following
+run-store "Status of a live run" for runs with no terminal event,
+whichever process started them. `queue_position` SHALL be the run's place
+in the shared run queue (1 for the next run to start). `GET
+/api/runs/{id}` SHALL return the same summary plus the redacted
 `request`, the `costs` when present, and `last_seq` (0 when the run has no
 logged event).
 
@@ -342,12 +351,16 @@ logged event).
 - **THEN** its summary has `form = null`
 
 #### Scenario: Catalog summary
-- **WHEN** a catalog run has 72 extracted nodes and is in wave 3
-- **THEN** its summary has `kind = "catalog"`, `nodes = 72`, `writing = null`, and `status = "running"`
+- **WHEN** a catalog run with `output` `table` has 72 extracted nodes and is in wave 3
+- **THEN** its summary has `kind = "catalog"`, `output = "table"`, `nodes = 72`, `writing = null`, and `status = "running"`
+
+#### Scenario: Catalog with a report
+- **WHEN** a finished catalog run has `output` `both`
+- **THEN** its summary has `output = "both"` and `writing` holds its resolved writing options
 
 #### Scenario: Older run without a kind
 - **WHEN** a run's `request.json` has no `kind`
-- **THEN** its summary has `kind = "research"` and `nodes = null`
+- **THEN** its summary has `kind = "research"`, `output = null`, and `nodes = null`
 
 ### Requirement: Delete a run
 `DELETE /api/runs/{id}` SHALL remove a finished, failed, cancelled, or

@@ -22,10 +22,12 @@ execute the stages in this order: `load`, `plan`, `search`, `fetch`,
 
 A catalog run SHALL execute `load`, `draft`, then `expand`, `search`,
 `fetch`, `chunk`, `extract` once per wave until a stop rule holds
-(catalog-crawl "Stop rules"), then `assemble`. `plan`, `prefilter`,
-`score`, `gap`, `select`, and `write` SHALL NOT run in a catalog run, and
-the catalog stages SHALL NOT run in a research run. `--until` SHALL name a
-stage of the run's kind.
+(catalog-crawl "Stop rules"), then `assemble`, then `write` when the
+structure's `output` is `report` or `both` (catalog-report "Catalog write
+stage"); with `output` `table`, `write` SHALL be reported done with
+`skipped`. `plan`, `prefilter`, `score`, `gap`, and `select` SHALL NOT run
+in a catalog run, and the catalog stages SHALL NOT run in a research run.
+`--until` SHALL name a stage of the run's kind.
 
 Each stage SHALL run once per round or wave over all of that round's or
 wave's queries or nodes (a phase), never once per query or node, except
@@ -51,11 +53,15 @@ user's query is at most 200 characters after trimming.
 - **THEN** the `gap` stage is reported done with `skipped` and select follows score
 
 #### Scenario: Catalog stage order
-- **WHEN** a catalog run stops after wave 2 with `frontier empty`
-- **THEN** its log has `stage.done` for `load`, `draft`, two each of `expand`, `search`, `fetch`, `chunk`, `extract` (with `round` 1 and 2), then `assemble`, and none for `plan`, `score`, or `write`
+- **WHEN** a catalog run with `output` `table` stops after wave 2 with `frontier empty`
+- **THEN** its log has `stage.done` for `load`, `draft`, two each of `expand`, `search`, `fetch`, `chunk`, `extract` (with `round` 1 and 2), then `assemble`, then `write` with `skipped`, and none for `plan`, `score`, or `select`
+
+#### Scenario: Catalog with a report
+- **WHEN** a catalog run has `output` `both`
+- **THEN** `write` runs after `assemble` and the log ends with `run.done` after the write stage
 
 #### Scenario: Until on a catalog run
-- **WHEN** a catalog run is started with `--until write`
+- **WHEN** a catalog run is started with `--until score`
 - **THEN** it fails before any provider is called, listing the catalog stages
 
 ### Requirement: Sources select stages

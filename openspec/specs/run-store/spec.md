@@ -23,7 +23,7 @@ by the stage named:
 | `chunks.jsonl` | chunk |
 | `candidates.jsonl` | prefilter |
 | `scores.jsonl` | score |
-| `context.json`, `select.jsonl` | select |
+| `context.json`, `select.jsonl` | select (research); `context.json` by write (catalog with a report) |
 | `report.md`, `report.json` | write |
 | `structure.json` | draft |
 | `nodes.jsonl` | draft, expand, extract |
@@ -33,8 +33,9 @@ by the stage named:
 | `costs.json` | end of the run |
 
 A research run SHALL NOT have the four catalog files, and a catalog run
-SHALL NOT have `initial.jsonl`, `candidates.jsonl`, `scores.jsonl`,
-`context.json`, `select.jsonl`, `report.md`, or `report.json`.
+SHALL NOT have `initial.jsonl`, `candidates.jsonl`, `scores.jsonl`, or
+`select.jsonl`. A catalog run SHALL have `context.json`, `report.md`, and
+`report.json` only when its `output` is `report` or `both`.
 `select.jsonl` SHALL hold one select skip per line (see context-selection
 "Skipped passages"). `runs_dir` SHALL default to
 `$XDG_DATA_HOME/wosarcher/runs` (`~/.local/share/wosarcher/runs` when
@@ -46,8 +47,12 @@ time.
 - **THEN** its directory contains every research file in the table
 
 #### Scenario: Files after a catalog run
-- **WHEN** a catalog run finishes
+- **WHEN** a catalog run with `output` `table` finishes
 - **THEN** its directory contains `structure.json`, `nodes.jsonl`, `records.jsonl`, `catalog.json`, `plan.json`, `hits.jsonl`, `pages.jsonl`, `chunks.jsonl`, `events.jsonl`, and `costs.json`, and no `report.md`
+
+#### Scenario: Files after a catalog run with a report
+- **WHEN** a catalog run with `output` `both` finishes
+- **THEN** its directory also contains `context.json`, `report.md`, and `report.json`
 
 #### Scenario: Run IDs sort by time
 - **WHEN** two runs are created one after the other

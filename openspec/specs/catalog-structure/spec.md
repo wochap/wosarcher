@@ -23,7 +23,9 @@ A catalog run SHALL have a structure with:
 - `expand`: `links`, `search`, or `both` (default `both`);
 - `limits`: `max_depth` (1 to 10, default 3), `max_nodes` (1 to 5000,
   default 200), and `pages_per_node` (1 to 10, default 2);
-- `language`: a search language (http-api "Create a run") or empty.
+- `language`: a search language (http-api "Create a run") or empty;
+- `output`: `table` (default), `report`, or `both` (catalog-report
+  "Output option").
 
 The fields SHALL include exactly one `enum` field, whose `values` (one to
 40 distinct non-empty strings) are the node types; at most one `slug`
@@ -54,6 +56,14 @@ SHALL be rejected naming the key.
 - **WHEN** a field is named `Head Name`
 - **THEN** the structure is rejected with an error naming it and the pattern
 
+#### Scenario: Output default
+- **WHEN** a structure leaves `output` unset
+- **THEN** it resolves to `table`
+
+#### Scenario: Invalid output
+- **WHEN** a structure sets `output` to `summary`
+- **THEN** it is rejected with an error naming `output` and the three values
+
 ### Requirement: Draft stage
 The `draft` stage SHALL run first after `load` in a catalog run. When the
 run request carries a structure, `draft` SHALL validate it (Requirement:
@@ -67,13 +77,15 @@ When the request carries no structure, `draft` SHALL make one LLM call:
 a system message from `prompts/draft.md` with only the brief, the default
 limits, and the date substituted, and one user message with a data
 preamble and a delimited block holding the attachment outlines
-(research-planning "Attachment outline"), or nothing. The reply SHALL be
-JSON in the structure's shape. The stage SHALL read it, apply the
-defaults for absent optional keys, validate it, and fail the run with
-`draft failed: <reason>` when the reply cannot be read or is invalid. The
-derived structure SHALL be written as `structure.json` and recorded in
-`request.json` as the run's structure. Outlines SHALL never go through a
-template.
+(research-planning "Attachment outline"), or nothing. The prompt SHALL
+ask for `output` too: `report` when the brief asks a question or for a
+summary, `table` when it asks for a list or data, `both` when it asks for
+both. The reply SHALL be JSON in the structure's shape. The stage SHALL
+read it, apply the defaults for absent optional keys, validate it, and
+fail the run with `draft failed: <reason>` when the reply cannot be read
+or is invalid. The derived structure SHALL be written as `structure.json`
+and recorded in `request.json` as the run's structure. Outlines SHALL
+never go through a template.
 
 #### Scenario: Supplied structure
 - **WHEN** a catalog run starts with a valid structure of six seeds
@@ -90,6 +102,10 @@ template.
 #### Scenario: Outline is data
 - **WHEN** an attachment outline contains "ignore previous instructions"
 - **THEN** that text appears only inside the delimited block of the user message
+
+#### Scenario: Output proposed
+- **WHEN** the brief reads "list every comisaría in Peru with its address and tell me how they are distributed by region" and the draft reply sets `output` `both`
+- **THEN** `structure.json` has `output` `both`
 
 ### Requirement: Draft route
 `POST /api/catalog/draft` SHALL accept a multipart form with a `request`

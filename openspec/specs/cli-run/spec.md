@@ -402,14 +402,18 @@ without `--profile` SHALL keep rebuilding from the parent's saved settings.
 `wosarcher catalog "<brief>"` SHALL start a catalog run through the
 daemon's API and accept: `--structure FILE` (a JSON structure file),
 `--seed "NAME|TYPE[|URL]"` (repeatable), `--relation TEXT`, `--leaf TYPE`
-(repeatable), `--expand links|search|both`, `--max-depth N`,
-`--max-nodes N`, `--pages-per-node N`, `--search-language CODE`,
-`--allow-domain` and `--block-domain` (repeatable), `--attach PATH`
-(repeatable), `--sources web|both` (default `both`), `--profile`, `--use
-BLOCK=NAME` (repeatable), `--model`, `--draft-thinking` and
-`--extract-thinking` (each `none`, `low`, `medium`, `high`, or `default`,
-acting as `--set llm.reasoning.<step>=<value>`), `--context-window`,
-`--max-output`, `--set KEY=VALUE` (repeatable), `--until STAGE`, and
+(repeatable), `--expand links|search|both`, `--output table|report|both`,
+`--max-depth N`, `--max-nodes N`, `--pages-per-node N`,
+`--search-language CODE`, `--allow-domain` and `--block-domain`
+(repeatable), `--attach PATH` (repeatable), `--sources web|both` (default
+`both`), `--profile`, `--use BLOCK=NAME` (repeatable), `--model`,
+`--draft-thinking` and `--extract-thinking` (each `none`, `low`, `medium`,
+`high`, or `default`, acting as `--set llm.reasoning.<step>=<value>`),
+`--context-window`, `--max-output`, the writing flags of `wosarcher run`
+(`--tone`, `--tone-instructions`, `--words`, `--language`,
+`--citation-marker`, `--reference-style`, `--format report|answer`; sent
+as `writing`, and rejected with exit status 2 naming `--output` when the
+output is `table`), `--set KEY=VALUE` (repeatable), `--until STAGE`, and
 `--json`. It SHALL NOT accept `--plan-thinking`, `--gap-thinking`, or
 `--write-thinking`. The structure flags SHALL be applied over the file's
 values (seeds and leaf types from flags replace the file's lists); with no
@@ -417,14 +421,17 @@ values (seeds and leaf types from flags replace the file's lists); with no
 the `draft` stage derives one. With structure flags but no file, the
 command SHALL fail before a request is sent when the flags do not make a
 complete structure (no seed, or no relation), naming what is missing.
-Values the client can check (`--expand`, the limits' ranges, the thinking
-values, `--until` against the catalog stages, `--search-language`, the
-domain entries, the block of `--use`) SHALL fail with exit status 2 before
-a request is sent; a 422 SHALL exit with 2 printing its detail. The
-command SHALL follow the run's events as `wosarcher run` does, with the
-catalog phases and a wave counter, and SHALL print the `records` array of
-`catalog.json` as JSON when the run ends; `--json` SHALL print the whole
-`catalog.json`. A run that ends without `catalog.json` (stopped early with
+Values the client can check (`--expand`, `--output`, the limits' ranges,
+the thinking values, `--until` against the catalog stages,
+`--search-language`, the domain entries, the block of `--use`) SHALL fail
+with exit status 2 before a request is sent; a 422 SHALL exit with 2
+printing its detail. The command SHALL follow the run's events as
+`wosarcher run` does, with the catalog phases and a wave counter, and the
+report streamed when one is written. When the run ends it SHALL print:
+for `output` `table`, the `records` array of `catalog.json` as JSON; for
+`report` or `both`, the report as Markdown. `--json` SHALL print
+`catalog.json` with, when a report was written, a `report` key holding
+`report.json`. A run that ends without `catalog.json` (stopped early with
 `--until`) SHALL print nothing and exit 0.
 
 #### Scenario: Structure file
@@ -450,6 +457,18 @@ catalog phases and a wave counter, and SHALL print the `records` array of
 #### Scenario: Research thinking flag rejected
 - **WHEN** the user runs `wosarcher catalog "brief" --write-thinking high`
 - **THEN** the command fails with exit status 2 as an unknown option
+
+#### Scenario: Report output
+- **WHEN** the user runs `wosarcher catalog "brief" --structure s.json --output report --words 800`
+- **THEN** the request's structure has `output` `report`, `writing.words` is 800, the report streams during the write stage, and the Markdown report is printed at the end
+
+#### Scenario: Writing flag without a report
+- **WHEN** the user runs `wosarcher catalog "brief" --structure s.json --tone critical` and the structure's output is `table`
+- **THEN** the command fails with exit status 2 naming `--tone` and `--output`
+
+#### Scenario: JSON with a report
+- **WHEN** the user runs `wosarcher catalog "brief" --structure s.json --output both --json`
+- **THEN** the printed JSON holds `records` and a `report` key with the report body and references
 
 ### Requirement: Catalog draft command
 `wosarcher catalog draft "<brief>"` SHALL post the brief (and `--attach`
