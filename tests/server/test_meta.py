@@ -334,7 +334,7 @@ def test_save_profile_route(client: TestClient, config_dir: Path, cloud: None) -
             "id": "claude-sonnet-5-5",
             "context_window": None,
             "max_output_tokens": None,
-            "reasoning": {"plan": None, "gap": None, "write": "high"},
+            "reasoning": {"plan": None, "gap": None, "write": "high", "draft": None, "extract": None},
             "gap_context_tokens": None,
         }
     ]

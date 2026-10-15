@@ -221,7 +221,7 @@ types must be among them. Unset limits and expand take the `catalog`
 block's values. The `draft` stage validates a supplied structure (an
 invalid one fails the run naming the field) or, when none is given, makes
 one LLM call (`prompts/draft.md`, with attachment outlines as data in
-`draft_data.md`) and reads a `Structure` from the reply. It writes
+`draft_data.md`, at thinking level `llm.reasoning.draft`) and reads a `Structure` from the reply. It writes
 `structure.json`, emits `structure.ready`, and seeds the frontier: each
 seed a node at depth 0 with `found_by = seed`. The web form always sends a
 structure (from `POST /api/catalog/draft`, edited); the CLI drafts inside
@@ -248,7 +248,9 @@ already fetched in the run is reused without a new fetch and does not
 count again toward `fetch.max_pages` (it counts toward the node's
 `pages_per_node`). Chunk runs on the wave's new pages.
 
-**Extract.** One LLM call per node, `catalog.concurrency` in flight. The
+**Extract.** One LLM call per node, `catalog.concurrency` in flight, at
+thinking level `llm.reasoning.extract` (neither catalog call reads `plan`,
+`gap`, or `write`). The
 system message is `prompts/extract.md` with the structure as JSON, the
 node's name, type, parent, the relation, the expand mode,
 `catalog.max_children`, and the date; the user message is the data
@@ -790,8 +792,9 @@ hosted models bill their input again. The Report screen shows "Continued
 N×", or the cut note and an end marker before References.
 
 **Thinking.** Each LLM step has its own thinking effort,
-`llm.reasoning.plan`, `llm.reasoning.gap`, and `llm.reasoning.write`:
-`none` (default), `low`, `medium`, `high`, or `default`. The writer's
+`llm.reasoning.plan`, `llm.reasoning.gap`, and `llm.reasoning.write` for
+research runs, `llm.reasoning.draft` and `llm.reasoning.extract` for
+catalog runs: `none` (default), `low`, `medium`, `high`, or `default`. The writer's
 continuations use the writer's value; the eval judge always uses `none`.
 With `none` the call sends `reasoning_effort: "none"` and the exact output
 limit, so the limit covers only visible text. A level sends
@@ -803,8 +806,10 @@ guessed for hidden reasoning.
 A server that ignores `reasoning_effort` but still counts reasoning in the
 cap can spend the whole limit on hidden reasoning; the error then says to
 set the step to `none` (or `default`, which drops the cap). Set per run with
-`--plan-thinking`, `--gap-thinking`, `--write-thinking`, the request's
-`llm.reasoning`, or the web Advanced panel's Thinking selects.
+`--plan-thinking`, `--gap-thinking`, `--write-thinking` (`run`), or
+`--draft-thinking`, `--extract-thinking` (`catalog`), the request's
+`llm.reasoning` (only the steps of the run's kind; another step is 422),
+or the web Advanced panel's Thinking selects.
 
 Writing options affect only the write stage, so changing them on a finished
 run is cheap: `wosarcher fork <id> --from write --tone critical` reuses all context
@@ -1133,11 +1138,12 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   stopped at `select`. Exit status: 0 done, 1 failed, 130 cancelled, 2
   invalid arguments, a request the server rejects, or a run the engine
   rejected before its first stage (an invalid override), 69 no daemon.
-- `wosarcher fork <id> --from <stage> [--set k=v]... [writing flags] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--use BLOCK=NAME]... [--profile NAME] [--until ...] [--json]`:
-  creates the fork with `POST /api/runs/{id}/fork` and follows it like
+- `wosarcher fork <id> --from <stage> [--set k=v]... [writing flags] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--use BLOCK=NAME]... [--profile NAME] [--until ...] [--json]`:
+  creates the fork (a thinking flag whose step is not of the parent's
+  kind exits 2 naming the flag and the kind) with `POST /api/runs/{id}/fork` and follows it like
   `run`; a queued or running parent exits 2 printing the server's 409
   detail, and a fork that fails before its first stage exits 1.
-- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--set k=v]... [--until STAGE] [--json]`:
+- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--model NAME] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--context-window N] [--max-output N] [--set k=v]... [--until STAGE] [--json]`:
   creates a run with `kind` `catalog` (see Catalog runs); the flags
   override the structure file's values, and without `--structure` the run's
   `draft` stage derives one. It follows the run like `run`, with
@@ -1438,8 +1444,10 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   naming `domains.allow` or `domains.block` and the entry),
   `search_language` (sets `search.language`; null keeps the configured
   value; an invalid value is 422 naming `search_language`), `llm`
-  (`model`, a non-empty string; `reasoning`, any of `plan`, `gap`,
-  `write` with a thinking level; `context_window` and `max_output_tokens`,
+  (`model`, a non-empty string; `reasoning`, a thinking level per step of
+  the run's kind, `plan`, `gap`, `write` for research and `draft`,
+  `extract` for catalog, another step 422 naming `llm.reasoning`, the
+  step, and the kind; `context_window` and `max_output_tokens`,
   positive integers; `context_tokens` and `gap_context_tokens`, a positive
   integer or `auto`, setting `select.max_context_tokens` and
   `research.gap_context_tokens`; an invalid value is 422 naming
@@ -1575,7 +1583,7 @@ filter replaces images with their alt text, so no file or URL is read.
   unfinished earlier stage; 422 for an unknown stage. A catalog run forks
   only `from` `expand`, with `limits` (`max_depth`, `max_nodes`,
   `pages_per_node`, each at least the parent's), or `from` `extract`
-  (optional `llm` model and reasoning); anything else, or limits below the
+  (optional `llm` model and `reasoning.extract`); anything else, or limits below the
   parent's, is 422 (see Catalog runs).
 - `POST /api/catalog/draft` (multipart: `request` with `{brief, profile?,
   use?, llm?}` plus `attachments`): runs the draft call with the
@@ -2117,7 +2125,7 @@ Each provider block (and so each entry) has the same shape: `provider`, `base_ur
 (seconds of retry waits, default 60), `prices` (optional `input_per_mtok`,
 `output_per_mtok`, `per_unit` for cost recording). The `llm` block adds
 `max_tokens_field` (`max_completion_tokens` or `max_tokens`),
-`reasoning` (a table with `plan`, `gap`, and `write`, each `none`, `low`,
+`reasoning` (a table with `plan`, `gap`, `write`, `draft`, and `extract`, each `none`, `low`,
 `medium`, `high`, or `default`, default `none`; see Thinking), and `max_continuations`
 (default 2, how often the writer continues a report cut at the output
 limit), and `max_output_tokens` (default 8192; caps the writer's output
@@ -2541,13 +2549,17 @@ screen, in both themes and on phone and desktop.
 Catalog runs use three screens of the prototype and a History change:
 
 - **New run, Catalog kind** (scenario `new`, Catalog picked): the Kind
-  segmented control (Research, Catalog) above the form, kept with the New
-  run draft. The catalog form has the brief, Attachments, "Draft
+  segmented control (Research, Catalog; each segment with the prototype's
+  title) above the form, followed by the `kind` help button, kept with the
+  New run draft. The catalog form has the brief, Attachments, "Draft
   structure" (posts `POST /api/catalog/draft` and fills the Structure
   panel), and "Run catalog" (disabled until a structure exists). The
   Structure panel edits record fields (name, type, Required, Volatile),
   the child relation, seeds, leaf types, Expand by, the three limits, the
-  domain rows, and the search language, with the estimate line "Up to <n>
+  Profile row with its Advanced box (the research form's, bound to the
+  same profile choice and edits; its LLM group shows Draft and Extract
+  thinking instead of Plan, Gap, and Write), the domain rows, and the
+  search language, with the estimate line "Up to <n>
   nodes · about <n> pages · <n> extraction calls". A rejected structure
   shows the error box with "Fix in Structure".
 - **Live run, catalog** (`live-catalog`): the 8-phase timeline (Load,
@@ -2559,8 +2571,8 @@ Catalog runs use three screens of the prototype and a History change:
 - **Catalog result** (`catalog-result`, `#/catalog/<id>`), built from
   `catalog.json`: Download JSON, Copy JSON, Download CSV (built in the
   client), Expand more (a dialog with the three limits, posting the
-  `expand` fork), and Re-extract (the Rewrite dialog's model and thinking
-  fields, posting the `extract` fork); Table (filters by text, type,
+  `expand` fork), and Re-extract (the Rewrite dialog's model field and
+  "Extract thinking", posting the `extract` fork with `reasoning.extract`); Table (filters by text, type,
   flagged only, missing field), Graph (inline SVG tree from the ref
   field), and JSON views; a Summary aside; and the record drawer with each
   value's source link.

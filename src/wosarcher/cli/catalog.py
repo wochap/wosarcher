@@ -29,14 +29,13 @@ from wosarcher.cli.options import (
     BlockDomainOption,
     ClientProfileOption,
     ContextWindowOption,
-    GapThinkingOption,
+    DraftThinkingOption,
+    ExtractThinkingOption,
     MaxOutputOption,
     ModelOption,
-    PlanThinkingOption,
     SearchLanguageOption,
     SetOption,
     UseOption,
-    WriteThinkingOption,
     fail,
     use_map,
 )
@@ -198,9 +197,8 @@ def catalog(
     profile: ClientProfileOption = None,
     use: UseOption = None,
     model: ModelOption = None,
-    plan_thinking: PlanThinkingOption = None,
-    gap_thinking: GapThinkingOption = None,
-    write_thinking: WriteThinkingOption = None,
+    draft_thinking: DraftThinkingOption = None,
+    extract_thinking: ExtractThinkingOption = None,
     context_window: ContextWindowOption = None,
     max_output: MaxOutputOption = None,
     set_: SetOption = None,
@@ -210,7 +208,9 @@ def catalog(
     as_json: Annotated[bool, typer.Option("--json", help="Print the whole catalog.json when the run ends.")] = False,
 ) -> None:
     """Crawl BRIEF into a catalog of records on the daemon; `catalog draft BRIEF` prints a structure to edit."""
-    llm = llm_patch(model, (plan_thinking, gap_thinking, write_thinking), (context_window, max_output), (None, None))
+    llm = llm_patch(
+        model, {"draft": draft_thinking, "extract": extract_thinking}, (context_window, max_output), (None, None)
+    )
     if words[:1] == [DRAFT] and len(words) == 2:
         catalog_flags = {
             "--structure": structure,

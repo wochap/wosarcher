@@ -36,6 +36,8 @@ from wosarcher.cli.options import (
     ClientProfileOption,
     ContextTokensOption,
     ContextWindowOption,
+    DraftThinkingOption,
+    ExtractThinkingOption,
     FormatOption,
     FromOption,
     GapContextTokensOption,
@@ -71,6 +73,7 @@ from wosarcher.cli.options import (
 )
 from wosarcher.cli.progress import ProgressView
 from wosarcher.models import (
+    KIND_STEPS,
     CatalogRecord,
     Context,
     DomainPatch,
@@ -110,16 +113,15 @@ def budget(value: str | None) -> int | str | None:
 
 def llm_patch(
     model: str | None,
-    thinking: tuple[str | None, str | None, str | None],
+    thinking: dict[str, str | None],
     limits: tuple[int | None, int | None],
     budgets: tuple[str | None, str | None],
 ) -> LLMPatch:
     """The model, the thinking levels, `--context-window` and `--max-output`, and the two token budgets."""
-    plan, gap, write = thinking
     return LLMPatch.model_validate(
         {
             "model": model,
-            "reasoning": ReasoningPatch.model_validate({"plan": plan, "gap": gap, "write": write}),
+            "reasoning": ReasoningPatch.model_validate(thinking),
             "context_window": limits[0],
             "max_output_tokens": limits[1],
             "context_tokens": budget(budgets[0]),
@@ -367,7 +369,7 @@ def run(
             domains=DomainPatch(allow=allow_domain or None, block=block_domain or None),
             llm=llm_patch(
                 model,
-                (plan_thinking, gap_thinking, write_thinking),
+                {"plan": plan_thinking, "gap": gap_thinking, "write": write_thinking},
                 (context_window, max_output),
                 (context_tokens, gap_context_tokens),
             ),
@@ -405,6 +407,8 @@ def fork(
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
+    draft_thinking: DraftThinkingOption = None,
+    extract_thinking: ExtractThinkingOption = None,
     max_depth: Annotated[int | None, typer.Option("--max-depth", help="Catalog fork from expand: max depth.")] = None,
     max_nodes: Annotated[int | None, typer.Option("--max-nodes", help="Catalog fork from expand: max nodes.")] = None,
     pages_per_node: Annotated[
@@ -416,6 +420,21 @@ def fork(
     first = stage_option(from_)
     assert first is not None
     stop = stage_option(until)
+    thinking = {
+        "plan": plan_thinking,
+        "gap": gap_thinking,
+        "write": write_thinking,
+        "draft": draft_thinking,
+        "extract": extract_thinking,
+    }
+    client = api(os.environ)
+    parent = client.request("GET", f"/api/runs/{parent_id}")
+    kind: RunKind | None = parent.json().get("kind", "research") if parent.is_success else None
+    steps = KIND_STEPS.get(kind, tuple(thinking)) if kind else tuple(thinking)
+    wrong = [step for step, level in thinking.items() if level and step not in steps]
+    if wrong and kind:
+        allowed = ", ".join(f"--{step}-thinking" for step in KIND_STEPS[kind])
+        raise fail(f"--{wrong[0]}-thinking: not for a {kind} run; use {allowed}", 2)
     try:
         request = ForkCreate(
             from_stage=first,
@@ -431,7 +450,7 @@ def fork(
             ),
             llm=llm_patch(
                 model,
-                (plan_thinking, gap_thinking, write_thinking),
+                thinking,
                 (context_window, max_output),
                 (context_tokens, gap_context_tokens),
             ),
@@ -442,8 +461,6 @@ def fork(
         )
     except ValidationError as error:
         raise fail(error, 2) from None
-    client = api(os.environ)
-    parent = client.request("GET", f"/api/runs/{parent_id}")
     rounds = parent.json().get("rounds_planned", 1) if parent.is_success else 1
     body = request.model_dump(mode="json", by_alias=True, exclude_none=True)
     run = created(client, f"/api/runs/{parent_id}/fork", json=body)

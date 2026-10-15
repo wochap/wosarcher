@@ -69,6 +69,27 @@ describe("CatalogScreen", () => {
     expect(window.location.hash).toMatch(/^#\/live\//);
   });
 
+  it("re-extracts with a model and Extract thinking", async () => {
+    const fake = api();
+    renderApp({ hash: "#/catalog/r_cat", api: fake });
+    await screen.findByRole("heading", { name: CATALOG_BRIEF });
+    fireEvent.click(screen.getByRole("button", { name: "Re-extract" }));
+    const dialog = screen.getByRole("dialog", { name: "Re-extract" });
+    fireEvent.change(within(dialog).getByLabelText("Model"), {
+      target: { value: "qwen3-30b-a3b" },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/^Extract thinking/), {
+      target: { value: "medium" },
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Re-extract" }));
+    });
+    expect(callsTo(fake, "forkRun")[0]).toEqual([
+      "r_cat",
+      { from: "extract", llm: { model: "qwen3-30b-a3b", reasoning: { extract: "medium" } } },
+    ]);
+  });
+
   it("shows a live catalog run's frontier, records, and footer", async () => {
     const fake = api("running");
     const events: RunEvent[] = [

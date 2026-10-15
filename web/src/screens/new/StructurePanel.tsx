@@ -1,9 +1,9 @@
 // The catalog form's Structure panel: record fields, child relation, seeds, leaf types, Expand
-// by, limits, domain rows, search language, and the estimate line (prototype scenario `new`
+// by, limits, the Profile row with Advanced, domain rows, search language, and the estimate line (prototype scenario `new`
 // with Catalog picked).
 import { Check, Link, Plus, X } from "@phosphor-icons/react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
-import type { ExpandBy, Seed, Structure, StructureField } from "../../api/types";
+import type { ExpandBy, ProfileInfo, Seed, Structure, StructureField } from "../../api/types";
 import { DomainRows } from "../../components/DomainRows";
 import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
@@ -16,8 +16,7 @@ import {
   limitsOf,
   typesOf,
 } from "../../run/catalog";
-import type { DomainView } from "./OptionsPanel";
-import { isSearchLanguage } from "./OptionsPanel";
+import { type DomainView, isSearchLanguage, ProfileRow, type ProfileView } from "./OptionsPanel";
 import css from "./StructurePanel.module.css";
 
 /** The element "Fix in Structure" focuses: the first control of the named row. */
@@ -32,6 +31,13 @@ type Props = {
   structure: Structure;
   onChange: (structure: Structure) => void;
   domains: DomainView;
+  /** The profile choice and its Advanced edits, shared with the research form. */
+  profile: ProfileView & {
+    profiles: ProfileInfo[];
+    name: string;
+    words: number;
+    onPick: (name: string) => void;
+  };
   searchLanguage: string;
   onSearchLanguage: (value: string) => void;
   isPhone: boolean;
@@ -213,6 +219,17 @@ export function StructurePanel(props: Props) {
               </label>
             ))}
           </div>
+        </Row>
+        <Row label="Profile" help="profile" id="c-profile-l" row="c-profile">
+          <ProfileRow
+            profiles={props.profile.profiles}
+            profile={props.profile.name}
+            view={props.profile}
+            words={props.profile.words}
+            rounds={1}
+            kind="catalog"
+            onPick={props.profile.onPick}
+          />
         </Row>
         <DomainRows
           idPrefix="cd"

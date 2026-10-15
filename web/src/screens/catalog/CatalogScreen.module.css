@@ -775,3 +775,9 @@
 [data-phone="true"] .flagToggle {
   min-height: 36px;
 }
+
+.dialogLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}

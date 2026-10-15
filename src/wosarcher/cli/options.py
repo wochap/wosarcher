@@ -197,3 +197,5 @@ ModelOption = Annotated[str | None, typer.Option("--model", help="Chat model for
 PlanThinkingOption = Annotated[str | None, thinking("plan")]
 GapThinkingOption = Annotated[str | None, thinking("gap")]
 WriteThinkingOption = Annotated[str | None, thinking("write")]
+DraftThinkingOption = Annotated[str | None, thinking("draft")]
+ExtractThinkingOption = Annotated[str | None, thinking("extract")]

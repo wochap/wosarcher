@@ -195,7 +195,13 @@ def test_unlisted_model(env: dict[str, str]) -> None:
     entry(env, "llm", "omniroute", OMNIROUTE)
     settings = resolve(None, ["use.llm=omniroute", 'llm.model="qwen3-30b-a3b"'], env)
     assert (settings.llm.context_window, settings.llm.max_output_tokens) == (32768, 8192)
-    assert settings.llm.reasoning.model_dump() == {"plan": "none", "gap": "none", "write": "none"}
+    assert settings.llm.reasoning.model_dump() == {
+        "plan": "none",
+        "gap": "none",
+        "write": "none",
+        "draft": "none",
+        "extract": "none",
+    }
     assert settings.research.gap_context_tokens == 4000
 
 
@@ -203,6 +209,27 @@ def test_run_overrides_model_limit(env: dict[str, str]) -> None:
     overrides = ['llm.model="qwen3-30b-a3b"', "llm.context_window=262144"]
     llm = resolve(None, overrides, env).llm
     assert (llm.context_window, llm.max_output_tokens) == (262144, 8192)
+
+
+def test_catalog_steps_for_a_model(env: dict[str, str]) -> None:
+    body = 'provider = "openai"\nmodel = "m"\n[models.m]\nreasoning = { extract = "low", draft = "high" }\n'
+    entry(env, "llm", "agents", body)
+    reasoning = resolve(None, [], env).llm.reasoning
+    assert (reasoning.extract, reasoning.draft, reasoning.plan, reasoning.gap, reasoning.write) == (
+        "low",
+        "high",
+        "none",
+        "none",
+        "none",
+    )
+
+
+def test_unknown_reasoning_step(env: dict[str, str]) -> None:
+    path = entry(env, "llm", "agents", 'provider = "openai"\nmodel = "m"\n[models.m]\nreasoning = { crawl = "low" }\n')
+    with pytest.raises(ConfigError) as error:
+        resolve(None, [], env)
+    assert str(path) in str(error.value)
+    assert "crawl" in str(error.value)
 
 
 def test_unknown_model_key(env: dict[str, str]) -> None:
@@ -637,7 +664,13 @@ def test_wire_format_defaults() -> None:
     settings = Settings()
     assert settings.llm.retry_budget == 60.0
     assert settings.llm.max_tokens_field == "max_completion_tokens"
-    assert settings.llm.reasoning.model_dump() == {"plan": "none", "gap": "none", "write": "none"}
+    assert settings.llm.reasoning.model_dump() == {
+        "plan": "none",
+        "gap": "none",
+        "write": "none",
+        "draft": "none",
+        "extract": "none",
+    }
     assert settings.llm.max_continuations == 2
     assert settings.score.rerank_scale == "auto"
 

@@ -1,10 +1,21 @@
 // Thinking levels per LLM step: their labels and the tags the headers show.
-import type { Effort, ReasoningOptions } from "../api/types";
+import type { Effort, ReasoningOptions, RunKind } from "../api/types";
 
-export const STEPS = ["plan", "gap", "write"] as const;
+export const STEPS = ["plan", "gap", "write", "draft", "extract"] as const;
 export type Step = (typeof STEPS)[number];
+/** The steps each run kind uses. */
+export const KIND_STEPS: Record<RunKind, readonly Step[]> = {
+  research: ["plan", "gap", "write"],
+  catalog: ["draft", "extract"],
+};
 export const EFFORTS: Effort[] = ["none", "low", "medium", "high", "default"];
-export const STEP_LABELS: Record<Step, string> = { plan: "Plan", gap: "Gap", write: "Write" };
+export const STEP_LABELS: Record<Step, string> = {
+  plan: "Plan",
+  gap: "Gap",
+  write: "Write",
+  draft: "Draft",
+  extract: "Extract",
+};
 export const EFFORT_LABELS: Record<Effort, string> = {
   none: "None",
   low: "Low",

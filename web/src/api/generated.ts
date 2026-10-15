@@ -149,6 +149,8 @@ export type ContextWindow1 = (number | null)
 export type GapContextTokens = (number | "auto" | null)
 export type MaxOutputTokens = (number | null)
 export type Model2 = (string | null)
+export type Draft = (("none" | "low" | "medium" | "high" | "default") | null)
+export type Extract = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Gap = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Plan = (("none" | "low" | "medium" | "high" | "default") | null)
 export type Write = (("none" | "low" | "medium" | "high" | "default") | null)
@@ -361,6 +363,8 @@ export type QueryId6 = string
 export type Scored1 = number
 export type Scorer3 = string
 export type ThresholdDisplay1 = (number | null)
+export type Draft1 = ("none" | "low" | "medium" | "high" | "default")
+export type Extract1 = ("none" | "low" | "medium" | "high" | "default")
 export type Gap1 = ("none" | "low" | "medium" | "high" | "default")
 export type Plan2 = ("none" | "low" | "medium" | "high" | "default")
 export type Write1 = ("none" | "low" | "medium" | "high" | "default")
@@ -1137,6 +1141,8 @@ reasoning?: ReasoningPatch
  * Any subset of the thinking levels; each sets `llm.reasoning.<step>`.
  */
 export interface ReasoningPatch {
+draft?: Draft
+extract?: Extract
 gap?: Gap
 plan?: Plan
 write?: Write
@@ -1340,6 +1346,8 @@ reasoning?: ReasoningPatch1
  * Any subset of the thinking levels; each sets `llm.reasoning.<step>`.
  */
 export interface ReasoningPatch1 {
+draft?: Draft
+extract?: Extract
 gap?: Gap
 plan?: Plan
 write?: Write
@@ -1711,6 +1719,8 @@ value: Value
  * via the `definition` "ReasoningOptions".
  */
 export interface ReasoningOptions {
+draft?: Draft1
+extract?: Extract1
 gap?: Gap1
 plan?: Plan2
 write?: Write1
@@ -1722,6 +1732,8 @@ write?: Write1
  * via the `definition` "ReasoningPatch".
  */
 export interface ReasoningPatch2 {
+draft?: Draft
+extract?: Extract
 gap?: Gap
 plan?: Plan
 write?: Write
@@ -2117,6 +2129,8 @@ writing?: (WritingOptions | null)
  * Resolved thinking effort per LLM step (`llm.reasoning`).
  */
 export interface ReasoningOptions1 {
+draft?: Draft1
+extract?: Extract1
 gap?: Gap1
 plan?: Plan2
 write?: Write1
@@ -2334,6 +2348,8 @@ writing?: (WritingOptions | null)
  * Resolved thinking effort per LLM step (`llm.reasoning`).
  */
 export interface ReasoningOptions2 {
+draft?: Draft1
+extract?: Extract1
 gap?: Gap1
 plan?: Plan2
 write?: Write1

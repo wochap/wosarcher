@@ -152,6 +152,13 @@ def test_catalog_flags(stub: Path) -> None:
     assert {"--structure", "--seed", "--relation", "--leaf", "--expand", "--max-nodes", "--json"} <= set(found)
     assert "--depth" not in found
     assert "--tone" not in found
+    assert {"--draft-thinking", "--extract-thinking"} <= set(found)
+    assert "--write-thinking" not in found
+
+
+def test_fork_catalog_thinking(stub: Path) -> None:
+    found = complete("wosarcher fork r1 --", stub)
+    assert {"--draft-thinking", "--extract-thinking", "--write-thinking"} <= set(found)
 
 
 def test_catalog_values(stub: Path) -> None:

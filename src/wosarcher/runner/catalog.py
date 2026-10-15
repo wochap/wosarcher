@@ -251,7 +251,7 @@ async def draft(ctx: CatalogContext) -> steps.Outcome:
         ctx.adapters.draft_llm,
         catalog=ctx.settings.catalog,
         today=date.today().isoformat(),
-        effort=ctx.settings.llm.reasoning.plan,
+        effort=ctx.settings.llm.reasoning.draft,
     )
     structure = result.structure
     run_id = ctx.run_id
@@ -529,7 +529,7 @@ async def extract(ctx: CatalogContext) -> steps.Outcome:
         max_children=settings.catalog.max_children,
         today=date.today().isoformat(),
         sizing=sizing,
-        effort=settings.llm.reasoning.gap,
+        effort=settings.llm.reasoning.extract,
         on_item=on_item,
     )
     ctx.save_nodes()

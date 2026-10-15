@@ -466,6 +466,8 @@ def test_catalog_until_prints_nothing(daemon: Daemon) -> None:
         (["--search-language", "spanish"], "--search-language"),
         (["--allow-domain", "gob.pe/x"], "gob.pe/x"),
         (["--use", "scorer=bm25"], "--use"),
+        (["--extract-thinking", "max"], "--extract-thinking"),
+        (["--write-thinking", "high"], "--write-thinking"),
     ],
 )
 def test_catalog_checked_before_a_request(daemon: Daemon, args: list[str], named: str) -> None:
@@ -473,6 +475,32 @@ def test_catalog_checked_before_a_request(daemon: Daemon, args: list[str], named
     assert result.exit_code == 2
     assert named in result.output
     assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_catalog_thinking_flags(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["catalog", "b", "--extract-thinking", "low", "--draft-thinking", "high"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    overrides = request_of(daemon, run_id)["overrides"]
+    assert {'llm.reasoning.extract="low"', 'llm.reasoning.draft="high"'} <= set(overrides)
+
+
+def test_fork_reextract_with_a_level(daemon: Daemon) -> None:
+    assert runner.invoke(app, ["catalog", "b"]).exit_code == 0
+    [parent] = listed(daemon)
+    result = runner.invoke(app, ["fork", parent, "--from", "extract", "--extract-thinking", "medium", "--json"])
+    assert result.exit_code == 0, result.output
+    fork = next(run_id for run_id in listed(daemon) if run_id != parent)
+    assert 'llm.reasoning.extract="medium"' in request_of(daemon, fork)["overrides"]
+
+
+def test_fork_flag_of_the_other_kind(daemon: Daemon) -> None:
+    parent = RunOutput.model_validate_json(runner.invoke(app, ["run", "q", "--json"]).stdout).run_id
+    result = runner.invoke(app, ["fork", parent, "--from", "write", "--extract-thinking", "low"])
+    assert result.exit_code == 2
+    assert "--extract-thinking" in result.output
+    assert "research" in result.output
+    assert listed(daemon) == [parent]
 
 
 def test_catalog_invalid_structure(daemon: Daemon, tmp_path: Path) -> None:

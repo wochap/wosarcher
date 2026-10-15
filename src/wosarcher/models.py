@@ -742,6 +742,8 @@ class ReasoningOptions(Contract):
     plan: Effort = "none"
     gap: Effort = "none"
     write: Effort = "none"
+    draft: Effort = "none"
+    extract: Effort = "none"
 
 
 class Message(Contract):
@@ -1004,12 +1006,18 @@ class ResearchPatch(Contract):
     queries_per_round: int | None = Field(default=None, gt=0)
 
 
+KIND_STEPS: dict[RunKind, tuple[str, ...]] = {"research": ("plan", "gap", "write"), "catalog": ("draft", "extract")}
+"""The `llm.reasoning` steps each run kind uses."""
+
+
 class ReasoningPatch(Contract):
     """Any subset of the thinking levels; each sets `llm.reasoning.<step>`."""
 
     plan: Effort | None = None
     gap: Effort | None = None
     write: Effort | None = None
+    draft: Effort | None = None
+    extract: Effort | None = None
 
 
 class LLMPatch(Contract):

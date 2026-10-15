@@ -50,7 +50,7 @@ async def draft(
                 llm,
                 today=date.today().isoformat(),
                 catalog=settings.catalog,
-                effort=settings.llm.reasoning.plan,
+                effort=settings.llm.reasoning.draft,
             )
     except DraftFailedError as error:
         raise RouteError(502, "draft_failed", error.reason) from None

@@ -157,10 +157,17 @@
   min-width: 0;
 }
 
+.kindRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-bottom: 14px;
+}
+
 .kind {
   width: fit-content;
   max-width: 100%;
-  margin-bottom: 14px;
 }
 
 .kindOpt {

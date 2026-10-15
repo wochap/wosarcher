@@ -8,6 +8,7 @@ import type {
   ProfileInfo,
   ProviderEntry,
   ResearchValues,
+  RunKind,
   WritingOptions,
 } from "../../api/types";
 import type { RunOptions } from "../../app/context";
@@ -111,7 +112,6 @@ export function OptionsPanel(props: Props) {
     writingOverridden + Object.keys(overriddenDomains(domains.lists, domains.defaults)).length;
   const Caret = open ? CaretDown : CaretRight;
   const languageValid = isSearchLanguage(props.searchLanguage.trim());
-  const selected = profiles.find((p) => p.name === options.profile);
   const label = depthLabel(options.depth);
   const rounds = options.sources === "files" ? 1 : depth.values.rounds;
   const edits = changedCount(props.profile.choice);
@@ -179,35 +179,14 @@ export function OptionsPanel(props: Props) {
             help="profile"
             htmlFor={profiles.length > SEGMENT_PROFILES ? "opt-profile" : undefined}
           >
-            <div className={css.profileRow}>
-              <div className={css.profileSelect}>
-                <ProfileControl
-                  profiles={profiles}
-                  profile={options.profile}
-                  edits={edits}
-                  onPick={props.onProfile}
-                />
-                {edits > 0 && (
-                  <div className={css.based}>
-                    based on <strong>{options.profile}</strong> · {edits}{" "}
-                    {edits === 1 ? "edit" : "edits"}
-                  </div>
-                )}
-                {selected?.description && (
-                  <div className={css.description}>{selected.description}</div>
-                )}
-              </div>
-              <ProfileAdvanced
-                profile={selected}
-                entries={props.profile.entries}
-                choice={props.profile.choice}
-                models={props.profile.models}
-                words={writing.words}
-                rounds={rounds}
-                onChange={props.profile.onChange}
-                actions={props.profile.actions}
-              />
-            </div>
+            <ProfileRow
+              profiles={profiles}
+              profile={options.profile}
+              view={props.profile}
+              words={writing.words}
+              rounds={rounds}
+              onPick={props.onProfile}
+            />
           </Row>
           <DomainRows
             idPrefix="nd"
@@ -266,6 +245,55 @@ export function OptionsPanel(props: Props) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+type ProfileRowProps = {
+  profiles: ProfileInfo[];
+  /** The chosen profile's name. */
+  profile: string;
+  view: ProfileView;
+  words: number;
+  rounds: number;
+  kind?: RunKind;
+  onPick: (name: string) => void;
+};
+
+/** The Profile row's control: the profile choice, its description, and the Advanced box. */
+export function ProfileRow({
+  profiles,
+  profile,
+  view,
+  words,
+  rounds,
+  kind,
+  onPick,
+}: ProfileRowProps) {
+  const selected = profiles.find((p) => p.name === profile);
+  const edits = changedCount(view.choice);
+  return (
+    <div className={css.profileRow}>
+      <div className={css.profileSelect}>
+        <ProfileControl profiles={profiles} profile={profile} edits={edits} onPick={onPick} />
+        {edits > 0 && (
+          <div className={css.based}>
+            based on <strong>{profile}</strong> · {edits} {edits === 1 ? "edit" : "edits"}
+          </div>
+        )}
+        {selected?.description && <div className={css.description}>{selected.description}</div>}
+      </div>
+      <ProfileAdvanced
+        profile={selected}
+        entries={view.entries}
+        choice={view.choice}
+        models={view.models}
+        words={words}
+        rounds={rounds}
+        kind={kind}
+        onChange={view.onChange}
+        actions={view.actions}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import type {
   StructureField,
 } from "../api/types";
 import { type ProfileChoice, profilePatch } from "./profileValues";
+import { KIND_STEPS } from "./thinking";
 
 export const FIELD_TYPES: FieldType[] = ["text", "slug", "url", "date", "enum", "ref"];
 export const DEFAULT_LIMITS: Limits = { max_depth: 3, max_nodes: 200, pages_per_node: 2 };
@@ -97,7 +98,7 @@ export function catalogRequest(form: CatalogForm): RunCreate {
   };
   if (Object.keys(form.domains).length) request.domains = form.domains;
   if (form.searchLanguage.trim()) request.search_language = form.searchLanguage.trim();
-  return { ...request, ...profilePatch(form.choice) };
+  return { ...request, ...profilePatch(form.choice, KIND_STEPS.catalog) };
 }
 
 /** The Structure panel rows a server error can name, by the key after `structure.`. */

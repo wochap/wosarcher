@@ -276,13 +276,43 @@ def test_draft_needs_login(make_app: MakeApp, config_dir: Path, password_hash: s
         assert response.status_code == 401
 
 
-def test_catalog_fork_thinking_maps_to_extract(client: TestClient, runs_dir: Path) -> None:
+def test_reextract_with_a_level(client: TestClient, runs_dir: Path) -> None:
     parent = finished_catalog(client)
-    body = {"from": "extract", "llm": {"reasoning": {"write": "high"}}}
+    body = {"from": "extract", "llm": {"reasoning": {"extract": "medium"}}}
     response = client.post(f"/api/runs/{parent}/fork", json=body)
     assert response.status_code == 201, response.text
     child = response.json()["run_id"]
     finished(client, child)
     args = argv(runs_dir, child)
-    assert 'llm.reasoning.gap="high"' in args
-    assert not any(arg.startswith("llm.reasoning.write") for arg in args)
+    assert 'llm.reasoning.extract="medium"' in args
+    assert not any(arg.startswith(("llm.reasoning.write", "llm.reasoning.gap")) for arg in args)
+
+
+def test_catalog_fork_research_step_422(client: TestClient) -> None:
+    parent = finished_catalog(client)
+    body = {"from": "extract", "llm": {"reasoning": {"write": "high"}}}
+    response = client.post(f"/api/runs/{parent}/fork", json=body)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail.startswith("llm.reasoning: write")
+    assert "catalog" in detail
+
+
+def test_catalog_thinking(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, catalog_request(llm={"reasoning": {"extract": "low"}}))
+    finished(client, run_id)
+    assert 'llm.reasoning.extract="low"' in argv(runs_dir, run_id)
+
+
+def test_research_step_on_catalog_422(client: TestClient) -> None:
+    response = post(client, catalog_request(llm={"reasoning": {"write": "high"}}))
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail.startswith("llm.reasoning: write")
+    assert "catalog" in detail
+
+
+def test_catalog_step_on_research_422(client: TestClient) -> None:
+    response = post(client, {"query": "q", "llm": {"reasoning": {"draft": "low"}}})
+    assert response.status_code == 422
+    assert "draft" in response.json()["detail"]

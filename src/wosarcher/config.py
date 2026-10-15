@@ -201,6 +201,8 @@ class ReasoningConfig(Block):
     plan: Effort = "none"
     gap: Effort = "none"
     write: Effort = "none"
+    draft: Effort = "none"
+    extract: Effort = "none"
 
 
 class LLMConfig(Provider):

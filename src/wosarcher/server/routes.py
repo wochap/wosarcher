@@ -13,6 +13,7 @@ from wosarcher.config import CUSTOM_DEPTH, ConfigError, list_depths, list_entrie
 from wosarcher.document import document
 from wosarcher.models import (
     CATALOG_STAGES,
+    KIND_STEPS,
     STAGES,
     Attachment,
     ExportFormat,
@@ -26,6 +27,7 @@ from wosarcher.models import (
     RunCreated,
     RunDetail,
     RunFailed,
+    RunKind,
     RunNotActive,
     RunRecord,
     RunSummary,
@@ -198,6 +200,14 @@ def kind_stages(kind: str) -> tuple[Stage, ...]:
     return CATALOG_STAGES if kind == "catalog" else STAGES
 
 
+def check_reasoning(kind: RunKind, llm: LLMPatch) -> None:
+    """`llm.reasoning` sets only the steps of the run's kind."""
+    for step in llm.reasoning.model_dump(exclude_none=True):
+        if step not in KIND_STEPS[kind]:
+            detail = f"llm.reasoning: {step} is not a {kind} step; steps: {', '.join(KIND_STEPS[kind])}"
+            raise RouteError(422, "invalid_request", detail)
+
+
 def check_kind(body: RunCreate) -> None:
     """The fields of the other kind, `sources files` for a catalog, `until` outside the kind, two languages."""
     if body.kind == "catalog":
@@ -213,6 +223,7 @@ def check_kind(body: RunCreate) -> None:
             raise RouteError(422, "invalid_request", detail)
     elif body.structure is not None:
         raise RouteError(422, "invalid_request", "structure: only for catalog runs, not research runs")
+    check_reasoning(body.kind, body.llm)
     stages = kind_stages(body.kind)
     if body.until is not None and body.until not in stages:
         detail = f"until: {body.until} is not a {body.kind} stage; stages: {', '.join(stages)}"
@@ -386,6 +397,7 @@ def check_fork(state: ServerState, parent: RunRecord, body: ForkCreate) -> None:
     if body.until is not None and body.until not in stages:
         detail = f"until: {body.until} is not a {parent.kind} stage; stages: {', '.join(stages)}"
         raise RouteError(422, "invalid_request", detail)
+    check_reasoning(parent.kind, body.llm)
     limits: dict[str, int] = body.limits.model_dump(exclude_none=True)
     if parent.kind == "catalog" and body.writing.model_dump(exclude_none=True):
         raise RouteError(422, "invalid_request", "writing: not for catalog runs")

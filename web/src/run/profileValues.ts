@@ -12,7 +12,7 @@ import type {
   Use,
 } from "../api/types";
 import type { Limits } from "./depth";
-import { STEPS } from "./thinking";
+import { STEPS, type Step } from "./thinking";
 
 export const BLOCKS: Block[] = ["search", "fetch", "prefilter", "score", "llm"];
 export const BLOCK_LABELS: Record<Block, string> = {
@@ -34,6 +34,8 @@ export type ProfileFields = {
   plan: Effort;
   gap: Effort;
   write: Effort;
+  draft: Effort;
+  extract: Effort;
   context_tokens: TokenBudget;
   gap_context_tokens: TokenBudget;
 };
@@ -49,6 +51,8 @@ export const MODEL_FIELDS = [
   "plan",
   "gap",
   "write",
+  "draft",
+  "extract",
   "gap_context_tokens",
 ] as const;
 export type ModelField = (typeof MODEL_FIELDS)[number];
@@ -108,6 +112,8 @@ export function profileBase(
   const [plan, planFrom] = pick((m) => m.reasoning?.plan);
   const [gap, gapFrom] = pick((m) => m.reasoning?.gap);
   const [write, writeFrom] = pick((m) => m.reasoning?.write);
+  const [draft, draftFrom] = pick((m) => m.reasoning?.draft);
+  const [extract, extractFrom] = pick((m) => m.reasoning?.extract);
   const [gapBudget, gapBudgetFrom] = pick((m) => m.gap_context_tokens);
   return {
     use: chosen,
@@ -117,6 +123,8 @@ export function profileBase(
     plan: plan ?? "none",
     gap: gap ?? "none",
     write: write ?? "none",
+    draft: draft ?? "none",
+    extract: extract ?? "none",
     context_tokens: profile?.context_tokens ?? "auto",
     gap_context_tokens: gapBudget ?? "auto",
     sources: {
@@ -126,6 +134,8 @@ export function profileBase(
       plan: planFrom,
       gap: gapFrom,
       write: writeFrom,
+      draft: draftFrom,
+      extract: extractFrom,
       gap_context_tokens: gapBudgetFrom,
     },
   };
@@ -198,13 +208,19 @@ export function changedCount({ use, edits }: ProfileChoice): number {
   return Object.keys(use).length + Object.keys(edits).length;
 }
 
-/** The request's `use` and `llm`: only the changed blocks and the edited fields. */
-export function profilePatch({ use, edits }: ProfileChoice): Pick<RunCreate, "use" | "llm"> {
+/**
+ * The request's `use` and `llm`: only the changed blocks and the edited fields. `steps` are the
+ * thinking levels sent: a run sends its kind's steps, a saved profile all of them.
+ */
+export function profilePatch(
+  { use, edits }: ProfileChoice,
+  steps: readonly Step[] = STEPS,
+): Pick<RunCreate, "use" | "llm"> {
   const patch: Pick<RunCreate, "use" | "llm"> = {};
   if (Object.keys(use).length) patch.use = use as Record<string, string>;
-  const { plan, gap, write, model, ...budgets } = edits;
-  const levels = { plan, gap, write };
-  const reasoning = Object.fromEntries(STEPS.filter((s) => levels[s]).map((s) => [s, levels[s]]));
+  const { plan, gap, write, draft, extract, model, ...budgets } = edits;
+  const levels = { plan, gap, write, draft, extract };
+  const reasoning = Object.fromEntries(steps.filter((s) => levels[s]).map((s) => [s, levels[s]]));
   const fields = {
     ...(model?.trim() ? { model: model.trim() } : {}),
     ...budgets,

@@ -31,6 +31,7 @@ import {
   isDomain,
   sameList,
 } from "../../components/DomainRows";
+import { HelpTip } from "../../components/HelpTip";
 import type { WritingField } from "../../components/WritingOptionsForm";
 import { catalogRequest, structureRow } from "../../run/catalog";
 import {
@@ -57,6 +58,7 @@ import {
   rowName,
   saveMarks,
 } from "../../run/recent";
+import { KIND_STEPS } from "../../run/thinking";
 import { Attachments } from "./Attachments";
 import { DeleteDialog } from "./DeleteDialog";
 import css from "./NewRunScreen.module.css";
@@ -65,6 +67,7 @@ import {
   OptionsPanel,
   overriddenDomains,
   overriddenFields,
+  type ProfileView,
 } from "./OptionsPanel";
 import { RecentRuns, useWide } from "./RecentRuns";
 import { depthGroups, profileGroups, profileIntro, SaveDialog } from "./SaveDialog";
@@ -85,9 +88,24 @@ type StartError = {
   title?: string;
 };
 
-const KIND_OPTIONS: { value: RunKind; label: string; Icon: typeof MagnifyingGlass }[] = [
-  { value: "research", label: "Research", Icon: MagnifyingGlass },
-  { value: "catalog", label: "Catalog", Icon: TreeStructure },
+const KIND_OPTIONS: {
+  value: RunKind;
+  label: string;
+  title: string;
+  Icon: typeof MagnifyingGlass;
+}[] = [
+  {
+    value: "research",
+    label: "Research",
+    title: "Cited report or answer to a question",
+    Icon: MagnifyingGlass,
+  },
+  {
+    value: "catalog",
+    label: "Catalog",
+    title: "Structured records, one per entity, from a crawl",
+    Icon: TreeStructure,
+  },
 ];
 
 const BRIEF_PLACEHOLDER =
@@ -151,7 +169,7 @@ export function runRequest(
   if (Object.keys(overrides).length) request.writing = overrides;
   if (Object.keys(domains).length) request.domains = domains;
   if (searchLanguage.trim()) request.search_language = searchLanguage.trim();
-  return { ...request, ...profilePatch(profile) };
+  return { ...request, ...profilePatch(profile, KIND_STEPS.research) };
 }
 
 export function NewRunScreen() {
@@ -238,6 +256,18 @@ export function NewRunScreen() {
   };
   const domains: DomainLists = { ...domainDefaults, ...draft.domains };
   const choice: ProfileChoice = { use: draft.use, edits: draft.profileEdits };
+  /** The profile's Advanced values, shared by the research and catalog forms. */
+  const profileView: ProfileView = {
+    entries,
+    choice,
+    models,
+    onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
+    actions: {
+      onSaveTo: () => void saveProfileTo(),
+      onSaveAs: () => setSaving("profile"),
+      onDelete: () => setDeleting({ kind: "profile", name: options.profile }),
+    },
+  };
   const llmEntry = profileBase(selected, entries, draft.use).use.llm;
 
   useEffect(() => {
@@ -315,7 +345,11 @@ export function NewRunScreen() {
     setError(null);
     try {
       const structure = await api.draftStructure(
-        { brief: draft.brief.trim(), profile: options.profile, ...profilePatch(choice) },
+        {
+          brief: draft.brief.trim(),
+          profile: options.profile,
+          ...profilePatch(choice, KIND_STEPS.catalog),
+        },
         draft.files,
       );
       setDraft((d) => ({ ...d, structure }));
@@ -567,22 +601,25 @@ export function NewRunScreen() {
             )}
           </div>
           <div className="field">
-            <div className={`seg ${css.kind}`} role="radiogroup" aria-label="Kind">
-              {KIND_OPTIONS.map(({ value, label, Icon }) => (
-                <label key={value} className={`seg-opt ${css.kindOpt}`}>
-                  <input
-                    type="radio"
-                    name="run-kind"
-                    checked={draft.kind === value}
-                    onChange={() => {
-                      setDraft((d) => ({ ...d, kind: value }));
-                      setError(null);
-                    }}
-                  />
-                  <Icon aria-hidden="true" />
-                  {label}
-                </label>
-              ))}
+            <div className={css.kindRow}>
+              <div className={`seg ${css.kind}`} role="radiogroup" aria-label="Kind">
+                {KIND_OPTIONS.map(({ value, label, title, Icon }) => (
+                  <label key={value} className={`seg-opt ${css.kindOpt}`} title={title}>
+                    <input
+                      type="radio"
+                      name="run-kind"
+                      checked={draft.kind === value}
+                      onChange={() => {
+                        setDraft((d) => ({ ...d, kind: value }));
+                        setError(null);
+                      }}
+                    />
+                    <Icon aria-hidden="true" />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <HelpTip help="kind" label="Kind" />
             </div>
             <div className={css.questionHead}>
               <label htmlFor="q">{catalog ? "Brief" : "Question"}</label>
@@ -712,6 +749,13 @@ export function NewRunScreen() {
                   invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
                   onChange: setDomains,
                 }}
+                profile={{
+                  ...profileView,
+                  profiles: profileList,
+                  name: options.profile,
+                  words: writing?.words ?? defaults?.words ?? 0,
+                  onPick: pickProfile,
+                }}
                 searchLanguage={draft.searchLanguage}
                 onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
                 isPhone={isPhone}
@@ -746,17 +790,7 @@ export function NewRunScreen() {
                   onDelete: (name) => setDeleting({ kind: "depth", name }),
                 },
               }}
-              profile={{
-                entries,
-                choice,
-                models,
-                onChange: ({ use, edits }) => setDraft((d) => ({ ...d, use, profileEdits: edits })),
-                actions: {
-                  onSaveTo: () => void saveProfileTo(),
-                  onSaveAs: () => setSaving("profile"),
-                  onDelete: () => setDeleting({ kind: "profile", name: options.profile }),
-                },
-              }}
+              profile={profileView}
               onOption={setOption}
               onProfile={pickProfile}
               writing={writing}

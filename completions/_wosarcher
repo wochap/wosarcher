@@ -243,9 +243,8 @@ _wosarcher_catalog() {
     '--profile[profile to use]:profile:_wosarcher_profile_names' \
     '*--use[use this provider entry for one block]:block=entry:_wosarcher_use' \
     '--model[chat model for this run]:model:' \
-    '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
-    '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
-    '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--draft-thinking[thinking for the draft step]:level:_wosarcher_efforts' \
+    '--extract-thinking[thinking for the extract step]:level:_wosarcher_efforts' \
     '--context-window[the model'\''s context window in tokens]:tokens:' \
     '--max-output[the model'\''s output limit in tokens]:tokens:' \
     '*--set[override one field]:dotted.key=value:' \
@@ -278,6 +277,8 @@ _wosarcher_fork() {
     '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
     '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
     '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--draft-thinking[thinking for the draft step]:level:_wosarcher_efforts' \
+    '--extract-thinking[thinking for the extract step]:level:_wosarcher_efforts' \
     '--max-depth[catalog fork from expand: max depth]:depth:' \
     '--max-nodes[catalog fork from expand: max nodes]:nodes:' \
     '--pages-per-node[catalog fork from expand: pages per node]:pages:' \

@@ -476,7 +476,7 @@ def test_model_and_thinking_for_one_run(client: TestClient, runs_dir: Path) -> N
     shown = summary(client, run_id)
     assert (shown["model"], shown["reasoning"]) == (
         "deepseek-v4-flash",
-        {"plan": "none", "gap": "none", "write": "high"},
+        {"plan": "none", "gap": "none", "write": "high", "draft": "none", "extract": "none"},
     )
 
 
@@ -497,7 +497,10 @@ def test_set_wins_over_llm_model(client: TestClient, runs_dir: Path) -> None:
 def test_older_run_shows_no_thinking(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
     shown = summary(client, "r")
-    assert (shown["model"], shown["reasoning"]) == ("", {"plan": "none", "gap": "none", "write": "none"})
+    assert (shown["model"], shown["reasoning"]) == (
+        "",
+        {"plan": "none", "gap": "none", "write": "none", "draft": "none", "extract": "none"},
+    )
 
 
 def test_command_override_422(client: TestClient, runs_dir: Path) -> None:

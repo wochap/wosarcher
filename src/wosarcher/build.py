@@ -88,8 +88,8 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
     planner = ChatLLM(settings.llm, llm_client, ledger, "plan")
     gapper = ChatLLM(settings.llm, llm_client, ledger, "gap")
     writer = ChatLLM(settings.llm, llm_client, ledger, "write")
-    drafter = ChatLLM(settings.llm, llm_client, ledger, "draft", step="plan")
-    extractor = ChatLLM(settings.llm, llm_client, ledger, "extract", step="gap")
+    drafter = ChatLLM(settings.llm, llm_client, ledger, "draft")
+    extractor = ChatLLM(settings.llm, llm_client, ledger, "extract")
     managed["llm"] = planner
     return Adapters(
         searcher=searcher,
@@ -108,9 +108,7 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
 def draft_llm(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> LLM:
     """The catalog draft call alone, for the server's draft route."""
     check_providers(settings)
-    return ChatLLM(
-        settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "draft", "plan"
-    )
+    return ChatLLM(settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "draft")
 
 
 def exporter() -> Exporter:

@@ -424,6 +424,10 @@ it. They are redacted everywhere they are shown or saved.
   reject `reasoning_effort`). Set per model in the llm entry's
   `models.<id>.reasoning`. Per run: `--plan-thinking`, `--gap-thinking`,
   `--write-thinking`, `--model`, `--context-window`, and `--max-output`.
+- `llm.reasoning.draft`, `llm.reasoning.extract`: the same levels for a
+  catalog run's draft call and its extraction calls. Per run:
+  `wosarcher catalog --draft-thinking` and `--extract-thinking`
+  (`wosarcher catalog` does not take the research thinking flags).
 - `score.rerank_scale`: `auto` (default), `probability`, or `logit`. Logit
   scores from a reranker are mapped through a sigmoid before thresholds and
   display; `auto` detects the scale per run.

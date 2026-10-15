@@ -823,7 +823,7 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
   const api = useApi();
   const { follow, toast } = useUi();
   const baseModel = detail.model ?? "";
-  const baseEffort = detail.reasoning?.write ?? "default";
+  const baseEffort = detail.reasoning?.extract ?? "none";
   const [model, setModel] = useState(baseModel);
   const [effort, setEffort] = useState(baseEffort);
   const [busy, setBusy] = useState(false);
@@ -832,7 +832,7 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
     setBusy(true);
     const llm: NonNullable<Parameters<typeof api.forkRun>[1]["llm"]> = {};
     if (model.trim() && model.trim() !== baseModel) llm.model = model.trim();
-    if (effort !== baseEffort) llm.reasoning = { write: effort };
+    if (effort !== baseEffort) llm.reasoning = { extract: effort };
     try {
       const created = await api.forkRun(detail.run_id, {
         from: "extract",
@@ -861,9 +861,13 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
             onChange={(e) => setModel(e.target.value)}
           />
         </label>
-        <label className={css.dialogLimit}>
-          Thinking
+        <div className={css.dialogLimit}>
+          <span className={css.dialogLabel}>
+            <label htmlFor="rx-extract">Extract thinking</label>
+            <HelpTip help="p-think-extract" label="Extract thinking" />
+          </span>
           <select
+            id="rx-extract"
             className="input"
             value={effort}
             onChange={(e) => setEffort(e.target.value as typeof effort)}
@@ -874,7 +878,7 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
               </option>
             ))}
           </select>
-        </label>
+        </div>
       </div>
       <div className="dialog-actions">
         <button type="button" className="btn btn-secondary" onClick={onClose}>

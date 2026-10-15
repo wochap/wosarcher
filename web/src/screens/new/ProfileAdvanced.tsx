@@ -13,7 +13,14 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { type ReactNode, useState } from "react";
-import type { Block, Effort, ProfileInfo, ProviderEntry, TokenBudget } from "../../api/types";
+import type {
+  Block,
+  Effort,
+  ProfileInfo,
+  ProviderEntry,
+  RunKind,
+  TokenBudget,
+} from "../../api/types";
 import { HelpTip } from "../../components/HelpTip";
 import { Tag } from "../../components/Tag";
 import { effectiveContext, effectiveGapContext, fmtN, isClamped, windowCap } from "../../run/depth";
@@ -32,7 +39,7 @@ import {
   profileBase,
   sourceTag,
 } from "../../run/profileValues";
-import { EFFORT_LABELS, EFFORTS, STEP_LABELS, STEPS } from "../../run/thinking";
+import { EFFORT_LABELS, EFFORTS, KIND_STEPS, STEP_LABELS, type Step } from "../../run/thinking";
 import css from "./OptionsPanel.module.css";
 
 const BLOCK_HELP: Record<Block, string> = {
@@ -41,6 +48,10 @@ const BLOCK_HELP: Record<Block, string> = {
   prefilter: "p-prefilter",
   score: "p-scorer",
   llm: "p-llm",
+};
+const STEP_HELP: Partial<Record<Step, string>> = {
+  draft: "p-think-draft",
+  extract: "p-think-extract",
 };
 const ROUNDS_LOCK = "Used between rounds; needs 2+ rounds.";
 const FALLBACK_NOTE = "Fallback: no limits set for this model.";
@@ -57,6 +68,8 @@ type Props = {
   words: number;
   /** The depth's rounds; gap fields are used only between rounds. */
   rounds: number;
+  /** The run kind, whose thinking steps the Model group shows. */
+  kind?: RunKind;
   onChange: (choice: ProfileChoice) => void;
   actions: ProfileActions;
 };
@@ -75,6 +88,7 @@ export function ProfileAdvanced({
   models,
   words,
   rounds,
+  kind = "research",
   onChange,
   actions,
 }: Props) {
@@ -209,7 +223,7 @@ export function ProfileAdvanced({
                 />
               </Field>
             ))}
-            {STEPS.map((step) => {
+            {KIND_STEPS[kind].map((step) => {
               const locked = step === "gap" && lockGap;
               const label = `${STEP_LABELS[step]} thinking`;
               return (
@@ -217,7 +231,7 @@ export function ProfileAdvanced({
                   key={step}
                   id={`pa-${step}`}
                   label={label}
-                  help="p-think"
+                  help={STEP_HELP[step] ?? "p-think"}
                   source={tag(step)}
                   note={locked ? ROUNDS_LOCK : ""}
                   locked

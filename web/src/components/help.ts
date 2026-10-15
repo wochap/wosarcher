@@ -55,6 +55,10 @@ export const HELP: Record<string, Help> = {
     title: "Depth default",
     body: "Each depth sets a default length: Quick 600, Standard your Settings default, Deep 2,000, Exhaustive 3,000 words. Changing depth updates it until you edit it.",
   },
+  kind: {
+    title: "Kind",
+    body: "Research answers a question: it plans searches, scores passages and writes a cited report or answer. Catalog builds a table: it crawls out from seed records, extracts one structured record per node and returns them as JSON, a table and a graph. Pick Research for “what, why, compare”; pick Catalog for “every X with its Y”.",
+  },
   recipe: {
     title: "Recipe",
     body: "Report writes a cited report. Answer replies to the question directly, with citations, in at most the chosen length. Context stops after selecting passages and returns them with sources and scores, for agents or your own answer. Faster and cheaper.",
@@ -95,6 +99,14 @@ export const HELP: Record<string, Help> = {
   "p-think": {
     title: "Thinking",
     body: "How much the model reasons before answering at each step: off, low, medium or high. Higher is slower and uses more tokens.",
+  },
+  "p-think-draft": {
+    title: "Draft thinking",
+    body: "Reasoning effort for the one call that turns the brief into the structure.",
+  },
+  "p-think-extract": {
+    title: "Extract thinking",
+    body: "Reasoning effort for the extraction call made for each node. This is the call that runs hundreds of times, so keep it low unless records come back wrong.",
   },
   "p-ctx": {
     title: "Context tokens",

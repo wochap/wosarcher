@@ -2,6 +2,7 @@ import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import type { RunCreate } from "../../api/types";
+import { HELP } from "../../components/help";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { renderApp } from "../../test/renderApp";
 
@@ -89,6 +90,43 @@ describe("catalog form", () => {
     });
     expect(((await screen.findByLabelText("Brief")) as HTMLTextAreaElement).value).toBe(
       "Kept brief",
+    );
+  });
+
+  it("shows the Kind help and the segment titles", async () => {
+    await openCatalog();
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Help: Kind" }));
+    expect(screen.getByRole("tooltip").textContent).toContain(HELP.kind.body);
+    const title = (name: string) =>
+      screen.getByRole("radio", { name }).closest("label")?.getAttribute("title");
+    expect(title("Research")).toBe("Cited report or answer to a question");
+    expect(title("Catalog")).toBe("Structured records, one per entity, from a crawl");
+  });
+
+  it("sends the profile and Extract thinking, shared with the research form", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.click(screen.getByRole("radio", { name: "workstation" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Advanced/ }));
+    expect(screen.queryByLabelText("Write thinking")).toBeNull();
+    expect(screen.getByLabelText("Draft thinking")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Extract thinking"), { target: { value: "low" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.profile).toBe("workstation");
+    expect(request.llm?.reasoning).toEqual({ extract: "low" });
+  });
+
+  it("keeps the profile choice when switching back to Research", async () => {
+    const { brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.click(screen.getByRole("radio", { name: "workstation" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Research" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Options/ }));
+    expect((screen.getByRole("radio", { name: "workstation" }) as HTMLInputElement).checked).toBe(
+      true,
     );
   });
 });

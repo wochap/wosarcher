@@ -10,7 +10,7 @@ import pytest
 from tests.runner.helpers import adapters, kinds, settings
 from tests.stages.catalog_data import structure, structure_data
 from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeSearcher
-from wosarcher.config import CatalogConfig, Settings
+from wosarcher.config import CatalogConfig, ReasoningConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
     CatalogDone,
@@ -83,12 +83,14 @@ class CatalogLLM(FakeLLM):
         self.ledger = ledger
         self.failing = failing or set()
         self.names: list[str] = []
+        self.levels: list[str] = []
 
     async def complete(
         self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
     ) -> Completion:
         self.calls.append(list(messages))
         system = messages[0].content
+        self.levels.append(effort if "The entity: " in system else f"draft:{effort}")
         if "The entity: " not in system:
             if self.ledger:
                 self.ledger.record("fake-llm", "draft", input_tokens=100, output_tokens=50)
@@ -291,6 +293,20 @@ async def test_derived_structure(tmp_path: Path) -> None:
     assert record.structure == store.read_artifact(run_id, "structure.json", Structure)
     assert record.structure is not None
     assert record.structure.limits.max_depth == 1
+
+
+async def test_catalog_reasoning_levels(tmp_path: Path) -> None:
+    base = catalog_settings(tmp_path)
+    reasoning = ReasoningConfig(plan="high", gap="high", write="high", draft="medium", extract="low")
+    cfg = base.model_copy(update={"llm": base.llm.model_copy(update={"reasoning": reasoning})})
+    llm = CatalogLLM(draft_reply=json.dumps(structure_data(limits={"max_depth": 1})))
+    store = RunStore.from_settings(cfg)
+    fakes = adapters(searcher=FakeSearcher(SEARCH), fetcher=FakeFetcher(PAGES), planner=llm)
+    run_id = new_catalog(store, cfg, None)
+    assert await Runner(store, cfg, fakes, UsageLedger({})).run(run_id) == "done"
+    assert llm.levels[0] == "draft:medium"
+    assert len(llm.levels) > 1
+    assert set(llm.levels[1:]) == {"low"}
 
 
 async def test_unreadable_draft(tmp_path: Path) -> None:

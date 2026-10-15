@@ -219,21 +219,11 @@ def stage_run(
     return write(runs_dir, staged, uploads, reused)
 
 
-def catalog_thinking(parent: RunRecord, request: ForkCreate) -> ForkCreate:
-    """A catalog run has no write step: its `write` thinking means the extract calls' `gap` level."""
-    reasoning = request.llm.reasoning
-    if parent.kind != "catalog" or reasoning.write is None:
-        return request
-    moved = reasoning.model_copy(update={"gap": reasoning.gap or reasoning.write, "write": None})
-    return request.model_copy(update={"llm": request.llm.model_copy(update={"reasoning": moved})})
-
-
 def stage_fork(
     runs_dir: Path, parent: RunRecord, request: ForkCreate, origin: Origin = "web", token_name: str | None = None
 ) -> StagedRun:
     """A fork keeps the parent's configuration; only the request's writing and `set` change it."""
     check_overrides(request.set)
-    request = catalog_thinking(parent, request)
     writing = WritingOptions.model_validate(parent.settings.get("write", {}))
     staged = StagedRun(
         query=parent.request.query,
