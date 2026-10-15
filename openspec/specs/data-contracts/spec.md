@@ -10,9 +10,13 @@ frontend agree on one shape.
 
 ### Requirement: Contract types
 The system SHALL define these data types: run request, query, search hit,
-source, page, chunk, score, selected context, select skip, report, and
-writing options. Each type SHALL serialise to JSON and parse back to an
-equal value.
+source, page, chunk, score, selected context, select skip, report,
+writing options, structure (with its field, seed, and limits types),
+node, extracted record, and catalog (the `catalog.json` record with its
+wave entries). Each type SHALL serialise to JSON and parse back to an
+equal value. The run request SHALL carry `kind` and an optional
+structure; a query SHALL carry an optional node ID; a search hit's query
+IDs MAY be node query IDs (`n<k>s`, `n<k>c`).
 
 #### Scenario: Round trip
 - **WHEN** any contract value is serialised to JSON and parsed again
@@ -21,6 +25,10 @@ equal value.
 #### Scenario: Unknown fields rejected
 - **WHEN** JSON for a contract type contains a field the type does not define
 - **THEN** parsing fails with an error that names the field
+
+#### Scenario: Catalog types published
+- **WHEN** `wosarcher schema` runs
+- **THEN** its output defines the structure, node, record, and catalog types, and the frontend's generated types include them
 
 ### Requirement: Source identity
 Every source SHALL have a kind (`web` or `file`), a URI, a title, and a

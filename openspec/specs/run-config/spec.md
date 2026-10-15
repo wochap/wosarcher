@@ -479,3 +479,37 @@ and `WOSARCHER_USE__<BLOCK>` SHALL be allowed. `--set` and a request's
 #### Scenario: Set reaches any key
 - **WHEN** the command runs with `--set score.min_score=1.5`
 - **THEN** the resolved `score.min_score` is 1.5
+
+### Requirement: Catalog block
+The configuration SHALL have a `catalog` block with:
+- `max_depth` (1 to 10, default 3), `max_nodes` (1 to 5000, default 200),
+  `pages_per_node` (1 to 10, default 2), and `expand` (`links`, `search`,
+  or `both`, default `both`): the defaults a structure's limits and expand
+  mode take when it leaves them unset;
+- `max_children` (a positive integer, default 50): children kept per
+  extraction;
+- `concurrency` (a positive integer, default 4): extraction calls in
+  flight;
+- `context_tokens` (a positive integer or `auto`, default `auto`): the
+  extract budget (catalog-extraction "Extract stage").
+
+The block SHALL be validated like any other (Requirement: Validation). A
+profile MAY set these keys (they are outside the five provider blocks); a
+depth preset SHALL NOT set them (depth-presets "Allowed preset keys"). A
+run request's structure limits and expand mode SHALL win over the block.
+
+#### Scenario: Defaults
+- **WHEN** no source sets the `catalog` block
+- **THEN** the resolved values are `max_depth` 3, `max_nodes` 200, `pages_per_node` 2, `expand` `both`, `max_children` 50, `concurrency` 4, and `context_tokens` `auto`
+
+#### Scenario: Invalid value
+- **WHEN** a profile sets `catalog.concurrency = 0`
+- **THEN** loading fails with an error naming the profile file and `catalog.concurrency`
+
+#### Scenario: Preset cannot set catalog keys
+- **WHEN** a depth preset file sets `catalog.max_nodes`
+- **THEN** loading the preset fails naming the file and the key
+
+#### Scenario: Structure wins
+- **WHEN** a profile sets `catalog.max_nodes = 500` and the run's structure sets `max_nodes` 200
+- **THEN** the run stops adding nodes at 200

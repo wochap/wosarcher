@@ -83,9 +83,11 @@ third-party component library.
 ### Requirement: Screen URLs and API paths
 The UI SHALL be built into `web/dist`, which the server serves at `/`. All
 screens SHALL be reached through the URL fragment (`#/new`,
-`#/live/<run id>`, `#/runs/<run id>`, `#/history`, `#/settings`).
-Reloading the page SHALL keep the current screen. Every request the UI
-makes SHALL go to the page's own origin under `/api`.
+`#/live/<run id>`, `#/runs/<run id>`, `#/catalog/<run id>`, `#/history`,
+`#/settings`). `#/runs/<id>` of a finished catalog run SHALL show the
+Catalog result screen, and `#/catalog/<id>` of a research run SHALL show
+the Report screen. Reloading the page SHALL keep the current screen.
+Every request the UI makes SHALL go to the page's own origin under `/api`.
 
 #### Scenario: Reload keeps the screen
 - **WHEN** the user is on `#/history` and reloads the page
@@ -94,6 +96,10 @@ makes SHALL go to the page's own origin under `/api`.
 #### Scenario: Same-origin API
 - **WHEN** the UI loads the run list
 - **THEN** it requests `/api/runs` on the page's own origin
+
+#### Scenario: Catalog route
+- **WHEN** the user opens `#/catalog/<id>` of a finished catalog run
+- **THEN** the Catalog result screen is shown for it
 
 ### Requirement: Generated types
 The UI's types for contracts, events, and server requests and responses
@@ -551,20 +557,22 @@ toast "Token “<name>” revoked".
 ### Requirement: Run history
 The Run history screen of the prototype (scenario `history`; reached
 with Alt+3) SHALL list runs from `GET /api/runs`, newest first, with the H1
-"Run history" and the run count, in a table with Query, Date, Recipe
-(derived as web-run "Run recipe" defines: `report`, `answer`, or
-`context`), Status,
-Duration (`m:ss` from `duration_s`, "–" while it is null), Cost (`$` with
-three decimals from `cost`, "–" while it is null), and the row actions
-Open, Live view (completed runs only), Rerun, and Delete. A fork SHALL show under its query "↳ rewrite of
-<parent id> · <writing changes>", where the changes are the writing
-options in which the fork's `writing` differs from its parent's. Every
-column SHALL come from the `GET /api/runs` response, with no request per
-row. Status tags SHALL use the prototype's
-icons and tints for completed (`done`), running (spinning; also `queued`,
-labelled "Queued"), failed, and cancelled; `interrupted` SHALL use the
-failed style with the label "Interrupted", and the Failed filter SHALL
-include it.
+"Run history" and the run count, in a table with Query, Date, Kind (a tag:
+`catalog` accent-tinted, `research` outlined), Recipe (derived as web-run
+"Run recipe" defines: `report`, `answer`, or `context`; for a catalog run,
+"<n> nodes" from `nodes`, or "–" while null), Status, Duration (`m:ss`
+from `duration_s`, "–" while it is null), Cost (`$` with three decimals
+from `cost`, "–" while it is null), and the row actions Open, Live view
+(completed runs only), Rerun, and Delete. A research fork SHALL show under
+its query "↳ rewrite of <parent id> · <writing changes>", where the
+changes are the writing options in which the fork's `writing` differs
+from its parent's; a catalog fork SHALL show "↳ expanded from <parent
+id>" (`fork_from` `expand`) or "↳ re-extracted from <parent id>"
+(`extract`). Every column SHALL come from the `GET /api/runs` response,
+with no request per row. Status tags SHALL use the prototype's icons and
+tints for completed (`done`), running (spinning; also `queued`, labelled
+"Queued"), failed, and cancelled; `interrupted` SHALL use the failed style
+with the label "Interrupted", and the Failed filter SHALL include it.
 
 #### Scenario: Answer row
 - **WHEN** `GET /api/runs` returns a finished run with `until` null and `writing.format` = `answer`
@@ -578,12 +586,17 @@ include it.
 - **WHEN** a finished run has `duration_s = 125` and `cost = 0.012`
 - **THEN** its row shows "2:05" and "$0.012"
 
+#### Scenario: Catalog row
+- **WHEN** `GET /api/runs` returns a finished catalog run with `nodes` 118
+- **THEN** its Kind tag reads `catalog` and its Recipe column reads "118 nodes"
+
 ### Requirement: History search and filters
 The search field SHALL filter rows by a case-insensitive substring of the
-query, together with the Status filter (All, Completed, Failed, Cancelled)
-and the Recipe filter (Any recipe, report, answer, context). When filters hide
-every row, the screen SHALL show "No runs match" with a "Clear filters"
-button that resets all three.
+query, together with the Kind filter (Any, Research, Catalog), the Status
+filter (All, Completed, Failed, Cancelled), and the Recipe filter (Any
+recipe, report, answer, context; it SHALL NOT hide catalog rows unless a
+recipe is picked). When filters hide every row, the screen SHALL show "No
+runs match" with a "Clear filters" button that resets all four.
 
 #### Scenario: No match
 - **WHEN** the user searches for a word no query contains
@@ -592,6 +605,10 @@ button that resets all three.
 #### Scenario: Answer filter
 - **WHEN** the user picks the Recipe filter `answer`
 - **THEN** only runs whose recipe is `answer` are listed
+
+#### Scenario: Catalog filter
+- **WHEN** the user picks the Kind filter Catalog
+- **THEN** only catalog runs are listed, and Clear filters resets it
 
 ### Requirement: History empty state
 When there are no runs, the Run history screen SHALL show the prototype's
@@ -603,18 +620,21 @@ cancelled runs are kept here with their reports.", and a "New run" button.
 - **THEN** "No runs yet" and the "New run" button are shown
 
 ### Requirement: History actions
-Open SHALL show the Report screen for a completed run and the Live run
+Open SHALL show the Report screen for a completed research run, the
+Catalog result screen for a completed catalog run, and the Live run
 screen for any other run. Live view SHALL appear only on a completed
 (`done`) run's row, between Open and Rerun, as the same ghost icon button
 as the other row actions with the Live run nav icon (pulse), the
 accessible label and title "Live view"; it SHALL show the Live run screen
 for that run (`#/live/<run id>`), which replays the run's whole event log.
-This action is an addition to prototype scenario `history`. Rerun SHALL start a new run with the same request and
-attachments through `POST /api/runs/{id}/rerun` and show it on the Live
-run screen. Delete SHALL hide the row at once and
-show the toast "Run deleted" with Undo for 6 seconds; the run SHALL be
-deleted on the server only when the toast expires without Undo, and Undo
-SHALL restore the row.
+This action is an addition to prototype scenario `history`. Rerun SHALL
+start a new run with the same request and attachments through `POST
+/api/runs/{id}/rerun` and show it on the Live run screen; for a catalog
+run it SHALL instead open New run with Catalog selected, the brief, and
+the run's structure filled in, and no run started. Delete SHALL hide the
+row at once and show the toast "Run deleted" with Undo for 6 seconds; the
+run SHALL be deleted on the server only when the toast expires without
+Undo, and Undo SHALL restore the row.
 
 #### Scenario: Live view of a completed run
 - **WHEN** the user presses Live view on a completed run's row
@@ -635,6 +655,14 @@ SHALL restore the row.
 #### Scenario: Delete
 - **WHEN** the user deletes a run and waits 6 seconds
 - **THEN** `DELETE /api/runs/{id}` is sent
+
+#### Scenario: Open a catalog run
+- **WHEN** the user presses Open on a completed catalog run
+- **THEN** the Catalog result screen is shown
+
+#### Scenario: Rerun a catalog run
+- **WHEN** the user presses Rerun on a catalog run
+- **THEN** New run opens with Catalog selected, the brief, and the structure from the run's `form`, and no request is sent
 
 ### Requirement: Toasts
 Confirmations SHALL appear as the prototype's toast: centred 52px above the

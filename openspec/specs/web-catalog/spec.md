@@ -1,0 +1,166 @@
+# web-catalog Specification
+
+## Purpose
+
+The web UI for catalog runs: the kind switch and catalog form on New run,
+the catalog Live run variant, and the Catalog result screen.
+
+## Requirements
+
+### Requirement: Kind switch
+The New run screen SHALL start with the prototype's Kind segmented
+control (scenario `new`): "Research" (magnifying-glass icon) and
+"Catalog" (tree-structure icon), Research selected by default. With
+Research selected the screen SHALL be the research form (web-run "New run
+form"). With Catalog selected it SHALL show the catalog form (Requirement:
+Catalog form). The chosen kind and the catalog form's values SHALL be kept
+with the New run draft while the user moves between screens and cleared
+with it after a run starts.
+
+#### Scenario: Pick Catalog
+- **WHEN** the user picks Catalog
+- **THEN** the question textarea shows the catalog placeholder, the Options panel is hidden, and the "Draft structure" and "Run catalog" buttons are shown
+
+#### Scenario: Kind kept across screens
+- **WHEN** the user picks Catalog, types a brief, opens History, and returns to New run
+- **THEN** Catalog is still selected with the brief
+
+### Requirement: Catalog form
+With Catalog selected, the New run screen SHALL match the prototype
+(scenario `new`, Catalog picked): the brief textarea (placeholder from the
+prototype), the Attachments zone, the "Draft structure" secondary button
+(sparkle icon; "Drafting…" with a spinning icon while the draft request
+runs; disabled while the brief is blank), and the primary "Run catalog"
+button, disabled until a structure exists. Draft structure SHALL post the
+brief, the attachments, and the profile to `POST /api/catalog/draft` and
+fill the Structure panel from the reply; a 502 SHALL show the error box
+of web-run "Start a run" with the title "Couldn’t draft the structure".
+
+The Structure panel SHALL show the heading "Structure", the line "Drafted
+from your brief · edit anything", and these rows with the prototype's
+help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
+`c-limits`, `c-lang`):
+- Record fields: one row per field with the name input (spaces become
+  `_`), the type select (`text`, `slug`, `url`, `date`, `enum`, `ref`),
+  the Required and Volatile switches, and a remove button; an "Add
+  field" link;
+- Child relation: a single-line input;
+- Seeds: chips with name, type, and a link icon when a URL is set, each
+  removable; "Add seed" opens the inline name, type, and URL inputs
+  (Enter adds, Escape cancels);
+- Leaf types: toggle chips, one per enum value;
+- Expand by: segmented Links, Search, Both;
+- Limits: Max depth (1 to 10), Max nodes (1 to 5000), Pages per node (1
+  to 10);
+- Allow domains, Block domains, and Search language, as web-run "Domain
+  rows" and "Run options" define them;
+- the estimate line "Up to <nodes> nodes · about <nodes × pages> pages ·
+  <nodes> extraction calls".
+
+Run catalog SHALL post `POST /api/runs` with `kind` `catalog`, the brief
+as `query`, the structure, the profile, the domain lists, the search
+language, and the attachments, then show the Live run screen. A
+structure the server rejects SHALL show the error box with "Fix in
+Structure", which focuses the named row. Ctrl+Enter in the brief SHALL
+run the catalog when a structure exists.
+
+#### Scenario: Draft fills the panel
+- **WHEN** the user types a brief and presses Draft structure, and the server returns a structure with 12 fields and 6 seeds
+- **THEN** the Structure panel shows those fields and seeds, the estimate reads "Up to 200 nodes · about 400 pages · 200 extraction calls", and Run catalog is enabled
+
+#### Scenario: Edit a limit
+- **WHEN** the user sets Max nodes to 50
+- **THEN** the estimate reads "Up to 50 nodes · about 100 pages · 50 extraction calls"
+
+#### Scenario: Rejected structure
+- **WHEN** the server answers 422 naming `structure.seeds`
+- **THEN** the error box shows the message and "Fix in Structure", which focuses the Seeds row
+
+### Requirement: Catalog live run
+The Live run screen of a catalog run SHALL match scenario `live-catalog`:
+the header and banner of web-run "Live run header" with the meta "catalog ·
+<sources> · <profile>"; the 8-phase timeline Load, Draft, Expand, Search,
+Fetch, Chunk, Extract, Assemble with help texts `cp-load` to
+`cp-assemble`, the loop phases showing "wave <k>" while running and "<n>
+waves" when done, and each phase's detail text from its events (Draft:
+"<n> fields · <n> seeds"; Expand: "<n> nodes expanding"; Search: "<n>
+queries"; Fetch: "<n> pages"; Chunk: "<n> chunks"; Extract: "<n> records";
+Assemble: "after the last wave", then "<n> records · <n> flagged");
+column 1 with the Frontier panel (help `c-frontier`) over Sources; column
+2 with Records; column 3 with Coverage (help `c-coverage`); and the footer
+"wave <k> · <n> nodes expanding · <n> extracted · <n> failed" (failed in
+the warn colour, omitted when 0).
+
+The Frontier SHALL be a tree from `node.found` and status changes: rows
+indented 14px per depth, a status dot (discovered faint, expanding accent
+ring pulsing, extracted accent, failed warn), the name, the acronym-like
+short value when the structure has a second `text` field, a type chip,
+and the child count; nodes with children collapse with a caret; the
+header shows "<n> known". Records SHALL list extracted nodes newest
+first from `node.extracted`: name, type chip, a field grid with null
+values as "—" in the warn colour, a source link per filled value, and a
+flags line in the warn colour. Coverage SHALL show Limits (Nodes
+<n>/<max>, Depth <d>/<max>, Pages <n>/<max> as bars), Fill per field
+(sorted ascending, bars warn below 50%), and Nodes by type. Phone mode
+SHALL use the tabs Progress, Sources, Records, Coverage. When the run
+ends, the "Open catalog" action SHALL show the Catalog result screen.
+
+#### Scenario: Node extracted
+- **WHEN** `node.extracted` arrives for INEI with `website` null and the flag "head_name from a source dated 2025-10-02"
+- **THEN** the Frontier shows INEI with the extracted dot, Records shows its card first with "—" for website in the warn colour and the flag line, and the Extract phase count rises by one
+
+#### Scenario: Wave counter
+- **WHEN** wave 3 is running
+- **THEN** the loop phases show "wave 3" and the footer starts with "wave 3"
+
+#### Scenario: Finished catalog
+- **WHEN** `catalog.done` arrives with 5 waves, 118 records, and 12 flagged
+- **THEN** every phase is done, the loop phases show "5 waves", Assemble reads "118 records · 12 flagged", and "Open catalog" is shown
+
+### Requirement: Catalog result screen
+`#/catalog/<run id>` SHALL show the Catalog result screen of scenario
+`catalog-result`, built from `catalog.json`: the Completed tag, the run
+ID, the meta "<date> · <duration> · catalog · <n> nodes · <n> sources",
+the H1 from the brief; the actions Download JSON (primary; the `records`
+array as `catalog.json`), Copy JSON, Download CSV (one column per field
+plus `flags`, built in the client), Expand more (help `cr-expand`), and
+Re-extract (help `cr-reextract`); the view switch Table, Graph, JSON; and
+the Summary aside with the stop note, Nodes by depth bars, and the three
+worst-filled fields, each a button that sets the "missing field" filter.
+
+Table SHALL show one column per field in order plus Flags (a warn badge
+with the count), the type as a chip, the ref field as the parent's name,
+null values as "—" in the warn colour; the filter bar with a search input
+(name, short value, id), type chips with counts, a "flagged only" toggle
+with the flagged count, a "missing field" select, the count "<n> records"
+or "<n> of <N>", and "Clear filters" with the empty state "No records
+match". Graph SHALL draw the tree from the ref field as inline SVG, left
+to right, nodes coloured by type with a legend, flagged nodes with a warn
+ring, each node a button. JSON SHALL show the `records` array with line
+numbers and the summary "<n> records · <n> lines". Selecting a row or a
+graph node SHALL open the drawer (380px; full width on phone) with the
+name, type, id, depth, a warn callout with the flags, every field with
+its value and its source as a link ("— not found" for null, "— seed, no
+parent" for a null ref), and the pages used; Escape closes it.
+
+Expand more SHALL open a dialog with the three limits prefilled with the
+run's, each at least the run's, and post `POST /api/runs/{id}/fork` with
+`from` `expand` and `limits`; Re-extract SHALL open the Rewrite dialog's
+model and thinking fields only and post the fork with `from` `extract`.
+Both SHALL show the new run on the Live run screen.
+
+#### Scenario: Filter by missing field
+- **WHEN** the user presses "website" in the Summary's worst-filled list
+- **THEN** the Table view shows only records with `website` null and the count reads "<n> of <N>"
+
+#### Scenario: Drawer
+- **WHEN** the user selects SUNAT in the Graph view
+- **THEN** the drawer shows its fields with a source link per filled value and the two pages used
+
+#### Scenario: Expand more
+- **WHEN** the user opens Expand more, sets Max depth to 4, and confirms
+- **THEN** `POST /api/runs/{id}/fork` is sent with `{"from": "expand", "limits": {"max_depth": 4, "max_nodes": 200, "pages_per_node": 2}}` and the Live run screen shows the fork
+
+#### Scenario: Download CSV
+- **WHEN** the user presses Download CSV for a catalog of 118 records and 12 fields
+- **THEN** a file with a header of 13 columns and 118 rows is downloaded, values with commas, quotes, or newlines quoted

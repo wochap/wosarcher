@@ -218,10 +218,11 @@ parent SHALL exit with 2 printing the server's 409 detail.
 
 ### Requirement: Runs command
 `wosarcher runs` SHALL list the runs `GET /api/runs` returns, newest first,
-with ID, creation time, status (`queued`, `running`, `done`, `failed`,
-`cancelled`, or `interrupted`), origin, version, parent run ID, and query.
-`--limit N` SHALL limit the list (default 20) and `--json` SHALL print the
-list as a JSON array of `RunSummary`.
+with ID, creation time, kind (`research` or `catalog`), status (`queued`,
+`running`, `done`, `failed`, `cancelled`, or `interrupted`), origin,
+version, parent run ID, and query. `--limit N` SHALL limit the list
+(default 20), `--kind research|catalog` SHALL keep only that kind, and
+`--json` SHALL print the list as a JSON array of `RunSummary`.
 
 #### Scenario: Status from the log
 - **WHEN** a run's last run event is `run.failed`
@@ -239,12 +240,21 @@ list as a JSON array of `RunSummary`.
 - **WHEN** a run started by the server from an API token is running
 - **THEN** `wosarcher runs` shows its status as `running` and its origin as `api · <token name>`
 
+#### Scenario: Catalog run listed
+- **WHEN** a finished catalog run of 118 records is listed
+- **THEN** its line shows the kind `catalog` and `wosarcher runs --kind research` leaves it out
+
 ### Requirement: Logs command
 `wosarcher logs <run-id> [--follow]` SHALL print the run's logged events
 from the daemon, one line each: `<HH:MM:SS> <stage or -> <type>
 <summary>`, where the time is the event time in local time and the summary
 is a short description of `data` (newlines replaced by spaces, at most 160
-characters). Without `--follow` it SHALL read `events.jsonl` through the
+characters). For `node.found` the summary SHALL be `<id> depth <d> ←
+<parent id or seed>`; for `node.extracted`, `<id> <n> values · <n>
+children · <n> flags`; for `node.failed`, `<id> <reason>`; for
+`wave.done`, `wave <k> expanded <n> found <n> records <n> failed <n>`; for
+`catalog.done`, `<waves> waves · <records> records · <flagged> flagged ·
+<reason>`. Without `--follow` it SHALL read `events.jsonl` through the
 artifacts route and skip lines that do not parse. With `--follow`, it SHALL
 subscribe to the run's event socket from `since=0`, print each logged event
 as it arrives (live-only events are not printed), and exit with 0 after a
@@ -266,6 +276,10 @@ run.
 #### Scenario: Long data shortened
 - **WHEN** a `page.failed` event has a 200-character reason
 - **THEN** its printed line's summary is at most 160 characters
+
+#### Scenario: Catalog events printed
+- **WHEN** the user runs `wosarcher logs <id>` for a finished catalog run
+- **THEN** its `wave.done` lines read like "wave 1 expanded 6 found 14 records 6 failed 0" and the `catalog.done` line names the stop reason
 
 ### Requirement: Round progress
 The CLI progress view SHALL show a `gap` row for multi-round runs only. A
@@ -372,3 +386,55 @@ without `--profile` SHALL keep rebuilding from the parent's saved settings.
 #### Scenario: Fork ignores the environment
 - **WHEN** the client's environment has `WOSARCHER_PROFILE=cloud` and the user runs `wosarcher fork <id> --from write --tone critical`
 - **THEN** the fork is rebuilt from the parent's saved settings and its record names the parent's profile, not `cloud`
+
+### Requirement: Catalog command
+`wosarcher catalog "<brief>"` SHALL start a catalog run through the
+daemon's API and accept: `--structure FILE` (a JSON structure file),
+`--seed "NAME|TYPE[|URL]"` (repeatable), `--relation TEXT`, `--leaf TYPE`
+(repeatable), `--expand links|search|both`, `--max-depth N`,
+`--max-nodes N`, `--pages-per-node N`, `--search-language CODE`,
+`--allow-domain` and `--block-domain` (repeatable), `--attach PATH`
+(repeatable), `--sources web|both` (default `both`), `--profile`, `--use
+BLOCK=NAME` (repeatable), `--model`, the thinking flags,
+`--context-window`, `--max-output`, `--set KEY=VALUE` (repeatable),
+`--until STAGE`, and `--json`. The structure flags SHALL be applied over
+the file's values (seeds and leaf types from flags replace the file's
+lists); with no `--structure` and no structure flag, the request carries
+no structure and the `draft` stage derives one. With structure flags but
+no file, the command SHALL fail before a request is sent when the flags do
+not make a complete structure (no seed, or no relation), naming what is
+missing. Values the client can check (`--expand`, the limits' ranges,
+`--until` against the catalog stages, `--search-language`, the domain
+entries, the block of `--use`) SHALL fail with exit status 2 before a
+request is sent; a 422 SHALL exit with 2 printing its detail. The command
+SHALL follow the run's events as `wosarcher run` does, with the catalog
+phases and a wave counter, and SHALL print the `records` array of
+`catalog.json` as JSON when the run ends; `--json` SHALL print the whole
+`catalog.json`. A run that ends without `catalog.json` (stopped early with
+`--until`) SHALL print nothing and exit 0.
+
+#### Scenario: Structure file
+- **WHEN** the user runs `wosarcher catalog "Every public organization…" --structure peru.json --allow-domain gob.pe`
+- **THEN** the request has `kind` `catalog`, the file's structure, and `domains.allow` `["gob.pe"]`, and the records array is printed when the run ends
+
+#### Scenario: Flags over the file
+- **WHEN** the file sets `max_nodes` 200 and the user passes `--max-nodes 50`
+- **THEN** the request's structure has `max_nodes` 50
+
+#### Scenario: Derived structure
+- **WHEN** the user runs `wosarcher catalog "brief"` with no structure flag
+- **THEN** the request carries no structure and the run's `draft` stage makes the draft call
+
+#### Scenario: Incomplete flags
+- **WHEN** the user passes `--seed "PCM|ministry"` and no `--relation` or `--structure`
+- **THEN** the command fails with exit status 2 naming `--relation`
+
+### Requirement: Catalog draft command
+`wosarcher catalog draft "<brief>"` SHALL post the brief (and `--attach`
+files, `--profile`, `--use`, and the llm flags) to `POST /api/catalog/draft`
+and print the structure as JSON, so it can be edited and passed back with
+`--structure`. A 502 SHALL exit with 1 printing the reason.
+
+#### Scenario: Draft to a file
+- **WHEN** the user runs `wosarcher catalog draft "brief" > peru.json`
+- **THEN** `peru.json` holds a structure that `wosarcher catalog "brief" --structure peru.json` accepts

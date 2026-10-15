@@ -17,7 +17,7 @@ by the stage named:
 | `request.json` | run creation |
 | `attachments/` | run creation |
 | `files.jsonl` | load |
-| `plan.json`, `initial.jsonl` | plan |
+| `plan.json`, `initial.jsonl` | plan (research); `plan.json` by expand (catalog) |
 | `hits.jsonl` | search |
 | `pages.jsonl` | fetch |
 | `chunks.jsonl` | chunk |
@@ -25,9 +25,16 @@ by the stage named:
 | `scores.jsonl` | score |
 | `context.json`, `select.jsonl` | select |
 | `report.md`, `report.json` | write |
+| `structure.json` | draft |
+| `nodes.jsonl` | draft, expand, extract |
+| `records.jsonl` | extract |
+| `catalog.json` | assemble |
 | `events.jsonl` | every event that is logged |
 | `costs.json` | end of the run |
 
+A research run SHALL NOT have the four catalog files, and a catalog run
+SHALL NOT have `initial.jsonl`, `candidates.jsonl`, `scores.jsonl`,
+`context.json`, `select.jsonl`, `report.md`, or `report.json`.
 `select.jsonl` SHALL hold one select skip per line (see context-selection
 "Skipped passages"). `runs_dir` SHALL default to
 `$XDG_DATA_HOME/wosarcher/runs` (`~/.local/share/wosarcher/runs` when
@@ -36,7 +43,11 @@ time.
 
 #### Scenario: Files after a full run
 - **WHEN** a run with sources `both` finishes
-- **THEN** its directory contains every file in the table
+- **THEN** its directory contains every research file in the table
+
+#### Scenario: Files after a catalog run
+- **WHEN** a catalog run finishes
+- **THEN** its directory contains `structure.json`, `nodes.jsonl`, `records.jsonl`, `catalog.json`, `plan.json`, `hits.jsonl`, `pages.jsonl`, `chunks.jsonl`, `events.jsonl`, and `costs.json`, and no `report.md`
 
 #### Scenario: Run IDs sort by time
 - **WHEN** two runs are created one after the other
@@ -49,9 +60,13 @@ time.
 ### Requirement: Request record
 `request.json` SHALL hold:
 - the run request (query, sources, `until`, and attachment names);
+- `kind` (`research` or `catalog`; a record without it reads as
+  `research`);
+- for a catalog run, `structure`: the structure the run started with, or
+  the one `draft` derived, written when `draft` finishes;
 - the profile name;
 - `use`: the entry name of each of the five blocks the run resolved;
-- the depth (a preset name, `custom`, or empty);
+- the depth (a preset name, `custom`, or empty; empty for a catalog run);
 - the list of overrides (the user's own, not the preset's expansion),
   with each per-run entry choice as `use.<block>=<name>`;
 - the resolved configuration with every secret replaced by `***`;
@@ -60,16 +75,18 @@ time.
 - the version;
 - the creation time;
 - `form`: for a run created through `POST /api/runs`, the request as
-  the client sent it (query, sources, `until`, profile, `use`, depth,
-  `research`, `writing`, `domains`, `llm`, `search_language`, and
-  `reuse_attachments`) without `set`; for a rerun, the original run's
-  `form`; absent for a fork and for a run started with `wosarcherd run`;
+  the client sent it (query, `kind`, `structure`, sources, `until`,
+  profile, `use`, depth, `research`, `writing`, `domains`, `llm`,
+  `search_language`, and `reuse_attachments`) without `set`; for a rerun,
+  the original run's `form`; absent for a fork and for a run started with
+  `wosarcherd run`;
 - the origin: `web` (started in the browser), `api` (started with an API
-  token) with the token's name, or `cli` (started with `wosarcher run` or
-  `wosarcher fork` by a person or an agent).
+  token) with the token's name, or `cli` (started with `wosarcher run`,
+  `wosarcher catalog`, or `wosarcher fork` by a person or an agent).
 
-A fork SHALL record its parent's depth. A fork, rerun, or rewrite SHALL
-record the origin of the request that started it, not its parent's.
+A fork SHALL record its parent's depth and kind. A fork, rerun, or
+rewrite SHALL record the origin of the request that started it, not its
+parent's.
 
 #### Scenario: Secrets redacted
 - **WHEN** a run is created with a score entry that sets `api_key`
@@ -106,6 +123,14 @@ record the origin of the request that started it, not its parent's.
 #### Scenario: Fork has no form
 - **WHEN** a run is forked from `write`
 - **THEN** the fork's `request.json` has no `form`
+
+#### Scenario: Catalog recorded
+- **WHEN** a catalog run is created with a structure of six seeds
+- **THEN** `request.json` has `kind` `catalog`, that `structure`, an empty depth, and `form.kind` `catalog`
+
+#### Scenario: Derived structure recorded
+- **WHEN** a catalog run starts with no structure and `draft` derives one
+- **THEN** after `draft`, `request.json` has the derived `structure` and `form.structure` is null
 
 ### Requirement: Attachments copied
 Attachment files, directories (recursively), and glob matches SHALL be
@@ -146,6 +171,12 @@ its file is now (none when that profile no longer exists). The fork SHALL
 record the entries it used. Forking from a stage whose earlier stages are
 not all finished SHALL fail and name the first unfinished stage.
 
+A fork SHALL have its parent's kind. A catalog run SHALL be forked only
+from `expand` or `extract`, with the copies and the continuation that
+catalog-crawl "Resume and fork of a catalog run" defines; a fork from
+`expand` SHALL take `--max-depth`, `--max-nodes`, and `--pages-per-node`
+and record the raised limits in `structure.json` and as overrides.
+
 #### Scenario: Rewrite only
 - **WHEN** the user forks a finished run from `write` with `--set write.tone=critical`
 - **THEN** the new run reuses the parent's `context.json`, makes no search, fetch, or scorer request, and writes a new report with tone `critical`
@@ -173,6 +204,10 @@ not all finished SHALL fail and name the first unfinished stage.
 #### Scenario: Profile gone
 - **WHEN** the same parent's profile `cloud-rerank` was deleted and the user forks from `write` with `--use llm=openrouter`
 - **THEN** the fork resolves the model values from the `openrouter` entry alone
+
+#### Scenario: Catalog fork keeps the kind
+- **WHEN** a catalog run is forked from `extract`
+- **THEN** the fork's `request.json` has `kind` `catalog` and `fork_from` `extract`, and its directory holds the parent's `nodes.jsonl` and `pages.jsonl` and no `records.jsonl`
 
 ### Requirement: Lineage
 A new run SHALL have version 1 and no parent. A fork SHALL record its

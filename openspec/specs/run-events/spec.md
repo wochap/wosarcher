@@ -23,7 +23,7 @@ The system SHALL define exactly these event types and data:
 | Type | Data |
 |---|---|
 | `run.queued` | position |
-| `run.started` | query, profile, parent run ID, version, until |
+| `run.started` | query, kind, profile, parent run ID, version, until |
 | `run.done` | until, totals |
 | `run.failed` | stage, error |
 | `run.cancelled` | stage |
@@ -43,12 +43,26 @@ The system SHALL define exactly these event types and data:
 | `research.done` | planned rounds, rounds ran, stop reason, end note |
 | `report.delta` | text |
 | `report.snapshot` | text |
+| `structure.ready` | fields (name and type), seed count, relation, limits, derived (whether `draft` made the LLM call) |
+| `node.found` | node ID, name, type, parent ID, depth, URL, wave, found by |
+| `node.extracted` | node ID, record, sources, flags, children count |
+| `node.failed` | node ID, reason |
+| `wave.done` | wave, expanded, found, records, failed, dropped |
+| `catalog.done` | waves, nodes, records, flagged, stop reason, note |
 
 The `round` of stage and page events SHALL be the research round (1 for
-single-round runs and for stages outside the loop). `round.done`,
-`gap.ready`, and `research.done` SHALL be emitted only by multi-round runs.
-`gap.ready` SHALL carry the stage `gap`. `round.done` SHALL carry `score`,
-and `research.done` SHALL carry `gap`.
+single-round runs and for stages outside the loop) in a research run, and
+the wave (1 for `load`, `draft`, and `assemble`) in a catalog run.
+`round.done`, `gap.ready`, and `research.done` SHALL be emitted only by
+multi-round research runs; `structure.ready`, the node events,
+`wave.done`, and `catalog.done` only by catalog runs. `gap.ready` SHALL
+carry the stage `gap`. `round.done` SHALL carry `score`, and
+`research.done` SHALL carry `gap`. `structure.ready` SHALL carry `draft`;
+`node.found` the stage that found the node (`draft` for seeds, `extract`
+for children); `node.extracted` and `node.failed` `extract` (or `fetch`
+when no page could be fetched); `wave.done` `extract`; `catalog.done`
+`assemble`. `node.extracted` SHALL carry the checked record (catalog-
+extraction "Reply checks"), so the Records panel needs no artifact read.
 
 `thin` of `page.fetched` SHALL be true when the page is a thin page
 (source-collection "Fetch page cap and order"), and false otherwise. It is
@@ -112,6 +126,14 @@ reports 0.
 #### Scenario: Missing parts in events
 - **WHEN** the gap step after round 1 names the missing part "setup"
 - **THEN** `gap.ready` for round 1 carries `missing` = `["setup"]`; a gap step that sent no parts carries an empty list
+
+#### Scenario: Catalog events
+- **WHEN** a catalog run of six seeds runs two waves and stops with `frontier empty`
+- **THEN** the log has one `structure.ready`, a `node.found` per node, a `node.extracted` or `node.failed` per node, `wave.done` for waves 1 and 2, and one `catalog.done` with 2 waves and the reason, and no `round.done` or `report.delta`
+
+#### Scenario: Wave as round
+- **WHEN** wave 2's fetch stage starts
+- **THEN** its `stage.started` carries `round` 2
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

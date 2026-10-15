@@ -9,8 +9,9 @@ timeouts and cancellation, and records costs.
 ## Requirements
 
 ### Requirement: Stage order and phases
-A run SHALL execute the stages in this order: `load`, `plan`, `search`,
-`fetch`, `chunk`, `prefilter`, `score`, `gap`, `select`, `write`.
+A run SHALL have a kind, `research` or `catalog`. A research run SHALL
+execute the stages in this order: `load`, `plan`, `search`, `fetch`,
+`chunk`, `prefilter`, `score`, `gap`, `select`, `write`.
 - `plan` searches the user's query first when it is at most 200 characters
   (the initial search, research-planning "Initial search"), then calls the
   planner, which returns the topic line `q0` and the sub-queries.
@@ -19,11 +20,19 @@ A run SHALL execute the stages in this order: `load`, `plan`, `search`,
 - With more than one research round, `search` through `gap` repeat once
   per round (research-rounds "Rounds"). Otherwise `gap` is skipped.
 
-Each stage SHALL run once per round over all of that round's queries (a
-phase), never once per query. A stage SHALL start only after the previous
-stage is finished. The `plan` stage SHALL include the initial search when
-the run's sources are not `files` and the user's query is at most 200
-characters after trimming.
+A catalog run SHALL execute `load`, `draft`, then `expand`, `search`,
+`fetch`, `chunk`, `extract` once per wave until a stop rule holds
+(catalog-crawl "Stop rules"), then `assemble`. `plan`, `prefilter`,
+`score`, `gap`, `select`, and `write` SHALL NOT run in a catalog run, and
+the catalog stages SHALL NOT run in a research run. `--until` SHALL name a
+stage of the run's kind.
+
+Each stage SHALL run once per round or wave over all of that round's or
+wave's queries or nodes (a phase), never once per query or node, except
+that `extract` makes one call per node inside its phase. A stage SHALL
+start only after the previous stage is finished. The `plan` stage SHALL
+include the initial search when the run's sources are not `files` and the
+user's query is at most 200 characters after trimming.
 
 #### Scenario: Phases across sub-queries
 - **WHEN** the plan produces three sub-queries
@@ -41,15 +50,29 @@ characters after trimming.
 - **WHEN** a run has `research.rounds = 1`
 - **THEN** the `gap` stage is reported done with `skipped` and select follows score
 
+#### Scenario: Catalog stage order
+- **WHEN** a catalog run stops after wave 2 with `frontier empty`
+- **THEN** its log has `stage.done` for `load`, `draft`, two each of `expand`, `search`, `fetch`, `chunk`, `extract` (with `round` 1 and 2), then `assemble`, and none for `plan`, `score`, or `write`
+
+#### Scenario: Until on a catalog run
+- **WHEN** a catalog run is started with `--until write`
+- **THEN** it fails before any provider is called, listing the catalog stages
+
 ### Requirement: Sources select stages
 With `--sources web` the `load` stage SHALL be skipped. With `--sources
-files` the initial search, `search`, and `fetch` stages SHALL be skipped.
-A skipped stage SHALL still be recorded as finished with an empty output
-and marked as skipped.
+files` the initial search, `search`, and `fetch` stages SHALL be skipped
+in a research run; in a catalog run `--sources files` SHALL be rejected
+before the run is created, since nodes are fetched from the web. A skipped
+stage SHALL still be recorded as finished with an empty output and marked
+as skipped.
 
 #### Scenario: Files only
 - **WHEN** a run uses sources `files`
 - **THEN** no search or fetch request is made and the `search` and `fetch` stages are recorded as skipped
+
+#### Scenario: Catalog with files only
+- **WHEN** a catalog run is requested with sources `files`
+- **THEN** the request fails naming `sources` and no run is created
 
 ### Requirement: GPU stages run one after another
 A stage is a GPU stage when its provider block sets a `device` label:
