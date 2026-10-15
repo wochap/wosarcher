@@ -179,7 +179,7 @@ function DepthSeg({ depth, presets, onPick }: SegProps) {
     </label>
   );
   return (
-    <div className={`seg ${css.depthSeg}`} role="radiogroup" aria-label="Depth">
+    <div className={`seg ${css.wrapSeg}`} role="radiogroup" aria-label="Depth">
       {[...builtin, ...shown].map(option)}
       {many && (
         <label className={`seg-opt ${css.moreOpt}`}>

@@ -292,6 +292,7 @@ function ProfileControl({ profiles, profile, edits, onPick }: ProfileControlProp
       <Seg
         label="Profile"
         name="opt-profile"
+        className={css.wrapSeg}
         value={value}
         options={[
           ...profiles.map((p) => ({ value: p.name, label: p.name })),

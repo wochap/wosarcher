@@ -134,15 +134,16 @@
   gap: 6px;
 }
 
-/* Wraps onto more rows when the presets do not fit, each option keeping its borders. */
-.depthSeg {
+/* Depth and Profile segmented controls: as wide as their options, wrapping onto
+   more rows when they do not fit, each option keeping its borders. */
+.wrapSeg {
   display: flex;
   flex-wrap: wrap;
   width: fit-content;
   max-width: 100%;
 }
 
-.depthSeg :global(.seg-opt) {
+.wrapSeg :global(.seg-opt) {
   flex: 1 0 auto;
   justify-content: center;
   margin: 0 0 -1px -1px;
