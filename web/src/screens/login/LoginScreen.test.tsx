@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client";
 import type { FakeApi } from "../../test/fakeApi";
@@ -45,6 +45,9 @@ describe("LoginScreen", () => {
     lockedApp();
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeTruthy();
     expect(screen.getByText("Enter the password for this wosarcher instance.")).toBeTruthy();
+    const form = screen.getByRole("heading", { name: "Sign in" }).closest("form") as HTMLElement;
+    const brand = within(form).getByText("wosarcher").previousElementSibling;
+    expect(brand?.getAttribute("viewBox")).toBe("0 0 32 32");
     expect(submit().disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Show password" }));
     expect(field().type).toBe("text");

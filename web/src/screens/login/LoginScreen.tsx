@@ -1,15 +1,8 @@
 // The sign-in overlay over the current screen: idle, wrong password, or paused.
-import {
-  Eye,
-  EyeSlash,
-  FunnelSimple,
-  LockSimple,
-  SignIn,
-  Timer,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { Eye, EyeSlash, LockSimple, SignIn, Timer, WarningCircle } from "@phosphor-icons/react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useApi } from "../../app/context";
+import { BrandMark } from "../../components/BrandMark";
 import { minSec } from "../../format";
 import css from "./LoginScreen.module.css";
 
@@ -69,7 +62,7 @@ export function LoginScreen({ initial = { kind: "idle" }, onSignedIn }: Props) {
     <div className={css.overlay}>
       <form className={css.form} onSubmit={submit}>
         <div className={css.brand}>
-          <FunnelSimple className={css.brandIcon} aria-hidden="true" />
+          <BrandMark size={22} className={css.brandIcon} />
           <span className={css.brandName}>wosarcher</span>
         </div>
         <div>

@@ -2335,7 +2335,8 @@ screen, in both themes and on phone and desktop.
   overrides. Page-specific styles are CSS modules that use only Nocturne
   variables. No Tailwind or shadcn/ui: a second styling system would drift
   from the design.
-- Icons: Phosphor (`@phosphor-icons/react`), as the design system requires.
+- Icons: Phosphor (`@phosphor-icons/react`), as the design system requires,
+  except for the brand mark (see Frontend decisions).
 - Fonts and icons are bundled with the build, not loaded from a CDN.
 - The prototype's runtime (`support.js`, `x-dc`, `sc-if`, the scenario
   switcher) is not used; React components recreate the output.
@@ -2361,6 +2362,18 @@ These override the prototype where they differ:
   every 5 s.
 
 - **Name:** wosarcher everywhere; no version string.
+- **Brand mark:** the "1a Distill" mark from
+  `design/project/Wosarcher Icon.dc.html`, in the accent color, is the brand
+  icon in the sidebar, the phone top bar, and the sign-in screen (the
+  prototype still shows the Phosphor funnel in the last two). `BrandMark`
+  draws it inline with `currentColor` and picks the stroke and dot radius
+  from its `size`, as the icon file specifies. The head icons are
+  `web/public/favicon.svg` (the bare mark, `#cba6f7` under a dark color
+  scheme, `#8839ef` otherwise), `manifest.webmanifest`, and the PNGs
+  `apple-touch-icon.png` (180), `icon-192.png`, and `icon-512.png`
+  (maskable). `pnpm build` renders the PNGs from `web/scripts/icon-tile.svg`
+  (the dark tile, full bleed) with `@resvg/resvg-wasm`; they are not
+  committed.
 - **Live view of a completed run:** a completed run's Live run view is
   reachable from the History row action Live view and the Report screen's
   Live view button (additions to the prototype); the event stream replays
