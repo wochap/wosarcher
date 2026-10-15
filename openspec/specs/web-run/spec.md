@@ -1857,9 +1857,11 @@ Standard when the preset no longer exists), and Length; the writing
 overrides; the profile (the active profile when it no longer exists) and
 its Advanced edits (`use` and `llm`); the domain lists and search
 language; and the run's attachments as reused files (Requirement:
-Attachments). Values come from the run summary's `form`; a run without
-`form` fills the question, Sources, Recipe, profile, and Depth from its
-summary. When the form had a question or edits before, the toast "Filled
+Attachments). Values come from the run summary's `form`; a field the
+`form` leaves unset (sent as `null`) SHALL keep its default (the writing
+defaults, or Standard's value for a Custom research value) and SHALL NOT
+be filled as empty. A run without `form` fills the question, Sources,
+Recipe, profile, and Depth from its summary. When the form had a question or edits before, the toast "Filled
 from “<name>”" (name cut at 28 characters) SHALL offer Undo, which
 restores the previous form. The pressed row SHALL be marked (accent ring,
 `aria-current`) while the form still matches it.
@@ -1875,6 +1877,10 @@ entry.
 #### Scenario: Fill from a recent run
 - **WHEN** the user presses the row of a run with depth Custom, recipe `report`, sources `both`, profile `low-vram`, Length 1500, and the attachments `notes/rag-chunking.md` and `notes/api-docs-sample.md` (scenario `new-recent`)
 - **THEN** the form shows that question, Custom with the run's six values, `report`, `both`, `low-vram`, 1500 words, and both files marked "reused from" the row's name, and no run is started
+
+#### Scenario: Fill from a run with unset fields
+- **WHEN** the user presses the row of a Custom run whose `form` sets only the tone `critical` and `sub_queries` 6, with every other writing and research field `null` (scenario `new-recent`), and then opens Options
+- **THEN** the form shows tone Critical, the language and other writing fields at their defaults, Custom with `sub_queries` 6 and Standard's other values, and the page shows no error
 
 #### Scenario: Undo a fill
 - **WHEN** the question box holds a typed question and the user presses a row
