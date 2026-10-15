@@ -456,3 +456,9 @@ def test_invalid_output_names_the_values() -> None:
     text = str(error.value)
     assert "output" in text
     assert all(value in text for value in ("table", "report", "both"))
+
+
+def test_record_language_default_and_invalid() -> None:
+    assert Structure.model_validate(structure_data()).record_language == ""
+    with pytest.raises(ValidationError, match="record_language"):
+        Structure.model_validate(structure_data(record_language="spanish"))

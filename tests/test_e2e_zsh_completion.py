@@ -151,6 +151,7 @@ def test_catalog_flags(stub: Path) -> None:
     found = complete("wosarcher catalog brief --", stub)
     assert {"--structure", "--seed", "--relation", "--leaf", "--expand", "--max-nodes", "--json"} <= set(found)
     assert "--depth" not in found
+    assert "--record-language" in found
     assert {"--output", "--tone", "--words", "--format"} <= set(found)
     assert {"--draft-thinking", "--extract-thinking"} <= set(found)
     assert "--write-thinking" not in found

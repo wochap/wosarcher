@@ -28,6 +28,8 @@ The structure has:
   `pages_per_node` (1 to 10). Unless the brief asks otherwise, use
   max_depth $max_depth, max_nodes $max_nodes, and pages_per_node $pages_per_node.
 - `language`: the language code of the sources (for example "es"), or "".
+- `record_language`: the language code of the brief (for example "en") when it
+  differs from the sources' language, else "".
 - `output`: what the user gets back: `report` when the brief asks a question
   or for a summary, `table` when it asks for a list or data, `both` when it
   asks for both.
@@ -43,4 +45,4 @@ Today is $today.
 Brief: $brief
 
 Answer with JSON only, in this shape:
-{"fields": [{"name": "id", "type": "slug"}, {"name": "name", "type": "text", "required": true}, {"name": "type", "type": "enum", "values": ["ministry", "agency"]}, {"name": "parent_id", "type": "ref"}], "relation": "child relation", "seeds": [{"name": "Seed", "type": "ministry", "url": null}], "leaf_types": ["agency"], "expand": "both", "limits": {"max_depth": $max_depth, "max_nodes": $max_nodes, "pages_per_node": $pages_per_node}, "language": "", "output": "table"}
+{"fields": [{"name": "id", "type": "slug"}, {"name": "name", "type": "text", "required": true}, {"name": "type", "type": "enum", "values": ["ministry", "agency"]}, {"name": "parent_id", "type": "ref"}], "relation": "child relation", "seeds": [{"name": "Seed", "type": "ministry", "url": null}], "leaf_types": ["agency"], "expand": "both", "limits": {"max_depth": $max_depth, "max_nodes": $max_nodes, "pages_per_node": $pages_per_node}, "language": "", "record_language": "", "output": "table"}

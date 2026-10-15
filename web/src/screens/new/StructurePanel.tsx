@@ -45,8 +45,6 @@ type Props = {
     words: number;
     onPick: (name: string) => void;
   };
-  searchLanguage: string;
-  onSearchLanguage: (value: string) => void;
   isPhone: boolean;
 };
 
@@ -55,7 +53,8 @@ export function StructurePanel(props: Props) {
   const limits = limitsOf(structure);
   const types = typesOf(structure);
   const leaf = structure.leaf_types ?? [];
-  const languageValid = isSearchLanguage(props.searchLanguage.trim());
+  const languageValid = isSearchLanguage((structure.language ?? "").trim());
+  const recordLanguageValid = isSearchLanguage((structure.record_language ?? "").trim());
   const set = (patch: Partial<Structure>) => onChange({ ...structure, ...patch });
   const setField = (i: number, patch: Partial<StructureField>) =>
     set({ fields: structure.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) });
@@ -263,14 +262,34 @@ export function StructurePanel(props: Props) {
             id="c-lang"
             className={`input ${css.language}`}
             placeholder="Any language"
-            value={props.searchLanguage}
+            value={structure.language ?? ""}
             aria-invalid={!languageValid}
-            onChange={(e) => props.onSearchLanguage(e.target.value)}
+            onChange={(e) => set({ language: e.target.value })}
           />
           {languageValid ? (
             <div className={css.hint}>all, auto, es, es-PE…</div>
           ) : (
             <div className={css.danger}>Use all, auto, or a code such as es or es-PE.</div>
+          )}
+        </Row>
+        <Row
+          label="Record language"
+          help="c-record-lang"
+          htmlFor="c-record-lang"
+          row="c-record-lang"
+        >
+          <input
+            id="c-record-lang"
+            className={`input ${css.language}`}
+            placeholder="Sources’ language"
+            value={structure.record_language ?? ""}
+            aria-invalid={!recordLanguageValid}
+            onChange={(e) => set({ record_language: e.target.value })}
+          />
+          {recordLanguageValid ? (
+            <div className={css.hint}>es, en, es-PE…</div>
+          ) : (
+            <div className={css.danger}>Use a code such as es or es-PE.</div>
           )}
         </Row>
       </div>

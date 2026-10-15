@@ -110,7 +110,27 @@ def test_invalid_structure_names_seeds(client: TestClient, runs_dir: Path) -> No
 def test_structure_language_and_search_language_422(client: TestClient) -> None:
     response = post(client, catalog_request(structure=structure_data(language="es"), search_language="es-PE"))
     assert response.status_code == 422
-    assert response.json()["detail"].startswith("search_language:")
+    detail = response.json()["detail"]
+    assert detail.startswith("search_language:")
+    assert "es-PE" in detail
+    assert "structure.language" in detail
+
+
+def test_equal_languages_accepted(client: TestClient) -> None:
+    response = post(client, catalog_request(structure=structure_data(language="es"), search_language="es"))
+    assert response.status_code == 201
+
+
+def test_search_language_fills_structure_language(client: TestClient, runs_dir: Path) -> None:
+    run_id = create(client, catalog_request(search_language="es"))
+    finished(client, run_id)
+    record = json.loads((runs_dir / run_id / "request.json").read_text())
+    assert record["request"]["structure"]["language"] == "es"
+
+
+def test_structure_language_alone_accepted(client: TestClient) -> None:
+    response = post(client, catalog_request(structure=structure_data(language="es")))
+    assert response.status_code == 201
 
 
 def test_structure_language_invalid_422(client: TestClient) -> None:

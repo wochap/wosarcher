@@ -100,6 +100,16 @@ def checked(structure: Structure | dict[str, Any], catalog: CatalogConfig) -> St
         raise ValueError(f"invalid structure: {validation_error(error)}") from None
 
 
+def with_languages(structure: Structure, catalog: CatalogConfig) -> Structure:
+    """The derived structure with the `catalog` block's language flags over its proposed languages."""
+    given = {
+        key: value
+        for key, value in (("language", catalog.language), ("record_language", catalog.record_language))
+        if value
+    }
+    return structure.model_copy(update=given) if given else structure
+
+
 def seed_nodes(structure: Structure) -> list[Node]:
     taken: set[str] = set()
     return [
@@ -121,7 +131,9 @@ async def draft(
     """With a structure: validate it, no call. Without: derive one. Either way, the seed nodes."""
     derived = structure is None
     found = (
-        await draft_structure(brief, outlines, llm, today=today, catalog=catalog, effort=effort)
+        with_languages(
+            await draft_structure(brief, outlines, llm, today=today, catalog=catalog, effort=effort), catalog
+        )
         if structure is None
         else checked(structure, catalog)
     )

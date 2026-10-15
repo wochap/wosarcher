@@ -231,7 +231,16 @@ table-only catalog answers 404 `no_report`.
 `text`, `slug`, `url`, `date`, `enum`, `ref`, `required`, `volatile`),
 `relation` (the child relation, "dependent organizations"), `seeds` (name,
 type, optional URL), `leaf_types`, `expand` (`links`, `search`, `both`),
-`limits` (`max_depth`, `max_nodes`, `pages_per_node`), and `language`.
+`limits` (`max_depth`, `max_nodes`, `pages_per_node`), `language`, and
+`record_language`. `language` is the catalog's only search language: it
+sets `search.language`, and a request `search_language` is accepted when
+equal (422 naming both when different; it fills an empty `language`).
+`record_language` is empty (the sources' language) or a code; extraction
+writes `text` values in it, leaving names, acronyms, URLs, dates, and enum
+values as the sources give them. Draft proposes both; the CLI's
+`--search-language` and `--record-language` and the form's Search language
+and Record language rows write them into the structure, and the catalog
+request never carries `search_language`.
 Field names match `^[a-z][a-z0-9_]{0,39}$`; the first required `text`
 field is the name field; at most one `slug` and one `ref` (the parent)
 field; the `enum` field's `values` are the node types, and leaf and seed
@@ -1171,7 +1180,7 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   kind exits 2 naming the flag and the kind) with `POST /api/runs/{id}/fork` and follows it like
   `run`; a queued or running parent exits 2 printing the server's 409
   detail, and a fork that fails before its first stage exits 1.
-- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--output table|report|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--model NAME] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--context-window N] [--max-output N] [the writing flags of run] [--set k=v]... [--until STAGE] [--json]`:
+- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--output table|report|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--record-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--model NAME] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--context-window N] [--max-output N] [the writing flags of run] [--set k=v]... [--until STAGE] [--json]`:
   creates a run with `kind` `catalog` (see Catalog runs); the flags
   override the structure file's values, and without `--structure` the run's
   `draft` stage derives one. It follows the run like `run`, with
@@ -2694,7 +2703,10 @@ These override the prototype where they differ:
   in the in-memory New run draft next to the domain lists and clears with
   the draft after Start. It sends the trimmed value as `search_language`
   only when not empty, and checks it with a client copy of the server's
-  pattern; an invalid value disables Start.
+  pattern; an invalid value disables Start. The catalog form's Search
+  language and Record language rows (help `c-lang`, `c-record-lang`) edit
+  `structure.language` and `structure.record_language` instead, with the
+  same check, and no `search_language` is sent.
 - **Source query IDs:** each web row of the Sources panel lists, under its
   URL, the union of `query_ids` from every `hit.found` for that URL (a URL
   can arrive several times with overlapping IDs), sorted `q2` before

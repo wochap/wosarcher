@@ -46,6 +46,7 @@ from wosarcher.cli.options import (
     UseOption,
     WordsOption,
     fail,
+    language_option,
     use_map,
 )
 from wosarcher.cli.run import created, llm_patch, uploads, watch, writing_patch
@@ -199,6 +200,7 @@ CATALOG_ONLY = (
     "--max-nodes",
     "--pages-per-node",
     "--search-language",
+    "--record-language",
     "--allow-domain",
     "--block-domain",
     "--sources",
@@ -241,6 +243,12 @@ def catalog(
         int | None, typer.Option("--pages-per-node", min=1, max=10, help="Pages fetched per node.")
     ] = None,
     search_language: SearchLanguageOption = None,
+    record_language: Annotated[
+        str | None,
+        typer.Option(
+            "--record-language", metavar="CODE", callback=language_option, help="Language of the records' text values."
+        ),
+    ] = None,
     allow_domain: AllowDomainOption = None,
     block_domain: BlockDomainOption = None,
     attach: AttachOption = None,
@@ -292,6 +300,7 @@ def catalog(
             "--max-nodes": max_nodes,
             "--pages-per-node": pages_per_node,
             "--search-language": search_language,
+            "--record-language": record_language,
             "--allow-domain": allow_domain,
             "--block-domain": block_domain,
             "--sources": None if sources == "both" else sources,
@@ -313,9 +322,15 @@ def catalog(
     limits = {"max_depth": max_depth, "max_nodes": max_nodes, "pages_per_node": pages_per_node}
     found = structure_request(structure, seed or [], relation, leaf or [], expand, limits, output)
     check_writing(found, writing)
-    search_language_value = search_language
-    if found is not None and search_language is not None:
-        found["language"], search_language_value = search_language, None
+    languages = {"language": search_language, "record_language": record_language}
+    given_languages = {key: value for key, value in languages.items() if value is not None}
+    extra_set = list(set_ or [])
+    if found is not None:
+        found.update(given_languages)
+    else:
+        extra_set += [f"catalog.{key}={json.dumps(value)}" for key, value in given_languages.items()]
+        if search_language is not None:
+            extra_set.append(f"search.language={json.dumps(search_language)}")
     try:
         request = RunCreate.model_validate(
             {
@@ -337,8 +352,7 @@ def catalog(
                     reference_style=reference_style,
                     format=format_,
                 ),
-                "search_language": search_language_value,
-                "set": set_ or [],
+                "set": extra_set,
             }
         )
     except ValidationError as error:

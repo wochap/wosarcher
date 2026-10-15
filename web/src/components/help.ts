@@ -436,6 +436,10 @@ Object.assign(HELP, {
     title: "Search language",
     body: "Language used for search queries and for matching the child relation.",
   },
+  "c-record-lang": {
+    title: "Record language",
+    body: "Language for text fields such as descriptions. Leave empty to keep the sources’ language. Names, acronyms and URLs stay as the sources give them.",
+  },
   "cp-load": { title: "Load", body: "Reads the brief, the structure and any attached files." },
   "cp-draft": {
     title: "Draft",

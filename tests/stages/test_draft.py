@@ -78,6 +78,20 @@ async def test_outline_is_data() -> None:
     assert data.content.count("</data>") == 1
 
 
+async def test_languages_proposed() -> None:
+    llm = FakeLLM([json.dumps(structure_data(language="es", record_language="en"))])
+    result = await draft("Peruvian state bodies", None, [], llm, catalog=CatalogConfig(), today=TODAY)
+    assert (result.structure.language, result.structure.record_language) == ("es", "en")
+    assert "`record_language`" in llm.calls[0][0].content
+
+
+async def test_language_flags_applied_over_derived() -> None:
+    llm = FakeLLM([json.dumps(structure_data(language="es", record_language="en"))])
+    flags = CatalogConfig(language="pt", record_language="fr")
+    result = await draft("brief", None, [], llm, catalog=flags, today=TODAY)
+    assert (result.structure.language, result.structure.record_language) == ("pt", "fr")
+
+
 async def test_output_proposed() -> None:
     brief = "list every comisaría in Peru with its address and tell me how they are distributed by region"
     llm = FakeLLM([json.dumps(structure_data(output="both"))])

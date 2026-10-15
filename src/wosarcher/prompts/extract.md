@@ -11,6 +11,7 @@ Rules:
   (an update or publication date); give that date, as YYYY-MM-DD, for the field
   named in its `dated_by`. Without such a date give null for both.
 - Never fill fields of type `slug`, `ref`, or `enum`; the crawler fills them.
+- $record_language
 - `url` values are full http or https URLs; `date` values are YYYY-MM-DD.
 - In `sources`, give for each value the URL of the page it came from.
 - List as `children` only entities that are "$relation" of this entity, each

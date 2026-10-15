@@ -222,8 +222,11 @@ def check_kind(body: RunCreate) -> None:
         if body.sources == "files":
             raise RouteError(422, "invalid_request", "sources: a catalog run cannot use files only")
         language = body.structure.language if body.structure else ""
-        if language and body.search_language is not None:
-            detail = "search_language: set either search_language or structure.language for a catalog run"
+        if language and body.search_language not in (None, language):
+            detail = (
+                f"search_language: '{body.search_language}' conflicts with structure.language '{language}'; "
+                "set one, or make them equal"
+            )
             raise RouteError(422, "invalid_request", detail)
     elif body.structure is not None:
         raise RouteError(422, "invalid_request", "structure: only for catalog runs, not research runs")
@@ -253,6 +256,10 @@ async def create_run(
     except ValidationError as error:
         raise invalid(structure_errors(error)) from None
     check_kind(body)
+    if body.kind == "catalog" and body.structure and not body.structure.language and body.search_language:
+        body = body.model_copy(
+            update={"structure": body.structure.model_copy(update={"language": body.search_language})}
+        )
     try:
         known = [*list_depths(os.environ), CUSTOM_DEPTH]
     except ConfigError as error:

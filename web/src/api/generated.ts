@@ -473,6 +473,7 @@ export type Fields = StructureField[]
 export type Language1 = string
 export type LeafTypes = string[]
 export type Output1 = ("table" | "report" | "both")
+export type RecordLanguage = string
 export type Relation = string
 /**
  * @minItems 1
@@ -2042,6 +2043,7 @@ language?: Language1
 leaf_types?: LeafTypes
 limits?: Limits1
 output?: Output1
+record_language?: RecordLanguage
 relation: Relation
 seeds: Seeds
 }

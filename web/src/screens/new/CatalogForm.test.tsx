@@ -79,6 +79,29 @@ describe("catalog form", () => {
     expect(document.activeElement?.closest('[data-row="c-seeds"]')).toBeTruthy();
   });
 
+  it("sends the languages in the structure and no search_language", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.change(screen.getByLabelText("Search language"), { target: { value: "es" } });
+    fireEvent.change(screen.getByLabelText("Record language"), { target: { value: "en" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.structure?.language).toBe("es");
+    expect(request.structure?.record_language).toBe("en");
+    expect(request).not.toHaveProperty("search_language");
+  });
+
+  it("disables Run catalog for an invalid record language", async () => {
+    const { brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.change(screen.getByLabelText("Record language"), { target: { value: "spanish" } });
+    expect(
+      (screen.getByRole("button", { name: "Run catalog" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
   it("keeps the kind and brief across screens", async () => {
     const { brief } = await openCatalog();
     fireEvent.change(brief, { target: { value: "Kept brief" } });

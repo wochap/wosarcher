@@ -87,7 +87,6 @@ export type CatalogForm = {
   profile: string;
   /** Lists that differ from their defaults. */
   domains: Partial<DomainLists>;
-  searchLanguage: string;
   choice: ProfileChoice;
   /** The overridden writing fields; sent only when the output wants a report. */
   writing?: Partial<WritingOptions>;
@@ -97,6 +96,8 @@ export type CatalogForm = {
 export function catalogRequest(form: CatalogForm): RunCreate {
   const structure: Structure = {
     ...form.structure,
+    language: form.structure.language?.trim() ?? "",
+    record_language: form.structure.record_language?.trim() ?? "",
     fields: form.structure.fields.map((f) => ({ ...f, name: fieldName(f.name.trim()) })),
     limits: limitsOf(form.structure),
   };
@@ -110,7 +111,6 @@ export function catalogRequest(form: CatalogForm): RunCreate {
     request.writing = form.writing;
   }
   if (Object.keys(form.domains).length) request.domains = form.domains;
-  if (form.searchLanguage.trim()) request.search_language = form.searchLanguage.trim();
   return { ...request, ...profilePatch(form.choice, KIND_STEPS.catalog) };
 }
 

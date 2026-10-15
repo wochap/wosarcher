@@ -102,18 +102,19 @@ describe("catalog form", () => {
       brief: "  Every body ",
       structure: {
         ...structure,
+        language: " es ",
         fields: [{ name: "head name", type: "text" }, ...structure.fields],
       },
       profile: "low-vram",
       domains: { allow: ["gob.pe"] },
-      searchLanguage: " es ",
       choice: { use: {}, edits: {} },
     });
     expect(request.query).toBe("Every body");
     expect(request.kind).toBe("catalog");
     expect(request.profile).toBe("low-vram");
     expect(request.domains).toEqual({ allow: ["gob.pe"] });
-    expect(request.search_language).toBe("es");
+    expect(request).not.toHaveProperty("search_language");
+    expect(request.structure?.language).toBe("es");
     expect(request.structure?.fields[0].name).toBe("head_name");
     expect(request.structure?.limits).toEqual({ max_depth: 3, max_nodes: 200, pages_per_node: 2 });
     expect(request).not.toHaveProperty("writing");

@@ -282,6 +282,10 @@ class CatalogConfig(Block):
     """Extraction calls in flight."""
     context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = "auto"
     """The extract budget; `auto`: all the room the context window leaves."""
+    language: str = ""
+    """Applied over a derived structure's `language` when set (`--search-language` without a structure)."""
+    record_language: str = ""
+    """Applied over a derived structure's `record_language` when set."""
 
     @property
     def limits(self) -> Limits:

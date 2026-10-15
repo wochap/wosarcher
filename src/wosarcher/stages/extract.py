@@ -40,6 +40,18 @@ CHILDREN_RULES: dict[ExpandMode, str] = {
     "search": "Take children from the page text only, with url null.",
     "both": "Take children from the page text and its links; give the URL a link shows for a child, else null.",
 }
+
+
+def record_language_rule(language: str) -> str:
+    """The prompt rule for `text` values: the given language, or the sources' own."""
+    if not language:
+        return "Write `text` values in the language of the pages."
+    return (
+        f"Write `text` values in the language `{language}`. Keep names, acronyms, URLs, dates, "
+        "and enum values as the pages give them."
+    )
+
+
 NO_CHILDREN = "This entity's children are not needed: give an empty list."
 
 
@@ -114,6 +126,7 @@ def system_message(structure: Structure, item: NodePages, *, max_children: int, 
         relation=structure.relation,
         children_rule=CHILDREN_RULES[structure.expand] if item.expandable else NO_CHILDREN,
         max_children=max_children if item.expandable else 0,
+        record_language=record_language_rule(structure.record_language),
         today=today,
     )
 

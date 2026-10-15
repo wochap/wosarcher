@@ -237,6 +237,7 @@ _wosarcher_catalog() {
     '--max-nodes[nodes at most]:nodes:' \
     '--pages-per-node[pages fetched per node]:pages:' \
     '--search-language[search language]:language:_wosarcher_search_language' \
+    '--record-language[language of the records'\'' text values]:language:_wosarcher_search_language' \
     '*--allow-domain[only use search results from this domain]:domain:' \
     '*--block-domain[drop search results from this domain]:domain:' \
     '*--attach[file, directory, or glob to attach]:file:_files' \

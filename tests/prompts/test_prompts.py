@@ -93,6 +93,7 @@ def test_extract_prompts_substitute() -> None:
         "relation": "organismos adscritos",
         "children_rule": "Take children from links.",
         "max_children": 50,
+        "record_language": "Write `text` values in the language of the pages.",
         "today": "2026-10-15",
     }
     text = load("extract").substitute(values)

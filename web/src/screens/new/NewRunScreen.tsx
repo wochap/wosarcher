@@ -251,7 +251,10 @@ export function NewRunScreen() {
   const catalogWriting = saved && { ...saved, ...draft.writing };
   const blank = !draft.query.trim();
   const blankBrief = !draft.brief.trim();
-  const languageInvalid = !isSearchLanguage(draft.searchLanguage.trim());
+  const languageInvalid = catalog
+    ? !isSearchLanguage((draft.structure?.language ?? "").trim()) ||
+      !isSearchLanguage((draft.structure?.record_language ?? "").trim())
+    : !isSearchLanguage(draft.searchLanguage.trim());
   const selected = profiles.find((p) => p.name === options.profile);
   const domainDefaults: DomainLists = {
     allow: selected?.allow_domains ?? settings?.domains.allow ?? [],
@@ -380,7 +383,6 @@ export function NewRunScreen() {
         structure,
         profile: options.profile,
         domains: overriddenDomains(domains, domainDefaults),
-        searchLanguage: draft.searchLanguage,
         choice,
         writing: catalogWriting && saved ? overriddenFields(catalogWriting, saved) : undefined,
       });
@@ -761,8 +763,6 @@ export function NewRunScreen() {
                   words: writing?.words ?? defaults?.words ?? 0,
                   onPick: pickProfile,
                 }}
-                searchLanguage={draft.searchLanguage}
-                onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
                 isPhone={isPhone}
               />
             ) : (

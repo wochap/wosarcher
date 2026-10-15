@@ -441,6 +441,28 @@ def test_catalog_flags_over_the_file(daemon: Daemon, tmp_path: Path) -> None:
     assert json.loads(result.stdout)["reason"] == "frontier empty"
 
 
+def test_catalog_languages_with_a_file(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    result = runner.invoke(
+        app, ["catalog", "b", "--structure", str(path), "--search-language", "es", "--record-language", "en"]
+    )
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    request = request_of(daemon, run_id)["request"]
+    assert (request["structure"]["language"], request["structure"]["record_language"]) == ("es", "en")
+    assert "search_language" not in request
+
+
+def test_catalog_languages_with_a_derived_structure(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["catalog", "b", "--record-language", "en"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    request = request_of(daemon, run_id)["request"]
+    assert request.get("structure") is None
+    assert "search_language" not in request
+    assert "catalog.record_language=" in json.dumps(request_of(daemon, run_id))
+
+
 def test_catalog_derived_structure(daemon: Daemon) -> None:
     result = runner.invoke(app, ["catalog", "brief"])
     assert result.exit_code == 0, result.output
@@ -476,6 +498,7 @@ def test_catalog_until_prints_nothing(daemon: Daemon) -> None:
         (["--until", "score"], "catalog stage"),
         (["--sources", "files"], "--sources"),
         (["--search-language", "spanish"], "--search-language"),
+        (["--record-language", "spanish"], "--record-language"),
         (["--allow-domain", "gob.pe/x"], "gob.pe/x"),
         (["--use", "scorer=bm25"], "--use"),
         (["--extract-thinking", "max"], "--extract-thinking"),

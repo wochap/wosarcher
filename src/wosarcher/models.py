@@ -593,7 +593,9 @@ class Structure(Contract):
     expand: ExpandMode = "both"
     limits: Limits = Limits()
     language: str = ""
-    """A search language, or empty for the configured one."""
+    """The catalog's search language, or empty for the configured one."""
+    record_language: str = ""
+    """The language of `text` values; empty means the sources' language."""
     output: CatalogOutput = "table"
     """`report` and `both` write a report from the records after `assemble`."""
 
@@ -608,7 +610,7 @@ class Structure(Contract):
             raise ValueError("relation must not be empty")
         return value
 
-    @field_validator("language")
+    @field_validator("language", "record_language")
     @classmethod
     def check_language(cls, value: str) -> str:
         return value and search_language(value)
