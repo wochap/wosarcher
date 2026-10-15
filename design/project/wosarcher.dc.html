@@ -33,7 +33,7 @@ html,body{margin:0;height:100%}
 
 <sc-if value="{{ notPhone }}" hint-placeholder-val="{{ true }}">
 <nav aria-label="Main" style="width:184px;flex:none;display:flex;flex-direction:column;gap:2px;padding:14px 10px;background:var(--color-mantle);border-right:1px solid var(--line)">
-  <div style="display:flex;align-items:center;gap:8px;padding:2px 8px 16px"><i class="ph ph-funnel-simple" style="font-size:18px;color:var(--color-accent)"></i><span style="font-size:16px;font-weight:500;letter-spacing:-0.01em">wosarcher</span></div>
+  <div style="display:flex;align-items:center;gap:8px;padding:2px 8px 16px"><svg width="18" height="18" viewBox="0 0 32 32" fill="none" stroke="var(--color-accent)" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 8h22M9 15h14M13 22h6"></path><circle cx="16" cy="28" r="2.4" fill="var(--color-accent)" stroke="none"></circle></svg><span style="font-size:16px;font-weight:500;letter-spacing:-0.01em">wosarcher</span></div>
   <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
     <button onClick="{{ n.go }}" aria-current="{{ n.cur }}" style="display:flex;align-items:center;gap:9px;padding:7px 8px;border:0;border-radius:var(--radius-md);background:{{ n.bg }};color:{{ n.col }};font:inherit;font-size:13.5px;text-align:left;cursor:pointer" style-hover="background:color-mix(in srgb,var(--color-text) 6%,transparent)">
       <i class="ph {{ n.ic }}" style="font-size:16px"></i><span style="flex:1">{{ n.l }}</span>
