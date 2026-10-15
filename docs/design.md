@@ -686,10 +686,19 @@ to `context.json` and the skips to `select.jsonl`.
   order, hidden parts skipped) and reads the bytes; a path that matches
   nothing fails the run before any stage. The load stage only sees bytes,
   so the server can pass uploads without touching disk.
-- Formats: `.md` and `.txt`; other files in a directory are skipped with a
+- Formats: `.md`, `.txt`, and `.json`; other files in a directory are skipped with a
   warning. UTF-8 with replacement; size limit `attach.max_bytes`. Identical
   content is loaded once. Neither `fetch.max_chars` nor `fetch.max_pages` applies: both are for web pages
   only.
+- JSON is rendered to Markdown in load (page title = file name, `format`
+  `json` in `files.jsonl`): a top-level object gives one `##` section per
+  key, a top-level array one per item. Inside a section, scalars are
+  `key: value` lines, nested objects indented `key:` blocks, arrays of
+  scalars bullet lists, and arrays of objects sections one level deeper
+  titled by the item's `name`, `title`, `id`, or `label` (else
+  "Item <n>"). Beyond depth six (or below a level-six section) values are
+  compact one-line JSON. Invalid JSON is skipped with a warning naming the
+  file and the parse error. The raw file stays in `attachments/`.
 - pdf-ingest output is detected by its `<!-- page: … -->` and `<!-- a: … -->`
   comments; chunks keep page and block IDs for citations.
 - The planner sees an outline of each attachment (headings plus the first

@@ -49,7 +49,9 @@ wosarcher run "<query>" --attach notes.md --attach docs/ --sources both --until 
 wosarcher run "<query>" --attach notes.md --sources files --until select --json
 ```
 
-`--sources` is `files`, `web`, or `both` (default).
+`--sources` is `files`, `web`, or `both` (default). Attachments are `.md`,
+`.txt`, or `.json` files; a JSON file is read as a Markdown page with one
+section per top-level key or item.
 
 ## 4. Profiles, providers, and overrides
 

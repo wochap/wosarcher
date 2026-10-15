@@ -175,6 +175,17 @@ def test_missing_attachment(daemon: Daemon, tmp_path: Path) -> None:
     assert "no file matches" in result.output
 
 
+def test_json_attachment_uploaded(daemon: Daemon, tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "a.md").write_text("a")
+    (data / "b.json").write_text('{"k": "v"}')
+    result = runner.invoke(app, ["run", "q", "--attach", str(data), "--sources", "files", "--until", "load", "--json"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    assert sorted(path.name for path in (daemon.runs_dir / run_id / "attachments").iterdir()) == ["a.md", "b.json"]
+
+
 def test_run_id_is_not_a_client_flag(daemon: Daemon) -> None:
     result = runner.invoke(app, ["run", "q", "--run-id", "20260101-120000-abcdef"])
     assert result.exit_code == 2

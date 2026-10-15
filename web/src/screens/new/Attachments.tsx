@@ -1,4 +1,4 @@
-// The New run drop zone: drag and drop or browse for .md and .txt files, listed with size.
+// The New run drop zone: drag and drop or browse for .md, .txt and .json files, listed with size.
 import { FileArrowUp, FileText, Recycle, Warning, X } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 import { HelpTip } from "../../components/HelpTip";
@@ -6,7 +6,7 @@ import { fmtBytes } from "../../run/format";
 import type { ReusedFile } from "../../run/recent";
 import css from "./Attachments.module.css";
 
-const ALLOWED = /\.(md|txt)$/i;
+const ALLOWED = /\.(md|txt|json)$/i;
 
 type Props = {
   files: File[];
@@ -35,7 +35,7 @@ export function Attachments({ files, reused = [], onChange, onReused }: Props) {
     onChange([...files, ...added]);
     setSkipped(
       bad.length
-        ? `Skipped ${bad.map((f) => f.name).join(", ")} — only .md and .txt are supported.`
+        ? `Skipped ${bad.map((f) => f.name).join(", ")} — only .md, .txt and .json are supported.`
         : "",
     );
     setOver(false);
@@ -51,7 +51,7 @@ export function Attachments({ files, reused = [], onChange, onReused }: Props) {
       <div
         role="button"
         tabIndex={0}
-        aria-label="Add .md or .txt files"
+        aria-label="Add .md, .txt or .json files"
         className={css.drop}
         data-over={over}
         onClick={() => input.current?.click()}
@@ -83,7 +83,7 @@ export function Attachments({ files, reused = [], onChange, onReused }: Props) {
       <input
         ref={input}
         type="file"
-        accept=".md,.txt"
+        accept=".md,.txt,.json"
         multiple
         hidden
         data-testid="attachments-input"

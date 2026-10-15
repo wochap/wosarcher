@@ -12,13 +12,13 @@ def write(path: Path, text: str = "text") -> Path:
 
 
 def test_mixed_directory(tmp_path: Path) -> None:
-    for name in ("a.md", "b.txt", "c.pdf"):
+    for name in ("a.md", "b.txt", "d.json", "c.pdf"):
         write(tmp_path / "docs" / name)
     attachments, skipped = collect([str(tmp_path / "docs")], max_bytes=1000)
-    assert [Path(a.name).name for a in attachments] == ["a.md", "b.txt"]
+    assert [Path(a.name).name for a in attachments] == ["a.md", "b.txt", "d.json"]
     assert len(skipped) == 1
     assert skipped[0].item.endswith("c.pdf")
-    assert "only .md and .txt" in skipped[0].reason
+    assert "only .md, .txt and .json" in skipped[0].reason
 
 
 def test_oversized_file(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from wosarcher.models import Attachment, Skipped
 
-SUFFIXES = {".md", ".txt"}
+SUFFIXES = {".md", ".txt", ".json"}
 
 
 class AttachmentError(Exception):
@@ -54,7 +54,7 @@ def collect(paths: Sequence[str], *, max_bytes: int) -> tuple[list[Attachment], 
             seen.add(resolved)
             name = display(file)
             if file.suffix.lower() not in SUFFIXES:
-                skipped.append(Skipped(item=name, reason="unsupported file type (only .md and .txt)"))
+                skipped.append(Skipped(item=name, reason="unsupported file type (only .md, .txt and .json)"))
             elif file.stat().st_size > max_bytes:
                 skipped.append(Skipped(item=name, reason=f"larger than {max_bytes} bytes"))
             else:

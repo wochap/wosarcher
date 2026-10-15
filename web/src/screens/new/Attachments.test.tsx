@@ -16,19 +16,22 @@ describe("Attachments", () => {
     expect(screen.getByRole("button", { name: "Help: Attachments" })).toBeTruthy();
   });
 
-  it("adds .md and .txt files, skips others, ignores duplicates, and removes", () => {
+  it("adds .md, .txt and .json files, skips others, ignores duplicates, and removes", () => {
     render(<Harness />);
-    const zone = screen.getByRole("button", { name: "Add .md or .txt files" });
+    const zone = screen.getByRole("button", { name: "Add .md, .txt or .json files" });
     fireEvent.dragOver(zone);
     expect(zone.dataset.over).toBe("true");
     fireEvent.drop(zone, {
-      dataTransfer: { files: [file("notes.md", 4403), file("paper.pdf", 10)] },
+      dataTransfer: {
+        files: [file("notes.md", 4403), file("data.json", 20), file("paper.pdf", 10)],
+      },
     });
     expect(zone.dataset.over).toBe("false");
     expect(screen.getByText("notes.md")).toBeTruthy();
     expect(screen.getByText("4.3 KB")).toBeTruthy();
+    expect(screen.getByText("data.json")).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toBe(
-      "Skipped paper.pdf — only .md and .txt are supported.",
+      "Skipped paper.pdf — only .md, .txt and .json are supported.",
     );
     fireEvent.drop(zone, { dataTransfer: { files: [file("notes.md", 1), file("a.txt", 12)] } });
     expect(screen.getAllByText("notes.md")).toHaveLength(1);

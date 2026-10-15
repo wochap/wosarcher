@@ -226,3 +226,7 @@ def test_skill_connection() -> None:
     assert "`69` the daemon is not reachable" in text
     assert "`WOSARCHER_URL`" in text
     assert "`WOSARCHER_TOKEN`" in text
+
+
+def test_skill_json_attachments() -> None:
+    assert "`.json` files" in " ".join(SKILL.read_text().split())

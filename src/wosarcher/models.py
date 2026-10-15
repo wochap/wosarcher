@@ -146,7 +146,7 @@ class Source(Contract):
 class Page(Contract):
     source: Source
     text: str
-    format: Literal["markdown", "pdf-ingest"] = "markdown"
+    format: Literal["markdown", "pdf-ingest", "json"] = "markdown"
     truncated: bool = False
     """Set by the Fetcher when it cut the text at `fetch.max_chars`."""
     rank: int = 0

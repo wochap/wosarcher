@@ -234,7 +234,7 @@ Other props: `speed` (0.5 to 6, simulation rate), `device` (`auto`/`phone`) and 
   - Click or tap pins it. A second tap on the same pinned button closes it; tapping another button pins that one instead.
   - A pointerdown outside any `[data-help]` element and the tooltip closes it. Any scroll (capture phase) closes it.
   - Escape closes help before dialogs and the citation tooltip.
-- **Attachments**: click, drag-over (highlight) and drop; `.md`/`.txt` only. Others are skipped with the danger alert "Skipped x.pdf — only .md and .txt are supported." Duplicate names are ignored. Remove per file.
+- **Attachments**: click, drag-over (highlight) and drop; `.md`/`.txt`/`.json` only. Others are skipped with the danger alert "Skipped x.pdf — only .md, .txt and .json are supported." Duplicate names are ignored. Remove per file.
 - **Options panel**: collapsed by default (`ph-caret-right`/`-down`, `aria-expanded`). Summary line shows run options and the writing summary. Badge "N overridden"; per-field Reset; "Reset all to defaults"; "edit defaults" links to Settings. Profile select updates the description line under it.
 - **Live**:
   - Cancel (while running or connecting) freezes at the current t.

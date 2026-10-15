@@ -96,6 +96,7 @@ SAMPLES: list[Contract] = [
     HIT,
     SOURCE,
     PAGE,
+    Page(source=SOURCE, text="## a\n1", format="json"),
     CHUNK,
     Attachment(name="notes/a.md", data=b"# A\n"),
     SKIPPED,

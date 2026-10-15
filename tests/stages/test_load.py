@@ -1,5 +1,6 @@
 from wosarcher.models import Attachment
-from wosarcher.stages.load import load, outline
+from wosarcher.stages.chunk import sections
+from wosarcher.stages.load import load, outline, render_json
 
 
 def test_invalid_bytes_replaced() -> None:
@@ -38,3 +39,40 @@ def test_outline_two_lines_per_heading() -> None:
 def test_outline_cut() -> None:
     page = load([Attachment(name="a.md", data=("# H\n" + "x " * 3000).encode())]).pages[0]
     assert len(outline(page)) == 2000
+
+
+def test_json_dataset_of_nodes() -> None:
+    data = (
+        '{"nodes": [{"id": "sac", "name": "Sociedad Anónima Cerrada",'
+        ' "costs": [{"concept": "Minuta", "amount_pen": null}]}], "edges": []}'
+    )
+    result = load([Attachment(name="empresa_peru.json", data=data.encode())])
+    page = result.pages[0]
+    assert (page.format, page.source.title) == ("json", "empresa_peru.json")
+    assert page.text == (
+        "## nodes\n\n### Sociedad Anónima Cerrada\n\nid: sac\nname: Sociedad Anónima Cerrada\ncosts:\n\n"
+        "#### Item 1\n\nconcept: Minuta\namount_pen: null\n\n## edges\n"
+    )
+
+
+def test_json_top_level_array_and_scalars() -> None:
+    assert render_json([{"title": "A"}, {"x": 1}]) == "## A\n\ntitle: A\n\n## Item 2\n\nx: 1\n"
+    assert render_json({"k": [1, "x", True], "s": "v"}) == "## k\n\n- 1\n- x\n- true\n\n## s\n\nv\n"
+    assert render_json(3) == "3\n"
+
+
+def test_json_deep_nesting_cut() -> None:
+    text = render_json({"a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": 1}}}}}}}})
+    assert text.splitlines()[-1] == '          g: {"h":1}'
+
+
+def test_json_broken_skipped() -> None:
+    result = load([Attachment(name="data.json", data=b'{"a": }'), Attachment(name="b.md", data=b"x")])
+    assert [page.source.uri for page in result.pages] == ["b.md"]
+    assert result.skipped[0].item == "data.json"
+    assert result.skipped[0].reason.startswith("invalid JSON: Expecting value: line 1 column 7")
+
+
+def test_json_headings_become_heading_paths() -> None:
+    page = load([Attachment(name="d.json", data=b'{"nodes": [{"name": "A", "v": 1}]}')]).pages[0]
+    assert [section.path for section in sections(page.text)] == [("nodes",), ("nodes", "A")]
