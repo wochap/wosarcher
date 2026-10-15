@@ -33,3 +33,20 @@ def test_api_not_shadowed(make_app: MakeApp, build: Path) -> None:
 def test_no_build_404(client: TestClient) -> None:
     assert client.get("/").status_code == 404
     assert client.get("/api/runs").status_code == 200
+
+
+def test_head_icons(make_app: MakeApp, build: Path) -> None:
+    files = {
+        "favicon.svg": "image/svg+xml",
+        "manifest.webmanifest": "application/manifest+json",
+        "apple-touch-icon.png": "image/png",
+        "icon-192.png": "image/png",
+        "icon-512.png": "image/png",
+    }
+    for name in files:
+        (build / name).write_bytes(b"x")
+    with TestClient(make_app(static_dir=build), base_url=BASE_URL) as client:
+        for name, media_type in files.items():
+            response = client.get(f"/{name}")
+            assert response.status_code == 200
+            assert response.headers["content-type"].split(";")[0] == media_type

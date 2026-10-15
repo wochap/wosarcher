@@ -13,6 +13,11 @@ const current = () =>
     .getAllByRole("button")
     .filter((b) => b.getAttribute("aria-current") === "page");
 
+/** The brand glyph drawn just before the "wosarcher" name in the nav. */
+function brandGlyph() {
+  return within(nav()).getByText("wosarcher").previousElementSibling;
+}
+
 describe("Shell", () => {
   it("marks only the current screen's item", async () => {
     renderApp({ hash: "#/settings" });
@@ -75,6 +80,13 @@ describe("Shell", () => {
     expect(container.textContent).not.toContain("Sift");
   });
 
+  it("draws the Distill brand mark in the sidebar", async () => {
+    renderApp({ hash: "#/settings" });
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(brandGlyph()?.getAttribute("viewBox")).toBe("0 0 32 32");
+    expect(brandGlyph()?.querySelector("path")?.getAttribute("d")).toBe("M5 8h22M9 15h14M13 22h6");
+  });
+
   it("shows the phone top bar with labelled buttons below 720px", async () => {
     vi.stubGlobal("matchMedia", (query: string) => ({
       matches: query.includes("max-width"),
@@ -87,5 +99,6 @@ describe("Shell", () => {
       expect(within(nav()).getByRole("button", { name: label })).toBeTruthy();
     }
     expect(within(nav()).queryByText("Alt 1")).toBeNull();
+    expect(brandGlyph()?.getAttribute("viewBox")).toBe("0 0 32 32");
   });
 });

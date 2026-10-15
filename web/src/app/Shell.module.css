@@ -39,7 +39,6 @@
 }
 
 .brandIcon {
-  font-size: 18px;
   color: var(--color-accent);
 }
 
@@ -134,7 +133,6 @@
 }
 
 .topIcon {
-  font-size: 18px;
   color: var(--color-accent);
   margin: 0 6px;
 }

@@ -1,7 +1,6 @@
 // The frame around every screen: the desktop sidebar, or the phone top bar below 720px.
 import {
   ClockCounterClockwise,
-  FunnelSimple,
   GearSix,
   type Icon,
   Moon,
@@ -10,6 +9,7 @@ import {
   Sun,
 } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useState } from "react";
+import { BrandMark } from "../components/BrandMark";
 import { useUi } from "./context";
 import type { Screen } from "./route";
 import css from "./Shell.module.css";
@@ -68,7 +68,7 @@ export function Shell({ screen, liveDot, onGo, overlays, children }: Props) {
 
   const nav = isPhone ? (
     <nav aria-label="Main" className={css.top}>
-      <FunnelSimple className={css.topIcon} aria-hidden="true" />
+      <BrandMark size={18} className={css.topIcon} />
       <span className={css.topName}>wosarcher</span>
       {items.map(({ screen: id, label, icon: Glyph, active, tone }) => (
         <button
@@ -95,7 +95,7 @@ export function Shell({ screen, liveDot, onGo, overlays, children }: Props) {
   ) : (
     <nav aria-label="Main" className={css.side}>
       <div className={css.brand}>
-        <FunnelSimple className={css.brandIcon} aria-hidden="true" />
+        <BrandMark size={18} className={css.brandIcon} />
         <span className={css.brandName}>wosarcher</span>
       </div>
       {items.map(({ screen: id, label, icon: Glyph, hint, active, tone }) => (

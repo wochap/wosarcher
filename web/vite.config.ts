@@ -1,12 +1,13 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { icons } from "./scripts/icons.mjs";
 
 // In development, /api (HTTP and the event WebSocket) goes to a running `wosarcher serve`.
 // The Origin header is rewritten to the target so the server's Origin check passes.
 const api = process.env.WOSARCHER_DEV_API ?? "http://127.0.0.1:8765";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), icons()],
   server: {
     proxy: {
       "/api": {

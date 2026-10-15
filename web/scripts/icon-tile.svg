@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- The "1a Distill" app tile, full bleed: CSS linear-gradient(160deg, #45475a, #1e1e2e). -->
+  <title>wosarcher</title>
+  <defs>
+    <linearGradient id="bg" x1="0.329" y1="0.030" x2="0.671" y2="0.970">
+      <stop offset="0" stop-color="#45475a"/>
+      <stop offset="1" stop-color="#1e1e2e"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" fill="url(#bg)"/>
+  <!-- The mark at 72/128 scale, centered (inside the maskable safe zone). -->
+  <g transform="translate(28 28) scale(2.25)">
+    <path d="M5 8h22M9 15h14M13 22h6" fill="none" stroke="#cba6f7" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="16" cy="28" r="2" fill="#cba6f7"/>
+  </g>
+</svg>

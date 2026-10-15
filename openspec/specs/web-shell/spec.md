@@ -17,11 +17,23 @@ docs/design.md "Frontend decisions" overrides it. The product name SHALL be
 "wosarcher" everywhere, including the brand, the API token prefix shown in
 the UI, and browser storage keys. No version string SHALL be hard-coded.
 The prototype's `help` scenario specifies the inline help component and
-is not a screen of the app.
+is not a screen of the app. The brand icon SHALL be the "1a Distill" mark
+from `design/project/Wosarcher Icon.dc.html` in the accent color wherever
+the brand appears (the sidebar, the phone top bar, and the sign-in screen).
+Its stroke width and dot radius SHALL follow that file for the rendered
+size.
 
 #### Scenario: Brand in the sidebar
 - **WHEN** the app is open on a desktop-width window (any prototype scenario, for example `new`)
-- **THEN** the sidebar brand row shows the funnel icon and "wosarcher" with no version string, and the word "Sift" appears nowhere in the UI
+- **THEN** the sidebar brand row shows the 18px Distill mark (stroke 3, dot radius 2.4) in the accent color and "wosarcher" with no version string, and the word "Sift" appears nowhere in the UI
+
+#### Scenario: Brand on the phone top bar
+- **WHEN** the window is 390px wide (prototype `device=phone`, scenario `new`)
+- **THEN** the top bar shows the Distill mark, not the Phosphor funnel, before "wosarcher"
+
+#### Scenario: Brand on the sign-in screen
+- **WHEN** the sign-in screen is shown (scenario `login`)
+- **THEN** its brand row shows the Distill mark, not the Phosphor funnel, before "wosarcher"
 
 ### Requirement: Self-contained assets
 The built UI SHALL load its fonts (Inter) and icons (Phosphor) from its own
@@ -857,3 +869,28 @@ seconds while it is shown.
 #### Scenario: Out of range
 - **WHEN** the user types 9
 - **THEN** no settings request is sent
+
+### Requirement: Head icons
+The built UI SHALL serve, from its own origin, an SVG favicon (the bare
+Distill mark at the 16px weight, in the accent color for the browser's color
+scheme: `#cba6f7` dark, `#8839ef` light), a 180px PNG `apple-touch-icon`,
+and a `manifest.webmanifest`. The manifest SHALL name the app "wosarcher",
+set `display` to `standalone`, set `theme_color` and `background_color` to
+the dark `--color-bg` (`#1e1e2e`), and list 192px and 512px PNG icons, the
+512px one with `purpose: "maskable"`. The PNG icons SHALL show the mark in
+the accent color on the icon design file's dark tile, and SHALL be produced
+by `pnpm build` from one source SVG, not committed. `index.html` SHALL link
+the favicon, the touch icon, and the manifest, and SHALL set the
+`theme-color` meta.
+
+#### Scenario: Favicon in the tab
+- **WHEN** the built UI is opened in a browser
+- **THEN** the tab shows the Distill mark, and the request for `/favicon.svg` answers 200 with `image/svg+xml`
+
+#### Scenario: Manifest and icons served
+- **WHEN** `/manifest.webmanifest`, `/apple-touch-icon.png`, `/icon-192.png`, and `/icon-512.png` are requested from `wosarcher serve` with a frontend build
+- **THEN** each answers 200 from the page's own origin, the manifest parses as JSON with the name, display, colors, and icons above, and each PNG has its stated pixel size
+
+#### Scenario: Icons come from the build
+- **WHEN** `pnpm build` runs in a clean checkout
+- **THEN** `dist/` contains the three PNG icons, and no PNG icon is tracked in git
