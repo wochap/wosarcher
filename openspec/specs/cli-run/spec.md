@@ -479,3 +479,13 @@ and print the structure as JSON, so it can be edited and passed back with
 #### Scenario: Draft to a file
 - **WHEN** the user runs `wosarcher catalog draft "brief" > peru.json`
 - **THEN** `peru.json` holds a structure that `wosarcher catalog "brief" --structure peru.json` accepts
+
+### Requirement: JSON attachments on the command line
+`--attach` of `wosarcher run` and `wosarcher catalog` SHALL expand
+directories and globs to `.md`, `.txt`, and `.json` files (source-
+collection "Attachment paths") and upload them; a `.json` file given
+directly SHALL be uploaded as is.
+
+#### Scenario: JSON uploaded
+- **WHEN** the user runs `wosarcher run "q" --attach data/ --sources files --until load` and `data/` holds `a.md` and `b.json`
+- **THEN** both files are uploaded and the run's `files.jsonl` has a page for `b.json` with `format` `json`

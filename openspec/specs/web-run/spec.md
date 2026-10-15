@@ -37,19 +37,19 @@ form matches this run. Edit anything to clear."; any edit SHALL remove it
 ### Requirement: Attachments
 The New run screen (scenario `new`) SHALL offer the prototype's drop zone:
 click, Enter, or Space opens the file picker; dragging files over it
-highlights it; dropping or picking adds the files. Only `.md` and `.txt`
-files SHALL be added; others SHALL be skipped with the alert "Skipped
-<names> — only .md and .txt are supported." A file with the name of an
-already added file SHALL be ignored. Added files SHALL be listed with name,
-size (`B` or `KB` with one decimal), and a remove button. A file taken
-from an earlier run (Requirement: Recent and pinned runs) SHALL show,
-after its name, the recycle icon and "reused from <run name>" (scenario
-`new-recent`), and SHALL be sent as `reuse_attachments` instead of being
-uploaded; removing it works like removing any file.
+highlights it; dropping or picking adds the files. Only `.md`, `.txt`, and
+`.json` files SHALL be added; others SHALL be skipped with the alert
+"Skipped <names> — only .md, .txt and .json are supported." A file with
+the name of an already added file SHALL be ignored. Added files SHALL be
+listed with name, size (`B` or `KB` with one decimal), and a remove
+button. A file taken from an earlier run (Requirement: Recent and pinned
+runs) SHALL show, after its name, the recycle icon and "reused from <run
+name>" (scenario `new-recent`), and SHALL be sent as `reuse_attachments`
+instead of being uploaded; removing it works like removing any file.
 
 #### Scenario: Mixed drop
-- **WHEN** the user drops `notes.md` and `paper.pdf`
-- **THEN** `notes.md` is listed and the alert says `paper.pdf` was skipped
+- **WHEN** the user drops `notes.md`, `data.json`, and `paper.pdf`
+- **THEN** `notes.md` and `data.json` are listed and the alert says `paper.pdf` was skipped
 
 #### Scenario: Remove
 - **WHEN** the user presses the remove button of `notes.md`

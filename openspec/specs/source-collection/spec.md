@@ -79,15 +79,15 @@ The fetch stage SHALL NOT cut page text again.
 ### Requirement: Attachment paths
 Attachments SHALL be given as files, directories, or glob patterns.
 Directories SHALL be read recursively in sorted path order, skipping hidden
-files and directories. Only `.md` and `.txt` files SHALL be loaded; any
-other file SHALL be skipped with a warning that names it. A file larger
-than `attach.max_bytes` (default 5000000) SHALL be skipped with a warning.
-A path or pattern that matches no file SHALL fail before any stage runs,
-with an error that names it.
+files and directories. Only `.md`, `.txt`, and `.json` files SHALL be
+loaded; any other file SHALL be skipped with a warning that names it. A
+file larger than `attach.max_bytes` (default 5000000) SHALL be skipped
+with a warning. A path or pattern that matches no file SHALL fail before
+any stage runs, with an error that names it.
 
 #### Scenario: Mixed directory
-- **WHEN** a directory holds `a.md`, `b.txt`, and `c.pdf`
-- **THEN** `a.md` and `b.txt` are loaded and `c.pdf` is skipped with a warning naming it
+- **WHEN** a directory holds `a.md`, `b.txt`, `d.json`, and `c.pdf`
+- **THEN** `a.md`, `b.txt`, and `d.json` are loaded and `c.pdf` is skipped with a warning naming it
 
 #### Scenario: Oversized file
 - **WHEN** an attached `.md` file is larger than `attach.max_bytes`
@@ -99,10 +99,13 @@ with an error that names it.
 
 ### Requirement: Attachment loading
 Attachment bytes SHALL be decoded as UTF-8, with invalid bytes replaced.
-Each attachment SHALL become a file page whose `source_id` comes from its
-content. Attachments with identical content SHALL be loaded once, and the
-later ones reported as duplicates. The page title SHALL be the first
-level-one heading, or the file name when there is none.
+A `.json` attachment SHALL then be parsed and rendered (Requirement: JSON
+rendering); one that does not parse SHALL be skipped with a warning
+naming the file and the parse error. Each attachment SHALL become a file
+page whose `source_id` comes from its content. Attachments with identical
+content SHALL be loaded once, and the later ones reported as duplicates.
+The page title SHALL be the first level-one heading, or the file name when
+there is none; a JSON page's title is its file name.
 
 #### Scenario: Invalid bytes
 - **WHEN** an attachment contains a byte sequence that is not valid UTF-8
@@ -111,6 +114,41 @@ level-one heading, or the file name when there is none.
 #### Scenario: Same content twice
 - **WHEN** `a.md` and `copy/a.md` have the same bytes
 - **THEN** one page is loaded and the second file is reported as a duplicate
+
+#### Scenario: Broken JSON
+- **WHEN** `data.json` holds `{"a": }`
+- **THEN** it is skipped with a warning naming `data.json` and the parse error, and the run goes on
+
+### Requirement: JSON rendering
+A `.json` attachment SHALL be parsed and rendered to Markdown before it
+becomes a file page. The page title SHALL be the file name. A top-level
+object SHALL render one level-two heading per key, in file order; a
+top-level array one level-two heading per item, "Item <n>" counted from
+1 unless the item is an object with a `name`, `title`, `id`, or `label`
+string value (the first present), which becomes the heading. Within a
+section, an object SHALL render one `<key>: <value>` line per scalar
+value (strings as is, numbers and booleans as JSON, null as `null`), a
+nested object as `<key>:` followed by its lines indented by two spaces,
+an array of scalars as a bullet list, and an array of objects as
+sections one heading level deeper than the enclosing section (level
+three under a top-level section, and so on down to level six), each
+titled the same way as top-level items. A value nested deeper than six
+levels, or an array of objects below a level-six section, SHALL render
+as compact JSON on one line. A top-level scalar SHALL render as one line. The rendered page
+SHALL carry `format` `json` in `files.jsonl` and SHALL be chunked and
+outlined as any file page.
+
+#### Scenario: Dataset of nodes
+- **WHEN** `empresa_peru.json` is `{"nodes": [{"id": "sac", "name": "Sociedad Anónima Cerrada", "costs": [{"concept": "Minuta", "amount_pen": null}]}], "edges": []}`
+- **THEN** the page has "## nodes", under it "### Sociedad Anónima Cerrada" with the lines "id: sac" and "name: Sociedad Anónima Cerrada", then "#### Item 1" under a "costs" sub-section with the lines "concept: Minuta" and "amount_pen: null", and "## edges" with no lines
+
+#### Scenario: Top-level array
+- **WHEN** a file is `[{"title": "A"}, {"x": 1}]`
+- **THEN** the page has "## A" with "title: A" and "## Item 2" with "x: 1"
+
+#### Scenario: Deep nesting
+- **WHEN** a value sits eight levels deep
+- **THEN** the level-six value is rendered as compact JSON on one line
 
 ### Requirement: pdf-ingest detection
 An attachment that contains at least one `<!-- page: … -->` comment SHALL be
