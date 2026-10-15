@@ -384,7 +384,10 @@ gpu_policy = "shared"           # "exclusive" unloads models between phases
 ```
 
 Select a profile with `--profile`, `WOSARCHER_PROFILE`, or `wosarcherd
-profile use`; with none selected the first profile by name is used. Pick
+profile use`; with none selected the first profile by name is used.
+`WOSARCHER_PROFILE` and `WOSARCHER_DEPTH` in the `wosarcher` client's
+environment fill `run`'s `--profile` and `--depth` (and `doctor`'s
+`--profile`), so each agent or shell can keep its own defaults. Pick
 another entry for one run with `--use BLOCK=NAME` (repeatable), or per
 daemon with `WOSARCHER_USE__<BLOCK>=<name>`. `wosarcher providers list`
 shows every entry and each llm entry's models. Changing an entry or a

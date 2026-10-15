@@ -20,7 +20,7 @@ from wosarcher.cli.options import fail
 from wosarcher.config import CLIENT_ENV
 from wosarcher.models import Event, parse_event
 
-URL_VAR, TOKEN_VAR, SOCKET_VAR = CLIENT_ENV
+URL_VAR, TOKEN_VAR, SOCKET_VAR, _ = CLIENT_ENV
 SYSTEM_SOCKET = Path("/run/wosarcher/api.sock")
 SOCKET_BASE = "http://localhost"
 UNREACHABLE = 69

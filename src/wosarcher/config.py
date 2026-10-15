@@ -30,8 +30,8 @@ from pydantic_core import to_jsonable_python
 from wosarcher.models import Effort, FinishedStatus, Stage, WritingOptions, domain_list, search_language
 
 ENV_PREFIX = "WOSARCHER_"
-CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET")
-"""How the `wosarcher` client reaches the daemon; not settings."""
+CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET", "WOSARCHER_DEPTH")
+"""The `wosarcher` client's variables; not settings."""
 BUILTIN_DEPTHS = Path(__file__).parent / "depths"
 DEPTH_ORDER = ("quick", "standard", "deep", "exhaustive")
 CUSTOM_DEPTH = "custom"

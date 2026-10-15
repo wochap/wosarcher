@@ -196,6 +196,76 @@ def test_remote_with_token(daemon: Daemon, password_hash: str, monkeypatch: pyte
     assert [(run["run_id"], run["origin"], run["token_name"]) for run in runs] == [(run_id, "api", "laptop")]
 
 
+def run_client(daemon: Daemon, env: dict[str, str], *args: str) -> "subprocess.CompletedProcess[str]":
+    """The client in its own process, so only it sees `env`; the daemon's environment stays as is."""
+    full = {**os.environ, "WOSARCHER_SOCKET": str(daemon.socket), **env}
+    argv = [sys.executable, "-m", "wosarcher", *args]
+    return subprocess.run(argv, cwd=ROOT, env=full, capture_output=True, text=True, timeout=60, check=False)
+
+
+def profiles_named(config_dir: Path, *names: str) -> None:
+    for name in names:
+        (config_dir / "profiles" / f"{name}.toml").write_text('[use]\nprefilter = "bm25"\n')
+
+
+def test_depth_from_the_environment(daemon: Daemon) -> None:
+    result = run_client(daemon, {"WOSARCHER_DEPTH": "quick"}, "run", "q", "--until", "select", "--json")
+    assert result.returncode == 0, result.stderr
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(RunOutput.model_validate_json(result.stdout).run_id)
+    assert record.request.depth == "quick"
+    assert record.settings["fetch"]["max_pages"] == 15
+
+
+def test_flags_win_over_the_environment(daemon: Daemon, config_dir: Path) -> None:
+    profiles_named(config_dir, "lan", "cloud")
+    env = {"WOSARCHER_DEPTH": "quick", "WOSARCHER_PROFILE": "lan"}
+    result = run_client(daemon, env, "run", "q", "--depth", "deep", "--profile", "cloud", "--json")
+    assert result.returncode == 0, result.stderr
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(RunOutput.model_validate_json(result.stdout).run_id)
+    assert (record.request.depth, record.profile) == ("deep", "cloud")
+
+
+def test_profile_from_the_environment(daemon: Daemon, config_dir: Path) -> None:
+    profiles_named(config_dir, "lan", "desktop")
+    (config_dir / "current").write_text("desktop\n")
+    result = run_client(daemon, {"WOSARCHER_PROFILE": "lan"}, "run", "q", "--json")
+    assert result.returncode == 0, result.stderr
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(RunOutput.model_validate_json(result.stdout).run_id)
+    assert record.profile == "lan"
+
+
+def test_empty_depth_variable(daemon: Daemon) -> None:
+    result = run_client(daemon, {"WOSARCHER_DEPTH": ""}, "run", "q", "--json")
+    assert result.returncode == 0, result.stderr
+    record = RunStore(daemon.runs_dir, daemon.runs_dir).read_record(RunOutput.model_validate_json(result.stdout).run_id)
+    assert record.request.depth is None
+
+
+def test_unknown_depth_from_the_environment(daemon: Daemon) -> None:
+    result = run_client(daemon, {"WOSARCHER_DEPTH": "quik"}, "run", "q")
+    assert result.returncode == 2
+    assert "depth: unknown depth 'quik'" in result.stderr
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_depth_in_the_daemon_environment(daemon: Daemon, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("WOSARCHER_DEPTH", "quick")
+    result = runner.invoke(app, ["run", "q", "--json"])
+    assert result.exit_code == 0, result.output
+    assert RunOutput.model_validate_json(result.stdout).status == "done"
+
+
+def test_fork_ignores_the_environment(daemon: Daemon, config_dir: Path) -> None:
+    profiles_named(config_dir, "cloud")
+    parent = RunOutput.model_validate_json(runner.invoke(app, ["run", "q", "--json"]).stdout).run_id
+    env = {"WOSARCHER_PROFILE": "cloud"}
+    result = run_client(daemon, env, "fork", parent, "--from", "write", "--tone", "critical", "--json")
+    assert result.returncode == 0, result.stderr
+    fork = RunOutput.model_validate_json(result.stdout).run_id
+    store = RunStore(daemon.runs_dir, daemon.runs_dir)
+    assert store.read_record(fork).profile == store.read_record(parent).profile == "workstation"
+
+
 def test_fork(daemon: Daemon) -> None:
     parent = RunOutput.model_validate_json(runner.invoke(app, ["run", "q", "--json"]).stdout).run_id
     result = runner.invoke(app, ["fork", parent, "--from", "write", "--format", "answer", "--until", "write", "--json"])
@@ -294,3 +364,22 @@ def test_doctor(daemon: Daemon, config_dir: Path, monkeypatch: pytest.MonkeyPatc
     table = runner.invoke(app, ["doctor", "--use", "score=bm25"], env={"COLUMNS": "200"})
     assert table.exit_code == 0, table.output
     assert "searxng" in table.output
+
+
+def test_doctor_profile_from_the_environment(daemon: Daemon, config_dir: Path) -> None:
+    (config_dir / "providers" / "score").mkdir()
+    (config_dir / "providers" / "score" / "rerank.toml").write_text('provider = "rerank"\nbase_url = "http://r"\n')
+    (config_dir / "profiles" / "cloud.toml").write_text('[use]\nprefilter = "bm25"\nscore = "rerank"\n')
+    (config_dir / "profiles" / "desktop.toml").write_text('[use]\nprefilter = "bm25"\nscore = "bm25"\n')
+    (config_dir / "current").write_text("desktop\n")
+    result = run_client(daemon, {"WOSARCHER_PROFILE": "cloud"}, "doctor", "--block", "score", "--json")
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["profile"] == "cloud"
+    assert [(entry["block"], entry["name"]) for entry in report["entries"]] == [("score", "rerank")]
+    flag = run_client(
+        daemon, {"WOSARCHER_PROFILE": "cloud"}, "doctor", "--profile", "desktop", "--block", "score", "--json"
+    )
+    assert flag.returncode == 0, flag.stderr
+    assert json.loads(flag.stdout)["profile"] == "desktop"
+    assert [entry["name"] for entry in json.loads(flag.stdout)["entries"]] == ["bm25"]

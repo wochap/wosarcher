@@ -2,7 +2,9 @@
 name: wosarcher
 description: Research a question on the web and/or in local Markdown files and get cited passages or a cited report, using the `wosarcher` CLI (a client of a running `wosarcherd`). Use when you need sourced evidence for an answer, a literature-style summary with references, or to search a folder of notes alongside the web.
 ---
-<!-- Install: copy or symlink this `skill/` directory into your agent's skills directory as `wosarcher/`. -->
+<!-- Install: copy or symlink this `skill/` directory into your agent's skills directory as `wosarcher/`.
+Set the agent's default depth and profile with `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE` in its environment
+(for Claude Code, the `env` block of `settings.json`). -->
 
 # wosarcher
 
@@ -19,27 +21,22 @@ token in `WOSARCHER_TOKEN`.
 ## 1. Cited context (default)
 
 ```sh
-wosarcher run "<query>" --depth quick --until select --json
+wosarcher run "<query>" --until select --json
 ```
 
 Stops after passage selection. Cheaper and faster than a report; write your
 own answer and cite passages by their number `n`, as `[n]`. Prefer this.
 
-Pass `--depth quick` by default: few searches and a short report. Use
-`--depth standard`, `deep`, or `exhaustive` only when the user asks for
-deeper research or a quick run comes back thin; `wosarcher depth list`
-shows every preset.
-
 ## 2. Full report
 
 ```sh
-wosarcher run "<query>" --depth quick --json
+wosarcher run "<query>" --json
 ```
 
 `report.markdown` holds the cited report with a `## References` section.
 
 ```sh
-wosarcher run "<query>" --depth quick --format answer --json
+wosarcher run "<query>" --format answer --json
 ```
 
 For a short cited answer: the direct answer first, then the supporting
@@ -48,8 +45,8 @@ detail, in at most `--words` words, with the same `## References` section.
 ## 3. Local files
 
 ```sh
-wosarcher run "<query>" --attach notes.md --attach docs/ --sources both --depth quick --until select --json
-wosarcher run "<query>" --attach notes.md --sources files --depth quick --until select --json
+wosarcher run "<query>" --attach notes.md --attach docs/ --sources both --until select --json
+wosarcher run "<query>" --attach notes.md --sources files --until select --json
 ```
 
 `--sources` is `files`, `web`, or `both` (default).
@@ -58,8 +55,10 @@ wosarcher run "<query>" --attach notes.md --sources files --depth quick --until 
 
 ```sh
 wosarcher profile list
+wosarcher depth list
 wosarcher providers list
 wosarcher run "<query>" --profile <profile> --until select --json
+wosarcher run "<query>" --depth <depth> --until select --json
 wosarcher run "<query>" --use score=<entry> --use llm=<entry> --until select --json
 wosarcher run "<query>" --set select.max_context_tokens=8000 --until select --json
 ```
@@ -69,6 +68,12 @@ A profile picks one provider entry per block (`search`, `fetch`,
 and each llm entry's models. `--use BLOCK=NAME` picks another entry for
 this run; repeat it for more blocks. `--set KEY=VALUE` overrides one
 configuration field; repeat it for more.
+
+`--depth` picks a depth preset (`quick`, `standard`, `deep`, `exhaustive`,
+or a saved one): how many searches, pages, and words a run uses. Your
+environment may set `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE`; they are your
+default depth and profile, so omit `--depth` and `--profile` unless the user
+asks for a different depth or profile.
 
 ```sh
 wosarcher run "<query>" --allow-domain gob.pe --allow-domain sbs.gob.pe --until select --json

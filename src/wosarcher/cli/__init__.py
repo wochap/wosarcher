@@ -19,7 +19,7 @@ from wosarcher.cli import logs as logs_command
 from wosarcher.cli import run as run_commands
 from wosarcher.cli.api import api
 from wosarcher.cli.depth import depth_app
-from wosarcher.cli.options import ProfileOption, UseOption, fail, use_map
+from wosarcher.cli.options import ClientProfileOption, UseOption, fail, use_map
 from wosarcher.cli.tokens import tokens_app
 from wosarcher.config import BLOCKS, to_toml
 from wosarcher.models import CONTRACTS, ProfileInfo, ProviderEntryInfo, ProvidersCheck, ProvidersReport
@@ -122,7 +122,7 @@ def render(rows: list[ProviderEntryInfo], warnings: list[str]) -> None:
 
 @app.command()
 def doctor(
-    profile: ProfileOption = None,
+    profile: ClientProfileOption = None,
     use: UseOption = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the report as JSON.")] = False,
     block: Annotated[list[str] | None, typer.Option("--block", help="Check only this block; repeat for more.")] = None,
@@ -147,7 +147,7 @@ def doctor(
     report = ProvidersReport.model_validate_json(response.content)
     rows = [row for name in names for row in report.entries if f"{row.block}/{row.name}" == name]
     if as_json:
-        typer.echo(report.model_copy(update={"entries": rows}).model_dump_json(indent=2))
+        typer.echo(report.model_copy(update={"profile": info.name, "entries": rows}).model_dump_json(indent=2))
     else:
         render(rows, report.warnings)
     if any(row.status == "down" for row in rows):

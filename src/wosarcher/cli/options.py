@@ -113,6 +113,13 @@ FormatOption = Annotated[
     typer.Option("--format", metavar="report|answer", callback=format_option, help="Write a report or an answer."),
 ]
 DepthOption = Annotated[str | None, typer.Option("--depth", help="Depth preset; see `wosarcher depth list`.")]
+ClientDepthOption = Annotated[
+    str | None,
+    typer.Option("--depth", envvar="WOSARCHER_DEPTH", help="Depth preset; see `wosarcher depth list`."),
+]
+ClientProfileOption = Annotated[
+    str | None, typer.Option("--profile", envvar="WOSARCHER_PROFILE", help="Profile to use for this command.")
+]
 SubQueriesOption = Annotated[int | None, typer.Option("--sub-queries", min=1, help="Sub-queries to plan.")]
 ResultsOption = Annotated[int | None, typer.Option("--results-per-query", min=1, help="Search results per query.")]
 PagesOption = Annotated[int | None, typer.Option("--max-pages", min=1, help="Pages to fetch at most.")]

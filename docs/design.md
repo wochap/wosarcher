@@ -967,8 +967,8 @@ The client connects, in this order, to `WOSARCHER_URL` (an `http://` or
 `https://` base URL, with `Authorization: Bearer $WOSARCHER_TOKEN` when
 that is set), else the Unix socket at `WOSARCHER_SOCKET`, else
 `$XDG_RUNTIME_DIR/wosarcher.sock`, else `/run/wosarcher/api.sock`; event
-streams use the same connection as a WebSocket. The three names are not
-settings (`config.CLIENT_ENV`). When the connection fails every command
+streams use the same connection as a WebSocket. These three names and
+`WOSARCHER_DEPTH` are client variables, not settings (`config.CLIENT_ENV`). When the connection fails every command
 prints one error naming the socket path or URL and `wosarcherd`, and exits
 69 (`EX_UNAVAILABLE`); a 401 exits 2 naming `WOSARCHER_TOKEN`.
 
@@ -978,7 +978,12 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   `--search-language` as `search_language`, `--use` as `use`, `--model`,
   the thinking flags, `--context-window`, `--max-output`,
   `--context-tokens`, and `--gap-context-tokens` as `llm`, and `--set` as
-  `set`, so the server's precedence applies (see Server). `--attach` paths
+  `set`, so the server's precedence applies (see Server). Without
+  `--depth` or `--profile`, the client's own `WOSARCHER_DEPTH` and
+  `WOSARCHER_PROFILE` fill them (Typer `envvar`; an empty variable counts
+  as unset), and the request carries them as if they were the flags; an
+  unknown name fails like the flag. `wosarcher fork` reads neither, so a
+  fork without `--profile` keeps the parent's saved settings. `--attach` paths
   (files, directories, globs) are expanded by the client and uploaded.
   Values the client can check (`--format`, the thinking levels,
   `--search-language`, the domain entries, `--until`, the block of
@@ -1025,10 +1030,12 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   run, a run without a report, an unknown format, or an existing file
   without `--force`.
 - `wosarcher doctor [--profile NAME] [--use BLOCK=NAME]... [--block NAME]... [--json]`:
-  reads the profile's entries from `GET /api/profiles`, applies `--use`,
+  `--profile` defaults to the client's `WOSARCHER_PROFILE`, else the
+  daemon's active profile; reads the profile's entries from `GET /api/profiles`, applies `--use`,
   keeps the blocks named by `--block`, asks the daemon to check those
   entries (`POST /api/providers/check`), and prints their rows; exit 1
-  when one is `down`. There is no `--set` on the client.
+  when one is `down`; `--json` names the checked profile. There is no
+  `--set` on the client.
 - `wosarcher providers list [--block BLOCK] [--json]`: the entries of
   `GET /api/providers`, grouped by block (search, fetch, prefilter, score,
   llm), one line each: name, source (`(built-in)` or `(user)`), adapter,
@@ -1850,7 +1857,9 @@ else `WOSARCHER_USE__<BLOCK>`, else the profile's `[use]`. A block with
 exactly one entry (built-ins count) may be left out; a block with several
 and no choice fails naming the block and its entries, and a name that is
 not an entry of its block fails listing them, before a run directory
-exists. The profile is `--profile`, else `WOSARCHER_PROFILE`, else the
+exists. The profile is `--profile` (which `wosarcher run` and `wosarcher
+doctor` fill from the client's `WOSARCHER_PROFILE`), else the daemon's
+`WOSARCHER_PROFILE`, else the
 name stored by `wosarcherd profile use`, else the first profile by name;
 with no profile file a command fails with "no profiles; add one in
 <dir>/profiles". `wosarcherd serve` and `wosarcherd auth` resolve their
@@ -2120,7 +2129,9 @@ as mutable copies; switching between them is a per-run choice.
   never reads them; it names a profile and entries, and the daemon
   resolves them.
 - Select a profile per command (`wosarcher run --profile desktop "q"`), per
-  daemon (`WOSARCHER_PROFILE=desktop` in its environment), or as the
+  client (`WOSARCHER_PROFILE=desktop` in the `wosarcher` client's
+  environment, read by `run` and `doctor`), per daemon
+  (`WOSARCHER_PROFILE=desktop` in its environment), or as the
   default (`wosarcherd profile use desktop` as the service user, which
   writes `$XDG_CONFIG_HOME/wosarcher/current`).
 - Switch one block for one run: `wosarcher run --use score=jev-strict
@@ -2163,6 +2174,12 @@ that is not reachable. Agents usually want cited context: `wosarcher run "q" --u
 --json` returns passages with sources and scores. A full report is the
 default `wosarcher run`; `wosarcher run "q" --format answer --json` gives a
 short cited answer.
+
+Each agent sets its own defaults in its environment (for Claude Code, the
+`env` block of `settings.json`): `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE`,
+which `wosarcher run` sends as `--depth` and `--profile`. The skill's
+examples pass neither flag and tell the agent to add them only when the
+user asks for another depth or profile.
 
 The skill is `skill/SKILL.md`. Install it by copying or linking `skill/`
 into an agent's skills directory as `wosarcher/`. `tests/test_skill.py`
