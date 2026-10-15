@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { RunSummary } from "../api/types";
 import { depths, profiles, runs, settings } from "../test/fixtures/data";
+import { researchOf } from "./depth";
 import {
   draftFromRun,
   loadMarks,
@@ -125,6 +126,37 @@ describe("draftFromRun", () => {
       { runId: "r1", runName: "RAG chunking", name: "rag-chunking.md", size: 6120 },
       { runId: "r1", runName: "RAG chunking", name: "api-docs-sample.md", size: 900 },
     ]);
+  });
+
+  it("drops the null fields the API sends for an unset writing or research value", () => {
+    const run = at("r3", "2026-10-01T00:00:00Z", {
+      form: {
+        query: base.query,
+        depth: "custom",
+        research: {
+          sub_queries: 6,
+          results_per_query: null,
+          max_pages: null,
+          passages_per_query: null,
+          rounds: null,
+          queries_per_round: null,
+        },
+        writing: {
+          format: null,
+          words: null,
+          tone: "critical",
+          tone_instructions: null,
+          language: null,
+          citation_marker: null,
+          reference_style: null,
+        },
+      },
+    });
+    const draft = draftFromRun(run, base.query, known);
+    expect(draft.writing).toEqual({ tone: "critical" });
+    const standard = depths.find((d) => d.name === "standard") as (typeof depths)[number];
+    expect(draft.custom?.values).toEqual({ ...researchOf(standard), sub_queries: 6 });
+    expect(draft.custom?.words).toBe(settings.writing.words);
   });
 
   it("fills a run without a form from its summary, with fallbacks for what is gone", () => {

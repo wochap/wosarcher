@@ -155,6 +155,11 @@ function editsOf(llm: RunCreate["llm"]): ProfileEdits {
   return edits;
 }
 
+/** The entries a patch sets: the API sends its unset fields as null. */
+function present<T extends object>(patch: T | undefined): Partial<T> {
+  return Object.fromEntries(Object.entries(patch ?? {}).filter(([, v]) => v != null)) as Partial<T>;
+}
+
 type Known = {
   profiles: ProfileInfo[];
   depths: DepthInfo[];
@@ -174,7 +179,7 @@ export function draftFromRun(run: RunSummary, name: string, known: Known): Draft
     requested === "custom" || known.depths.some((d) => d.name === requested)
       ? (requested ?? "standard")
       : "standard";
-  const { format, words, ...writing } = form?.writing ?? {};
+  const { format, words, ...writing } = present(form?.writing);
   const options: Partial<RunOptions> = {
     recipe: recipeOf(form ? form.until : run.until, form ? format : run.writing.format),
     depth,
@@ -191,7 +196,7 @@ export function draftFromRun(run: RunSummary, name: string, known: Known): Draft
   if (!form) return draft;
   const filled: Draft = {
     ...draft,
-    writing: { ...writing } as Partial<WritingOptions>,
+    writing: writing as Partial<WritingOptions>,
     domains: {
       ...(form.domains?.allow ? { allow: form.domains.allow } : {}),
       ...(form.domains?.block ? { block: form.domains.block } : {}),
@@ -203,7 +208,7 @@ export function draftFromRun(run: RunSummary, name: string, known: Known): Draft
   if (depth === "custom") {
     const standard = known.depths.find((d) => d.name === "standard");
     const base = standard ? researchOf(standard) : undefined;
-    const values = { ...base, ...form.research } as ReturnType<typeof researchOf>;
+    const values = { ...base, ...present(form.research) } as ReturnType<typeof researchOf>;
     const length = words ?? known.saved?.words ?? standard?.values.words ?? 0;
     return { ...filled, custom: { values, words: length } };
   }
