@@ -20,7 +20,7 @@ from wosarcher.prompts import tones
 from wosarcher.stages.write import style
 
 SKILL = Path(__file__).parents[1] / "skill" / "SKILL.md"
-FIRST_COMMAND = 'wosarcher run "<query>" --until select --json'
+FIRST_COMMAND = 'wosarcher run "<query>" --depth quick --until select --json'
 FENCE = re.compile(r"^```(\w*)\n(.*?)^```", re.MULTILINE | re.DOTALL)
 
 

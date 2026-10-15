@@ -19,22 +19,27 @@ token in `WOSARCHER_TOKEN`.
 ## 1. Cited context (default)
 
 ```sh
-wosarcher run "<query>" --until select --json
+wosarcher run "<query>" --depth quick --until select --json
 ```
 
 Stops after passage selection. Cheaper and faster than a report; write your
 own answer and cite passages by their number `n`, as `[n]`. Prefer this.
 
+Pass `--depth quick` by default: few searches and a short report. Use
+`--depth standard`, `deep`, or `exhaustive` only when the user asks for
+deeper research or a quick run comes back thin; `wosarcher depth list`
+shows every preset.
+
 ## 2. Full report
 
 ```sh
-wosarcher run "<query>" --json
+wosarcher run "<query>" --depth quick --json
 ```
 
 `report.markdown` holds the cited report with a `## References` section.
 
 ```sh
-wosarcher run "<query>" --format answer --json
+wosarcher run "<query>" --depth quick --format answer --json
 ```
 
 For a short cited answer: the direct answer first, then the supporting
@@ -43,8 +48,8 @@ detail, in at most `--words` words, with the same `## References` section.
 ## 3. Local files
 
 ```sh
-wosarcher run "<query>" --attach notes.md --attach docs/ --sources both --until select --json
-wosarcher run "<query>" --attach notes.md --sources files --until select --json
+wosarcher run "<query>" --attach notes.md --attach docs/ --sources both --depth quick --until select --json
+wosarcher run "<query>" --attach notes.md --sources files --depth quick --until select --json
 ```
 
 `--sources` is `files`, `web`, or `both` (default).
