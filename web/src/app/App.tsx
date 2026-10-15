@@ -6,6 +6,7 @@ import type { RunSummary } from "../api/types";
 import { HelpPopover, useHelpState } from "../components/HelpTip";
 import { Toast, UNDO_MS, useToastState } from "../components/Toast";
 import { useRun } from "../run/useRun";
+import { CatalogScreen } from "../screens/catalog/CatalogScreen";
 import { HistoryScreen } from "../screens/history/HistoryScreen";
 import { LiveScreen } from "../screens/live/LiveScreen";
 import { LoginScreen, type LoginState } from "../screens/login/LoginScreen";
@@ -230,6 +231,8 @@ function Current({ route }: { route: Route }) {
       return <LiveScreen />;
     case "report":
       return <ReportScreen key={route.runId} runId={route.runId ?? ""} />;
+    case "catalog":
+      return <CatalogScreen key={route.runId} runId={route.runId ?? ""} />;
     case "history":
       return <HistoryScreen />;
     case "settings":

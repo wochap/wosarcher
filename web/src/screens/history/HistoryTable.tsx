@@ -19,6 +19,12 @@ export const durationOf = (run: RunSummary) =>
   run.duration_s == null ? "–" : minSec(run.duration_s);
 export const costOf = (run: RunSummary) => (run.cost == null ? "–" : `$${run.cost.toFixed(3)}`);
 
+/** The Recipe column: the recipe, or "<n> nodes" for a catalog run ("–" while null). */
+export function recipeLabel(run: RunSummary): string {
+  if (run.kind === "catalog") return run.nodes == null ? "–" : `${run.nodes} nodes`;
+  return recipeOf(run.until, run.writing.format);
+}
+
 type Props = {
   runs: RunSummary[];
   all: RunSummary[];
@@ -36,6 +42,7 @@ export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete 
           <tr>
             <th className={css.queryCol}>Query</th>
             <th>Date</th>
+            <th>Kind</th>
             <th>
               <span className={css.thHelp}>
                 Recipe
@@ -69,7 +76,14 @@ export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete 
                       {run.query}
                     </button>
                   </div>
-                  {run.parent_run_id && (
+                  {run.parent_run_id && run.kind === "catalog" && (
+                    <div className={css.rewrite}>
+                      <ArrowElbowDownRight aria-hidden="true" />
+                      {run.fork_from === "extract" ? "re-extracted from" : "expanded from"}{" "}
+                      <span className={css.id}>{run.parent_run_id}</span>
+                    </div>
+                  )}
+                  {run.parent_run_id && run.kind !== "catalog" && (
                     <div className={css.rewrite}>
                       <ArrowElbowDownRight aria-hidden="true" />
                       rewrite of <span className={css.id}>{run.parent_run_id}</span> ·{" "}
@@ -79,7 +93,14 @@ export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete 
                   )}
                 </td>
                 <td className={css.date}>{dateTime(run.created)}</td>
-                <td>{recipeOf(run.until, run.writing.format)}</td>
+                <td>
+                  <span
+                    className={`tag ${run.kind === "catalog" ? "tag-accent" : "tag-outline"} ${css.kind}`}
+                  >
+                    {run.kind === "catalog" ? "catalog" : "research"}
+                  </span>
+                </td>
+                <td className={css.recipe}>{recipeLabel(run)}</td>
                 <td>
                   <div className={css.tags}>
                     <StatusTag status={run.status} />

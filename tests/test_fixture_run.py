@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 from tests.fixtures.recorded import FIXTURE_RUN, RUNS, config_home, copy_fixture
 from wosarcher.daemon import app
 from wosarcher.models import (
+    STAGES,
     Candidate,
     Chunk,
     Context,
@@ -49,7 +50,7 @@ REGENERATE = "rerun `uv run python -m tests.fixtures.make_recorded_run`"
 
 def test_fixture_parses() -> None:
     run_dir = RUNS / FIXTURE_RUN
-    expected = {name for names in STAGE_ARTIFACTS.values() for name in names}
+    expected = {name for stage in STAGES for name in STAGE_ARTIFACTS[stage]}
     assert expected <= {*DOCUMENTS, *LINES, "report.md", "research.json"}
     assert (run_dir / "report.md").is_file()
     for name, model in DOCUMENTS.items():

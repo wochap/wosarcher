@@ -1,8 +1,10 @@
 """`wosarcher logs` and the event line format shared with the run process's standard error."""
 
+import json
 import logging
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -12,7 +14,11 @@ from wosarcher.cli import app
 from wosarcher.cli.logs import event_line, stderr_listener
 from wosarcher.config import Settings
 from wosarcher.models import (
+    CatalogDoneData,
     HitFoundData,
+    NodeExtractedData,
+    NodeFailedData,
+    NodeFoundData,
     PageFailedData,
     RunDoneData,
     RunFailedData,
@@ -22,6 +28,7 @@ from wosarcher.models import (
     StageFailedData,
     StageStartedData,
     UsageTotals,
+    WaveDoneData,
     make_event,
 )
 from wosarcher.store import RunStore
@@ -142,3 +149,45 @@ def test_logs_follow(daemon: Daemon) -> None:
     assert printed[0] == "run.started"
     assert printed[-1] == "run.done"
     assert "stage.progress" in printed
+
+
+def test_node_found_line() -> None:
+    data = NodeFoundData(
+        node_id="pcm", name="PCM", type="ministry", parent_id=None, depth=0, url=None, wave=1, found_by="seed"
+    )
+    assert line("node.found", "draft", data) == "10:02:05 draft node.found pcm depth 0 ← seed"
+    child = data.model_copy(update={"node_id": "sgp", "parent_id": "pcm", "depth": 1})
+    assert line("node.found", "extract", child).endswith("node.found sgp depth 1 ← pcm")
+
+
+def test_node_extracted_line() -> None:
+    data = NodeExtractedData(
+        node_id="pcm", record={"name": "PCM", "head": None, "type": "ministry"}, flags=["x"], children=4
+    )
+    assert line("node.extracted", "extract", data).endswith("pcm 2 values · 4 children · 1 flags")
+
+
+def test_node_failed_line() -> None:
+    data = NodeFailedData(node_id="pcm", reason="no page")
+    assert line("node.failed", "extract", data).endswith("node.failed pcm no page")
+
+
+def test_wave_and_catalog_done_lines() -> None:
+    wave = WaveDoneData(wave=1, expanded=6, found=14, records=6, failed=0, dropped=0)
+    assert line("wave.done", "extract", wave).endswith("wave 1 expanded 6 found 14 records 6 failed 0")
+    done = CatalogDoneData(waves=3, nodes=120, records=118, flagged=4, reason="frontier empty", note="")
+    assert line("catalog.done", "assemble", done).endswith("3 waves · 118 records · 4 flagged · frontier empty")
+
+
+def test_logs_of_a_catalog_run(daemon: Daemon, tmp_path: Path) -> None:
+    from tests.stages.catalog_data import structure_data
+
+    path = tmp_path / "s.json"
+    path.write_text(json.dumps(structure_data()))
+    assert runner.invoke(app, ["catalog", "b", "--structure", str(path)]).exit_code == 0
+    [run_id] = [p.name for p in daemon.runs_dir.iterdir() if not p.name.startswith(".")]
+    result = runner.invoke(app, ["logs", run_id])
+    assert result.exit_code == 0
+    assert any(
+        " catalog.done 1 waves · 1 records · 0 flagged · frontier empty" in row for row in result.stdout.splitlines()
+    )

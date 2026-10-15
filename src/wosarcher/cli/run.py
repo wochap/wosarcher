@@ -11,6 +11,7 @@ its first stage), 69 no daemon.
 """
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -63,16 +64,19 @@ from wosarcher.cli.options import (
     WordsOption,
     WriteThinkingOption,
     fail,
+    kind_option,
     sources_option,
     stage_option,
     use_map,
 )
 from wosarcher.cli.progress import ProgressView
 from wosarcher.models import (
+    CatalogRecord,
     Context,
     DomainPatch,
     Event,
     ForkCreate,
+    LimitsPatch,
     LLMPatch,
     ReasoningPatch,
     Report,
@@ -80,6 +84,7 @@ from wosarcher.models import (
     RunCreate,
     RunCreated,
     RunFailed,
+    RunKind,
     RunOutput,
     RunQueued,
     RunStarted,
@@ -220,21 +225,26 @@ def artifact[T](client: Api, run_id: str, name: str, model: type[T]) -> T | None
     return TypeAdapter(model).validate_json(response.content)
 
 
-def watch(client: Api, created: RunCreated, rounds: int, as_json: bool, early_exit: int) -> None:
+def watch(
+    client: Api, created: RunCreated, rounds: int, as_json: bool, early_exit: int, kind: RunKind = "research"
+) -> None:
     """Follow the run, print its output, and exit with its status."""
     err = Console(stderr=True)
     with ExitStack() as stack:
         listeners: list[Listener] = []
         view = None
         if err.is_terminal and not as_json:
-            view = stack.enter_context(ProgressView(err, rounds))
+            view = stack.enter_context(ProgressView(err, rounds, kind))
             listeners.append(view)
         listeners.extend(diagnostics(view_shown=view is not None))
         follower = Follower(listeners, view)
         asyncio.run(follow(client, created.run_id, follower))
     assert follower.terminal is not None
     status = STATUS[follower.terminal.type]
-    output(client, created.run_id, status, follower, as_json)
+    if kind == "catalog":
+        catalog_output(client, created.run_id, status, follower, as_json)
+    else:
+        output(client, created.run_id, status, follower, as_json)
     rejected = status == "failed" and not follower.started
     raise typer.Exit(early_exit if rejected else EXIT[status])
 
@@ -265,6 +275,21 @@ def output(client: Api, run_id: str, status: Status, follower: Follower, as_json
         for source in context.sources:
             typer.echo(f"- {source.title} <{source.uri}>")
     err.print(f"run: {run_id}", markup=False)
+
+
+def catalog_output(client: Api, run_id: str, status: Status, follower: Follower, as_json: bool) -> None:
+    """The `records` array of `catalog.json`, or the whole file with `--json`; nothing when there is none."""
+    event = follower.terminal
+    if status != "done":
+        error = event.data.error if isinstance(event, RunFailed) else None
+        message = f"run {run_id} {status}" + (f": {error}" if error else "")
+        Console(stderr=True, highlight=False).print(message, markup=False)
+    found = artifact(client, run_id, "catalog.json", CatalogRecord) if "assemble" in follower.finished else None
+    if found is not None:
+        typer.echo(
+            found.model_dump_json(indent=2) if as_json else json.dumps(found.records, indent=2, ensure_ascii=False)
+        )
+    Console(stderr=True, highlight=False).print(f"run: {run_id}", markup=False)
 
 
 def created(client: Api, path: str, **options: object) -> RunCreated:
@@ -380,6 +405,11 @@ def fork(
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
+    max_depth: Annotated[int | None, typer.Option("--max-depth", help="Catalog fork from expand: max depth.")] = None,
+    max_nodes: Annotated[int | None, typer.Option("--max-nodes", help="Catalog fork from expand: max nodes.")] = None,
+    pages_per_node: Annotated[
+        int | None, typer.Option("--pages-per-node", help="Catalog fork from expand: pages per node.")
+    ] = None,
     as_json: JsonOption = False,
 ) -> None:
     """Copy a run up to --from and run the rest with the saved configuration plus new overrides."""
@@ -408,6 +438,7 @@ def fork(
             use=use_map(use),
             set=set_ or [],
             profile=profile,
+            limits=LimitsPatch(max_depth=max_depth, max_nodes=max_nodes, pages_per_node=pages_per_node),
         )
     except ValidationError as error:
         raise fail(error, 2) from None
@@ -425,17 +456,29 @@ def origin_label(item: RunSummary) -> str:
 
 def runs(
     limit: Annotated[int, typer.Option("--limit", help="How many runs to list.")] = 20,
+    kind: Annotated[
+        str | None, typer.Option("--kind", metavar="research|catalog", callback=kind_option, help="Only this kind.")
+    ] = None,
     as_json: Annotated[bool, typer.Option("--json", help="Print the list as a JSON array.")] = False,
 ) -> None:
     """List runs, newest first."""
-    found = TypeAdapter(list[RunSummary]).validate_python(api(os.environ).get("/api/runs"))[:limit]
+    listed = TypeAdapter(list[RunSummary]).validate_python(api(os.environ).get("/api/runs"))
+    found = [item for item in listed if kind is None or item.kind == kind][:limit]
     if as_json:
         typer.echo(TypeAdapter(list[RunSummary]).dump_json(found, indent=2).decode())
         return
-    table = Table("run", "created", "status", "origin", "version", "parent", "query")
+    table = Table("run", "created", "kind", "status", "origin", "version", "parent", "query")
     for item in found:
         created_at = f"{item.created:%Y-%m-%d %H:%M}"
-        row = (item.run_id, created_at, item.status, origin_label(item), str(item.version), item.parent_run_id or "")
+        row = (
+            item.run_id,
+            created_at,
+            item.kind,
+            item.status,
+            origin_label(item),
+            str(item.version),
+            item.parent_run_id or "",
+        )
         table.add_row(*row, item.query)
     Console(highlight=False).print(table)
 

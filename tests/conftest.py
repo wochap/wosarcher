@@ -18,6 +18,7 @@ from wosarcher.config import AuthConfig, ServerConfig, Settings
 from wosarcher.ports import Exporter
 from wosarcher.server import create_app
 from wosarcher.server.guard import socket_listener
+from wosarcher.server.state import DraftLLM
 
 PASSWORD = "hunter22"
 FAKE_ENGINE = [sys.executable, str(Path(__file__).parent / "server" / "fake_wosarcher.py")]
@@ -91,9 +92,16 @@ def start_daemon(
     monkeypatch.delenv("WOSARCHER_URL", raising=False)
     monkeypatch.delenv("WOSARCHER_TOKEN", raising=False)
 
-    def make(auth: AuthConfig | None = None, grace: float = 0.5, exporter: Exporter | None = None) -> Daemon:
+    def make(
+        auth: AuthConfig | None = None,
+        grace: float = 0.5,
+        exporter: Exporter | None = None,
+        draft_llm: DraftLLM | None = None,
+    ) -> Daemon:
         settings = Settings(server=ServerConfig(static_dir=tmp_path / "no-build"), auth=auth or AuthConfig())
-        app = create_app(settings, runs_dir, config_dir, FAKE_ENGINE, grace=grace, exporter=exporter)
+        app = create_app(
+            settings, runs_dir, config_dir, FAKE_ENGINE, grace=grace, exporter=exporter, draft_llm=draft_llm
+        )
         path = tmp_path / "wosarcher.sock"
         port = free_port()
         unix = uvicorn.Server(uvicorn.Config(socket_listener(app), uds=str(path), lifespan="off", log_level="error"))

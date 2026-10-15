@@ -1,20 +1,26 @@
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
 from wosarcher.models import (
     Attachment,
     Candidate,
+    CatalogRecord,
     Chunk,
     ChunkResult,
     Completion,
     Context,
     Contract,
     DoctorReport,
+    DroppedRecord,
     EmbedderInfo,
+    ExtractedRecord,
     FetchResult,
     Hit,
     LoadResult,
     Message,
+    Node,
     Page,
     Passage,
     Plan,
@@ -24,17 +30,25 @@ from wosarcher.models import (
     QueryScores,
     Reference,
     Report,
+    RunRecord,
     RunRequest,
     Score,
     ScoreResult,
     SearchResult,
+    Seed,
     SelectSkip,
     Skipped,
     Source,
+    Structure,
+    WaveEntry,
     WritingOptions,
     chunk_id,
     file_source_id,
+    is_node_query_id,
+    node_children_query_id,
+    node_self_query_id,
     normalise_url,
+    parse_node_query_id,
     web_source_id,
 )
 
@@ -196,3 +210,234 @@ def test_unknown_drop_reason() -> None:
 def test_report_without_continuation_fields() -> None:
     report = Report.model_validate_json('{"body": "x", "markdown": "x", "cited": [], "references": []}')
     assert (report.continuations, report.truncated) == (0, False)
+
+
+# Catalog contracts
+
+
+TYPES = ["power", "ministry", "public_body", "regional_government", "office", "court", "body"]
+
+
+FIELDS: list[dict[str, Any]] = [
+    {"name": "id", "type": "slug"},
+    {"name": "name", "type": "text", "required": True},
+    {"name": "type", "type": "enum", "values": TYPES},
+    {"name": "parent_id", "type": "ref"},
+    {"name": "head_name", "type": "text", "volatile": True, "dated_by": "verified_on"},
+    {"name": "verified_on", "type": "date"},
+    {"name": "website", "type": "url"},
+]
+
+
+def structure_data(**changes: object) -> dict[str, object]:
+    data: dict[str, object] = {
+        "fields": FIELDS,
+        "relation": "organismos públicos adscritos o dependientes",
+        "seeds": [{"name": f"Seed {i}", "type": "power", "url": f"https://s{i}.gob.pe"} for i in range(6)],
+        "leaf_types": ["regional_government", "office"],
+        "expand": "both",
+        "limits": {"max_depth": 3, "max_nodes": 200, "pages_per_node": 2},
+    }
+    data.update(changes)
+    return data
+
+
+def with_fields(*extra: dict[str, Any], drop: str | None = None) -> dict[str, object]:
+    fields = [f for f in FIELDS if f["name"] != drop]
+    return structure_data(fields=[*fields, *extra])
+
+
+def test_valid_structure() -> None:
+    structure = Structure.model_validate(structure_data())
+    assert structure.name_field.name == "name"
+    assert structure.slug_field is not None
+    assert structure.slug_field.name == "id"
+    assert structure.ref_field is not None
+    assert structure.ref_field.name == "parent_id"
+    assert structure.enum_field.name == "type"
+    assert structure.types == TYPES
+    assert structure.is_expandable("power", 0)
+    assert not structure.is_expandable("office", 1)
+    assert not structure.is_expandable("power", 3)
+    assert Structure.model_validate_json(structure.model_dump_json()) == structure
+
+
+def test_structure_defaults() -> None:
+    data = structure_data()
+    for key in ("leaf_types", "expand", "limits"):
+        del data[key]
+    structure = Structure.model_validate(data)
+    assert (structure.expand, structure.limits.max_depth, structure.limits.max_nodes) == ("both", 3, 200)
+
+
+def test_two_enum_fields() -> None:
+    with pytest.raises(ValidationError, match="type, kind"):
+        Structure.model_validate(with_fields({"name": "kind", "type": "enum", "values": ["a"]}))
+
+
+def test_no_enum_field() -> None:
+    with pytest.raises(ValidationError, match="exactly one enum"):
+        Structure.model_validate(with_fields(drop="type"))
+
+
+def test_two_slug_fields() -> None:
+    with pytest.raises(ValidationError, match=r"slug field .*id, code"):
+        Structure.model_validate(with_fields({"name": "code", "type": "slug"}))
+
+
+def test_two_ref_fields() -> None:
+    with pytest.raises(ValidationError, match=r"ref field .*parent_id, other"):
+        Structure.model_validate(with_fields({"name": "other", "type": "ref"}))
+
+
+def test_no_required_text_field() -> None:
+    with pytest.raises(ValidationError, match="required text field"):
+        Structure.model_validate(with_fields(drop="name"))
+
+
+def test_name_field_is_first_required_text() -> None:
+    data = structure_data()
+    data["fields"] = [{"name": "acronym", "type": "text", "required": True}, *data["fields"]]  # type: ignore[misc]
+    assert Structure.model_validate(data).name_field.name == "acronym"
+
+
+def test_seed_type_outside_enum() -> None:
+    with pytest.raises(ValidationError, match=r"Seed X.*agency"):
+        Structure.model_validate(structure_data(seeds=[{"name": "Seed X", "type": "agency"}]))
+
+
+def test_leaf_type_outside_enum() -> None:
+    with pytest.raises(ValidationError, match="leaf type 'shop'"):
+        Structure.model_validate(structure_data(leaf_types=["shop"]))
+
+
+@pytest.mark.parametrize("dated_by", [None, "website", "missing"])
+def test_volatile_without_date_field(dated_by: str | None) -> None:
+    field: dict[str, Any] = {"name": "budget", "type": "text", "volatile": True, "dated_by": dated_by}
+    with pytest.raises(ValidationError, match="budget"):
+        Structure.model_validate(with_fields(field))
+
+
+def test_volatile_only_on_text() -> None:
+    with pytest.raises(ValidationError, match="website: only text"):
+        Structure.model_validate(
+            with_fields({"name": "website", "type": "url", "volatile": True, "dated_by": "verified_on"}, drop="website")
+        )
+
+
+def test_bad_field_name() -> None:
+    with pytest.raises(ValidationError, match=r"Head Name.*\^\[a-z\]"):
+        Structure.model_validate(with_fields({"name": "Head Name", "type": "text"}))
+
+
+def test_duplicate_field_name() -> None:
+    with pytest.raises(ValidationError, match="unique: website"):
+        Structure.model_validate(with_fields({"name": "website", "type": "url"}))
+
+
+@pytest.mark.parametrize("values", [[], ["a", "a"], [""], [str(i) for i in range(41)]])
+def test_bad_enum_values(values: list[str]) -> None:
+    fields = [f for f in FIELDS if f["name"] != "type"]
+    with pytest.raises(ValidationError, match="enum"):
+        Structure.model_validate(structure_data(fields=[*fields, {"name": "type", "type": "enum", "values": values}]))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"relation": ""},
+        {"relation": "x" * 201},
+        {"seeds": []},
+        {"seeds": [{"name": "S", "type": "power", "url": "ftp://x"}]},
+        {"limits": {"max_depth": 11}},
+        {"limits": {"max_nodes": 5001}},
+        {"limits": {"pages_per_node": 0}},
+        {"expand": "crawl"},
+    ],
+)
+def test_structure_value_ranges(changes: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Structure.model_validate(structure_data(**changes))
+
+
+@pytest.mark.parametrize(
+    ("model", "data"),
+    [
+        (Structure, structure_data(colour="red")),
+        (Seed, {"name": "S", "type": "power", "colour": "red"}),
+        (Node, {"id": "a", "name": "A", "type": "power", "colour": "red"}),
+        (ExtractedRecord, {"node_id": "a", "record": {}, "colour": "red"}),
+        (CatalogRecord, {"records": [], "nodes": 0, "reason": "frontier empty", "colour": "red"}),
+        (WaveEntry, {"wave": 1, "colour": "red"}),
+    ],
+)
+def test_catalog_unknown_field_rejected(model: type[Contract], data: dict[str, object]) -> None:
+    with pytest.raises(ValidationError, match="colour"):
+        model.model_validate(data)
+
+
+def test_unknown_field_key_rejected() -> None:
+    with pytest.raises(ValidationError, match="colour"):
+        Structure.model_validate(with_fields({"name": "x", "type": "text", "colour": "red"}))
+
+
+def test_catalog_contracts_round_trip() -> None:
+    node = Node(
+        id="mef",
+        name="MEF",
+        type="ministry",
+        parent_id="poder-ejecutivo",
+        depth=1,
+        url="https://mef.gob.pe",
+        wave=2,
+        status="extracted",
+        expanded=True,
+        found_by="search",
+        pages=["s1"],
+        flags=["f"],
+    )
+    record = ExtractedRecord(
+        node_id="mef", record={"name": "MEF", "website": None}, sources={"name": "https://mef.gob.pe"}
+    )
+    catalog = CatalogRecord(
+        records=[{"id": "mef", "name": "MEF", "sources": {}, "flags": []}],
+        dropped=[DroppedRecord(node_id="x", field="name")],
+        nodes=2,
+        waves=[WaveEntry(wave=1, expanded=1, found=1, records=1)],
+        reason="frontier empty",
+        note="No unexpanded nodes left after wave 1.",
+        fill={"name": 1},
+        by_type={"ministry": 1},
+        by_depth={"1": 1},
+    )
+    for value in (node, record, catalog, Structure.model_validate(structure_data())):
+        assert type(value).model_validate_json(value.model_dump_json()) == value
+
+
+def test_node_query_ids() -> None:
+    assert (node_self_query_id(4), node_children_query_id(4)) == ("n4s", "n4c")
+    assert parse_node_query_id("n12c") == (12, "c")
+    assert parse_node_query_id("q1") is None
+    assert not is_node_query_id("n4x")
+    query = Query(id="n4s", text="MEF ministry", round=2, node_id="mef")
+    assert Query.model_validate_json(query.model_dump_json()) == query
+    assert Query(id="q0", text="q").node_id is None
+
+
+def test_run_request_kind_and_structure() -> None:
+    assert RunRequest(query="q").kind == "research"
+    request = RunRequest(query="brief", kind="catalog", structure=Structure.model_validate(structure_data()))
+    assert RunRequest.model_validate_json(request.model_dump_json()) == request
+    record = RunRecord.model_validate(
+        {
+            "run_id": "r",
+            "created_at": "2026-01-01T00:00:00Z",
+            "request": request.model_dump(),
+            "profile": "p",
+            "settings": {},
+        }
+    )
+    assert record.kind == "catalog"
+    assert record.structure == request.structure
+    with pytest.raises(ValidationError):
+        RunRequest(query="q", kind="crawl")  # type: ignore[arg-type]

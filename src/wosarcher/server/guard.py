@@ -119,9 +119,13 @@ def has_body(connection: HTTPConnection) -> bool:
     return chunked or (length.isdigit() and int(length) > 0)
 
 
+MULTIPART_PATHS = ("/api/runs", "/api/catalog/draft")
+
+
 def check_content_type(connection: HTTPConnection, method: str, path: str) -> None:
     media = connection.headers.get("content-type", "").partition(";")[0].strip().lower()
-    expected = "multipart/form-data" if method == "POST" and path == "/api/runs" else "application/json"
+    multipart = method == "POST" and path in MULTIPART_PATHS
+    expected = "multipart/form-data" if multipart else "application/json"
     if media != expected:
         raise RefusalError(415, "unsupported_media_type", f"{method} {path} needs Content-Type {expected}")
 

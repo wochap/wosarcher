@@ -35,9 +35,13 @@ from pathlib import Path
 
 from wosarcher.config import ConfigError, list_entries, redact, resolve_run, without_use
 from wosarcher.models import (
+    CATALOG_STAGES,
     STAGES,
+    CatalogDoneData,
+    CatalogRecord,
     Context,
     DoctorReport,
+    Node,
     ProviderHealth,
     Report,
     RunCancelledData,
@@ -48,6 +52,7 @@ from wosarcher.models import (
     StageDoneData,
     StageProgressData,
     StageStartedData,
+    Structure,
     UsageTotals,
 )
 from wosarcher.store import RunStore
@@ -77,6 +82,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
         command.add_argument("--token-name")
     run.add_argument("--form")
     run.add_argument("--depth")
+    run.add_argument("--kind", default="research")
+    run.add_argument("--structure")
+    for command in (run, fork):
+        for flag in ("--max-depth", "--max-nodes", "--pages-per-node"):
+            command.add_argument(flag, type=int)
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
     doctor.add_argument("--profile")
@@ -115,6 +125,53 @@ def doctor(store: RunStore, argv: list[str], entries: list[str]) -> int:
     return 1 if any(row.status == "failed" for row in report.providers) else 0
 
 
+DERIVED = {
+    "fields": [
+        {"name": "name", "type": "text", "required": True},
+        {"name": "type", "type": "enum", "values": ["ministry"]},
+    ],
+    "relation": "derived",
+    "seeds": [{"name": "Derived", "type": "ministry"}],
+}
+"""The structure a catalog run without one gets, standing in for the draft call."""
+
+
+def raised(parent: RunRecord, args: argparse.Namespace) -> Structure | None:
+    """The parent's structure with the fork's limit flags over it."""
+    if parent.request.structure is None:
+        return None
+    flags = {"max_depth": args.max_depth, "max_nodes": args.max_nodes, "pages_per_node": args.pages_per_node}
+    limits = parent.request.structure.limits.model_copy(update={k: v for k, v in flags.items() if v is not None})
+    return parent.request.structure.model_copy(update={"limits": limits})
+
+
+def catalog(store: RunStore, record: RunRecord, first: str | None) -> int:
+    """A catalog run: every catalog stage from `first`, one record per seed, then `catalog.done` and `run.done`."""
+    run_id = record.run_id
+    structure = record.request.structure or Structure.model_validate(DERIVED)
+    store.write_artifact(run_id, "structure.json", structure)
+    nodes = [
+        Node(id=f"n{n}", name=seed.name, type=seed.type, status="extracted") for n, seed in enumerate(structure.seeds)
+    ]
+    store.write_text(run_id, "nodes.jsonl", "".join(node.model_dump_json() + "\n" for node in nodes))
+    start = CATALOG_STAGES.index(first) if first else 0
+    until = record.request.until
+    end = CATALOG_STAGES.index(until) + 1 if until else len(CATALOG_STAGES)
+    for stage in CATALOG_STAGES[start:end]:
+        store.append_event(run_id, "stage.done", stage, StageDoneData(count=0, seconds=0))
+    if end < len(CATALOG_STAGES):
+        store.append_event(run_id, "run.done", None, RunDoneData(until=until, totals=UsageTotals()))
+        return 0
+    records = [{"id": node.id, "name": node.name, "type": node.type} for node in nodes]
+    store.write_artifact(
+        run_id, "catalog.json", CatalogRecord(records=records, nodes=len(nodes), reason="frontier empty")
+    )
+    done = CatalogDoneData(waves=1, nodes=len(nodes), records=len(nodes), flagged=0, reason="frontier empty", note="")
+    store.append_event(run_id, "catalog.done", "assemble", done)
+    store.append_event(run_id, "run.done", None, RunDoneData(until=record.request.until, totals=UsageTotals()))
+    return 0
+
+
 def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
     run_dir = store.run_dir(args.run_id)
     if run_dir.exists():
@@ -138,11 +195,20 @@ def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
     depth = getattr(args, "depth", None)
     if args.command == "fork":
         parent = store.read_record(args.parent)
-        request = parent.request.model_copy(update={"until": args.until})
+        request = parent.request.model_copy(update={"until": args.until, "structure": raised(parent, args)})
         lineage = {"parent_run_id": args.parent, "fork_from": args.from_stage, "version": parent.version + 1}
         profile, overrides = args.profile or parent.profile, [*without_use(parent.overrides), *args.set]
     else:
-        request = RunRequest(query=args.query, sources=args.sources, until=args.until, attachments=names, depth=depth)
+        structure = Structure.model_validate_json(args.structure) if args.structure else None
+        request = RunRequest(
+            query=args.query,
+            sources=args.sources,
+            until=args.until,
+            attachments=names,
+            depth=depth,
+            kind=args.kind,
+            structure=structure,
+        )
         lineage = {}
         profile, overrides = args.profile or "workstation", args.set
     overrides += [f"use.{choice}" for choice in args.use]
@@ -201,6 +267,8 @@ def main(argv: list[str]) -> int:
         for n in range(30):
             print(f"traceback line {n}", file=sys.stderr)
         return 1
+    if record.request.kind == "catalog":
+        return catalog(store, record, args.from_stage if args.command == "fork" else None)
     if mode == "huge-stderr":
         print("x" * 100_000, file=sys.stderr)
         return 1

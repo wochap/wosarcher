@@ -27,7 +27,17 @@ from pydantic import (
 )
 from pydantic_core import to_jsonable_python
 
-from wosarcher.models import Effort, FinishedStatus, Stage, WritingOptions, domain_list, search_language
+from wosarcher.models import (
+    Effort,
+    ExpandMode,
+    FinishedStatus,
+    Limits,
+    Stage,
+    Structure,
+    WritingOptions,
+    domain_list,
+    search_language,
+)
 
 ENV_PREFIX = "WOSARCHER_"
 CLIENT_ENV = ("WOSARCHER_URL", "WOSARCHER_TOKEN", "WOSARCHER_SOCKET", "WOSARCHER_DEPTH")
@@ -86,6 +96,10 @@ DEFAULT_STAGE_TIMEOUTS: dict[Stage, float] = {
     "gap": 360,
     "select": 60,
     "write": 1800,
+    "draft": 360,
+    "expand": 60,
+    "extract": 1800,
+    "assemble": 60,
 }
 
 # Concurrency per adapter when a block leaves `concurrency` unset.
@@ -253,6 +267,39 @@ class ResearchConfig(Block):
     """Send the plan's question parts to the gap step; a temporary switch for measuring that input."""
 
 
+class CatalogConfig(Block):
+    """Catalog runs: the defaults a structure's limits and expand mode take, and the extract stage's knobs."""
+
+    max_depth: int = Field(default=3, ge=1, le=10)
+    max_nodes: int = Field(default=200, ge=1, le=5000)
+    pages_per_node: int = Field(default=2, ge=1, le=10)
+    expand: ExpandMode = "both"
+    max_children: int = Field(default=50, gt=0)
+    """Children kept per extraction."""
+    concurrency: int = Field(default=4, gt=0)
+    """Extraction calls in flight."""
+    context_tokens: Annotated[int, Field(gt=0)] | Literal["auto"] = "auto"
+    """The extract budget; `auto`: all the room the context window leaves."""
+
+    @property
+    def limits(self) -> Limits:
+        return Limits(max_depth=self.max_depth, max_nodes=self.max_nodes, pages_per_node=self.pages_per_node)
+
+
+def catalog_structure(structure: Structure | dict[str, Any], catalog: CatalogConfig) -> Structure:
+    """The structure with the `catalog` block's limits and expand mode filling the keys it leaves unset.
+
+    Keys the structure sets win over the block; a `Structure` value counts every key as set that it was
+    built with (`model_fields_set`).
+    """
+    data = structure.model_dump(exclude_unset=True) if isinstance(structure, Structure) else dict(structure)
+    raw: object = data.get("limits") or {}
+    limits = raw.model_dump(exclude_unset=True) if isinstance(raw, Limits) else cast(dict[str, Any], raw)
+    data["limits"] = {**catalog.limits.model_dump(), **limits}
+    data.setdefault("expand", catalog.expand)
+    return Structure.model_validate(data)
+
+
 class RunConfig(Block):
     gpu_policy: Literal["shared", "exclusive"] = "shared"
     runs_dir: Path | None = None
@@ -310,6 +357,7 @@ class Settings(Block):
     chunk: ChunkConfig = ChunkConfig()
     select: SelectConfig = SelectConfig()
     research: ResearchConfig = ResearchConfig()
+    catalog: CatalogConfig = CatalogConfig()
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
     server: ServerConfig = ServerConfig()

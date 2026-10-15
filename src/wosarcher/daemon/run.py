@@ -17,7 +17,7 @@ import signal
 import sys
 from collections.abc import Callable
 from contextlib import ExitStack
-from typing import Annotated, Literal, get_args
+from typing import Annotated, Any, Literal, cast, get_args
 
 import httpx
 import typer
@@ -75,6 +75,7 @@ from wosarcher.config import (
     Prices,
     Resolved,
     Settings,
+    catalog_structure,
     fork_settings,
     resolve_run,
     resolve_server,
@@ -84,15 +85,19 @@ from wosarcher.config import (
 )
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
+    CATALOG_STAGES,
+    CatalogRecord,
     Context,
     Origin,
     Report,
     RunCreate,
     RunFailed,
+    RunKind,
     RunOutput,
     RunRecord,
     RunRequest,
     Stage,
+    Structure,
 )
 from wosarcher.runner import Runner
 from wosarcher.runner.events import Listener
@@ -105,6 +110,50 @@ RunIdOption = Annotated[str | None, typer.Option("--run-id", help="Create the ru
 OriginOption = Annotated[str, typer.Option("--origin", hidden=True)]
 TokenNameOption = Annotated[str | None, typer.Option("--token-name", hidden=True)]
 FormOption = Annotated[str | None, typer.Option("--form", hidden=True, help="The API request as JSON.")]
+KindOption = Annotated[str, typer.Option("--kind", help="Run kind: research or catalog.")]
+StructureOption = Annotated[
+    str | None, typer.Option("--structure", help="The catalog structure as JSON; absent: the draft stage derives one.")
+]
+MaxDepthOption = Annotated[int | None, typer.Option("--max-depth", help="Catalog limit: deepest node level.")]
+MaxNodesOption = Annotated[int | None, typer.Option("--max-nodes", help="Catalog limit: nodes in the run.")]
+PagesPerNodeOption = Annotated[int | None, typer.Option("--pages-per-node", help="Catalog limit: pages per node.")]
+
+
+def catalog_limits(max_depth: int | None, max_nodes: int | None, pages_per_node: int | None) -> dict[str, int]:
+    found = {"max_depth": max_depth, "max_nodes": max_nodes, "pages_per_node": pages_per_node}
+    return {name: value for name, value in found.items() if value is not None}
+
+
+def limit_overrides(limits: dict[str, int]) -> list[str]:
+    """The limit flags as `catalog.<limit>` overrides."""
+    return [f"catalog.{name}={value}" for name, value in limits.items()]
+
+
+def catalog_request(
+    kind: str, structure: str | None, limits: dict[str, int], settings: Settings, sources: str, depth: str | None
+) -> Structure | None:
+    """The run's structure: the JSON with the limit flags over it and the `catalog` block under it."""
+    if kind not in get_args(RunKind):
+        raise fail(f"--kind must be one of: {', '.join(get_args(RunKind))}", 2)
+    if kind == "research":
+        if structure is not None or limits:
+            raise fail("--structure and the limit flags are only for --kind catalog", 2)
+        return None
+    if sources == "files":
+        raise fail("sources: a catalog run cannot use --sources files", 2)
+    if depth:
+        raise fail("--depth is not for catalog runs", 2)
+    if structure is None:
+        return None
+    try:
+        data = json.loads(structure)
+        if not isinstance(data, dict):
+            raise ValueError("--structure must be a JSON object")
+        given = cast(dict[str, Any], data)
+        given["limits"] = {**cast(dict[str, Any], given.get("limits") or {}), **limits}
+        return catalog_structure(given, settings.catalog)
+    except (ValueError, ValidationError) as error:
+        raise fail(f"--structure: {error}", 2) from None
 
 
 def writing_overrides(**fields: str | int | None) -> list[str]:
@@ -195,7 +244,7 @@ def start(store: RunStore, settings: Settings, record: RunRecord, until: Stage |
     with ExitStack() as stack:
         listeners: list[Listener] = []
         if err.is_terminal and not as_json:
-            listeners.append(stack.enter_context(ProgressView(err, settings.research.rounds)))
+            listeners.append(stack.enter_context(ProgressView(err, settings.research.rounds, record.kind)))
         listeners.extend(diagnostics(view_shown=bool(listeners)))
         status = asyncio.run(execute(store, settings, record.run_id, until, listeners))
     output(store, record.run_id, status, as_json)
@@ -214,6 +263,9 @@ def output(store: RunStore, run_id: str, status: Status, as_json: bool) -> None:
         typer.echo(result.model_dump_json(indent=2))
         return
     err = Console(stderr=True, highlight=False)
+    if (store.run_dir(run_id) / "catalog.json").is_file() and not as_json:
+        found = store.read_artifact(run_id, "catalog.json", CatalogRecord)
+        typer.echo(json.dumps(found.records, indent=2, ensure_ascii=False))
     if status != "done":
         err.print(f"run {run_id} {status}" + (f": {error}" if error else ""), markup=False)
     if report is not None:
@@ -265,6 +317,11 @@ def run(
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
+    kind: KindOption = "research",
+    structure: StructureOption = None,
+    max_depth: MaxDepthOption = None,
+    max_nodes: MaxNodesOption = None,
+    pages_per_node: PagesPerNodeOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
     origin: OriginOption = "cli",
@@ -299,13 +356,30 @@ def run(
         "gap_context_tokens": gap_context_tokens,
     }
     thinking = llm_overrides(model, limits, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
-    overrides = [*(set_ or []), *flags, *research, *domains, *thinking, *use_overrides(use_map(use))]
+    caps = catalog_limits(max_depth, max_nodes, pages_per_node)
+    overrides = [
+        *(set_ or []),
+        *flags,
+        *research,
+        *domains,
+        *thinking,
+        *limit_overrides(caps),
+        *use_overrides(use_map(use)),
+    ]
     env = os.environ
     settings, entries = checked(lambda: resolve_run(profile, overrides, env, depth))
+    found = catalog_request(kind, structure, caps, settings, chosen, depth)
+    if kind == "catalog" and stop is not None and stop not in CATALOG_STAGES:
+        raise fail(f"--until {stop} is not a catalog stage; stages: {', '.join(CATALOG_STAGES)}", 2)
+    if found is not None and found.language and search_language is None:
+        overrides = [*overrides, *language_overrides(found.language)]
+        settings, entries = checked(lambda: resolve_run(profile, overrides, env, depth))
     source, token = origin_option(origin, token_name)
     store = RunStore.from_settings(settings)
     try:
-        request = RunRequest(query=query, sources=chosen, until=stop, depth=depth)
+        request = RunRequest(
+            query=query, sources=chosen, until=stop, depth=depth, kind=cast(RunKind, kind), structure=found
+        )
         record = store.create(
             request,
             select_profile(profile, env),
@@ -346,6 +420,9 @@ def fork(
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
+    max_depth: MaxDepthOption = None,
+    max_nodes: MaxNodesOption = None,
+    pages_per_node: PagesPerNodeOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
     origin: OriginOption = "cli",
@@ -372,7 +449,8 @@ def fork(
         "gap_context_tokens": gap_context_tokens,
     }
     thinking = llm_overrides(model, limits, plan=plan_thinking, gap=gap_thinking, write=write_thinking)
-    new = [*(set_ or []), *flags, *thinking]
+    caps = catalog_limits(max_depth, max_nodes, pages_per_node)
+    new = [*(set_ or []), *flags, *thinking, *limit_overrides(caps)]
     chosen = use_map(use)
     env = os.environ
     try:
@@ -414,6 +492,7 @@ def fork(
             origin=source,
             token_name=token,
             lock=True,
+            limits=caps,
         )
     except RunStoreError as error:
         raise fail(error, 2) from None

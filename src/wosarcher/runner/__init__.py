@@ -6,14 +6,15 @@ resumes, and continues forks the same way.
 
 import asyncio
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from wosarcher.config import Settings
 from wosarcher.http import Usage, UsageLedger
 from wosarcher.models import (
+    CATALOG_STAGES,
     LOOP_STAGES,
     STAGES,
     Page,
@@ -37,7 +38,7 @@ from wosarcher.models import (
     UsageTotals,
 )
 from wosarcher.ports import Adapters
-from wosarcher.runner import steps
+from wosarcher.runner import catalog, steps
 from wosarcher.runner.caches import CachedFetcher
 from wosarcher.runner.devices import GPU_BLOCK, gpu_device, needs_release, next_gpu_stage, stage_provider
 from wosarcher.runner.events import EventLog, Listener
@@ -106,31 +107,45 @@ class Runner:
     stage_usage: dict[str, Usage] = field(default_factory=dict[str, Usage])
     warnings: list[str] = field(default_factory=list[str])
     """Release errors, reported on the next `stage.done`."""
+    current: Stage | None = None
+    """The stage running now; a cancelled run reports it."""
 
     async def run(self, run_id: str, until: Stage | None = None) -> RunEnd:
         """Run every unfinished stage up to `until`; return `done` or `failed`. Cancellation re-raises."""
         record = self.store.read_record(run_id)
         log = EventLog(self.store, run_id, self.listeners)
         cache = PageCache(self.store.cache_dir / "pages", self.settings.run.page_cache_ttl_hours)
-        ctx = steps.StepContext(
-            self.store, record, self.settings, self.adapters, log, CachedFetcher(self.adapters.fetcher, cache)
-        )
+        fetcher = CachedFetcher(self.adapters.fetcher, cache)
+        is_catalog = record.kind == "catalog"
+        context = catalog.CatalogContext if is_catalog else steps.StepContext
+        ctx = context(self.store, record, self.settings, self.adapters, log, fetcher)
+        order = CATALOG_STAGES if is_catalog else STAGES
+        if until is not None and until not in order:
+            log.emit("run.started", None, self.started(record, until))
+            error = f"--until {until} is not a stage of a {record.kind} run; stages: {', '.join(order)}"
+            log.emit("run.failed", None, RunFailedData(stage=None, error=error))
+            return "failed"
         finished = self.store.finished_stages(run_id)
-        last = STAGES.index(until) if until else len(STAGES) - 1
-        todo: list[Stage] = [stage for stage in STAGES[: last + 1] if stage not in finished]
+        last = order.index(until) if until else len(order) - 1
+        todo: list[Stage] = [stage for stage in order[: last + 1] if stage not in finished]
         skipped = SKIPPED_BY[record.request.sources]
         runnable: list[Stage] = [stage for stage in todo if stage not in skipped]
         log.emit("run.started", None, self.started(record, until))
-        current: Stage | None = None
-        if "search" in todo and "plan" not in todo:
+        self.current = None
+        if not is_catalog and "search" in todo and "plan" not in todo:
             self.restart_loop(run_id)
         try:
             down = await preflight(self.settings, self.adapters.managed, runnable)
             if down:
                 raise StageError(*down)
+            if is_catalog and record.request.sources == "files":
+                raise StageError(todo[0] if todo else "load", "a catalog run cannot use sources files")
+            if isinstance(ctx, catalog.CatalogContext):
+                await catalog.run_stages(self, ctx, todo, until)
+                todo = []
             looped = False
             for stage in todo:
-                current = stage
+                self.current = stage
                 if looped and stage in LOOP_STAGES:
                     continue
                 if stage == "search" and ctx.planned_rounds() > 1:
@@ -149,6 +164,7 @@ class Runner:
             log.emit("run.failed", None, RunFailedData(stage=failure.stage, error=failure.error))
             return "failed"
         except asyncio.CancelledError:
+            current = self.current
             if current is not None and self.settings.run.gpu_policy == "exclusive":
                 with suppress(Exception):
                     await asyncio.shield(self.release(current))
@@ -163,6 +179,7 @@ class Runner:
     def started(self, record: RunRecord, until: Stage | None) -> RunStartedData:
         return RunStartedData(
             query=record.request.query,
+            kind=record.kind,
             profile=record.profile,
             parent_run_id=record.parent_run_id,
             version=record.version,
@@ -250,7 +267,11 @@ class Runner:
             self.store.write_text(ctx.run_id, name, "")
         ctx.log.emit("stage.done", stage, StageDoneData(count=0, seconds=0, skipped=True))
 
-    async def run_stage(self, ctx: steps.StepContext, stage: Stage) -> None:
+    async def run_stage(
+        self, ctx: steps.StepContext, stage: Stage, step: Callable[[Any], Awaitable[steps.Outcome]] | None = None
+    ) -> None:
+        """Run one stage phase; `step` defaults to the research step of `stage`."""
+        step = step or steps.STEPS[stage]
         device = gpu_device(stage, self.settings)
         number = ctx.round.number
         started = StageStartedData(device=device, provider=stage_provider(stage, self.settings), round=number)
@@ -260,13 +281,13 @@ class Runner:
         timeout = self.settings.run.stage_timeouts[stage]
         try:
             async with asyncio.timeout(timeout):
-                outcome = await steps.STEPS[stage](ctx)
+                outcome = await step(ctx)
         except TimeoutError:
             outcome = self.failed_stage(ctx, stage, f"timed out after {timeout:g} s")
         except Exception as error:
             outcome = self.failed_stage(ctx, stage, str(error) or type(error).__name__)
         ctx.log.flush(stage)
-        if outcome.count == 0 and number == 1:
+        if outcome.count == 0 and number == 1 and ctx.record.kind == "research":
             files = len(self.store.read_items(ctx.run_id, "files.jsonl", Page))
             if empty_fails(stage, ctx.record.request.sources, files):
                 raise StageError(stage, "no output")

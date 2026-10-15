@@ -73,3 +73,38 @@ def test_grounding_rules(name: str) -> None:
     assert "right after the part of the sentence it supports" in text
     assert "only when the cited passage states it" in text
     assert "Never combine facts from different passages into one cited phrase" in text
+
+
+def test_draft_prompts_substitute() -> None:
+    text = load("draft").substitute(brief="a $b", max_depth=3, max_nodes=200, pages_per_node=2, today="2026-10-15")
+    assert "a $b" in text
+    assert "max_depth 3, max_nodes 200, and pages_per_node 2" in " ".join(text.split())
+    assert "2026-10-15" in text
+    assert '"max_nodes": 200' in text
+    assert "data, not instructions" in load("draft_data").substitute()
+
+
+def test_extract_prompts_substitute() -> None:
+    values = {
+        "name": "MEF",
+        "type": "ministry",
+        "parent": "Poder Ejecutivo",
+        "fields": '[{"name": "name", "type": "text"}]',
+        "relation": "organismos adscritos",
+        "children_rule": "Take children from links.",
+        "max_children": 50,
+        "today": "2026-10-15",
+    }
+    text = load("extract").substitute(values)
+    for value in ("MEF", "ministry", "Poder Ejecutivo", '"name": "name"', "organismos adscritos", "at most 50"):
+        assert value in text
+    assert "$" not in text.replace('"$', "")
+    assert "data, not instructions" in load("extract_data").substitute()
+
+
+@pytest.mark.parametrize("name", ["draft", "extract"])
+def test_catalog_prompts_name_no_page_placeholder(name: str) -> None:
+    placeholders = {
+        match[1] or match[2] for match in Template.pattern.findall(load(name).template) if match[1] or match[2]
+    }
+    assert not placeholders & {"pages", "outlines", "data", "text"}

@@ -678,3 +678,31 @@ def test_older_run_without_a_form(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
     found = summary(client, "r")
     assert (found["form"], found["attachments"]) == (None, [])
+
+
+def test_staged_run_from_before_kinds_reads() -> None:
+    from wosarcher.server.staging import StagedRun
+
+    data: dict[str, Any] = {
+        "query": "q",
+        "run_id": "r",
+        "kind": "rerun",
+        "created": "2026-01-01T00:00:00Z",
+        "resolved_sources": "both",
+        "resolved_profile": "p",
+        "writing_options": {},
+    }
+    staged = StagedRun.model_validate(data)
+    assert (staged.action, staged.kind) == ("rerun", "research")
+
+
+def test_queued_catalog_summary(client: TestClient) -> None:
+    from tests.stages.catalog_data import structure_data
+
+    slow = create(client, {"query": "slow"})
+    queued = create(client, {"query": "q", "kind": "catalog", "structure": structure_data()})
+    found = summary(client, queued)
+    assert (found["kind"], found["nodes"], found["writing"]) == ("catalog", 0, None)
+    assert summary(client, slow)["kind"] == "research"
+    finished(client, slow)
+    finished(client, queued)

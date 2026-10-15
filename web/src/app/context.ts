@@ -2,7 +2,14 @@
 import { type Context, createContext, useContext } from "react";
 import type { ApiClient } from "../api/client";
 import type { SocketFactory } from "../api/events";
-import type { DomainLists, ResearchValues, Use, WritingOptions } from "../api/types";
+import type {
+  DomainLists,
+  ResearchValues,
+  RunKind,
+  Structure,
+  Use,
+  WritingOptions,
+} from "../api/types";
 import type { Help } from "../components/help";
 import type { Depth } from "../run/depth";
 import type { Recipe } from "../run/format";
@@ -36,7 +43,13 @@ export type RunOptions = {
 
 /** The New run form, kept while the user visits other screens. Options hold overrides only. */
 export type Draft = {
+  /** The Kind seg: the research form or the catalog form. */
+  kind: RunKind;
   query: string;
+  /** The catalog brief, kept apart from the research question. */
+  brief: string;
+  /** The catalog structure, once drafted (or filled from a run); edited in the Structure panel. */
+  structure: Structure | null;
   files: File[];
   /** Attachments taken from an earlier run (Recent & pinned), sent by name. */
   reused: ReusedFile[];
@@ -56,7 +69,10 @@ export type Draft = {
   profileEdits: ProfileEdits;
 };
 export const EMPTY_DRAFT: Draft = {
+  kind: "research",
   query: "",
+  brief: "",
+  structure: null,
   files: [],
   reused: [],
   options: {},

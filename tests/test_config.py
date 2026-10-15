@@ -5,8 +5,10 @@ import pytest
 from pydantic import SecretStr
 
 from wosarcher.config import (
+    CatalogConfig,
     ConfigError,
     Settings,
+    catalog_structure,
     fork_settings,
     list_depths,
     list_entries,
@@ -906,3 +908,51 @@ def test_fork_profile_gone(env: dict[str, str]) -> None:
 def test_toml_quotes_model_ids() -> None:
     tree = {"models": {"qwen3.5:9b": {"reasoning": {"write": "high"}}}, "llm": {"model": "qwen3.5:9b"}}
     assert tomllib.loads(to_toml(tree)) == tree
+
+
+# Catalog block
+
+
+def test_catalog_defaults(env: dict[str, str]) -> None:
+    catalog = resolve(None, [], env).catalog
+    values = (catalog.max_depth, catalog.max_nodes, catalog.pages_per_node, catalog.expand)
+    assert values == (3, 200, 2, "both")
+    assert (catalog.max_children, catalog.concurrency, catalog.context_tokens) == (50, 4, "auto")
+
+
+def test_catalog_in_profile(env: dict[str, str]) -> None:
+    user_profile(env, "p", BASE_PROFILE + "[catalog]\nmax_nodes = 500\ncontext_tokens = 12000\n")
+    catalog = resolve(None, [], env).catalog
+    assert (catalog.max_nodes, catalog.context_tokens) == (500, 12000)
+
+
+def test_catalog_invalid_concurrency(env: dict[str, str]) -> None:
+    path = user_profile(env, "p", BASE_PROFILE + "[catalog]\nconcurrency = 0\n")
+    with pytest.raises(ConfigError) as error:
+        resolve(None, [], env)
+    assert str(path) in str(error.value)
+    assert "catalog.concurrency" in str(error.value)
+
+
+def test_preset_cannot_set_catalog(env: dict[str, str]) -> None:
+    path = write(env, "depths/big.toml", "[catalog]\nmax_nodes = 900\n")
+    with pytest.raises(ConfigError) as error:
+        load_depth("big", env)
+    assert str(path) in str(error.value)
+    assert "catalog.max_nodes" in str(error.value)
+
+
+def test_structure_wins_over_catalog_block() -> None:
+    structure = {
+        "fields": [
+            {"name": "name", "type": "text", "required": True},
+            {"name": "type", "type": "enum", "values": ["a"]},
+        ],
+        "relation": "r",
+        "seeds": [{"name": "S", "type": "a"}],
+        "limits": {"max_nodes": 200},
+    }
+    resolved = catalog_structure(structure, CatalogConfig(max_nodes=500, max_depth=5, expand="links"))
+    assert (resolved.limits.max_nodes, resolved.limits.max_depth, resolved.expand) == (200, 5, "links")
+    structure["expand"] = "search"
+    assert catalog_structure(structure, CatalogConfig(expand="links")).expand == "search"

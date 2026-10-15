@@ -13,6 +13,7 @@ import type {
   SessionInfo,
   SlotState,
   SourceView,
+  Structure,
   TokenInfo,
 } from "../api/types";
 import * as fixtures from "./fixtures/data";
@@ -35,6 +36,8 @@ export type FakeData = {
   providers: ProvidersReport;
   session: SessionInfo;
   tokens: TokenInfo[];
+  /** What `draftStructure` answers: a structure, or an error to throw. */
+  draft: Structure | ApiError | null;
   /** Answers to `login`, in order; when empty, the login succeeds. */
   logins: LoginResult[];
 };
@@ -58,6 +61,7 @@ export function fakeData(overrides: Partial<FakeData> = {}): FakeData {
     session: fixtures.session,
     tokens: fixtures.tokens,
     logins: [],
+    draft: fixtures.structure,
     ...overrides,
   });
 }
@@ -104,6 +108,12 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
     async forkRun(id, body) {
       record("forkRun", id, body);
       return created(find(id).query);
+    },
+    async draftStructure(request, attachments) {
+      record("draftStructure", request, attachments);
+      if (data.draft instanceof ApiError) throw data.draft;
+      if (!data.draft) throw new ApiError(502, "draft_failed", "the draft call failed");
+      return structuredClone(data.draft);
     },
     async rerunRun(id) {
       record("rerunRun", id);

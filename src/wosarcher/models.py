@@ -15,6 +15,7 @@ from pydantic import (
     TypeAdapter,
     field_validator,
     model_serializer,
+    model_validator,
 )
 
 TRACKING_PARAMETERS = {"fbclid", "gclid"}
@@ -109,7 +110,9 @@ class Query(Contract):
     id: str
     text: str
     round: int = Field(default=1, ge=1)
-    """The research round that searches it; follow-ups start at 2."""
+    """The research round (or the wave of a catalog run) that searches it; follow-ups start at 2."""
+    node_id: str | None = None
+    """The catalog node a node query (`n<k>s`, `n<k>c`) is about; None otherwise."""
 
 
 class Plan(Contract):
@@ -389,7 +392,22 @@ class Report(Contract):
     """The last call ended at the output limit, or a continuation failed."""
 
 
-Stage = Literal["load", "plan", "search", "fetch", "chunk", "prefilter", "score", "gap", "select", "write"]
+Stage = Literal[
+    "load",
+    "plan",
+    "search",
+    "fetch",
+    "chunk",
+    "prefilter",
+    "score",
+    "gap",
+    "select",
+    "write",
+    "draft",
+    "expand",
+    "extract",
+    "assemble",
+]
 STAGES: tuple[Stage, ...] = (
     "load",
     "plan",
@@ -402,7 +420,7 @@ STAGES: tuple[Stage, ...] = (
     "select",
     "write",
 )
-"""Run order."""
+"""Run order of a research run."""
 LOOP_STAGES: tuple[Stage, ...] = ("search", "fetch", "chunk", "prefilter", "score", "gap")
 """The stages that repeat once per research round."""
 
@@ -447,6 +465,257 @@ class ResearchRecord(Contract):
     rounds: list[RoundRecord]
 
 
+# Catalog runs
+
+RunKind = Literal["research", "catalog"]
+"""`research` answers a question with a report; `catalog` crawls a structure into records."""
+CATALOG_STAGES: tuple[Stage, ...] = ("load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble")
+"""Run order of a catalog run."""
+WAVE_STAGES: tuple[Stage, ...] = ("expand", "search", "fetch", "chunk", "extract")
+"""The stages that repeat once per wave."""
+FieldType = Literal["text", "slug", "url", "date", "enum", "ref"]
+ExpandMode = Literal["links", "search", "both"]
+NodeStatus = Literal["discovered", "expanding", "extracted", "failed"]
+FoundBy = Literal["seed", "links", "search"]
+CatalogStopReason = Literal["frontier empty", "max nodes", "page limit reached", "extract failed"]
+FIELD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+NODE_QUERY_PATTERN = re.compile(r"^n([0-9]+)([sc])$")
+
+
+def node_self_query_id(index: int) -> str:
+    """The self query ID `n<k>s` of the node with discovery index `k`."""
+    return f"n{index}s"
+
+
+def node_children_query_id(index: int) -> str:
+    """The children query ID `n<k>c` of the node with discovery index `k`."""
+    return f"n{index}c"
+
+
+def parse_node_query_id(query_id: str) -> tuple[int, Literal["s", "c"]] | None:
+    """`(k, "s" | "c")` for a node query ID, None for any other query ID."""
+    match = NODE_QUERY_PATTERN.match(query_id)
+    if not match:
+        return None
+    return int(match.group(1)), "s" if match.group(2) == "s" else "c"
+
+
+def is_node_query_id(query_id: str) -> bool:
+    return parse_node_query_id(query_id) is not None
+
+
+def is_http_url(value: str) -> bool:
+    parts = urlsplit(value)
+    return parts.scheme in ("http", "https") and bool(parts.netloc)
+
+
+class StructureField(Contract):
+    name: str
+    type: FieldType
+    required: bool = False
+    volatile: bool = False
+    """The value changes over time; only `text` fields; needs `dated_by`."""
+    values: list[str] = []
+    """The node types; only on the `enum` field, 1 to 40 distinct non-empty strings."""
+    dated_by: str | None = None
+    """The `date` field that receives the date of the page a volatile value came from."""
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, value: str) -> str:
+        if not FIELD_NAME_PATTERN.match(value):
+            raise ValueError(f"field name {value!r} must match {FIELD_NAME_PATTERN.pattern}")
+        return value
+
+    @model_validator(mode="after")
+    def check_field(self) -> "StructureField":
+        if self.volatile and self.type != "text":
+            raise ValueError(f"field {self.name}: only text fields may be volatile")
+        if self.type == "enum":
+            if not 1 <= len(self.values) <= 40:
+                raise ValueError(f"field {self.name}: an enum needs 1 to 40 values")
+            if any(not value.strip() for value in self.values) or len(set(self.values)) != len(self.values):
+                raise ValueError(f"field {self.name}: enum values must be distinct and non-empty")
+        elif self.values:
+            raise ValueError(f"field {self.name}: only the enum field has values")
+        return self
+
+
+class Seed(Contract):
+    name: str = Field(min_length=1)
+    type: str
+    url: str | None = None
+
+    @field_validator("name")
+    @classmethod
+    def check_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("seed name must not be empty")
+        return value
+
+    @field_validator("url")
+    @classmethod
+    def check_url(cls, value: str | None) -> str | None:
+        if value is not None and not is_http_url(value):
+            raise ValueError(f"seed url {value!r} must be an http or https URL")
+        return value
+
+
+class Limits(Contract):
+    max_depth: int = Field(default=3, ge=1, le=10)
+    max_nodes: int = Field(default=200, ge=1, le=5000)
+    pages_per_node: int = Field(default=2, ge=1, le=10)
+
+
+class Structure(Contract):
+    """`structure.json`: the record fields, the child relation, the seeds, and the crawl limits."""
+
+    fields: list[StructureField]
+    relation: str = Field(min_length=1, max_length=200)
+    seeds: list[Seed] = Field(min_length=1)
+    leaf_types: list[str] = []
+    expand: ExpandMode = "both"
+    limits: Limits = Limits()
+    language: str = ""
+    """A search language, or empty for the configured one."""
+
+    @field_validator("relation")
+    @classmethod
+    def check_relation(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("relation must not be empty")
+        return value
+
+    @field_validator("language")
+    @classmethod
+    def check_language(cls, value: str) -> str:
+        return value and search_language(value)
+
+    @model_validator(mode="after")
+    def check_structure(self) -> "Structure":
+        names = [field.name for field in self.fields]
+        repeated = sorted({name for name in names if names.count(name) > 1})
+        if repeated:
+            raise ValueError(f"field names must be unique: {', '.join(repeated)}")
+        for kind in ("enum", "slug", "ref"):
+            of_kind = [field.name for field in self.fields if field.type == kind]
+            if kind == "enum" and len(of_kind) != 1:
+                found = ", ".join(of_kind) if of_kind else "none"
+                raise ValueError(f"exactly one enum field is required, found: {found}")
+            if len(of_kind) > 1:
+                raise ValueError(f"at most one {kind} field is allowed, found: {', '.join(of_kind)}")
+        if not any(field.type == "text" and field.required for field in self.fields):
+            raise ValueError("at least one required text field (the name field) is needed")
+        by_name = {field.name: field for field in self.fields}
+        for field in self.fields:
+            if field.dated_by is not None and not field.volatile:
+                raise ValueError(f"field {field.name}: dated_by is only for volatile fields")
+            if field.volatile:
+                target = by_name.get(field.dated_by) if field.dated_by else None
+                if target is None or target.type != "date":
+                    raise ValueError(f"field {field.name}: a volatile field needs dated_by naming a date field")
+        types = self.enum_field.values
+        for seed in self.seeds:
+            if seed.type not in types:
+                raise ValueError(f"seed {seed.name!r}: type {seed.type!r} is not one of the enum values")
+        for leaf in self.leaf_types:
+            if leaf not in types:
+                raise ValueError(f"leaf type {leaf!r} is not one of the enum values")
+        return self
+
+    def field(self, name: str) -> StructureField | None:
+        return next((field for field in self.fields if field.name == name), None)
+
+    @property
+    def enum_field(self) -> StructureField:
+        return next(field for field in self.fields if field.type == "enum")
+
+    @property
+    def types(self) -> list[str]:
+        """The node types: the enum field's values."""
+        return self.enum_field.values
+
+    @property
+    def name_field(self) -> StructureField:
+        """The first required text field."""
+        return next(field for field in self.fields if field.type == "text" and field.required)
+
+    @property
+    def slug_field(self) -> StructureField | None:
+        return next((field for field in self.fields if field.type == "slug"), None)
+
+    @property
+    def ref_field(self) -> StructureField | None:
+        return next((field for field in self.fields if field.type == "ref"), None)
+
+    def is_expandable(self, node_type: str, depth: int) -> bool:
+        """Not a leaf type and above `limits.max_depth`."""
+        return node_type not in self.leaf_types and depth < self.limits.max_depth
+
+
+class Node(Contract):
+    """A line of `nodes.jsonl`: one entity of the frontier."""
+
+    id: str
+    name: str
+    type: str
+    parent_id: str | None = None
+    depth: int = Field(default=0, ge=0)
+    url: str | None = None
+    wave: int = Field(default=1, ge=1)
+    status: NodeStatus = "discovered"
+    expanded: bool = False
+    found_by: FoundBy = "seed"
+    pages: list[str] = []
+    """Source IDs used for the node."""
+    flags: list[str] = []
+    reason: str | None = None
+    """The failure reason; None unless `failed`."""
+
+
+class ExtractedRecord(Contract):
+    """A line of `records.jsonl`: one node's checked record."""
+
+    node_id: str
+    record: dict[str, Any]
+    """Field name to value (string or null)."""
+    sources: dict[str, str] = {}
+    """Field name to the URL it came from."""
+    flags: list[str] = []
+
+
+class WaveEntry(Contract):
+    wave: int = Field(ge=1)
+    expanded: int = 0
+    found: int = 0
+    records: int = 0
+    failed: int = 0
+    dropped: int = 0
+
+
+class DroppedRecord(Contract):
+    node_id: str
+    field: str
+    """The required field that was missing."""
+
+
+class CatalogRecord(Contract):
+    """`catalog.json`: the assembled catalog."""
+
+    records: list[dict[str, Any]]
+    """Every structure field in order, plus `sources` (field to URL) and `flags`."""
+    dropped: list[DroppedRecord] = []
+    nodes: int = Field(ge=0)
+    waves: list[WaveEntry] = []
+    reason: CatalogStopReason
+    note: str = ""
+    fill: dict[str, int] = {}
+    """Per field, records with a non-null value."""
+    by_type: dict[str, int] = {}
+    by_depth: dict[str, int] = {}
+    """Depth (as a string key, JSON object keys) to record count."""
+
+
 class RunRequest(Contract):
     query: str = Field(min_length=1)
     sources: Sources = "both"
@@ -456,6 +725,10 @@ class RunRequest(Contract):
     """Paths under the run's `attachments/`, as copied."""
     depth: str | None = None
     """The depth preset name, `custom`, or None (no depth: Standard)."""
+    kind: RunKind = "research"
+    """Requests recorded before kinds existed read as `research`."""
+    structure: Structure | None = None
+    """The catalog's structure; None for research runs and for catalogs whose `draft` derives one."""
 
 
 Effort = Literal["none", "low", "medium", "high", "default"]
@@ -561,6 +834,14 @@ class RunRecord(Contract):
     form: "RunCreate | None" = None
     """The request the run was created with through the API, `set` cleared; a rerun copies it; None for forks."""
 
+    @property
+    def kind(self) -> RunKind:
+        return self.request.kind
+
+    @property
+    def structure(self) -> Structure | None:
+        return self.request.structure
+
 
 RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interrupted"]
 """`queued` and `running` come from the server; a run with no terminal event and no process is `interrupted`."""
@@ -595,6 +876,7 @@ class RunSummary(Contract):
 
     run_id: str
     query: str
+    kind: RunKind = "research"
     status: RunStatus
     created: datetime
     parent_run_id: str | None = None
@@ -605,8 +887,10 @@ class RunSummary(Contract):
     until: Stage | None = None
     depth: str | None = None
     """A preset name, `custom`, or None (an older run or no depth)."""
-    writing: WritingOptions = WritingOptions()
-    """The run's resolved writing options."""
+    writing: WritingOptions | None = WritingOptions()
+    """The run's resolved writing options; None for a catalog run."""
+    nodes: int | None = None
+    """Catalog runs: extracted records so far, or `catalog.json`'s record count when done; None for research."""
     duration_s: float | None = None
     """`run.started` to the terminal run event; None while queued or running, and for interrupted runs."""
     cost: float | None = None
@@ -777,6 +1061,9 @@ class RunCreate(Contract):
     """The `request` field of `POST /api/runs`."""
 
     query: str = Field(min_length=1)
+    kind: RunKind = "research"
+    structure: Structure | None = None
+    """Catalog runs only; None lets the `draft` stage derive one."""
     sources: Sources | None = None
     """None: the global default."""
     until: Stage | None = None
@@ -806,6 +1093,35 @@ class RunCreate(Contract):
         return entry_choices(value)
 
 
+class DraftCreate(Contract):
+    """The `request` field of `POST /api/catalog/draft`."""
+
+    brief: str = Field(min_length=1)
+    profile: str | None = None
+    use: dict[str, str] = {}
+    llm: LLMPatch = LLMPatch()
+
+    @field_validator("brief")
+    @classmethod
+    def check_brief(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("brief must not be empty")
+        return value
+
+    @field_validator("use")
+    @classmethod
+    def check_use(cls, value: dict[str, str]) -> dict[str, str]:
+        return entry_choices(value)
+
+
+class LimitsPatch(Contract):
+    """Raised catalog limits for a fork from `expand`; unset ones keep the parent's."""
+
+    max_depth: int | None = Field(default=None, ge=1, le=10)
+    max_nodes: int | None = Field(default=None, ge=1, le=5000)
+    pages_per_node: int | None = Field(default=None, ge=1, le=10)
+
+
 class ForkCreate(Contract):
     """The body of `POST /api/runs/{id}/fork`."""
 
@@ -820,6 +1136,8 @@ class ForkCreate(Contract):
     """Replace these blocks with the current entries."""
     set: list[str] = []
     profile: str | None = None
+    limits: LimitsPatch = LimitsPatch()
+    """Catalog runs forked from `expand`: the raised limits."""
 
     @field_validator("use")
     @classmethod
@@ -1074,6 +1392,7 @@ class RunQueuedData(Contract):
 
 class RunStartedData(Contract):
     query: str
+    kind: RunKind = "research"
     profile: str
     parent_run_id: str | None
     version: int
@@ -1210,6 +1529,62 @@ class ReportTextData(Contract):
     text: str
 
 
+class StructureFieldInfo(Contract):
+    name: str
+    type: FieldType
+
+
+class StructureReadyData(Contract):
+    fields: list[StructureFieldInfo]
+    seeds: int
+    relation: str
+    limits: Limits
+    derived: bool
+    """True when `draft` made the LLM call."""
+
+
+class NodeFoundData(Contract):
+    node_id: str
+    name: str
+    type: str
+    parent_id: str | None
+    depth: int
+    url: str | None
+    wave: int
+    found_by: FoundBy
+
+
+class NodeExtractedData(Contract):
+    node_id: str
+    record: dict[str, Any]
+    sources: dict[str, str] = {}
+    flags: list[str] = []
+    children: int = 0
+
+
+class NodeFailedData(Contract):
+    node_id: str
+    reason: str
+
+
+class WaveDoneData(Contract):
+    wave: int
+    expanded: int
+    found: int
+    records: int
+    failed: int
+    dropped: int
+
+
+class CatalogDoneData(Contract):
+    waves: int
+    nodes: int
+    records: int
+    flagged: int
+    reason: CatalogStopReason
+    note: str
+
+
 class EventBase(Contract):
     seq: int = Field(ge=0)
     run_id: str
@@ -1330,6 +1705,36 @@ class ReportSnapshot(EventBase):
     data: ReportTextData
 
 
+class StructureReady(EventBase):
+    type: Literal["structure.ready"] = "structure.ready"
+    data: StructureReadyData
+
+
+class NodeFound(EventBase):
+    type: Literal["node.found"] = "node.found"
+    data: NodeFoundData
+
+
+class NodeExtracted(EventBase):
+    type: Literal["node.extracted"] = "node.extracted"
+    data: NodeExtractedData
+
+
+class NodeFailed(EventBase):
+    type: Literal["node.failed"] = "node.failed"
+    data: NodeFailedData
+
+
+class WaveDone(EventBase):
+    type: Literal["wave.done"] = "wave.done"
+    data: WaveDoneData
+
+
+class CatalogDone(EventBase):
+    type: Literal["catalog.done"] = "catalog.done"
+    data: CatalogDoneData
+
+
 EVENT_TYPES: tuple[type[EventBase], ...] = (
     RunQueued,
     RunStarted,
@@ -1352,6 +1757,12 @@ EVENT_TYPES: tuple[type[EventBase], ...] = (
     ResearchDone,
     ReportDelta,
     ReportSnapshot,
+    StructureReady,
+    NodeFound,
+    NodeExtracted,
+    NodeFailed,
+    WaveDone,
+    CatalogDone,
 )
 
 Event = Annotated[
@@ -1375,7 +1786,13 @@ Event = Annotated[
     | GapReady
     | ResearchDone
     | ReportDelta
-    | ReportSnapshot,
+    | ReportSnapshot
+    | StructureReady
+    | NodeFound
+    | NodeExtracted
+    | NodeFailed
+    | WaveDone
+    | CatalogDone,
     Field(discriminator="type"),
 ]
 EVENT: TypeAdapter[Event] = TypeAdapter(Event)
@@ -1424,6 +1841,15 @@ CONTRACTS: tuple[type[Contract], ...] = (
     RoundRecord,
     ResearchRecord,
     WritingOptions,
+    StructureField,
+    Seed,
+    Limits,
+    Structure,
+    Node,
+    ExtractedRecord,
+    WaveEntry,
+    DroppedRecord,
+    CatalogRecord,
     Message,
     Completion,
     EmbedderInfo,

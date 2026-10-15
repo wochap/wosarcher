@@ -16,6 +16,7 @@ from wosarcher.models import ServerSettings
 from wosarcher.ports import Exporter
 from wosarcher.server import create_app
 from wosarcher.server.hooks import HookLoader
+from wosarcher.server.state import DraftLLM
 from wosarcher.store import settings as settings_file
 
 FAKE = Path(__file__).with_name("fake_wosarcher.py")
@@ -37,12 +38,15 @@ def make_app(runs_dir: Path, config_dir: Path, tmp_path: Path) -> MakeApp:
         auth: AuthConfig | None = None,
         exporter: Exporter | None = None,
         hooks: HookLoader | None = None,
+        draft_llm: DraftLLM | None = None,
     ) -> FastAPI:
         if limit != 1:
             settings_file.save(config_dir, ServerSettings(max_concurrent_runs=limit))
         server = ServerConfig(static_dir=static_dir or tmp_path / "no-build")
         settings = Settings(server=server, auth=auth or AuthConfig())
-        return create_app(settings, runs_dir, config_dir, COMMAND, grace=grace, exporter=exporter, hooks=hooks)
+        return create_app(
+            settings, runs_dir, config_dir, COMMAND, grace=grace, exporter=exporter, hooks=hooks, draft_llm=draft_llm
+        )
 
     return make
 

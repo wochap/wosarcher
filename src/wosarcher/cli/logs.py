@@ -11,8 +11,12 @@ import typer
 from wosarcher.cli.api import Api, api
 from wosarcher.cli.options import fail
 from wosarcher.models import (
+    CatalogDone,
     Event,
     HitFound,
+    NodeExtracted,
+    NodeFailed,
+    NodeFound,
     PageFailed,
     PageFetched,
     PassagesScored,
@@ -27,6 +31,7 @@ from wosarcher.models import (
     StageFailed,
     StageProgress,
     StageStarted,
+    WaveDone,
     parse_event,
 )
 
@@ -91,6 +96,21 @@ def summary(event: Event) -> str:
             return f"{event.data.device} {event.data.released_stage}"
         case StageProgress():
             return f"{event.data.done}/{event.data.total} failed {event.data.failed}"
+        case NodeFound():
+            return f"{event.data.node_id} depth {event.data.depth} ← {event.data.parent_id or 'seed'}"
+        case NodeExtracted():
+            data = event.data
+            values = sum(value is not None for value in data.record.values())
+            return f"{data.node_id} {values} values · {data.children} children · {len(data.flags)} flags"
+        case NodeFailed():
+            return f"{event.data.node_id} {event.data.reason}"
+        case WaveDone():
+            data = event.data
+            counts = f"records {data.records} failed {data.failed}"
+            return f"wave {data.wave} expanded {data.expanded} found {data.found} {counts}"
+        case CatalogDone():
+            data = event.data
+            return f"{data.waves} waves · {data.records} records · {data.flagged} flagged · {data.reason}"
         case _:
             return event.data.model_dump_json()
 

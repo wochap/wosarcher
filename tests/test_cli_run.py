@@ -8,15 +8,19 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import Daemon, create_run
+from tests.conftest import Daemon, StartDaemon, create_run
+from tests.server.test_catalog import fixed
+from tests.stages.catalog_data import structure_data
+from wosarcher.adapters.fakes import FakeLLM
 from wosarcher.auth import AuthStore
 from wosarcher.cli import app
-from wosarcher.models import RunOutput
+from wosarcher.models import Completion, Effort, Message, RunOutput
 from wosarcher.store import RunStore
 
 runner = CliRunner()
@@ -383,3 +387,167 @@ def test_doctor_profile_from_the_environment(daemon: Daemon, config_dir: Path) -
     assert flag.returncode == 0, flag.stderr
     assert json.loads(flag.stdout)["profile"] == "desktop"
     assert [entry["name"] for entry in json.loads(flag.stdout)["entries"]] == ["bm25"]
+
+
+# Catalog
+
+
+def structure_file(tmp_path: Path, **changes: object) -> Path:
+    path = tmp_path / "peru.json"
+    path.write_text(json.dumps(structure_data(**changes)))
+    return path
+
+
+def request_of(daemon: Daemon, run_id: str) -> dict[str, Any]:
+    return json.loads((daemon.runs_dir / run_id / "request.json").read_text())
+
+
+def test_catalog_structure_file(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    result = runner.invoke(
+        app, ["catalog", "Every public organization", "--structure", str(path), "--allow-domain", "gob.pe"]
+    )
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    record = request_of(daemon, run_id)
+    assert record["request"]["kind"] == "catalog"
+    assert record["request"]["structure"]["relation"] == "organismos adscritos"
+    assert record["form"]["domains"]["allow"] == ["gob.pe"]
+    assert json.loads(result.stdout) == [{"id": "n0", "name": "Poder Ejecutivo", "type": "power"}]
+
+
+def test_catalog_flags_over_the_file(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    args = ["catalog", "b", "--structure", str(path), "--max-nodes", "50", "--seed", "PCM|ministry|https://pcm.test"]
+    args += ["--leaf", "agency", "--expand", "links", "--search-language", "es", "--json"]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    structure = request_of(daemon, run_id)["request"]["structure"]
+    assert structure["limits"]["max_nodes"] == 50
+    assert structure["seeds"] == [{"name": "PCM", "type": "ministry", "url": "https://pcm.test"}]
+    assert (structure["leaf_types"], structure["expand"], structure["language"]) == (["agency"], "links", "es")
+    assert json.loads(result.stdout)["reason"] == "frontier empty"
+
+
+def test_catalog_derived_structure(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["catalog", "brief"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    assert "--structure" not in json.loads((daemon.runs_dir / run_id / "argv.json").read_text())
+
+
+def test_catalog_structure_from_flags(daemon: Daemon) -> None:
+    result = runner.invoke(
+        app, ["catalog", "b", "--seed", "PCM|ministry", "--relation", "adscritos", "--leaf", "office"]
+    )
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    structure = request_of(daemon, run_id)["request"]["structure"]
+    assert structure["relation"] == "adscritos"
+    assert next(f for f in structure["fields"] if f["type"] == "enum")["values"] == ["ministry", "office"]
+
+
+def test_catalog_until_prints_nothing(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["catalog", "b", "--until", "extract"])
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+
+
+@pytest.mark.parametrize(
+    ("args", "named"),
+    [
+        (["--seed", "PCM|ministry"], "--relation"),
+        (["--seed", "PCM"], "--seed"),
+        (["--expand", "crawl"], "--expand"),
+        (["--max-nodes", "0"], "--max-nodes"),
+        (["--until", "write"], "catalog stage"),
+        (["--sources", "files"], "--sources"),
+        (["--search-language", "spanish"], "--search-language"),
+        (["--allow-domain", "gob.pe/x"], "gob.pe/x"),
+        (["--use", "scorer=bm25"], "--use"),
+    ],
+)
+def test_catalog_checked_before_a_request(daemon: Daemon, args: list[str], named: str) -> None:
+    result = runner.invoke(app, ["catalog", "b", *args])
+    assert result.exit_code == 2
+    assert named in result.output
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_catalog_invalid_structure(daemon: Daemon, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["catalog", "b", "--structure", str(structure_file(tmp_path)), "--leaf", "moon"])
+    assert result.exit_code == 2
+    assert "leaf type 'moon'" in result.output
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_catalog_draft(start_daemon: StartDaemon, tmp_path: Path) -> None:
+    llm = FakeLLM([json.dumps(structure_data())])
+    daemon = start_daemon(draft_llm=fixed(llm))
+    result = runner.invoke(app, ["catalog", "draft", "Every public organization"])
+    assert result.exit_code == 0, result.output
+    assert listed(daemon) == [] if daemon.runs_dir.exists() else True
+    path = tmp_path / "drafted.json"
+    path.write_text(result.stdout)
+    again = runner.invoke(app, ["catalog", "Every public organization", "--structure", str(path)])
+    assert again.exit_code == 0, again.output
+
+
+class Down:
+    async def complete(
+        self, messages: list[Message], *, max_tokens: int, effort: Effort, temperature: float | None = None
+    ) -> Completion:
+        raise ConnectionError("connection refused")
+
+
+def test_catalog_draft_failed(start_daemon: StartDaemon) -> None:
+    start_daemon(draft_llm=fixed(Down()))
+    result = runner.invoke(app, ["catalog", "draft", "brief"])
+    assert result.exit_code == 1
+    assert "connection refused" in result.output
+
+
+def test_catalog_draft_rejects_run_flags(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["catalog", "draft", "brief", "--max-nodes", "5"])
+    assert result.exit_code == 2
+    assert "--max-nodes" in result.output
+
+
+def test_runs_kind(daemon: Daemon, tmp_path: Path) -> None:
+    assert runner.invoke(app, ["catalog", "b", "--structure", str(structure_file(tmp_path))]).exit_code == 0
+    assert runner.invoke(app, ["run", "q", "--json"]).exit_code == 0
+    table = runner.invoke(app, ["runs"])
+    assert "catalog" in table.stdout
+    research = json.loads(runner.invoke(app, ["runs", "--kind", "research", "--json"]).stdout)
+    assert [row["kind"] for row in research] == ["research"]
+    catalogs = json.loads(runner.invoke(app, ["runs", "--kind", "catalog", "--json"]).stdout)
+    assert [(row["kind"], row["nodes"], row["writing"]) for row in catalogs] == [("catalog", 1, None)]
+    assert runner.invoke(app, ["runs", "--kind", "other"]).exit_code == 2
+
+
+def test_catalog_progress_rows() -> None:
+    import io
+
+    from rich.console import Console
+
+    from wosarcher.cli.progress import ProgressView
+    from wosarcher.models import CatalogDoneData, StageDoneData, StageStartedData, WaveDoneData, make_event
+
+    def event(event_type: str, stage: str, data: object) -> Any:
+        return make_event(1, "r", datetime.now(UTC), event_type, stage, data)  # pyright: ignore[reportArgumentType]
+
+    out = io.StringIO()
+    view = ProgressView(Console(file=out, force_terminal=False, width=200), kind="catalog")
+    assert list(view.rows) == ["load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble"]
+    view.update(event("stage.started", "fetch", StageStartedData(device=None, provider="firecrawl", round=2)))
+    assert view.rows["fetch"].state == "running · wave 2"
+    view.update(event("stage.done", "fetch", StageDoneData(count=5, seconds=1.0, round=2)))
+    assert view.rows["fetch"].state == "done · wave 2"
+    view.update(
+        event("wave.done", "extract", WaveDoneData(wave=2, expanded=3, found=9, records=3, failed=1, dropped=0))
+    )
+    assert view.rows["extract"].counters == "wave 2: 3 records, 1 failed"
+    done = CatalogDoneData(waves=2, nodes=9, records=8, flagged=1, reason="max nodes", note="")
+    view.update(event("catalog.done", "assemble", done))
+    assert "catalog: 8 records in 2 waves · 1 flagged · max nodes" in out.getvalue()

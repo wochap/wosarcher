@@ -110,3 +110,15 @@ class Adapters:
     gapper: LLM
     writer: LLM
     managed: dict[str, Managed]
+    drafter: LLM | None = None
+    """The catalog draft call; None uses the planner."""
+    extractor: LLM | None = None
+    """The catalog extract calls; None uses the planner."""
+
+    @property
+    def draft_llm(self) -> LLM:
+        return self.drafter or self.planner
+
+    @property
+    def extract_llm(self) -> LLM:
+        return self.extractor or self.planner

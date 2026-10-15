@@ -83,7 +83,7 @@ def test_rerun_staging_copies_attachments(tmp_path: Path) -> None:
     copy = staging.staging_dir(tmp_path, staged.run_id) / "attachments"
     assert (copy / "notes.md").read_text() == "n"
     assert (copy / "dir" / "a.md").read_text() == "a"
-    assert staged.kind == "rerun"
+    assert staged.action == "rerun"
     assert staged.set == ["score.top_k=5", 'write.tone="critical"']
 
 

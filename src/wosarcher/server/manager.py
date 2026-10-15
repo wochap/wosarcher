@@ -282,7 +282,7 @@ class RunManager:
             active.stderr.append(str(error))
             return None
         active.process = process
-        log.info("run %s started: %s pid %d", active.run_id, active.staged.kind.replace("rerun", "run"), process.pid)
+        log.info("run %s started: %s pid %d", active.run_id, active.staged.action.replace("rerun", "run"), process.pid)
         if active.cancel_requested:
             self._terminate(active)
         reader = asyncio.create_task(self._read_stderr(active, process))
@@ -396,7 +396,7 @@ class RunManager:
             run_id=staged.run_id,
             status=status,
             query=staged.query,
-            kind=staged.kind,
+            kind=staged.action,
             origin=staged.origin,
             parent_run_id=staged.parent,
             version=staged.version,

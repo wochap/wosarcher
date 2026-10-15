@@ -22,13 +22,16 @@ async def prepend(first: str | None, rest: AsyncGenerator[str]) -> AsyncGenerato
 
 
 class ChatLLM:
-    """`stage` names the ledger stage and the `llm.reasoning.<stage>` step in error text."""
+    """`stage` names the ledger stage; `step` (default: the stage) the `llm.reasoning.<step>` in error text."""
 
-    def __init__(self, cfg: LLMConfig, client: ProviderClient, ledger: UsageLedger, stage: str) -> None:
+    def __init__(
+        self, cfg: LLMConfig, client: ProviderClient, ledger: UsageLedger, stage: str, step: str | None = None
+    ) -> None:
         self.cfg = cfg
         self.client = client
         self.ledger = ledger
         self.stage = stage
+        self.step = step or stage
 
     def body(
         self, messages: list[Message], max_tokens: int, effort: Effort, temperature: float | None, *, stream: bool
@@ -88,7 +91,7 @@ class ChatLLM:
         return ProviderError(
             self.cfg.provider,
             f"the model spent the whole output limit{cap} without writing text; "
-            f"set llm.reasoning.{self.stage} to none (hidden reasoning counts against the limit)",
+            f"set llm.reasoning.{self.step} to none (hidden reasoning counts against the limit)",
         )
 
     def rejected(self, error: ProviderError) -> ProviderError:
@@ -97,7 +100,7 @@ class ChatLLM:
             return error
         return ProviderError(
             self.cfg.provider,
-            f'the server rejects reasoning_effort; set llm.reasoning.{self.stage} = "default" ({error})',
+            f'the server rejects reasoning_effort; set llm.reasoning.{self.step} = "default" ({error})',
             url=error.url,
             status=error.status,
         )

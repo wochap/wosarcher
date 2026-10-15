@@ -5,8 +5,12 @@ import type { RunDetail } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
+import { countStatus, initialCatalog } from "../../run/catalog";
+import type { RunView } from "../../run/reducer";
 import { useRunData } from "../../run/useRunData";
 import { CancelDialog } from "./CancelDialog";
+import { CatalogTimeline, CoveragePanel, FrontierPanel, RecordsPanel } from "./CatalogPanels";
+import catalogCss from "./CatalogPanels.module.css";
 import { EmptyLive } from "./EmptyLive";
 import { LiveFooter } from "./LiveFooter";
 import { LiveHeader } from "./LiveHeader";
@@ -144,6 +148,23 @@ export function LiveScreen() {
     go({ screen: "live", runId: created.run_id });
   }
 
+  const catalog = run.kind === "catalog" || detail?.kind === "catalog";
+  if (catalog)
+    return (
+      <CatalogLiveScreen
+        run={run}
+        data={data}
+        elapsed={elapsed}
+        now={now}
+        attachments={attachments}
+        cancelling={cancelling}
+        confirming={confirming}
+        onConfirm={setConfirming}
+        onCancel={() => void attempt(cancel)}
+        onRerun={() => void attempt(rerun)}
+      />
+    );
+
   const tab = isPhone ? liveTab : null;
   const shows = (t: string) => tab === null || tab === t;
   const selected = run.phases.select.state === "done" || run.phases.select.state === "reused";
@@ -264,6 +285,100 @@ export function LiveScreen() {
           onClose={closeSource}
         />
       )}
+    </div>
+  );
+}
+
+type CatalogProps = {
+  run: RunView;
+  data: ReturnType<typeof useRunData>;
+  elapsed: number;
+  now: number;
+  attachments: number;
+  cancelling: boolean;
+  confirming: boolean;
+  onConfirm: (open: boolean) => void;
+  onCancel: () => void;
+  onRerun: () => void;
+};
+
+const CATALOG_TABS = { passages: "Records", report: "Coverage" };
+
+/** The catalog variant: Frontier over Sources, Records, and Coverage under the 8 phases. */
+function CatalogLiveScreen(props: CatalogProps) {
+  const { run, data, elapsed, now } = props;
+  const { live: stream, isPhone, liveTab, setLiveTab } = useUi();
+  const { detail, files, context } = data;
+  const live = run.catalog ?? initialCatalog();
+  const tab = isPhone ? liveTab : null;
+  const shows = (t: string) => tab === null || tab === t;
+  const remote = detail?.origin === "cli" || detail?.origin === "api";
+  const counts = {
+    sources: run.status === "queued" ? "" : String(Object.keys(run.sources).length + files.length),
+    passages: live.records.length ? String(live.records.length) : "",
+  };
+  const expanding = countStatus(live, "expanding");
+  return (
+    <div className={css.live}>
+      <LiveHeader
+        run={run}
+        detail={detail}
+        files={props.attachments}
+        isPhone={isPhone}
+        kind="catalog"
+        cancelling={props.cancelling}
+        onCancel={() => (remote ? props.onConfirm(true) : props.onCancel())}
+        onOpenReport={() => go({ screen: "catalog", runId: run.runId })}
+        onRerun={props.onRerun}
+      />
+      {props.confirming && remote && (
+        <CancelDialog
+          origin={detail.origin as "cli" | "api"}
+          tokenName={detail.token_name}
+          onKeep={() => props.onConfirm(false)}
+          onCancel={() => {
+            props.onConfirm(false);
+            props.onCancel();
+          }}
+        />
+      )}
+      <StatusBanner run={run} conn={stream.conn} elapsed={elapsed} now={now} rewriteOf={null} />
+      {isPhone && (
+        <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} labels={CATALOG_TABS} />
+      )}
+      {shows("progress") && <CatalogTimeline live={live} now={now - (run.clockOffset ?? 0)} />}
+      <div className={css.grid}>
+        {(shows("progress") || shows("sources")) && (
+          <div className={css.column}>
+            {shows("progress") && <FrontierPanel live={live} className={catalogCss.frontier} />}
+            {shows("sources") && (
+              <SourcesPanel
+                run={run}
+                files={files}
+                context={context}
+                rounds={1}
+                className={css.sources}
+              />
+            )}
+          </div>
+        )}
+        {shows("passages") && <RecordsPanel live={live} now={now - (run.clockOffset ?? 0)} />}
+        {shows("report") && <CoveragePanel live={live} />}
+      </div>
+      <LiveFooter
+        run={run}
+        conn={stream.conn}
+        elapsed={elapsed}
+        isPhone={isPhone}
+        catalog={{
+          wave: live.done ? live.done.waves : live.wave,
+          done: !!live.done,
+          expanding,
+          extracted: live.records.length,
+          failed: live.failed,
+          reason: live.done?.reason,
+        }}
+      />
     </div>
   );
 }

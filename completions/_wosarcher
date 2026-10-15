@@ -225,6 +225,37 @@ _wosarcher_run() {
     '1:query:'
 }
 
+_wosarcher_catalog() {
+  _arguments \
+    '--structure[a JSON structure file]:file:_files' \
+    '*--seed[a seed entity]:NAME|TYPE[|URL]:' \
+    '--relation[the child relation]:relation:' \
+    '*--leaf[a leaf type]:type:' \
+    '--expand[how children are found]:mode:(links search both)' \
+    '--max-depth[deepest node level]:depth:' \
+    '--max-nodes[nodes at most]:nodes:' \
+    '--pages-per-node[pages fetched per node]:pages:' \
+    '--search-language[search language]:language:_wosarcher_search_language' \
+    '*--allow-domain[only use search results from this domain]:domain:' \
+    '*--block-domain[drop search results from this domain]:domain:' \
+    '*--attach[file, directory, or glob to attach]:file:_files' \
+    '--sources[web or both]:sources:(web both)' \
+    '--profile[profile to use]:profile:_wosarcher_profile_names' \
+    '*--use[use this provider entry for one block]:block=entry:_wosarcher_use' \
+    '--model[chat model for this run]:model:' \
+    '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
+    '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
+    '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--context-window[the model'\''s context window in tokens]:tokens:' \
+    '--max-output[the model'\''s output limit in tokens]:tokens:' \
+    '*--set[override one field]:dotted.key=value:' \
+    '--until[stop after this stage]:stage:(load draft expand search fetch chunk extract assemble)' \
+    '--json[print the whole catalog.json when the run ends]' \
+    '--help[show help]' \
+    '1:brief or draft:(draft)' \
+    '2::brief:'
+}
+
 _wosarcher_fork() {
   _arguments \
     '--from[first stage to run again]:stage:_wosarcher_stages' \
@@ -247,6 +278,9 @@ _wosarcher_fork() {
     '--plan-thinking[thinking for the plan step]:level:_wosarcher_efforts' \
     '--gap-thinking[thinking for the gap step]:level:_wosarcher_efforts' \
     '--write-thinking[thinking for the write step]:level:_wosarcher_efforts' \
+    '--max-depth[catalog fork from expand: max depth]:depth:' \
+    '--max-nodes[catalog fork from expand: max nodes]:nodes:' \
+    '--pages-per-node[catalog fork from expand: pages per node]:pages:' \
     '--json[print one JSON document when the run ends]' \
     '--help[show help]' \
     '1:run:_wosarcher_run_ids'
@@ -255,6 +289,7 @@ _wosarcher_fork() {
 _wosarcher_runs() {
   _arguments \
     '--limit[how many runs to list]:count:' \
+    '--kind[only this kind]:kind:(research catalog)' \
     '--json[print the list as a JSON array]' \
     '--help[show help]'
 }
@@ -407,6 +442,7 @@ _wosarcher() {
   # commands: wosarcher
   local -a commands=(
     'run:research a query and print the report'
+    'catalog:crawl a brief into a catalog of records, or draft a structure'
     'fork:copy a run up to a stage and run the rest again'
     'runs:list runs, newest first'
     'logs:print a run'\''s logged events'

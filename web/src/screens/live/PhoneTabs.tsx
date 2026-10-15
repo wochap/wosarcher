@@ -13,9 +13,11 @@ type Props = {
   tab: LiveTab;
   onTab: (tab: LiveTab) => void;
   counts: Partial<Record<LiveTab, string>>;
+  /** Labels in place of the research ones (a catalog run's Records and Coverage). */
+  labels?: Partial<Record<LiveTab, string>>;
 };
 
-export function PhoneTabs({ tab, onTab, counts }: Props) {
+export function PhoneTabs({ tab, onTab, counts, labels = {} }: Props) {
   return (
     <div role="tablist" className={css.tabs}>
       {TABS.map((t) => (
@@ -27,7 +29,7 @@ export function PhoneTabs({ tab, onTab, counts }: Props) {
           className={css.tab}
           onClick={() => onTab(t.id)}
         >
-          {t.label}
+          {labels[t.id] ?? t.label}
           <span className={css.count}>{counts[t.id] ?? ""}</span>
         </button>
       ))}

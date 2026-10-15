@@ -536,3 +536,83 @@ def test_delete_a_managed_depth(preset_env: dict[str, str]) -> None:
         presets.delete_depth("wide", preset_env)
     assert error.value.code == "managed"
     assert read_depth("wide", preset_env)[0].name == "wide"
+
+
+# Catalog runs
+
+
+async def finished_catalog(tmp_path: Path) -> tuple["RunStore", str, "Settings"]:
+    from tests.runner.test_catalog import world
+
+    store, runner, run_id, _fakes = world(tmp_path)
+    assert await runner.run(run_id) == "done"
+    return store, run_id, runner.settings
+
+
+async def test_catalog_request_record(tmp_path: Path) -> None:
+    from wosarcher.models import RunRecord
+
+    store, run_id, _ = await finished_catalog(tmp_path)
+    data = json.loads((store.run_dir(run_id) / "request.json").read_text())
+    assert data["request"]["kind"] == "catalog"
+    assert data["request"]["structure"]["relation"] == "organismos adscritos"
+    del data["request"]["kind"]
+    del data["request"]["structure"]
+    assert RunRecord.model_validate(data).kind == "research"
+
+
+async def test_catalog_fork_from_extract(tmp_path: Path) -> None:
+    from tests.runner.helpers import adapters
+    from tests.runner.test_catalog import CatalogLLM
+    from wosarcher.adapters.fakes import FakeFetcher, FakeSearcher
+    from wosarcher.http import UsageLedger
+    from wosarcher.models import CatalogRecord, Node
+    from wosarcher.runner import Runner
+
+    store, run_id, settings = await finished_catalog(tmp_path)
+    fork = store.fork(run_id, "extract", ["use.llm=sonnet"], settings)
+    path = store.run_dir(fork.run_id)
+    assert (fork.kind, fork.fork_from) == ("catalog", "extract")
+    assert (path / "nodes.jsonl").is_file()
+    assert (path / "pages.jsonl").is_file()
+    assert not (path / "records.jsonl").exists()
+    assert {node.status for node in store.read_items(fork.run_id, "nodes.jsonl", Node)} == {"discovered"}
+    searcher, fetcher, llm = FakeSearcher({}), FakeFetcher({}), CatalogLLM()
+    fakes = adapters(searcher=searcher, fetcher=fetcher, planner=llm)
+    assert await Runner(store, settings, fakes, UsageLedger({})).run(fork.run_id) == "done"
+    assert searcher.calls == []
+    assert fetcher.calls == []
+    assert sorted(llm.names) == ["INEI", "MEF", "PCM", "Poder Ejecutivo"]
+    assert len(store.read_artifact(fork.run_id, "catalog.json", CatalogRecord).records) == 4
+
+
+async def test_catalog_fork_from_expand(tmp_path: Path) -> None:
+    from tests.runner.helpers import adapters
+    from tests.runner.test_catalog import PAGES, SEARCH, CatalogLLM
+    from wosarcher.adapters.fakes import FakeFetcher, FakeSearcher
+    from wosarcher.http import UsageLedger
+    from wosarcher.models import Node, Structure, WaveDone
+    from wosarcher.runner import Runner
+
+    store, run_id, settings = await finished_catalog(tmp_path)
+    with pytest.raises(RunStoreError, match="--max-depth"):
+        store.fork(run_id, "expand", [], settings)
+    with pytest.raises(RunStoreError, match="cannot lower"):
+        store.fork(run_id, "expand", [], settings, limits={"max_depth": 1})
+    fork = store.fork(run_id, "expand", ["catalog.max_depth=3"], settings, limits={"max_depth": 3})
+    assert store.read_artifact(fork.run_id, "structure.json", Structure).limits.max_depth == 3
+    found = {node.id: node for node in store.read_items(fork.run_id, "nodes.jsonl", Node)}
+    assert found["inei"].status == "discovered"
+    assert found["mef"].status == "extracted"
+    llm = CatalogLLM()
+    fakes = adapters(searcher=FakeSearcher(SEARCH), fetcher=FakeFetcher(PAGES), planner=llm)
+    assert await Runner(store, settings, fakes, UsageLedger({})).run(fork.run_id) == "done"
+    assert llm.names == ["INEI"]
+    waves = [e.data.wave for e in store.read_events(fork.run_id) if isinstance(e, WaveDone)]
+    assert waves == [1, 2, 3, 4]
+
+
+async def test_catalog_fork_from_fetch_rejected(tmp_path: Path) -> None:
+    store, run_id, settings = await finished_catalog(tmp_path)
+    with pytest.raises(RunStoreError, match="expand or extract"):
+        store.fork(run_id, "fetch", [], settings)

@@ -4,6 +4,7 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -14,7 +15,7 @@ from tests.fixtures import recorded
 from tests.fixtures.recorded import NOTES, QUERY, config_home, recorded_router
 from wosarcher.config import resolve
 from wosarcher.daemon import app
-from wosarcher.models import Context, Plan, ResearchRecord, RunOutput, parse_event
+from wosarcher.models import STAGES, CatalogRecord, Context, Plan, ResearchRecord, RunOutput, parse_event
 from wosarcher.store import STAGE_ARTIFACTS, RunStore
 
 runner = CliRunner()
@@ -61,7 +62,7 @@ def test_full_run(runs: Path) -> None:
     assert events[-1].type == "run.done"
     assert [event.seq for event in events] == list(range(1, len(events) + 1))
     assert any(event.type == "page.failed" for event in events)
-    expected = [name for names in STAGE_ARTIFACTS.values() for name in names if name != "research.json"]
+    expected = [name for stage in STAGES for name in STAGE_ARTIFACTS[stage] if name != "research.json"]
     for name in [*expected, "request.json", "costs.json", "attachments/notes.md"]:
         assert (run_dir / name).is_file(), name
     context = Context.model_validate_json((run_dir / "context.json").read_text())
@@ -416,3 +417,89 @@ def test_entries_fork_and_rerun(runs: Path, tmp_path: Path) -> None:
         result = runner.invoke(app, ["run", QUERY, "--profile", "e2e", *rerun, "--run-id", "r-rerun"])
     assert result.exit_code == 0, result.output
     assert store.read_record("r-rerun").settings["llm"]["timeout"] == 123
+
+
+# Catalog run
+
+CATALOG_BRIEF = "Battery recycling topics and methods"
+WIKI = "https://en.wikipedia.org/wiki/Battery_recycling"
+EPA = "https://www.epa.gov/hw/lithium-ion-battery-recycling"
+CATALOG_STRUCTURE = {
+    "fields": [
+        {"name": "id", "type": "slug"},
+        {"name": "name", "type": "text", "required": True},
+        {"name": "type", "type": "enum", "values": ["topic", "method"]},
+        {"name": "parent_id", "type": "ref"},
+        {"name": "website", "type": "url"},
+    ],
+    "relation": "methods",
+    "seeds": [{"name": "Battery recycling", "type": "topic", "url": WIKI}],
+    "leaf_types": ["method"],
+    "expand": "links",
+    "limits": {"max_depth": 2, "max_nodes": 10, "pages_per_node": 1},
+}
+EXTRACTS: dict[str, dict[str, Any]] = {
+    "Battery recycling": {
+        "record": {"name": "Battery recycling", "website": WIKI},
+        "sources": {"website": WIKI},
+        "children": [{"name": "Lithium-ion battery recycling", "type": "method", "url": EPA}],
+        "flags": [],
+    },
+    "Lithium-ion battery recycling": {
+        "record": {"name": "Lithium-ion battery recycling", "website": EPA},
+        "sources": {"website": EPA},
+        "children": [],
+        "flags": [],
+    },
+}
+
+
+def catalog_router(entities: list[str]) -> respx.MockRouter:
+    """The recorded world with extract replies by entity name; `entities` collects the extracted names."""
+
+    def chat(request: httpx.Request) -> httpx.Response:
+        system = json.loads(request.content)["messages"][0]["content"]
+        if "The entity: " in system:
+            name = system.split("The entity: ", 1)[1].split(" (type:", 1)[0]
+            entities.append(name)
+            return completion(json.dumps(EXTRACTS[name]))
+        return recorded.chat(request)
+
+    router = recorded_router()
+    router.post("http://llm.test/v1/chat/completions").mock(side_effect=chat)
+    return router
+
+
+def test_catalog_run(runs: Path) -> None:
+    entities: list[str] = []
+    args = ["run", CATALOG_BRIEF, "--profile", "e2e", "--kind", "catalog", "--sources", "web"]
+    args += ["--structure", json.dumps(CATALOG_STRUCTURE), "--run-id", RUN_ID]
+    with catalog_router(entities):
+        result = runner.invoke(app, args)
+    assert result.exit_code == 0, result.output
+    run_dir = runs / RUN_ID
+    found = CatalogRecord.model_validate_json((run_dir / "catalog.json").read_text())
+    assert [(record["id"], record["type"], record["parent_id"]) for record in found.records] == [
+        ("battery-recycling", "topic", None),
+        ("lithium-ion-battery-recycling", "method", "battery-recycling"),
+    ]
+    assert found.records[1]["website"] == EPA
+    assert found.reason == "frontier empty"
+    assert [wave.records for wave in found.waves] == [1, 1]
+    assert sorted(entities) == ["Battery recycling", "Lithium-ion battery recycling"]
+    events = [parse_event(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+    types = [event.type for event in events]
+    assert types[0] == "run.started"
+    assert types[-1] == "run.done"
+    assert types.count("node.found") == 2
+    assert types.count("node.extracted") == 2
+    assert types.count("wave.done") == 2
+    assert types.count("catalog.done") == 1
+    done = [event.stage for event in events if event.type == "stage.done"]
+    assert done[:2] == ["load", "draft"]
+    assert done[-1] == "assemble"
+    for name in ("structure.json", "nodes.jsonl", "records.jsonl", "catalog.json", "request.json", "costs.json"):
+        assert (run_dir / name).is_file(), name
+    assert json.loads(result.stdout) == found.records
+    listed = RunStore(runs, runs).list_runs()[0]
+    assert (listed.kind, listed.nodes, listed.writing) == ("catalog", 2, None)

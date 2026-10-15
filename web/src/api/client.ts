@@ -3,6 +3,7 @@ import type {
   DepthInfo,
   DepthSave,
   DepthUpdate,
+  DraftRequest,
   ForkCreate,
   ProfileInfo,
   ProfileSave,
@@ -17,6 +18,7 @@ import type {
   SessionInfo,
   SlotState,
   SourceView,
+  Structure,
   TokenCreated,
   TokenInfo,
 } from "./types";
@@ -37,6 +39,8 @@ export interface ApiClient {
   createRun(request: RunCreate, attachments: File[]): Promise<RunCreated>;
   forkRun(id: string, body: ForkCreate): Promise<RunCreated>;
   rerunRun(id: string): Promise<RunCreated>;
+  /** Drafts a catalog structure from the brief (`POST /api/catalog/draft`); 502 `draft_failed`. */
+  draftStructure(request: DraftRequest, attachments: File[]): Promise<Structure>;
   cancelRun(id: string): Promise<CancelOutcome>;
   deleteRun(id: string): Promise<void>;
   getArtifact(id: string, name: string): Promise<string>;
@@ -145,6 +149,12 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
       form.append("request", JSON.stringify(request));
       for (const file of attachments) form.append("attachments", file, file.name);
       return json("POST", "/runs", form);
+    },
+    draftStructure: (request, attachments) => {
+      const form = new FormData();
+      form.append("request", JSON.stringify(request));
+      for (const file of attachments) form.append("attachments", file, file.name);
+      return json("POST", "/catalog/draft", form);
     },
     forkRun: (id, body) => json("POST", `${run(id)}/fork`, body),
     rerunRun: (id) => json("POST", `${run(id)}/rerun`),

@@ -5,7 +5,17 @@ from typing import Annotated, get_args
 import typer
 from rich.console import Console
 
-from wosarcher.models import STAGES, Effort, ProviderBlock, Sources, Stage, domain_list, search_language
+from wosarcher.models import (
+    CATALOG_STAGES,
+    STAGES,
+    Effort,
+    ProviderBlock,
+    RunKind,
+    Sources,
+    Stage,
+    domain_list,
+    search_language,
+)
 
 FORMATS = ("report", "answer")
 
@@ -18,9 +28,11 @@ def fail(error: Exception | str, code: int = 1) -> typer.Exit:
 def stage_option(value: str | None) -> Stage | None:
     if value is None:
         return None
-    if value not in STAGES:
-        raise fail(f"unknown stage '{value}'; valid stages: {', '.join(STAGES)}", 2)
-    return value
+    known: tuple[Stage, ...] = (*STAGES, *(stage for stage in CATALOG_STAGES if stage not in STAGES))
+    for stage in known:
+        if stage == value:
+            return stage
+    raise fail(f"unknown stage '{value}'; valid stages: {', '.join(known)}", 2)
 
 
 def sources_option(sources: str, attach: list[str] | None) -> Sources:
@@ -29,6 +41,12 @@ def sources_option(sources: str, attach: list[str] | None) -> Sources:
     if sources == "files" and not attach:
         raise fail("--sources files needs --attach", 2)
     return sources  # pyright: ignore[reportReturnType]  (checked above)
+
+
+def kind_option(value: str | None) -> str | None:
+    if value is None or value in get_args(RunKind):
+        return value
+    raise typer.BadParameter(f"must be one of: {', '.join(get_args(RunKind))}")
 
 
 def format_option(value: str | None) -> str | None:

@@ -14,6 +14,8 @@ import type {
   WritingOptions,
 } from "../../api/types";
 
+export { structure } from "./catalog";
+
 export const writing: WritingOptions = {
   tone: "analytical",
   tone_instructions: "",

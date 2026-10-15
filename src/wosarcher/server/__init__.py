@@ -15,16 +15,17 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from wosarcher.auth import AuthStore
+from wosarcher.build import draft_llm as build_draft_llm
 from wosarcher.build import exporter as build_exporter
 from wosarcher.config import Settings
 from wosarcher.ports import Exporter
-from wosarcher.server import errors, login, meta, routes, sources, stream, tokens
+from wosarcher.server import catalog, errors, login, meta, routes, sources, stream, tokens
 from wosarcher.server.guard import Guard
 from wosarcher.server.health import HealthCache
 from wosarcher.server.hooks import HookLoader, default_loader
 from wosarcher.server.limiter import LoginLimiter
 from wosarcher.server.manager import GRACE_SECONDS, RunManager
-from wosarcher.server.state import ServerState
+from wosarcher.server.state import DraftLLM, ServerState
 from wosarcher.store import RunStore
 
 
@@ -36,6 +37,7 @@ def create_app(
     grace: float = GRACE_SECONDS,
     exporter: Exporter | None = None,
     hooks: HookLoader | None = None,
+    draft_llm: DraftLLM | None = None,
 ) -> FastAPI:
     # The server never uses the caches; the store only reads and appends run logs.
     store = RunStore(runs_dir, runs_dir)
@@ -52,6 +54,7 @@ def create_app(
         LoginLimiter(),
         HealthCache(),
         exporter or build_exporter(),
+        draft_llm or build_draft_llm,
     )
 
     @asynccontextmanager
@@ -65,6 +68,7 @@ def create_app(
     )
     app.state.server = state
     app.include_router(routes.router)
+    app.include_router(catalog.router)
     app.include_router(sources.router)
     app.include_router(meta.router)
     app.include_router(stream.router)

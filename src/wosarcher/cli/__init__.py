@@ -1,6 +1,6 @@
 """`wosarcher`: a client of the `wosarcherd` API; it holds no secret and reads no run directory.
 
-Commands: `run`, `fork`, `runs`, `logs`, `cancel`, `export`, `doctor`,
+Commands: `run`, `catalog`, `fork`, `runs`, `logs`, `cancel`, `export`, `doctor`,
 `profile list|show`, `providers list`, `depth list|show`, `tokens new|list|revoke`, `schema`.
 """
 
@@ -14,6 +14,7 @@ from pydantic.json_schema import models_json_schema
 from rich.console import Console
 from rich.table import Table
 
+from wosarcher.cli import catalog as catalog_command
 from wosarcher.cli import export as export_command
 from wosarcher.cli import logs as logs_command
 from wosarcher.cli import run as run_commands
@@ -162,6 +163,7 @@ def schema() -> None:
 
 
 app.command("run")(run_commands.run)
+app.command("catalog")(catalog_command.catalog)
 app.command("fork")(run_commands.fork)
 app.command("runs")(run_commands.runs)
 app.command("logs")(logs_command.logs)

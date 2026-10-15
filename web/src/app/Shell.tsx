@@ -56,7 +56,9 @@ export function Shell({ screen, liveDot, onGo, overlays, children }: Props) {
   const ThemeIcon = theme === "dark" ? Sun : Moon;
   const themeLabel = theme === "dark" ? "Light theme" : "Dark theme";
   const items = ITEMS.map((item) => {
-    const active = screen === item.screen || (item.screen === "live" && screen === "report");
+    const active =
+      screen === item.screen ||
+      (item.screen === "live" && (screen === "report" || screen === "catalog"));
     const tone =
       item.screen === "live" && liveDot
         ? "live"

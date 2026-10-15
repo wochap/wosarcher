@@ -91,3 +91,13 @@
   gap: 6px;
   flex-wrap: wrap;
 }
+
+.kind {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 1px 7px;
+}
+
+.recipe {
+  white-space: nowrap;
+}

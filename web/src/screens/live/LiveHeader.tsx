@@ -1,8 +1,8 @@
 // The Live run header: status tag, depth tag, rewrite tag, id, meta, query, device chip, and actions.
 
-import { ArrowClockwise, Article, Circle, GitBranch, Stop } from "@phosphor-icons/react";
+import { ArrowClockwise, Article, Circle, GitBranch, Stop, Table } from "@phosphor-icons/react";
 import { useState } from "react";
-import type { RunDetail, RunStatus } from "../../api/types";
+import type { RunDetail, RunKind, RunStatus } from "../../api/types";
 import { DepthTag } from "../../components/DepthTag";
 import { HelpTip } from "../../components/HelpTip";
 import { OriginLabel } from "../../components/OriginLabel";
@@ -28,6 +28,8 @@ type Props = {
   detail: RunDetail | null;
   files: number;
   isPhone: boolean;
+  /** A catalog run: "catalog" leads the meta and the done action is "Open catalog". */
+  kind?: RunKind;
   /** A cancel request is in flight. */
   cancelling: boolean;
   onCancel: () => void;
@@ -40,6 +42,7 @@ export function LiveHeader({
   detail,
   files,
   isPhone,
+  kind = "research",
   cancelling,
   onCancel,
   onOpenReport,
@@ -49,8 +52,9 @@ export function LiveHeader({
   const active = status === "queued" || status === "running";
   const ended = status === "failed" || status === "cancelled" || status === "interrupted";
   // The profile line names the profile; a run without one keeps it in the meta line.
+  const catalog = kind === "catalog";
   const meta = [
-    recipeOf(run.until ?? detail?.until, detail?.writing.format),
+    catalog ? "catalog" : recipeOf(run.until ?? detail?.until, detail?.writing.format),
     detail?.sources ?? "both",
     ...(detail?.use ? [] : [run.profile ?? detail?.profile ?? ""]),
   ];
@@ -68,7 +72,7 @@ export function LiveHeader({
             <Circle weight="fill" className={css.dot} aria-hidden="true" />
             {status === "queued" && run.queued ? "Queued" : LABELS[status]}
           </span>
-          <DepthTag depth={detail?.depth} />
+          {!catalog && <DepthTag depth={detail?.depth} />}
           <ThinkingTag reasoning={detail?.reasoning} />
           {detail?.fork_from === "write" && parent && (
             <span className={`tag tag-outline ${css.rewrite}`}>
@@ -108,8 +112,8 @@ export function LiveHeader({
         )}
         {status === "done" && (
           <button type="button" className="btn btn-primary" onClick={onOpenReport}>
-            <Article aria-hidden="true" />
-            Open report
+            {catalog ? <Table aria-hidden="true" /> : <Article aria-hidden="true" />}
+            {catalog ? "Open catalog" : "Open report"}
           </button>
         )}
         {ended && (

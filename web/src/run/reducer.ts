@@ -6,10 +6,12 @@ import type {
   KeptPassage,
   RunDetail,
   RunEvent,
+  RunKind,
   RunQueuedData,
   RunStatus,
   Stage,
 } from "../api/types";
+import { type CatalogLive, catalogReducer, initialCatalog } from "./catalog";
 
 /** The phases in the order the pipeline runs them. The initial search runs inside `plan`; `gap`
  * shows only for multi-round runs. */
@@ -132,6 +134,10 @@ export type RunView = {
   runId: string;
   lastSeq: number;
   status: RunStatus;
+  /** From `run.started` (or the first catalog event); research until told otherwise. */
+  kind?: RunKind;
+  /** A catalog run's frontier, records, and phases; null for research runs. */
+  catalog: CatalogLive | null;
   query?: string;
   profile?: string;
   parentRunId?: string | null;
@@ -181,6 +187,7 @@ export function initialRunView(runId: string): RunView {
     runId,
     lastSeq: 0,
     status: "queued",
+    catalog: null,
     phases,
     subQueries: [],
     earlyHits: {},
@@ -300,6 +307,7 @@ function apply(state: RunView, event: RunEvent): RunView {
         parentRunId: d.parent_run_id,
         version: d.version,
         until: d.until,
+        kind: d.kind ?? state.kind,
         queued: undefined,
       };
     }
@@ -502,18 +510,42 @@ function apply(state: RunView, event: RunEvent): RunView {
       return { ...state, report: state.report + event.data.text };
     case "report.snapshot":
       return { ...state, report: event.data.text };
+    case "structure.ready":
+    case "node.found":
+    case "node.extracted":
+    case "node.failed":
+    case "wave.done":
+    case "catalog.done":
+      return state.kind === "catalog" ? state : { ...state, kind: "catalog" };
   }
 }
 
+const CATALOG_EVENTS = new Set([
+  "structure.ready",
+  "node.found",
+  "node.extracted",
+  "node.failed",
+  "wave.done",
+  "catalog.done",
+]);
+
+/** The research fold, then the catalog fold for catalog runs. */
+function applyAll(state: RunView, event: RunEvent): RunView {
+  const next = apply(state, event);
+  const catalogRun = next.kind === "catalog" || CATALOG_EVENTS.has(event.type);
+  if (!catalogRun) return next;
+  return { ...next, catalog: catalogReducer(next.catalog ?? initialCatalog(), event) };
+}
+
 export function runReducer(state: RunView, event: RunEvent): RunView {
-  if (LIVE_ONLY.has(event.type)) return apply(state, event);
+  if (LIVE_ONLY.has(event.type)) return applyAll(state, event);
   // A terminal event that is not logged carries a seq already applied (0 when nothing was logged).
   if (TERMINAL.has(event.type)) {
     if (isEnded(state.status) && state.lastSeq >= event.seq) return state;
-    return { ...apply(state, event), lastSeq: Math.max(state.lastSeq, event.seq) };
+    return { ...applyAll(state, event), lastSeq: Math.max(state.lastSeq, event.seq) };
   }
   if (event.seq <= state.lastSeq) return state;
-  return { ...apply(state, event), lastSeq: event.seq };
+  return { ...applyAll(state, event), lastSeq: event.seq };
 }
 
 export function isEnded(status: RunStatus): boolean {

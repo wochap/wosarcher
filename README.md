@@ -101,6 +101,16 @@ uv run wosarcher fork <run-id> --from write --tone critical  # rewrite only
 uv run wosarcherd run "..." --until select --json  # the engine in this process, without a daemon
 ```
 
+Catalog runs turn a tree-shaped brief into a JSON array of records, one per
+entity, each value with its source URL (see Catalog runs in the design):
+
+```sh
+uv run wosarcher catalog draft "Every public organization of the Peruvian State" > peru.json  # edit it
+uv run wosarcher catalog "Every public organization of the Peruvian State" \
+  --structure peru.json --allow-domain gob.pe --max-nodes 200 > catalog.json
+uv run wosarcher fork <run-id> --from expand --max-depth 4   # Expand more
+```
+
 Checks:
 
 ```sh

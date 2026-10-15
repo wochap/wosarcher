@@ -27,8 +27,8 @@ capability at a time and may refine it; when they do, update this file.
 - Search providers besides SearXNG.
 - Local PDF parsing. Firecrawl handles PDFs at URLs. Local PDFs are converted
   outside the tool (for example with pdf-ingest) and attached as markdown.
-- Multi-agent orchestration, source curation, report chat, and recursive
-  child researchers.
+- Multi-agent orchestration, source curation, and report chat. (Tree-shaped
+  briefs are catalog runs, one run with a node frontier; see Catalog runs.)
 
 ## Pipeline
 
@@ -39,6 +39,14 @@ attachments ─► load ──────┬───────────�
 query ─► initial search ─► plan ─► search ─► fetch ──────┘                                              │
                                      ▲                                                                   │
                                      └──────────────── follow-up queries (research rounds) ──────────────┘
+```
+
+A catalog run (`kind = catalog`, see Catalog runs) has its own stage graph,
+built from the same search, fetch, and chunk stages:
+
+```
+attachments ─► load ─► draft ─► ┌─► expand ─► search ─► fetch ─► chunk ─► extract ─┐ ─► assemble
+                                └────────────── next wave (new nodes) ◄─────────────┘
 ```
 
 Load runs before plan so the planner sees attachment outlines. The initial
@@ -190,6 +198,114 @@ On `gpu_policy = exclusive`, release decisions use the real next stage,
 cyclic inside the loop (score, gap, search, …, prefilter), so a low-VRAM
 machine swaps models up to three times per round. Fewer rounds or a remote
 scorer keeps that down.
+
+### Catalog runs
+
+A catalog run answers a tree-shaped brief ("every public organization of
+the Peruvian State, with its head and website") with a validated JSON
+array of records, one per entity, each value traceable to a page URL. Its
+frontier is nodes, not question parts; it has no planner, gap step,
+scoring, select, or writer. `Runner.run` dispatches on the run's kind; the
+wave loop and `WaveState` (wave, nodes expanded, new nodes, records,
+failures, URLs seen, pages fetched) live in `runner/catalog.py`.
+
+**Structure.** `Structure` (`models.py`) holds `fields` (name, type one of
+`text`, `slug`, `url`, `date`, `enum`, `ref`, `required`, `volatile`),
+`relation` (the child relation, "dependent organizations"), `seeds` (name,
+type, optional URL), `leaf_types`, `expand` (`links`, `search`, `both`),
+`limits` (`max_depth`, `max_nodes`, `pages_per_node`), and `language`.
+Field names match `^[a-z][a-z0-9_]{0,39}$`; the first required `text`
+field is the name field; at most one `slug` and one `ref` (the parent)
+field; the `enum` field's `values` are the node types, and leaf and seed
+types must be among them. Unset limits and expand take the `catalog`
+block's values. The `draft` stage validates a supplied structure (an
+invalid one fails the run naming the field) or, when none is given, makes
+one LLM call (`prompts/draft.md`, with attachment outlines as data in
+`draft_data.md`) and reads a `Structure` from the reply. It writes
+`structure.json`, emits `structure.ready`, and seeds the frontier: each
+seed a node at depth 0 with `found_by = seed`. The web form always sends a
+structure (from `POST /api/catalog/draft`, edited); the CLI drafts inside
+the run unless `--structure` is given.
+
+**Nodes and waves.** `nodes.jsonl` is the frontier and the checkpoint: per
+node `id` (slug, unique in the run), `name`, `type`, `parent_id`, `depth`,
+`url`, `wave`, `status` (`discovered`, `expanding`, `extracted`,
+`failed`), `expanded`, `found_by` (`seed`, `links`, `search`), and `pages`.
+A node is expandable when its type is not a leaf type and its depth is
+below `max_depth`. A wave takes every `discovered` node in discovery order,
+up to the room `max_nodes` leaves, and runs `expand`, `search`, `fetch`,
+`chunk`, and `extract` on them; the stage events carry the wave as
+`round`.
+
+**Expand, search, fetch.** `expand` builds per node the URL to fetch first
+(the seed's, or the one its parent's extraction gave), a self query
+`"<name> <type>"` (`n<k>s`) only when the node has no URL, and, for an
+expandable node with `expand` = `search` or `both`, a children query
+`"<name> <relation>"` (`n<k>c`). Search runs them through the searcher
+with the run's domain lists and language. Fetch takes per node at most
+`pages_per_node` pages: known URL, children hits, then self hits. A URL
+already fetched in the run is reused without a new fetch and does not
+count again toward `fetch.max_pages` (it counts toward the node's
+`pages_per_node`). Chunk runs on the wave's new pages.
+
+**Extract.** One LLM call per node, `catalog.concurrency` in flight. The
+system message is `prompts/extract.md` with the structure as JSON, the
+node's name, type, parent, the relation, the expand mode,
+`catalog.max_children`, and the date; the user message is the data
+preamble plus a delimited block with the node's pages whole (`## <title>
+<url> (fetched <date>)` and their chunks in order), cut to
+`catalog.context_tokens` (a number or `auto`, computed as the gap budget
+is). Pages, not scored passages: a node's record needs its own page. The
+reply is JSON: `record`, `sources` (field to URL), `children` (name, type,
+url), and `flags`. With `expand` = `links` or `both` children may come from
+the page's links, with `search` from its text only. Code checks the reply:
+unknown fields dropped; a source URL that is not one of the node's pages
+dropped and flagged; a volatile value without a page date nulled and
+flagged; an enum value outside the list nulled and flagged; children cut to
+`catalog.max_children`. `slug` and `ref` fields are never taken from the
+model. A failed call or an unreadable reply marks the node `failed` with
+the reason (`node.failed`); the wave goes on. Records are appended to
+`records.jsonl` with their node ID, and `node.extracted` carries the
+checked record.
+
+**Children and dedupe.** Children are added at depth `d+1` with
+`found_by` `links` or `search`, deduplicated by normalised name (NFD,
+case-folded, punctuation stripped, whitespace collapsed) and normalised
+URL. A duplicate is not added; when it names another parent the existing
+node gets the flag `parent: also listed under <name>`. A type outside the
+enum gets the flag `type: <value> not in the structure` and the first
+enum value.
+
+**Stop rules**, checked after each wave in this order: `frontier empty`
+(no `discovered` node left), `max nodes` (no room and nothing left to
+expand), `page limit reached` (`fetch.max_pages` counted pages), `extract
+failed` (every extraction of the wave failed). Each wave ends with
+`wave.done` (expanded, found, records, failed, dropped). Cancellation and
+stage failure behave as for research runs.
+
+**Assemble** is pure code: it reads `structure.json`, `nodes.jsonl`, and
+`records.jsonl` and writes `catalog.json`: `records` (one per extracted
+node in discovery order, the slug field from the node ID, the ref field
+from the parent ID, the enum field from the type, with `flags` and
+`sources`), `dropped` (records missing a required field, naming it),
+`waves`, `reason`, `note` (for example "No unexpanded nodes left after
+wave 5. Max depth 3 was not reached."), `fill` (records with a value per
+field), `by_type`, `by_depth`, and `nodes`. Slugs come from the name field
+(NFD, ASCII letters and digits, hyphens) with `-2`, `-3` on collision.
+`catalog.done` carries waves, nodes, records, flagged, the reason, and the
+note. The CLI prints `records` as a JSON array.
+
+**Resume and forks.** On resume, `extracted` nodes keep their records and
+`expanding` nodes go back to `discovered`, so a resumed wave redoes at
+most the in-flight nodes. A catalog run forks from two stages only:
+`expand` with `limits` (each at least the parent's) copies everything
+through the last wave and continues from the frontier, re-marking nodes
+the old limits left unexpanded (Expand more); `extract` copies
+`structure.json`, `nodes.jsonl` (statuses reset to `discovered`,
+`expanded` kept), `hits.jsonl`, `pages.jsonl`, and `chunks.jsonl`, drops
+`records.jsonl`, and extracts every node again from its recorded pages,
+then assembles, with no search or fetch (Re-extract, usually with another
+model). Any other `from` is 422.
 
 ### Initial search
 
@@ -827,24 +943,25 @@ src/wosarcher/
   depths/        # built-in depth presets quick.toml, standard.toml, deep.toml, exhaustive.toml
   store/         # __init__.py: RunStore (create, fork, artifacts, events.jsonl with seq, list_runs); caches.py: PageCache, EmbeddingCache
   runner/        # __init__.py: Runner (stage loop, research rounds, timeouts, costs, cancel); steps.py: one function per stage, RoundState;
+                 # catalog.py: the catalog wave loop and WaveState;
                  # events.py: EventLog, snapshot_event; devices.py: needs_release; caches.py: CachedFetcher, EmbeddingMapping
   build.py       # composition root: config -> adapters (a dict, no registry)
   doctor.py      # provider health probes and exclusive-GPU warnings
   lexical.py     # BM25: tokenizer, scoring, relative threshold (pure functions)
   document.py    # export Markdown: title, date and run ID, "Question" block, report (pure)
   attachments.py # expands --attach paths and reads the files' bytes (the only attachment file I/O)
-  stages/        # one file per stage
+  stages/        # one file per stage (catalog: draft.py, expand.py, extract.py, assemble.py; search, fetch, chunk shared)
   adapters/      # one file per adapter (pandoc.py: report export; webhook.py, command.py: run-end hooks), plus fakes.py
-  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones())
+  prompts/       # __init__.py (load(name) -> string.Template from package data), jev.toml, plan.md, plan_data.md, gap.md, gap_data.md, write.md, passages.md, write_task.md, tones.toml (tones()), draft.md, draft_data.md, extract.md
   cli/           # the `wosarcher` client, imports models, attachments, and config only:
                  # __init__.py: typer app (profile list|show, doctor, schema); api.py: connection (socket or URL), httpx, websockets;
-                 # run.py: run, fork, runs, cancel; logs.py: logs, event lines, stderr listener; export.py: export;
+                 # run.py: run, fork, runs, cancel; catalog.py: catalog, catalog draft; logs.py: logs, event lines, stderr listener; export.py: export;
                  # depth.py: depth; tokens.py: tokens; options.py: options and checks shared with daemon/; progress.py: rich Live view
   daemon/        # `wosarcherd`: __init__.py: typer app (doctor, profile use); run.py: the engine `run` and `fork`;
                  # serve.py: serve (TCP and Unix socket listeners); auth.py: auth set-password; __main__.py: python -m wosarcher.daemon
   __main__.py    # python -m wosarcher (the client)
   server/        # __init__.py: create_app; manager.py: RunManager (queue, subprocesses, cancel); staging.py: runs/.queue/ and argv;
-                 # hooks.py: fire_hooks (run-end hooks); tail.py: RunTail; routes.py: /api/runs; meta.py: settings, profiles, health routes;
+                 # hooks.py: fire_hooks (run-end hooks); tail.py: RunTail; routes.py: /api/runs, /api/catalog/draft; meta.py: settings, profiles, health routes;
                  # health.py: HealthCache (stored provider checks); stream.py: event socket;
                  # settings.py: server-settings.json; errors.py: JSON errors; state.py: ServerState;
                  # guard.py: request guard; login.py: login, logout, session; limiter.py: LoginLimiter; tokens.py: /api/tokens
@@ -908,6 +1025,10 @@ runs/<id>/
   select.jsonl       # select: kept passages not selected, with the reason
   report.md          # written as the report streams, then replaced by the rendered report
   report.json        # the structured Report
+  structure.json     # draft: catalog runs only; the Structure the run uses
+  nodes.jsonl        # catalog: the frontier and checkpoint, one line per node
+  records.jsonl      # extract: checked records with their node ID
+  catalog.json       # assemble: records, dropped, waves, reason, note, fill, by_type, by_depth, nodes
   events.jsonl
   costs.json         # usage and cost per stage, per provider, and in total
 ```
@@ -941,6 +1062,14 @@ is held, and `interrupted` otherwise, the same for every reader and for
 the server after a restart. Only the server queues runs (see Server); a
 direct `wosarcherd run` is not queued or counted, but shows as `running`
 through its lock.
+
+A catalog run has `structure.json`, `nodes.jsonl`, `records.jsonl`,
+`catalog.json`, `plan.json` (the wave queries), `hits.jsonl`,
+`pages.jsonl`, `chunks.jsonl`, `events.jsonl`, and `costs.json`; it has no
+`initial.jsonl`, `candidates.jsonl`, `scores.jsonl`, `research.json`,
+`context.json`, `select.jsonl`, or report. `request.json` records `kind`
+(a record without it reads as `research`) and the `structure` the run
+started with; after `draft` derives one, `structure.json` is the source.
 
 Queries, hits, pages, and scores carry the `round` they first appeared in
 (1 for single-round runs and files). `research.json` holds `planned`,
@@ -1008,9 +1137,20 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   creates the fork with `POST /api/runs/{id}/fork` and follows it like
   `run`; a queued or running parent exits 2 printing the server's 409
   detail, and a fork that fails before its first stage exits 1.
+- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--set k=v]... [--until STAGE] [--json]`:
+  creates a run with `kind` `catalog` (see Catalog runs); the flags
+  override the structure file's values, and without `--structure` the run's
+  `draft` stage derives one. It follows the run like `run`, with
+  `wave.done` lines ("wave 1 expanded 6 found 14 records 6 failed 0") and
+  the `catalog.done` stop reason, and prints the `records` array of
+  `catalog.json` (`--json`: the `RunOutput` with the catalog). `wosarcher
+  catalog draft "<brief>" [--attach ...] [--profile NAME]` calls `POST
+  /api/catalog/draft` and prints the structure JSON, which `--structure`
+  accepts; it creates no run. `wosarcher fork` gains `--max-depth`,
+  `--max-nodes`, and `--pages-per-node` for `--from expand`.
 - `wosarcher runs [--limit N] [--json]`: the runs `GET /api/runs` lists,
   newest first, as `RunSummary` rows: status (`queued`, `running`, `done`,
-  `failed`, `cancelled`, `interrupted`), the origin (`web`, `cli`, or `api ·
+  `failed`, `cancelled`, `interrupted`), the kind, the origin (`web`, `cli`, or `api ·
   <token>`), version, parent, and query.
 - `wosarcher logs <id> [--follow]`: prints the run's logged events, one
   line each: `<HH:MM:SS> <stage or -> <type> <summary>` (local time; the
@@ -1168,6 +1308,10 @@ commands, flags, or the value lists that mirror package constants.
 - Research rounds (multi-round runs only): `round.done` (stage `score`),
   `gap.ready` (stage `gap`), `research.done` (stage `gap`).
 - Write: `report.delta` and `report.snapshot` (server only, live).
+- Catalog (catalog runs only): `structure.ready` (stage `draft`),
+  `node.found` (`draft` for seeds, `extract` for children),
+  `node.extracted` and `node.failed` (`extract`, or `fetch` when no page
+  could be fetched), `wave.done` (`extract`), `catalog.done` (`assemble`).
 
 Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 `models.py` and are part of `wosarcher schema`. `data` fields:
@@ -1175,7 +1319,7 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | Type | `data` |
 |---|---|
 | `run.queued` | `position` |
-| `run.started` | `query`, `profile`, `parent_run_id`, `version`, `until` |
+| `run.started` | `query`, `kind`, `profile`, `parent_run_id`, `version`, `until` |
 | `run.done` | `until`, `totals` |
 | `run.failed` | `stage`, `error` |
 | `run.cancelled` | `stage` |
@@ -1193,9 +1337,16 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `gap.ready` | `round` (the round it followed), `queries` (follow-ups), `note`, `uncovered` (query IDs), `missing` (question parts), `retried` |
 | `research.done` | `planned`, `ran`, `reason`, `note` |
 | `report.delta`, `report.snapshot` | `text` |
+| `structure.ready` | `fields` (name and type), `seeds`, `relation`, `limits`, `derived` |
+| `node.found` | `node_id`, `name`, `type`, `parent_id`, `depth`, `url`, `wave`, `found_by` |
+| `node.extracted` | `node_id`, `record` (checked), `sources`, `flags`, `children` |
+| `node.failed` | `node_id`, `reason` |
+| `wave.done` | `wave`, `expanded`, `found`, `records`, `failed`, `dropped` |
+| `catalog.done` | `waves`, `nodes`, `records`, `flagged`, `reason`, `note` |
 
 `round` is the research round (1 for single-round runs and for stages
-outside the loop).
+outside the loop); in a catalog run it is the wave (1 for `load`, `draft`,
+and `assemble`).
 
 `provider` is `<provider>:<model>`, or `<provider>` when the block has no
 model (`built-in` for stages without a block). On `stage.started` it is
@@ -1297,7 +1448,12 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   staged directory while queued, copied into the new run's staging
   directory next to the uploads; an unknown run is 404 `run_not_found`, an
   unknown name 422 `invalid_attachment` naming it; the duplicate rule and
-  the files-only rule count reused and uploaded files together). Request precedence, each later layer
+  the files-only rule count reused and uploaded files together), and
+  `kind` (`research`, the default, or `catalog`) with, for a catalog,
+  `structure` (optional; absent means the `draft` stage derives it). On a
+  catalog run `depth`, `research`, and `writing` are 422, as is
+  `structure` on a research run; `until` must be a stage of the run's
+  kind. Request precedence, each later layer
   winning: defaults, the chosen entries, the chosen model's values,
   profile, environment, global settings, the depth preset, the request's
   `sources`, `research`, `writing`, `domains`, and `llm`, then its `set`;
@@ -1329,13 +1485,16 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   `llm` field of the profile's Advanced values; `form`, the recorded
   request (see Run directory), null without one; `attachments`, each
   attachment's `name` and `size` from the run directory, or the staged
-  directory while queued), and for one
+  directory while queued); `kind`; `nodes`, for a catalog run the
+  records so far (from `nodes.jsonl` while live, from `catalog.json` when
+  done), null for research runs), and for one
   run `RunDetail` (plus the redacted `request.json`, `costs`, `last_seq`).
   Runs that ended without a run directory are listed too (see below).
 - `GET /api/runs/{id}/artifacts/{name}`: only `request.json`,
   `files.jsonl`, `plan.json`, `initial.jsonl`, `hits.jsonl`, `pages.jsonl`,
   `chunks.jsonl`, `candidates.jsonl`, `scores.jsonl`, `research.json`,
   `context.json`, `select.jsonl`, `report.md`, `report.json`,
+  `structure.json`, `nodes.jsonl`, `records.jsonl`, `catalog.json`,
   `events.jsonl`, `costs.json` (JSON as
   `application/json`, JSONL as `application/x-ndjson`, Markdown as
   `text/markdown`, UTF-8); anything else is 404.
@@ -1413,7 +1572,15 @@ filter replaces images with their alt text, so no file or URL is read.
   `profile`): `wosarcherd fork` through the queue. A fork keeps the parent's
   configuration: only the request's writing fields and `set` are passed,
   not the global settings. 409 for a queued or running parent or an
-  unfinished earlier stage; 422 for an unknown stage.
+  unfinished earlier stage; 422 for an unknown stage. A catalog run forks
+  only `from` `expand`, with `limits` (`max_depth`, `max_nodes`,
+  `pages_per_node`, each at least the parent's), or `from` `extract`
+  (optional `llm` model and reasoning); anything else, or limits below the
+  parent's, is 422 (see Catalog runs).
+- `POST /api/catalog/draft` (multipart: `request` with `{brief, profile?,
+  use?, llm?}` plus `attachments`): runs the draft call with the
+  profile's llm and returns the `Structure`, or 502 `draft_failed` with the
+  reason. Synchronous; it creates no run and is not listed.
 - `POST /api/runs/{id}/rerun`: a new run (version 1, no parent) with the
   original query, sources, `until`, profile, depth, `--use` for the five
   entries recorded in `request.json` `use`, and the saved overrides
@@ -1924,6 +2091,14 @@ not in the CLI flags, presets, API, or web form). The `gap` stage
 timeout defaults to 360 seconds, room for a gap step that asks its model
 twice.
 
+The `catalog` block: `max_depth` (1 to 10, default 3), `max_nodes` (1 to
+5000, default 200), `pages_per_node` (1 to 10, default 2), and `expand`
+(`links`, `search`, `both`; default `both`), the defaults a structure
+leaves unset (a run's structure wins); `max_children` (default 50),
+children kept per extraction; `concurrency` (default 4), extraction calls
+in flight; and `context_tokens` (a number or `auto`, default `auto`), the
+extract budget. A profile may set them; a depth preset may not.
+
 `standard` sets nothing, so it resolves like no depth. `custom` applies no
 preset; it only labels a run whose research values the user set. An unknown
 name fails before any provider is called and lists the presets.
@@ -2343,7 +2518,8 @@ screen, in both themes and on phone and desktop.
 - Primary file: `design/project/wosarcher.dc.html`. Its `scenario`
   values (live, loading, queued, queued-cli, live-cli, cancel-cli,
   live-api, reconnecting, failure, cancelled, finished, versions, empty,
-  new, login, login-wrong, login-limited) are the states the
+  new (with the Kind switch), live-catalog, catalog-result, history,
+  login, login-wrong, login-limited) are the states the
   frontend must implement. The `help` scenario specifies the inline help
   component (the `?` button and its tooltip); it is not a screen.
 - Styling uses the bundle's Nocturne design system directly:
@@ -2361,6 +2537,38 @@ screen, in both themes and on phone and desktop.
   changes; the design is not reduced to fit.
 - `docs/frontend-inventory.md` describes the prototype's screens,
   components, data, and interactions as a reading aid.
+
+Catalog runs use three screens of the prototype and a History change:
+
+- **New run, Catalog kind** (scenario `new`, Catalog picked): the Kind
+  segmented control (Research, Catalog) above the form, kept with the New
+  run draft. The catalog form has the brief, Attachments, "Draft
+  structure" (posts `POST /api/catalog/draft` and fills the Structure
+  panel), and "Run catalog" (disabled until a structure exists). The
+  Structure panel edits record fields (name, type, Required, Volatile),
+  the child relation, seeds, leaf types, Expand by, the three limits, the
+  domain rows, and the search language, with the estimate line "Up to <n>
+  nodes · about <n> pages · <n> extraction calls". A rejected structure
+  shows the error box with "Fix in Structure".
+- **Live run, catalog** (`live-catalog`): the 8-phase timeline (Load,
+  Draft, Expand, Search, Fetch, Chunk, Extract, Assemble; loop phases show
+  "wave <k>"), Frontier (a tree from `node.found` and node status events)
+  over Sources, Records (from `node.extracted`, newest first), and
+  Coverage (limit bars, fill per field, nodes by type, from `wave.done`
+  and the node events); "Open catalog" when it ends.
+- **Catalog result** (`catalog-result`, `#/catalog/<id>`), built from
+  `catalog.json`: Download JSON, Copy JSON, Download CSV (built in the
+  client), Expand more (a dialog with the three limits, posting the
+  `expand` fork), and Re-extract (the Rewrite dialog's model and thinking
+  fields, posting the `extract` fork); Table (filters by text, type,
+  flagged only, missing field), Graph (inline SVG tree from the ref
+  field), and JSON views; a Summary aside; and the record drawer with each
+  value's source link.
+- **History** (`history`): a Kind column (`catalog` accent-tinted,
+  `research` outlined) and a Kind filter (Any, Research, Catalog); a
+  catalog row's Recipe reads "<n> nodes" from the summary's `nodes`, a
+  catalog fork reads "↳ expanded from <parent>", and its open action shows
+  the Catalog result.
 
 #### Frontend decisions
 
@@ -2620,7 +2828,7 @@ The UI lives in `web/` (Vite, React, TypeScript, pnpm) and builds into
 
 - **Routes** are URL fragments, parsed by `src/app/route.ts` with no router
   library: `#/new`, `#/live`, `#/live/<id>`, `#/runs/<id>` (Report),
-  `#/history`, `#/settings`; anything else is `#/new`. Fragments never
+  `#/catalog/<id>` (Catalog result), `#/history`, `#/settings`; anything else is `#/new`. Fragments never
   reach the server, so a reload keeps the screen.
 - **Styles**: two vendored global sheets in `src/vendor/` (exempt from the
   token check): `nocturne.css`, the bundle's `styles.css` without its

@@ -5,16 +5,56 @@ import type * as G from "./generated";
 export type Stage = NonNullable<G.RunStarted["stage"]>;
 export type WritingOptions = Required<NonNullable<G.RunSummary["writing"]>>;
 export type RunStatus = "queued" | "running" | "done" | "failed" | "cancelled" | "interrupted";
-export type RunSummary = Omit<G.RunSummary, "status" | "writing"> & {
-  status: RunStatus;
-  writing: WritingOptions;
+/** `research` (the default for older runs) or `catalog`. */
+export type RunKind = "research" | "catalog";
+/** Added by hand until the server's summary carries them: the kind, and a catalog's records. */
+type KindFields = {
+  kind?: RunKind;
+  /** Catalog runs: extracted records so far, or the catalog's count when done; else null. */
+  nodes?: number | null;
 };
-export type RunDetail = Omit<G.RunDetail, "status" | "writing"> & {
-  status: RunStatus;
-  writing: WritingOptions;
+export type RunSummary = Omit<G.RunSummary, "status" | "writing" | "form"> &
+  KindFields & {
+    status: RunStatus;
+    writing: WritingOptions;
+    form?: RunCreate | null;
+  };
+export type RunDetail = Omit<G.RunDetail, "status" | "writing" | "form"> &
+  KindFields & {
+    status: RunStatus;
+    writing: WritingOptions;
+    form?: RunCreate | null;
+  };
+export type Structure = G.Structure;
+export type StructureField = G.StructureField;
+export type FieldType = G.StructureField["type"];
+export type Seed = G.Seed;
+export type Limits = Required<G.Limits>;
+export type ExpandBy = NonNullable<G.Structure["expand"]>;
+export type RunCreate = G.RunCreate & { kind?: RunKind; structure?: Structure | null };
+export type ForkCreate = G.ForkCreate & { limits?: G.Limits };
+/** `POST /api/catalog/draft`: the brief and the profile's choices; attachments go alongside. */
+export type DraftRequest = { brief: string; profile?: string; use?: Use; llm?: LlmPatch };
+/** One record of `catalog.json`: the structure's fields, `sources`, and `flags`. */
+export type CatalogRecord = Record<string, unknown> & {
+  sources?: Record<string, string>;
+  flags?: string[];
 };
-export type RunCreate = G.RunCreate;
-export type ForkCreate = G.ForkCreate;
+/** `catalog.json`. */
+export type Catalog = Omit<G.CatalogRecord, "records"> & { records: CatalogRecord[] };
+/** One line of `nodes.jsonl`. */
+export type CatalogNode = {
+  id: string;
+  name: string;
+  type: string;
+  parent_id: string | null;
+  depth: number;
+  url?: string | null;
+  wave?: number;
+  status: "discovered" | "expanding" | "extracted" | "failed";
+  found_by?: string;
+  pages?: string[];
+};
 export type RunCreated = G.RunCreated;
 /** Domain lists: entries are bare domains, matched with their subdomains. */
 export type DomainLists = { allow: string[]; block: string[] };
@@ -82,4 +122,10 @@ export type RunEvent =
   | Ev<"gap.ready", G.GapReady>
   | Ev<"research.done", G.ResearchDone>
   | Ev<"report.delta", G.ReportDelta>
-  | Ev<"report.snapshot", G.ReportSnapshot>;
+  | Ev<"report.snapshot", G.ReportSnapshot>
+  | Ev<"structure.ready", G.StructureReady>
+  | Ev<"node.found", G.NodeFound>
+  | Ev<"node.extracted", G.NodeExtracted>
+  | Ev<"node.failed", G.NodeFailed>
+  | Ev<"wave.done", G.WaveDone>
+  | Ev<"catalog.done", G.CatalogDone>;

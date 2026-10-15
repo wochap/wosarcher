@@ -8,6 +8,8 @@ describe("route", () => {
     expect(parseRoute("#/live")).toEqual({ screen: "live" });
     expect(parseRoute("#/live/r_8c21")).toEqual({ screen: "live", runId: "r_8c21" });
     expect(parseRoute("#/runs/r_8c21")).toEqual({ screen: "report", runId: "r_8c21" });
+    expect(parseRoute("#/catalog/r_8d14")).toEqual({ screen: "catalog", runId: "r_8d14" });
+    expect(routeHash({ screen: "catalog", runId: "r_8d14" })).toBe("#/catalog/r_8d14");
     expect(parseRoute("#/history")).toEqual({ screen: "history" });
     expect(parseRoute("#/settings")).toEqual({ screen: "settings" });
     expect(parseRoute("#/preview/login")).toEqual({ screen: "preview", name: "login" });

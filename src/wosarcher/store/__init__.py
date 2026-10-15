@@ -18,10 +18,16 @@ from pydantic import BaseModel
 
 from wosarcher.config import LLM_KEYS, Settings, redact
 from wosarcher.models import (
+    CATALOG_STAGES,
     LOOP_STAGES,
     STAGES,
+    WAVE_STAGES,
     AttachmentInfo,
+    CatalogDone,
+    CatalogRecord,
     Event,
+    Limits,
+    Node,
     Origin,
     Plan,
     ReasoningOptions,
@@ -36,6 +42,8 @@ from wosarcher.models import (
     RunSummary,
     Stage,
     StageDone,
+    Structure,
+    WaveDone,
     WritingOptions,
     make_event,
     parse_event,
@@ -52,7 +60,36 @@ STAGE_ARTIFACTS: dict[Stage, tuple[str, ...]] = {
     "gap": ("research.json",),
     "select": ("context.json", "select.jsonl"),
     "write": ("report.md", "report.json"),
+    "draft": ("structure.json", "nodes.jsonl"),
+    "expand": ("plan.json",),
+    "extract": ("records.jsonl",),
+    "assemble": ("catalog.json",),
 }
+CATALOG_FORKS: tuple[Stage, ...] = ("expand", "extract")
+"""The stages a catalog run forks from."""
+CATALOG_COPIES: dict[Stage, tuple[str, ...]] = {
+    "expand": (
+        "files.jsonl",
+        "structure.json",
+        "nodes.jsonl",
+        "records.jsonl",
+        "plan.json",
+        "hits.jsonl",
+        "pages.jsonl",
+        "chunks.jsonl",
+    ),
+    "extract": (
+        "files.jsonl",
+        "structure.json",
+        "nodes.jsonl",
+        "plan.json",
+        "hits.jsonl",
+        "pages.jsonl",
+        "chunks.jsonl",
+    ),
+}
+"""What a catalog fork copies; `nodes.jsonl` is rewritten after the copy."""
+LIMIT_FLAGS = {"max_depth": "--max-depth", "max_nodes": "--max-nodes", "pages_per_node": "--pages-per-node"}
 END_STATUS: dict[str, RunStatus] = {"run.done": "done", "run.failed": "failed", "run.cancelled": "cancelled"}
 LOCK = ".lock"
 """`<run>/.lock`: the run process holds `LOCK_EX` on it until it exits; the kernel drops it even on SIGKILL."""
@@ -138,6 +175,41 @@ def free_name(name: Path, taken: set[Path]) -> Path:
         candidate = name.with_name(f"{name.stem}-{n}{name.suffix}")
     taken.add(candidate)
     return candidate
+
+
+def raised_limits(structure: Structure, limits: Mapping[str, int]) -> Structure:
+    """The structure with `limits` applied; each at least the old value and at least one raised."""
+    old = structure.limits
+    unknown = [name for name in limits if name not in LIMIT_FLAGS]
+    if unknown:
+        raise RunStoreError(f"unknown limits: {', '.join(unknown)}")
+    lower = [
+        f"{LIMIT_FLAGS[name]} {value} < {getattr(old, name)}"
+        for name, value in limits.items()
+        if value < getattr(old, name)
+    ]
+    if lower:
+        raise RunStoreError(f"a fork from expand cannot lower a limit: {'; '.join(lower)}")
+    if not any(value > getattr(old, name) for name, value in limits.items()):
+        raise RunStoreError(f"a fork from expand needs a raised limit: {', '.join(LIMIT_FLAGS.values())}")
+    try:
+        new = Limits.model_validate({**old.model_dump(), **limits})
+    except ValueError as error:
+        raise RunStoreError(f"invalid limits: {error}") from None
+    return structure.model_copy(update={"limits": new})
+
+
+def forked_nodes(nodes: Sequence[Node], structure: Structure, from_stage: Stage) -> list[Node]:
+    """`extract`: every node `discovered`, `expanded` kept. `expand`: extracted nodes left unexpanded that the
+    new limits make expandable go back to `discovered`."""
+    if from_stage == "extract":
+        return [node.model_copy(update={"status": "discovered", "reason": None}) for node in nodes]
+    found: list[Node] = []
+    for node in nodes:
+        if node.status == "extracted" and not node.expanded and structure.is_expandable(node.type, node.depth):
+            node = node.model_copy(update={"status": "discovered"})
+        found.append(node)
+    return found
 
 
 class RunStore:
@@ -244,8 +316,27 @@ class RunStore:
         token_name: str | None = None,
         lock: bool = False,
         use: Mapping[str, str] | None = None,
+        limits: Mapping[str, int] | None = None,
     ) -> RunRecord:
+        """`limits`: raised catalog limits (`max_depth`, `max_nodes`, `pages_per_node`), for `--from expand` only."""
         parent = self.read_record(parent_id)
+        if parent.kind == "catalog":
+            return self.fork_catalog(
+                parent,
+                from_stage,
+                overrides,
+                settings,
+                limits=limits,
+                profile=profile,
+                until=until,
+                run_id=run_id,
+                origin=origin,
+                token_name=token_name,
+                lock=lock,
+                use=use,
+            )
+        if limits:
+            raise RunStoreError(f"{', '.join(LIMIT_FLAGS[name] for name in limits)}: only for catalog runs")
         done = self.done_events(parent_id)
         missing = self.missing_stages(parent_id, from_stage)
         if missing:
@@ -289,10 +380,87 @@ class RunStore:
             self.write_artifact(run_id, "plan.json", plan.model_copy(update={"queries": first}))
         return record
 
+    def fork_catalog(
+        self,
+        parent: RunRecord,
+        from_stage: Stage,
+        overrides: Sequence[str],
+        settings: Settings,
+        *,
+        limits: Mapping[str, int] | None,
+        profile: str | None,
+        until: Stage | None,
+        run_id: str | None,
+        origin: Origin,
+        token_name: str | None,
+        lock: bool,
+        use: Mapping[str, str] | None,
+    ) -> RunRecord:
+        """`expand`: everything copied, raised limits, nodes left unexpanded by the old limits back in the frontier.
+
+        `extract`: the crawl's artifacts copied without the records, every node back to `discovered`.
+        """
+        parent_id = parent.run_id
+        if from_stage not in CATALOG_FORKS:
+            raise RunStoreError(
+                f"cannot fork catalog run {parent_id} from {from_stage}: a catalog run forks from expand or extract"
+            )
+        missing = self.missing_stages(parent_id, from_stage)
+        if missing:
+            raise RunStoreError(f"cannot fork {parent_id} from {from_stage}: stage {missing[0]} is not finished")
+        structure = self.read_artifact(parent_id, "structure.json", Structure)
+        if from_stage == "expand":
+            structure = raised_limits(structure, limits or {})
+        elif limits:
+            raise RunStoreError(f"{', '.join(LIMIT_FLAGS[name] for name in limits)}: only with --from expand")
+        done = self.done_events(parent_id)
+        run_id, path = self.new_dir(run_id, lock)
+        source = self.run_dir(parent_id)
+        if (source / "attachments").is_dir():
+            shutil.copytree(source / "attachments", path / "attachments")
+        record = RunRecord(
+            run_id=run_id,
+            created_at=datetime.now(UTC),
+            request=parent.request.model_copy(update={"until": until, "structure": structure}),
+            profile=profile or parent.profile,
+            use=dict(use) if use is not None else None,
+            overrides=[*parent.overrides, *overrides],
+            changes=list(overrides),
+            settings=redact(settings),
+            parent_run_id=parent_id,
+            fork_from=from_stage,
+            version=max(self.lineage_versions(parent_id)) + 1,
+            origin=origin,
+            token_name=token_name,
+        )
+        self.write_artifact(run_id, "request.json", record)
+        for name in CATALOG_COPIES[from_stage]:
+            if (source / name).is_file():
+                shutil.copyfile(source / name, path / name)
+        self.write_artifact(run_id, "structure.json", structure)
+        nodes = self.read_items(run_id, "nodes.jsonl", Node)
+        self.write_artifact(run_id, "nodes.jsonl", forked_nodes(nodes, structure, from_stage))
+        for stage in ("load", "draft"):
+            if stage in done:
+                data = done[stage].data
+                self.append_event(
+                    run_id, "stage.done", stage, data.model_copy(update={"copied_from": data.copied_from or parent_id})
+                )
+        for event in self.read_events(parent_id):
+            if isinstance(event, WaveDone):
+                self.append_event(run_id, "wave.done", event.stage, event.data)
+        return record
+
     def missing_stages(self, run_id: str, from_stage: Stage) -> list[Stage]:
         """The stages before `from_stage` that are not finished; `gap` only counts in multi-round runs."""
         finished = self.finished_stages(run_id)
-        multi = self.planned_rounds(self.read_record(run_id)) > 1
+        record = self.read_record(run_id)
+        if record.kind == "catalog":
+            needed: list[Stage] = ["load", "draft"] if from_stage == "expand" else ["load", "draft", "extract"]
+            if from_stage == "extract" and not self.catalog_done(run_id):
+                return ["assemble"]
+            return [stage for stage in needed if stage not in finished and stage not in self.done_events(run_id)]
+        multi = self.planned_rounds(record) > 1
         earlier = STAGES[: STAGES.index(from_stage)]
         if multi and from_stage in LOOP_STAGES:
             earlier = STAGES[: STAGES.index("search")]
@@ -300,12 +468,15 @@ class RunStore:
 
     def planned_rounds(self, record: RunRecord) -> int:
         """The rounds the loop runs: `research.rounds`, or 1 for files-only runs and plans without a sub-query."""
-        if record.request.sources == "files" or settings_rounds(record) < 2:
+        if record.kind == "catalog" or record.request.sources == "files" or settings_rounds(record) < 2:
             return 1
         path = self.run_dir(record.run_id) / "plan.json"
         if path.is_file() and len(self.read_artifact(record.run_id, "plan.json", Plan).queries) < 2:
             return 1
         return settings_rounds(record)
+
+    def catalog_done(self, run_id: str) -> CatalogDone | None:
+        return next((e for e in reversed(self.read_events(run_id)) if isinstance(e, CatalogDone)), None)
 
     def research_done(self, run_id: str) -> ResearchDone | None:
         return next((e for e in reversed(self.read_events(run_id)) if isinstance(e, ResearchDone)), None)
@@ -437,7 +608,12 @@ class RunStore:
     def finished_stages(self, run_id: str) -> set[Stage]:
         """Stages with `stage.done`; in a multi-round run the loop stages count only after `research.done`."""
         finished = set(self.done_events(run_id))
-        if self.planned_rounds(self.read_record(run_id)) > 1 and self.research_done(run_id) is None:
+        record = self.read_record(run_id)
+        if record.kind == "catalog":
+            if self.catalog_done(run_id) is None:
+                finished -= {*WAVE_STAGES, "assemble"}
+            return finished & set(CATALOG_STAGES)
+        if self.planned_rounds(record) > 1 and self.research_done(run_id) is None:
             finished -= set(LOOP_STAGES)
         return finished
 
@@ -469,6 +645,7 @@ class RunStore:
         ended = last if isinstance(last, RunFailed | RunCancelled) else None
         error = last.data.error if isinstance(last, RunFailed) else None
         model, reasoning = settings_llm(record)
+        catalog = record.kind == "catalog"
         return RunSummary(
             run_id=record.run_id,
             query=record.request.query,
@@ -481,7 +658,9 @@ class RunStore:
             sources=record.request.sources,
             until=record.request.until,
             depth=record.request.depth,
-            writing=WritingOptions.model_validate(record.settings.get("write", {})),
+            kind=record.kind,
+            writing=None if catalog else WritingOptions.model_validate(record.settings.get("write", {})),
+            nodes=self.node_count(record.run_id) if catalog else None,
             duration_s=duration,
             cost=costs.total.cost if costs else None,
             error=error,
@@ -498,6 +677,12 @@ class RunStore:
             form=record.form,
             attachments=attachment_infos(self.run_dir(record.run_id) / "attachments"),
         )
+
+    def node_count(self, run_id: str) -> int:
+        """`catalog.json`'s record count when present, else the extracted nodes in `nodes.jsonl`."""
+        if (self.run_dir(run_id) / "catalog.json").is_file():
+            return len(self.read_artifact(run_id, "catalog.json", CatalogRecord).records)
+        return sum(node.status == "extracted" for node in self.read_items(run_id, "nodes.jsonl", Node))
 
     def list_runs(self, limit: int | None = 20) -> list[RunSummary]:
         """Every run, newest first; directories starting with `.` (`.queue/`) are skipped."""

@@ -388,3 +388,75 @@ export function funnelHelp(config: FunnelConfig): Record<FunnelKey, Help> {
     },
   };
 }
+
+// Catalog runs: the Structure panel, the catalog phases and panels, and the result's actions.
+Object.assign(HELP, {
+  "c-fields": {
+    title: "Record fields",
+    body: "The columns every record gets. A record missing a required field is dropped. ref holds another record’s id; enum takes one of the type values.",
+  },
+  "c-vol": { title: "Volatile", body: "Taken only from a dated source; the date is recorded" },
+  "c-rel": {
+    title: "Child relation",
+    body: "The phrase used to find a node’s children, written in the sources’ language.",
+  },
+  "c-seeds": {
+    title: "Seeds",
+    body: "Where the crawl starts. Each seed becomes a record. When a URL is set it is fetched first instead of searched for.",
+  },
+  "c-leaf": {
+    title: "Leaf types",
+    body: "Nodes of these types are recorded but not expanded further.",
+  },
+  "c-expand": {
+    title: "Expand by",
+    body: "How children are found. Links follows links on the node’s own pages, Search queries the web for the child relation, Both does each and merges the results.",
+  },
+  "c-limits": {
+    title: "Limits",
+    body: "Max depth counts levels below the seeds. The run stops at Max nodes. Pages per node caps fetches for each record.",
+  },
+  "c-lang": {
+    title: "Search language",
+    body: "Language used for search queries and for matching the child relation.",
+  },
+  "cp-load": { title: "Load", body: "Reads the brief, the structure and any attached files." },
+  "cp-draft": {
+    title: "Draft",
+    body: "Checks the structure and turns the seeds into starting nodes.",
+  },
+  "cp-expand": {
+    title: "Expand",
+    body: "Finds each node’s children using the child relation. Each wave expands the nodes found in the previous one; Expand through Extract repeat per wave.",
+  },
+  "cp-search": {
+    title: "Search",
+    body: "Web searches for nodes without a URL, and for the child relation when Expand by includes Search.",
+  },
+  "cp-fetch": { title: "Fetch", body: "Fetches up to Pages per node for each node." },
+  "cp-chunk": { title: "Chunk", body: "Splits fetched pages into passages for extraction." },
+  "cp-extract": {
+    title: "Extract",
+    body: "One extraction call per node fills its record from the passages, with a source for each value.",
+  },
+  "cp-assemble": {
+    title: "Assemble",
+    body: "Merges duplicates, resolves parent_id references and writes the table.",
+  },
+  "c-frontier": {
+    title: "Frontier",
+    body: "Every node found so far, by depth. Grey dot: discovered. Pulsing ring: being expanded. Solid: extracted. Amber: failed.",
+  },
+  "c-coverage": {
+    title: "Coverage",
+    body: "How far the run is into its limits, and how often each field was filled across extracted records. The lowest fill rates are the gaps to check.",
+  },
+  "cr-expand": {
+    title: "Expand more",
+    body: "Raises max depth or max nodes and resumes from the frontier. Records already extracted are kept.",
+  },
+  "cr-reextract": {
+    title: "Re-extract",
+    body: "Runs extract and assemble again with another model. The fetched pages are kept, so nothing is crawled again.",
+  },
+} satisfies Record<string, Help>);

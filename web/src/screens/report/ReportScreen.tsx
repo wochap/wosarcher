@@ -27,6 +27,7 @@ import { lineage } from "../../run/lineage";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { useRun } from "../../run/useRun";
 import { useRunData } from "../../run/useRunData";
+import { CatalogScreen } from "../catalog/CatalogScreen";
 import { NotFound } from "../live/NotFound";
 import { Downloads } from "./Downloads";
 import { contextJson, download, markdownFile } from "./exportReport";
@@ -51,6 +52,7 @@ export function ReportScreen({ runId }: { runId: string }) {
 
   if (notFound) return <NotFound runId={runId} />;
   if (!detail) return null;
+  if (detail.kind === "catalog") return <CatalogScreen runId={runId} detail={detail} />;
   const versions = lineage(runs, runId);
   const parent = runs.find((r) => r.run_id === detail.parent_run_id);
   const recipe = recipeOf(detail.until, detail.writing.format);

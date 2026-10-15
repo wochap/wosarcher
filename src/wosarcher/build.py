@@ -17,7 +17,7 @@ from wosarcher.adapters.searxng import SearxngSearcher
 from wosarcher.adapters.webhook import WebhookHook
 from wosarcher.config import HookEntry, Provider, ScoreConfig, Settings
 from wosarcher.http import ProviderClient, UsageLedger
-from wosarcher.ports import Adapters, Embedder, Exporter, Hook, Managed, Scorer
+from wosarcher.ports import LLM, Adapters, Embedder, Exporter, Hook, Managed, Scorer
 
 ScorerFactory = Callable[[ScoreConfig, ProviderClient | None, UsageLedger], Scorer]
 
@@ -88,6 +88,8 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
     planner = ChatLLM(settings.llm, llm_client, ledger, "plan")
     gapper = ChatLLM(settings.llm, llm_client, ledger, "gap")
     writer = ChatLLM(settings.llm, llm_client, ledger, "write")
+    drafter = ChatLLM(settings.llm, llm_client, ledger, "draft", step="plan")
+    extractor = ChatLLM(settings.llm, llm_client, ledger, "extract", step="gap")
     managed["llm"] = planner
     return Adapters(
         searcher=searcher,
@@ -98,6 +100,16 @@ def build(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> A
         gapper=gapper,
         writer=writer,
         managed=managed,
+        drafter=drafter,
+        extractor=extractor,
+    )
+
+
+def draft_llm(settings: Settings, http: httpx.AsyncClient, ledger: UsageLedger) -> LLM:
+    """The catalog draft call alone, for the server's draft route."""
+    check_providers(settings)
+    return ChatLLM(
+        settings.llm, ProviderClient(settings.llm.provider, settings.llm, http, ledger), ledger, "draft", "plan"
     )
 
 

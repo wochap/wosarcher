@@ -7,8 +7,11 @@ from rich.live import Live
 from rich.table import Table
 
 from wosarcher.models import (
+    CATALOG_STAGES,
     LOOP_STAGES,
     STAGES,
+    WAVE_STAGES,
+    CatalogDone,
     Event,
     GapReady,
     PageFailed,
@@ -16,11 +19,13 @@ from wosarcher.models import (
     ResearchDone,
     ResourceWaiting,
     RunFailed,
+    RunKind,
     Stage,
     StageDone,
     StageFailed,
     StageProgress,
     StageStarted,
+    WaveDone,
 )
 
 
@@ -35,11 +40,17 @@ class Row:
 class ProgressView:
     """A listener (`Callable[[Event], None]`) that redraws a rich table; use it as a context manager."""
 
-    def __init__(self, console: Console, rounds: int = 1) -> None:
+    def __init__(self, console: Console, rounds: int = 1, kind: RunKind = "research") -> None:
         self.console = console
         self.rounds = rounds
         """Planned research rounds; the gap row and round texts show only above 1."""
-        self.rows: dict[Stage, Row] = {stage: Row() for stage in STAGES if rounds > 1 or stage != "gap"}
+        self.catalog = kind == "catalog"
+        """Catalog rows, with the wave counter on the stages that repeat per wave."""
+        self.rows: dict[Stage, Row] = (
+            {stage: Row() for stage in CATALOG_STAGES}
+            if self.catalog
+            else {stage: Row() for stage in STAGES if rounds > 1 or stage != "gap"}
+        )
         self.fetched = 0
         self.failed = 0
         self.notice = ""
@@ -67,6 +78,8 @@ class ProgressView:
                 self.rows[event.data.stage].state = "failed"
             return
         row = self.rows[event.stage]
+        if self.catalog and self.catalog_update(event, row):
+            return
         match event:
             case StageStarted():
                 row.state, row.device, row.provider = "running", event.data.device or "", event.data.provider
@@ -104,6 +117,29 @@ class ProgressView:
                 row.provider = data.provider or row.provider
             case _:
                 pass
+
+    def catalog_update(self, event: Event, row: Row) -> bool:
+        """The wave counter and the catalog events; False leaves the event to the shared handling."""
+        waved = event.stage in WAVE_STAGES
+        match event:
+            case StageStarted() if waved:
+                row.state, row.device, row.provider = "running", event.data.device or "", event.data.provider
+                row.state = f"running · wave {event.data.round}"
+            case StageDone() if waved and not event.data.copied_from:
+                data = event.data
+                row.state = "skipped" if data.skipped else f"done · wave {data.round}"
+                row.counters = f"{data.count} in {data.seconds:.1f} s"
+                row.provider = data.provider or row.provider
+            case WaveDone():
+                data = event.data
+                row.counters = f"wave {data.wave}: {data.records} records, {data.failed} failed"
+            case CatalogDone():
+                data = event.data
+                line = f"catalog: {data.records} records in {data.waves} waves · {data.flagged} flagged · {data.reason}"
+                self.console.print(line, markup=False)
+            case _:
+                return False
+        return True
 
     def table(self) -> Table:
         table = Table("stage", "state", "counters", "device", "provider", title=self.notice or None)

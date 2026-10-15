@@ -1,5 +1,13 @@
 // New run: the question, attachments, and options; starts the run and opens it on Live run.
-import { ArrowUUpLeft, Play, WarningCircle } from "@phosphor-icons/react";
+import {
+  ArrowUUpLeft,
+  CircleNotch,
+  MagnifyingGlass,
+  Play,
+  Sparkle,
+  TreeStructure,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import type {
@@ -9,6 +17,7 @@ import type {
   ProviderEntry,
   ResearchValues,
   RunCreate,
+  RunKind,
   RunSummary,
   ServerSettings,
   WritingOptions,
@@ -23,6 +32,7 @@ import {
   sameList,
 } from "../../components/DomainRows";
 import type { WritingField } from "../../components/WritingOptionsForm";
+import { catalogRequest, structureRow } from "../../run/catalog";
 import {
   CUSTOM_DESCRIPTION,
   type Depth,
@@ -58,12 +68,30 @@ import {
 } from "./OptionsPanel";
 import { RecentRuns, useWide } from "./RecentRuns";
 import { depthGroups, profileGroups, profileIntro, SaveDialog } from "./SaveDialog";
+import { focusStructureRow, StructurePanel } from "./StructurePanel";
 
 /** The message of a failed save or delete, as the server wrote it. */
 const failure = (error: unknown) => (error as Error).message;
 
-/** Why the server (or the entry check) refused the run; `field` names a domain row to fix. */
-type StartError = { message: string; field?: DomainKind; entry?: string };
+/**
+ * Why the server (or the entry check) refused the run; `field` names a domain row to fix, `row`
+ * a Structure panel row. `title` replaces "Couldn’t start the run".
+ */
+type StartError = {
+  message: string;
+  field?: DomainKind;
+  entry?: string;
+  row?: string;
+  title?: string;
+};
+
+const KIND_OPTIONS: { value: RunKind; label: string; Icon: typeof MagnifyingGlass }[] = [
+  { value: "research", label: "Research", Icon: MagnifyingGlass },
+  { value: "catalog", label: "Catalog", Icon: TreeStructure },
+];
+
+const BRIEF_PLACEHOLDER =
+  "e.g. Every public organization of the Peruvian state, from the three powers down to their attached bodies and offices, as structured records: name, acronym, type, parent, head and legal basis.";
 
 /** The first entry that is not a domain, as the server would reject it. */
 export function invalidDomain(lists: DomainLists): StartError | null {
@@ -81,6 +109,8 @@ export function invalidDomain(lists: DomainLists): StartError | null {
 function startError(error: unknown): StartError {
   const message = (error as Error).message;
   if (!(error instanceof ApiError)) return { message };
+  const row = structureRow(error.fields);
+  if (row) return { message, row };
   const field = DOMAIN_KINDS.find((k) => `domains.${k}` in error.fields);
   if (!field) return { message };
   const entry = /'([^']*)'/.exec(error.fields[`domains.${field}`])?.[1];
@@ -133,6 +163,7 @@ export function NewRunScreen() {
   const [error, setError] = useState<StartError | null>(null);
   const [busy, setBusy] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [entries, setEntries] = useState<ProviderEntry[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [focusField, setFocusField] = useState<DomainKind | null>(null);
@@ -146,10 +177,11 @@ export function NewRunScreen() {
   const question = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!focusField || !optionsOpen) return;
-    document.getElementById(domainInputId("nd", focusField))?.focus();
+    if (!focusField || !(optionsOpen || draft.kind === "catalog")) return;
+    const prefix = draft.kind === "catalog" ? "cd" : "nd";
+    document.getElementById(domainInputId(prefix, focusField))?.focus();
     setFocusField(null);
-  }, [focusField, optionsOpen]);
+  }, [focusField, optionsOpen, draft.kind]);
 
   useEffect(() => {
     question.current?.focus();
@@ -195,7 +227,9 @@ export function NewRunScreen() {
   const values = valuesOf(options.depth);
   const defaults = saved && { ...saved, words: wordsOf(options.depth) ?? saved.words };
   const writing = defaults && { ...defaults, ...draft.writing };
+  const catalog = draft.kind === "catalog";
   const blank = !draft.query.trim();
+  const blankBrief = !draft.brief.trim();
   const languageInvalid = !isSearchLanguage(draft.searchLanguage.trim());
   const selected = profiles.find((p) => p.name === options.profile);
   const domainDefaults: DomainLists = {
@@ -260,6 +294,58 @@ export function NewRunScreen() {
         draft.searchLanguage,
         choice,
       );
+      if (draft.reused.length) {
+        const names = draft.reused.map((f) => f.name);
+        request.reuse_attachments = { run_id: draft.reused[0].runId, names };
+      }
+      const created = await api.createRun(request, draft.files);
+      setDraft(() => EMPTY_DRAFT);
+      follow(created.run_id);
+      go({ screen: "live", runId: created.run_id });
+    } catch (e) {
+      setError(startError(e));
+      setBusy(false);
+    }
+  }
+
+  /** Drafts the structure from the brief, the attachments, and the profile's choice. */
+  async function draftStructure() {
+    if (blankBrief || drafting) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      const structure = await api.draftStructure(
+        { brief: draft.brief.trim(), profile: options.profile, ...profilePatch(choice) },
+        draft.files,
+      );
+      setDraft((d) => ({ ...d, structure }));
+    } catch (e) {
+      setError({ message: (e as Error).message, title: "Couldn’t draft the structure" });
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  /** Starts the catalog run with the Structure panel's values. */
+  async function startCatalog() {
+    const structure = draft.structure;
+    if (!structure || blankBrief || busy || drafting || languageInvalid) return;
+    const invalid = invalidDomain(domains);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const request = catalogRequest({
+        brief: draft.brief,
+        structure,
+        profile: options.profile,
+        domains: overriddenDomains(domains, domainDefaults),
+        searchLanguage: draft.searchLanguage,
+        choice,
+      });
       if (draft.reused.length) {
         const names = draft.reused.map((f) => f.name);
         request.reuse_attachments = { run_id: draft.reused[0].runId, names };
@@ -462,16 +548,45 @@ export function NewRunScreen() {
       <div className={css.layout} data-wide={wide}>
         <div className={css.inner}>
           <div>
-            <h1 className={css.h1}>New research run</h1>
-            <p className={css.intro}>
-              wosarcher searches the web and your files, scores passages for relevance, and writes a
-              cited report.
-            </p>
+            {catalog ? (
+              <>
+                <h1 className={css.h1}>New catalog run</h1>
+                <p className={css.intro}>
+                  wosarcher crawls out from seed records, extracts one structured record per node,
+                  and returns them as a table.
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className={css.h1}>New research run</h1>
+                <p className={css.intro}>
+                  wosarcher searches the web and your files, scores passages for relevance, and
+                  writes a cited report.
+                </p>
+              </>
+            )}
           </div>
           <div className="field">
+            <div className={`seg ${css.kind}`} role="radiogroup" aria-label="Kind">
+              {KIND_OPTIONS.map(({ value, label, Icon }) => (
+                <label key={value} className={`seg-opt ${css.kindOpt}`}>
+                  <input
+                    type="radio"
+                    name="run-kind"
+                    checked={draft.kind === value}
+                    onChange={() => {
+                      setDraft((d) => ({ ...d, kind: value }));
+                      setError(null);
+                    }}
+                  />
+                  <Icon aria-hidden="true" />
+                  {label}
+                </label>
+              ))}
+            </div>
             <div className={css.questionHead}>
-              <label htmlFor="q">Question</label>
-              {fromRun && (
+              <label htmlFor="q">{catalog ? "Brief" : "Question"}</label>
+              {!catalog && fromRun && (
                 <span
                   className={`tag tag-neutral ${css.from}`}
                   title="The form matches this run. Edit anything to clear."
@@ -486,13 +601,20 @@ export function NewRunScreen() {
               ref={question}
               className={`input ${css.question}`}
               rows={6}
-              value={draft.query}
-              placeholder="e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?"
-              onChange={(e) => setDraft((d) => ({ ...d, query: e.target.value }))}
+              value={catalog ? draft.brief : draft.query}
+              placeholder={
+                catalog
+                  ? BRIEF_PLACEHOLDER
+                  : "e.g. How do speculative decoding methods trade off acceptance rate against draft-model size on 12 GB GPUs?"
+              }
+              onChange={(e) => {
+                const text = e.target.value;
+                setDraft((d) => (catalog ? { ...d, brief: text } : { ...d, query: text }));
+              }}
               onKeyDown={(e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
                   e.preventDefault();
-                  void start();
+                  void (catalog ? startCatalog() : start());
                 }
               }}
             />
@@ -500,23 +622,63 @@ export function NewRunScreen() {
               <span className={css.hint}>
                 <kbd>Ctrl</kbd>+<kbd>Enter</kbd>to run
               </span>
-              <button
-                type="button"
-                className={`btn btn-primary ${css.run}`}
-                disabled={blank || busy || languageInvalid}
-                onClick={() => void start()}
-              >
-                <Play aria-hidden="true" />
-                Run research
-              </button>
+              {catalog ? (
+                <div className={css.catalogActions}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={blankBrief || drafting}
+                    aria-busy={drafting}
+                    onClick={() => void draftStructure()}
+                  >
+                    {drafting ? (
+                      <CircleNotch aria-hidden="true" className="spin" />
+                    ) : (
+                      <Sparkle aria-hidden="true" />
+                    )}
+                    {drafting ? "Drafting…" : "Draft structure"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!draft.structure || blankBrief || drafting || busy || languageInvalid}
+                    onClick={() => void startCatalog()}
+                  >
+                    <Play aria-hidden="true" />
+                    Run catalog
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={`btn btn-primary ${css.run}`}
+                  disabled={blank || busy || languageInvalid}
+                  onClick={() => void start()}
+                >
+                  <Play aria-hidden="true" />
+                  Run research
+                </button>
+              )}
             </div>
             {error && (
               <div role="alert" className={css.error}>
                 <WarningCircle aria-hidden="true" className={css.errorIcon} />
                 <div className={css.errorText}>
-                  <div className={css.errorTitle}>Couldn’t start the run</div>
+                  <div className={css.errorTitle}>{error.title ?? "Couldn’t start the run"}</div>
                   <div className={css.errorMessage}>{error.message}</div>
-                  {error.field && (
+                  {catalog && (error.row || error.field) && (
+                    <button
+                      type="button"
+                      className={`btn btn-ghost ${css.fix}`}
+                      onClick={() => {
+                        if (error.row) focusStructureRow(error.row);
+                        else setFocusField(error.field ?? null);
+                      }}
+                    >
+                      Fix in Structure
+                    </button>
+                  )}
+                  {!catalog && error.field && (
                     <button
                       type="button"
                       className={`btn btn-ghost ${css.fix}`}
@@ -539,7 +701,28 @@ export function NewRunScreen() {
             onChange={(files) => setDraft((d) => ({ ...d, files }))}
             onReused={(reused) => setDraft((d) => ({ ...d, reused }))}
           />
-          {defaults && writing && values && (
+          {catalog &&
+            (draft.structure ? (
+              <StructurePanel
+                structure={draft.structure}
+                onChange={(structure) => setDraft((d) => ({ ...d, structure }))}
+                domains={{
+                  lists: domains,
+                  defaults: domainDefaults,
+                  invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
+                  onChange: setDomains,
+                }}
+                searchLanguage={draft.searchLanguage}
+                onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
+                isPhone={isPhone}
+              />
+            ) : (
+              <span className={css.structureNone}>
+                Draft a structure from your brief to review its fields, seeds and limits before
+                running.
+              </span>
+            ))}
+          {!catalog && defaults && writing && values && (
             <OptionsPanel
               open={optionsOpen}
               onOpen={setOptionsOpen}

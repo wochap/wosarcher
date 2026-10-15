@@ -3,7 +3,7 @@
 import os
 import shutil
 from collections.abc import Mapping
-from typing import Annotated, get_args
+from typing import Annotated, Any, get_args
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -12,6 +12,8 @@ from pydantic import ValidationError
 from wosarcher.config import CUSTOM_DEPTH, ConfigError, list_depths, list_entries, own_settings, select_profile
 from wosarcher.document import document
 from wosarcher.models import (
+    CATALOG_STAGES,
+    STAGES,
     Attachment,
     ExportFormat,
     ForkCreate,
@@ -19,6 +21,7 @@ from wosarcher.models import (
     Origin,
     ReasoningOptions,
     Report,
+    ResearchPatch,
     RunCreate,
     RunCreated,
     RunDetail,
@@ -26,6 +29,9 @@ from wosarcher.models import (
     RunNotActive,
     RunRecord,
     RunSummary,
+    Stage,
+    Structure,
+    WritingPatch,
 )
 from wosarcher.ports import ExportError
 from wosarcher.server import staging
@@ -56,6 +62,10 @@ ARTIFACTS: dict[str, str] = {
     "select.jsonl": JSONL,
     "report.md": MARKDOWN,
     "report.json": JSON,
+    "structure.json": JSON,
+    "nodes.jsonl": JSONL,
+    "records.jsonl": JSONL,
+    "catalog.json": JSON,
     "events.jsonl": JSONL,
     "costs.json": JSON,
 }
@@ -85,6 +95,7 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
     return RunSummary(
         run_id=staged.run_id,
         query=staged.query,
+        kind=staged.kind,
         status="running" if running else "queued",
         created=staged.created,
         parent_run_id=staged.parent,
@@ -94,7 +105,8 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         sources=staged.resolved_sources,
         until=staged.until,
         depth=staged.depth,
-        writing=staged.writing_options,
+        writing=None if staged.kind == "catalog" else staged.writing_options,
+        nodes=0 if staged.kind == "catalog" else None,
         queue_position=state.manager.queue_position(staged.run_id),
         model=staged.llm.model or "",
         reasoning=ReasoningOptions.model_validate(staged.llm.reasoning.model_dump(exclude_none=True)),
@@ -157,6 +169,56 @@ def check_use(use: Mapping[str, str]) -> None:
             raise RouteError(422, "invalid_request", f"use.{block}: unknown entry '{name}'; {block} entries: {listed}")
 
 
+STRUCTURE_PATHS = (
+    ("seed", "seeds"),
+    ("leaf type", "leaf_types"),
+    ("relation", "relation"),
+    ("field", "fields"),
+    ("exactly one enum", "fields"),
+    ("at most one", "fields"),
+    ("at least one required", "fields"),
+)
+
+
+def structure_errors(error: ValidationError) -> list[Any]:
+    """The errors with a whole-structure check located at the structure part it names (`structure.seeds`)."""
+    found: list[Any] = []
+    for item in error.errors():
+        loc = tuple(item["loc"])
+        message = str(item["msg"]).removeprefix("Value error, ")
+        if loc == ("structure",):
+            part = next((path for prefix, path in STRUCTURE_PATHS if message.startswith(prefix)), None)
+            if part is not None:
+                item = {**item, "loc": (*loc, part)}
+        found.append(item)
+    return found
+
+
+def kind_stages(kind: str) -> tuple[Stage, ...]:
+    return CATALOG_STAGES if kind == "catalog" else STAGES
+
+
+def check_kind(body: RunCreate) -> None:
+    """The fields of the other kind, `sources files` for a catalog, `until` outside the kind, two languages."""
+    if body.kind == "catalog":
+        defaults = {"depth": None, "research": ResearchPatch(), "writing": WritingPatch()}
+        given = [name for name, empty in defaults.items() if getattr(body, name) != empty]
+        if given:
+            raise RouteError(422, "invalid_request", f"{given[0]}: not for catalog runs")
+        if body.sources == "files":
+            raise RouteError(422, "invalid_request", "sources: a catalog run cannot use files only")
+        language = body.structure.language if body.structure else ""
+        if language and body.search_language is not None:
+            detail = "search_language: set either search_language or structure.language for a catalog run"
+            raise RouteError(422, "invalid_request", detail)
+    elif body.structure is not None:
+        raise RouteError(422, "invalid_request", "structure: only for catalog runs, not research runs")
+    stages = kind_stages(body.kind)
+    if body.until is not None and body.until not in stages:
+        detail = f"until: {body.until} is not a {body.kind} stage; stages: {', '.join(stages)}"
+        raise RouteError(422, "invalid_request", detail)
+
+
 async def submit(state: ServerState, staged: StagedRun) -> JSONResponse:
     active: ActiveRun = await state.manager.submit(staged)
     status = "running" if active.run_id in state.manager.running else "queued"
@@ -174,7 +236,8 @@ async def create_run(
     try:
         body = RunCreate.model_validate_json(request)
     except ValidationError as error:
-        raise invalid(error.errors()) from None
+        raise invalid(structure_errors(error)) from None
+    check_kind(body)
     try:
         known = [*list_depths(os.environ), CUSTOM_DEPTH]
     except ConfigError as error:
@@ -291,6 +354,7 @@ async def cancel_run(state: State, run_id: str) -> JSONResponse:
 @router.post("/{run_id}/fork", status_code=201, response_model=RunCreated)
 async def fork_run(state: State, http: Request, run_id: str, body: ForkCreate) -> JSONResponse:
     parent = require_finished(state, run_id)
+    check_fork(state, parent, body)
     missing = state.store.missing_stages(run_id, body.from_stage)
     if missing:
         detail = f"cannot fork {run_id} from {body.from_stage}: stage {missing[0]} is not finished"
@@ -301,6 +365,41 @@ async def fork_run(state: State, http: Request, run_id: str, body: ForkCreate) -
     except OverrideError as error:
         raise RouteError(422, "invalid_override", str(error)) from None
     return await submit(state, staged)
+
+
+CATALOG_FORKS: tuple[Stage, ...] = ("expand", "extract")
+
+
+def parent_structure(state: ServerState, parent: RunRecord) -> Structure | None:
+    path = state.runs_dir / parent.run_id / "structure.json"
+    return state.store.read_artifact(parent.run_id, "structure.json", Structure) if path.is_file() else parent.structure
+
+
+def check_fork(state: ServerState, parent: RunRecord, body: ForkCreate) -> None:
+    """The stage is a fork stage of the parent's kind; `writing` and `limits` only where they apply."""
+    allowed = CATALOG_FORKS if parent.kind == "catalog" else STAGES
+    if body.from_stage not in allowed:
+        listed = ", ".join(f"'{stage}'" for stage in allowed)
+        detail = f"from: {body.from_stage} is not a fork stage of a {parent.kind} run; allowed: {listed}"
+        raise RouteError(422, "invalid_request", detail)
+    stages = kind_stages(parent.kind)
+    if body.until is not None and body.until not in stages:
+        detail = f"until: {body.until} is not a {parent.kind} stage; stages: {', '.join(stages)}"
+        raise RouteError(422, "invalid_request", detail)
+    limits: dict[str, int] = body.limits.model_dump(exclude_none=True)
+    if parent.kind == "catalog" and body.writing.model_dump(exclude_none=True):
+        raise RouteError(422, "invalid_request", "writing: not for catalog runs")
+    if limits and (parent.kind != "catalog" or body.from_stage != "expand"):
+        raise RouteError(422, "invalid_request", "limits: only for a catalog fork from expand")
+    structure = parent_structure(state, parent)
+    if parent.kind != "catalog" or body.from_stage != "expand" or structure is None:
+        return
+    for name, value in limits.items():
+        old = getattr(structure.limits, name)
+        if value < old:
+            raise RouteError(422, "invalid_request", f"limits.{name}: {value} is below the parent's {old}")
+    if not any(value > getattr(structure.limits, name) for name, value in limits.items()):
+        raise RouteError(422, "invalid_request", "limits: a fork from expand needs a raised limit")
 
 
 @router.post("/{run_id}/rerun", status_code=201, response_model=RunCreated)

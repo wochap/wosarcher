@@ -12,12 +12,18 @@ from wosarcher.cli import app
 from wosarcher.config import DEFAULT_STAGE_TIMEOUTS, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
+    CATALOG_STAGES,
     EVENT_TYPES,
     STAGES,
+    CatalogDoneData,
     Context,
     GapReadyData,
     HitFoundData,
     KeptPassage,
+    Limits,
+    NodeExtractedData,
+    NodeFailedData,
+    NodeFoundData,
     PageFailedData,
     PageFetchedData,
     PassagesScoredData,
@@ -40,7 +46,10 @@ from wosarcher.models import (
     StageFailedData,
     StageProgressData,
     StageStartedData,
+    StructureFieldInfo,
+    StructureReadyData,
     UsageTotals,
+    WaveDoneData,
     make_event,
     parse_event,
 )
@@ -75,12 +84,25 @@ DATA: dict[str, BaseModel] = {
     "research.done": ResearchDoneData(planned=3, ran=2, reason="no new sources", note="n"),
     "report.delta": ReportTextData(text="Intro"),
     "report.snapshot": ReportTextData(text="Intro"),
+    "structure.ready": StructureReadyData(
+        fields=[StructureFieldInfo(name="name", type="text")], seeds=6, relation="r", limits=Limits(), derived=False
+    ),
+    "node.found": NodeFoundData(
+        node_id="mef", name="MEF", type="ministry", parent_id=None, depth=0, url=None, wave=1, found_by="seed"
+    ),
+    "node.extracted": NodeExtractedData(
+        node_id="mef", record={"name": "MEF"}, sources={"name": "https://x.test"}, flags=[], children=3
+    ),
+    "node.failed": NodeFailedData(node_id="mef", reason="no page"),
+    "wave.done": WaveDoneData(wave=1, expanded=6, found=14, records=5, failed=1, dropped=0),
+    "catalog.done": CatalogDoneData(waves=2, nodes=20, records=18, flagged=2, reason="frontier empty", note="n"),
 }
 
 
 def test_stage_order() -> None:
     assert STAGES == ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "gap", "select", "write")
-    assert get_args(Stage) == STAGES
+    assert CATALOG_STAGES == ("load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble")
+    assert set(get_args(Stage)) == set(STAGES) | set(CATALOG_STAGES)
 
 
 def test_every_event_type_has_sample() -> None:
@@ -170,3 +192,18 @@ def test_ledger_total_and_rows() -> None:
     assert set(rows) == {("llm", "plan"), ("llm", "write"), ("firecrawl", "fetch")}
     assert rows["llm", "plan"].input_tokens == 100
     assert rows["llm", "plan"].cost == 0
+
+
+def test_run_started_kind_defaults_to_research() -> None:
+    data = RunStartedData.model_validate(
+        {"query": "q", "profile": "p", "parent_run_id": None, "version": 1, "until": None}
+    )
+    assert data.kind == "research"
+
+
+def test_schema_covers_catalog_types() -> None:
+    definitions = json.loads(CliRunner().invoke(app, ["schema"]).output)["$defs"]
+    assert {"Structure", "StructureField", "Seed", "Limits", "Node", "ExtractedRecord", "CatalogRecord"} <= set(
+        definitions
+    )
+    assert definitions["RunRequest"]["properties"]["kind"]["default"] == "research"

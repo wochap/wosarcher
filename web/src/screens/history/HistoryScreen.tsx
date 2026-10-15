@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { SEARCH_ID } from "../../app/keys";
-import { go } from "../../app/route";
+import { go, type Route } from "../../app/route";
 import page from "../../components/Page.module.css";
 import { Seg } from "../../components/Seg";
 import { type Recipe, recipeOf } from "../../run/format";
@@ -13,6 +13,30 @@ import { HistoryTable } from "./HistoryTable";
 
 type StatusFilter = "all" | "completed" | "failed" | "cancelled";
 type RecipeFilter = "any" | Recipe;
+type KindFilter = "any" | "research" | "catalog";
+
+const isCatalog = (r: RunSummary) => r.kind === "catalog";
+
+/** Rows the search and the Kind, Status, and Recipe filters keep; a recipe hides catalog runs. */
+export function historyFilter(
+  runs: RunSummary[],
+  f: { query: string; kind: KindFilter; status: StatusFilter; recipe: RecipeFilter },
+): RunSummary[] {
+  const needle = f.query.trim().toLowerCase();
+  return runs.filter(
+    (r) =>
+      (!needle || r.query.toLowerCase().includes(needle)) &&
+      (f.kind === "any" || (f.kind === "catalog") === isCatalog(r)) &&
+      STATUS_MATCH[f.status](r) &&
+      (f.recipe === "any" || (!isCatalog(r) && recipeOf(r.until, r.writing.format) === f.recipe)),
+  );
+}
+
+/** Where Open goes: a finished run's result by kind, else the Live run screen. */
+export function openRoute(r: RunSummary): Route {
+  if (r.status !== "done") return { screen: "live", runId: r.run_id };
+  return { screen: isCatalog(r) ? "catalog" : "report", runId: r.run_id };
+}
 
 const STATUS_MATCH: Record<StatusFilter, (r: RunSummary) => boolean> = {
   all: () => true,
@@ -23,11 +47,12 @@ const STATUS_MATCH: Record<StatusFilter, (r: RunSummary) => boolean> = {
 
 export function HistoryScreen() {
   const api = useApi();
-  const { hiddenRuns, deleteRun, follow, toast } = useUi();
+  const { hiddenRuns, deleteRun, follow, toast, setDraft } = useUi();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [recipe, setRecipe] = useState<RecipeFilter>("any");
+  const [kind, setKind] = useState<KindFilter>("any");
 
   useEffect(() => {
     api.listRuns().then(
@@ -39,14 +64,20 @@ export function HistoryScreen() {
   if (!runs) return null;
   const all = runs.filter((r) => !hiddenRuns.has(r.run_id));
   const needle = query.trim().toLowerCase();
-  const shown = all.filter(
-    (r) =>
-      (!needle || r.query.toLowerCase().includes(needle)) &&
-      STATUS_MATCH[status](r) &&
-      (recipe === "any" || recipeOf(r.until, r.writing.format) === recipe),
-  );
+  const shown = historyFilter(all, { query, kind, status, recipe });
 
   async function rerun(run: RunSummary) {
+    if (isCatalog(run)) {
+      // A catalog rerun opens New run with the brief and structure; nothing is sent.
+      setDraft((d) => ({
+        ...d,
+        kind: "catalog",
+        brief: run.form?.query ?? run.query,
+        structure: run.form?.structure ?? null,
+      }));
+      go({ screen: "new" });
+      return;
+    }
     try {
       const created = await api.rerunRun(run.run_id);
       follow(created.run_id);
@@ -88,6 +119,17 @@ export function HistoryScreen() {
             ]}
           />
           <Seg
+            label="Kind"
+            name="hk"
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: "any", label: "Any" },
+              { value: "research", label: "Research" },
+              { value: "catalog", label: "Catalog" },
+            ]}
+          />
+          <Seg
             label="Recipe"
             name="hr"
             value={recipe}
@@ -104,13 +146,7 @@ export function HistoryScreen() {
           <HistoryTable
             runs={shown}
             all={all}
-            onOpen={(r) =>
-              go(
-                r.status === "done"
-                  ? { screen: "report", runId: r.run_id }
-                  : { screen: "live", runId: r.run_id },
-              )
-            }
+            onOpen={(r) => go(openRoute(r))}
             onOpenLive={(r) => go({ screen: "live", runId: r.run_id })}
             onRerun={rerun}
             onDelete={(r) => deleteRun(r.run_id)}
@@ -134,6 +170,7 @@ export function HistoryScreen() {
                   setQuery("");
                   setStatus("all");
                   setRecipe("any");
+                  setKind("any");
                 }}
               >
                 Clear filters

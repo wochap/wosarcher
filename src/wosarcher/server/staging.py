@@ -10,14 +10,16 @@ import shutil
 from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from wosarcher.config import CUSTOM_DEPTH, LLM_KEYS, RESEARCH_KEYS, depth_values, load_depth, without_use
 from wosarcher.models import (
     Attachment,
     ForkCreate,
+    LimitsPatch,
+    LLMPatch,
     Origin,
     ReuseAttachments,
     RunCreate,
@@ -56,7 +58,7 @@ class StagedRun(RunCreate):
     """`runs/.queue/<id>/request.json`: the request plus what the server decided when it accepted it."""
 
     run_id: str
-    kind: Literal["run", "fork", "rerun"]
+    action: Literal["run", "fork", "rerun"]
     created: datetime
     resolved_sources: Sources
     resolved_profile: str
@@ -73,6 +75,19 @@ class StagedRun(RunCreate):
     token_name: str | None = None
     form: RunCreate | None = None
     """Recorded in the run's `request.json`; None for forks."""
+    limits: LimitsPatch = LimitsPatch()
+    """A catalog fork's raised limits, emitted as the limit flags."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def legacy_action(cls, data: Any) -> Any:
+        """Staged runs written before run kinds existed hold the action in `kind`."""
+        if not isinstance(data, dict):
+            return data
+        fields = cast(dict[str, Any], data)
+        if "action" not in fields and fields.get("kind") in ("run", "fork", "rerun"):
+            return {**fields, "action": fields["kind"], "kind": "research"}
+        return fields
 
 
 def queue_dir(runs_dir: Path) -> Path:
@@ -190,12 +205,12 @@ def stage_run(
     staged = StagedRun(
         **request.model_dump(),
         run_id=fresh_id(runs_dir),
-        kind="run",
+        action="run",
         created=datetime.now(UTC),
         resolved_sources=request.sources or defaults.sources,
         resolved_profile=request.profile or profile,
         writing_options=writing,
-        writing_flags=writing.model_dump(),
+        writing_flags={} if request.kind == "catalog" else writing.model_dump(),
         domain_flags=domain_lists(request, defaults, own),
         origin=origin,
         token_name=token_name,
@@ -204,14 +219,25 @@ def stage_run(
     return write(runs_dir, staged, uploads, reused)
 
 
+def catalog_thinking(parent: RunRecord, request: ForkCreate) -> ForkCreate:
+    """A catalog run has no write step: its `write` thinking means the extract calls' `gap` level."""
+    reasoning = request.llm.reasoning
+    if parent.kind != "catalog" or reasoning.write is None:
+        return request
+    moved = reasoning.model_copy(update={"gap": reasoning.gap or reasoning.write, "write": None})
+    return request.model_copy(update={"llm": request.llm.model_copy(update={"reasoning": moved})})
+
+
 def stage_fork(
     runs_dir: Path, parent: RunRecord, request: ForkCreate, origin: Origin = "web", token_name: str | None = None
 ) -> StagedRun:
     """A fork keeps the parent's configuration; only the request's writing and `set` change it."""
     check_overrides(request.set)
+    request = catalog_thinking(parent, request)
     writing = WritingOptions.model_validate(parent.settings.get("write", {}))
     staged = StagedRun(
         query=parent.request.query,
+        kind=parent.kind,
         until=request.until,
         profile=request.profile,
         depth=parent.request.depth,
@@ -220,12 +246,13 @@ def stage_fork(
         use=request.use,
         set=request.set,
         run_id=fresh_id(runs_dir),
-        kind="fork",
+        action="fork",
         created=datetime.now(UTC),
         resolved_sources=parent.request.sources,
         resolved_profile=request.profile or parent.profile,
         writing_options=merged(writing, request.writing),
         writing_flags=request.writing.model_dump(exclude_none=True),
+        limits=request.limits,
         parent=parent.run_id,
         from_stage=request.from_stage,
         version=parent.version + 1,
@@ -242,6 +269,8 @@ def stage_rerun(
     check_overrides(original.overrides)
     staged = StagedRun(
         query=original.request.query,
+        kind=original.kind,
+        structure=original.form.structure if original.form else original.request.structure,
         sources=original.request.sources,
         until=original.request.until,
         profile=original.profile,
@@ -249,7 +278,7 @@ def stage_rerun(
         depth=original.request.depth,
         set=without_use(original.overrides),
         run_id=fresh_id(runs_dir),
-        kind="rerun",
+        action="rerun",
         created=datetime.now(UTC),
         resolved_sources=original.request.sources,
         resolved_profile=original.profile,
@@ -298,9 +327,14 @@ def attach_flags(path: Path) -> list[str]:
 
 
 def llm_flags(staged: StagedRun) -> list[str]:
-    model = [] if staged.llm.model is None else [f"llm.model={toml_value(staged.llm.model)}"]
-    limits = staged.llm.model_dump(include=set(LLM_KEYS), exclude_none=True).items()
-    levels = staged.llm.reasoning.model_dump(exclude_none=True).items()
+    return llm_overrides(staged.llm)
+
+
+def llm_overrides(llm: LLMPatch) -> list[str]:
+    """The model, the limits, and the thinking levels as `dotted.key=value` overrides."""
+    model = [] if llm.model is None else [f"llm.model={toml_value(llm.model)}"]
+    limits = llm.model_dump(include=set(LLM_KEYS), exclude_none=True).items()
+    levels = llm.reasoning.model_dump(exclude_none=True).items()
     return [
         *model,
         *(f"{LLM_KEYS[name]}={toml_value(value)}" for name, value in limits),
@@ -333,12 +367,31 @@ def depth_flags(staged: StagedRun) -> list[str]:
     return ["--depth", staged.depth] if staged.depth else []
 
 
+def kind_flags(staged: StagedRun) -> list[str]:
+    """`--kind catalog` and the structure as JSON; nothing for a research run."""
+    if staged.kind == "research":
+        return []
+    structure = (
+        [] if staged.structure is None else ["--structure", staged.structure.model_dump_json(exclude_unset=True)]
+    )
+    return ["--kind", staged.kind, *structure]
+
+
+LIMIT_FLAGS = {"max_depth": "--max-depth", "max_nodes": "--max-nodes", "pages_per_node": "--pages-per-node"}
+
+
+def limit_flags(staged: StagedRun) -> list[str]:
+    raised = staged.limits.model_dump(exclude_none=True).items()
+    return [flag for name, value in raised for flag in (LIMIT_FLAGS[name], str(value))]
+
+
 def build_run_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
     argv = [*command, "run", staged.query, "--run-id", staged.run_id, "--sources", staged.resolved_sources]
     if staged.until:
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
+    argv += kind_flags(staged)
     return argv + use_flags(staged) + depth_flags(staged) + attach_flags(path) + set_flags(staged)
 
 
@@ -350,14 +403,14 @@ def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
-    return argv + use_flags(staged) + set_flags(staged)
+    return argv + use_flags(staged) + limit_flags(staged) + set_flags(staged)
 
 
 def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
     argv = [*command, "run", staged.query, "--run-id", staged.run_id, "--sources", staged.resolved_sources]
     if staged.until:
         argv += ["--until", staged.until]
-    argv += ["--profile", staged.resolved_profile, *use_flags(staged), *depth_flags(staged)]
+    argv += ["--profile", staged.resolved_profile, *kind_flags(staged), *use_flags(staged), *depth_flags(staged)]
     return argv + attach_flags(path) + [flag for value in staged.set for flag in ("--set", value)]
 
 
@@ -369,9 +422,9 @@ def origin_flags(staged: StagedRun) -> list[str]:
 
 def build_argv(command: list[str], staged: StagedRun, runs_dir: Path) -> list[str]:
     path = staging_dir(runs_dir, staged.run_id)
-    if staged.kind == "fork":
+    if staged.action == "fork":
         argv = build_fork_argv(command, staged)
-    elif staged.kind == "rerun":
+    elif staged.action == "rerun":
         argv = build_rerun_argv(command, staged, path)
     else:
         argv = build_run_argv(command, staged, path)

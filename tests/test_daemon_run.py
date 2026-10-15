@@ -551,3 +551,73 @@ def test_stderr_diagnostics_when_piped(world: World, tmp_path: Path) -> None:
     assert any(line.startswith("INFO ") and " plan stage.started " in line for line in lines)
     assert any(line.startswith("INFO ") and " plan stage.done " in line for line in lines)
     assert any(line.startswith("INFO ") and " run.done " in line for line in lines)
+
+
+CATALOG_STRUCTURE = {
+    "fields": [
+        {"name": "id", "type": "slug"},
+        {"name": "name", "type": "text", "required": True},
+        {"name": "type", "type": "enum", "values": ["power", "agency"]},
+    ],
+    "relation": "organismos adscritos",
+    "seeds": [{"name": "Poder Ejecutivo", "type": "power"}],
+    "limits": {"max_depth": 2},
+}
+
+
+def test_catalog_run_flags(world: World, tmp_path: Path) -> None:
+    args = ["run", "brief", "--kind", "catalog", "--structure", json.dumps(CATALOG_STRUCTURE), "--max-nodes", "7"]
+    result = runner.invoke(app, [*args, "--until", "draft"])
+    assert result.exit_code == 0, result.output
+    record = only_run(tmp_path)
+    assert record.kind == "catalog"
+    assert record.structure is not None
+    assert (record.structure.limits.max_depth, record.structure.limits.max_nodes) == (2, 7)
+    assert record.structure.limits.pages_per_node == 2
+    assert "catalog.max_nodes=7" in record.overrides
+
+
+def test_catalog_run_rejections(world: World, tmp_path: Path) -> None:
+    structure = json.dumps(CATALOG_STRUCTURE)
+    bad = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", '{"fields": []}'])
+    assert bad.exit_code == 2
+    assert "--structure" in bad.output
+    until = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", structure, "--until", "write"])
+    assert until.exit_code == 2
+    assert "assemble" in until.output
+    research = runner.invoke(app, ["run", "q", "--structure", structure])
+    assert research.exit_code == 2
+    kind = runner.invoke(app, ["run", "q", "--kind", "atlas"])
+    assert kind.exit_code == 2
+    assert "--kind" in kind.output
+
+
+def test_catalog_fork_limit_flags(world: World, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.runner.test_catalog import CatalogLLM
+
+    structure = json.dumps(CATALOG_STRUCTURE)
+
+    def build(*_args: object) -> Adapters:
+        return adapters(planner=CatalogLLM())
+
+    monkeypatch.setattr(building, "build", build)
+    first = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", structure, "--sources", "web"])
+    assert first.exit_code == 0, first.output
+    parent = only_run(tmp_path).run_id
+    rejected = runner.invoke(app, ["fork", parent, "--from", "fetch"])
+    assert rejected.exit_code == 2
+    assert "expand or extract" in rejected.output
+    same = runner.invoke(app, ["fork", parent, "--from", "expand"])
+    assert same.exit_code == 2
+    assert "--max-depth" in same.output
+    raised = runner.invoke(app, ["fork", parent, "--from", "expand", "--max-depth", "3"])
+    assert raised.exit_code == 0, raised.output
+    forks = [
+        RunRecord.model_validate_json((path / "request.json").read_text())
+        for path in runs_dir(tmp_path).iterdir()
+        if not path.name.startswith(".") and path.name != parent
+    ]
+    assert len(forks) == 1
+    assert forks[0].structure is not None
+    assert forks[0].structure.limits.max_depth == 3
+    assert "catalog.max_depth=3" in forks[0].overrides
