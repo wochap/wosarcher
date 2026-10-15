@@ -89,21 +89,25 @@ SHALL have `query` (required, non-empty), and these optional fields:
 structure's `output` is `table`, and `structure` on a research run, SHALL
 be rejected with 422 naming the field and the kind (or `output`). An
 invalid `structure` SHALL be rejected with 422 naming `structure.<path>`
-and the error. A `structure.language` SHALL follow the search language
-rule and, when set, SHALL set `search.language` for the run as
-`search_language` does; both set is 422 naming `search_language`. An
-unknown `depth` SHALL be rejected with 422 that names `depth`. A `use`
-key that is not a block, or a name that is not an entry of its block,
-SHALL be rejected with 422 that names `use.<block>` and lists that block's
-entries. An invalid domain entry SHALL be rejected with 422 that names
-`domains.allow` or `domains.block` and the entry. An invalid
-`search_language` SHALL be rejected with 422 that names `search_language`.
-The response SHALL be 201 with the new `run_id` and its status (`queued`
-or `running`). Attachment file names SHALL be reduced to their base name;
-two attachments with the same base name SHALL be rejected with 422, also
-when one is uploaded and the other reused. A `reuse_attachments.run_id`
-that names no run SHALL answer 404 `run_not_found`; a name that is not one
-of that run's attachments SHALL answer 422 `invalid_attachment` naming it.
+and the error. On a catalog run the structure's `language` is the search
+language: when it is set, it SHALL set `search.language` for the run as
+`search_language` does; a `search_language` equal to it SHALL be
+accepted; a `search_language` that differs from a set
+`structure.language` SHALL be rejected with 422 naming both fields and
+both values; with the structure's `language` empty, `search_language`
+SHALL apply and be recorded into the structure. An unknown `depth` SHALL
+be rejected with 422 that names `depth`. A `use` key that is not a block,
+or a name that is not an entry of its block, SHALL be rejected with 422
+that names `use.<block>` and lists that block's entries. An invalid
+domain entry SHALL be rejected with 422 that names `domains.allow` or
+`domains.block` and the entry. An invalid `search_language` SHALL be
+rejected with 422 that names `search_language`. The response SHALL be
+201 with the new `run_id` and its status (`queued` or `running`).
+Attachment file names SHALL be reduced to their base name; two
+attachments with the same base name SHALL be rejected with 422, also when
+one is uploaded and the other reused. A `reuse_attachments.run_id` that
+names no run SHALL answer 404 `run_not_found`; a name that is not one of
+that run's attachments SHALL answer 422 `invalid_attachment` naming it.
 Reused files SHALL count as attachments for the rule that follows. A
 request whose resolved sources are `files` with no attachment SHALL be
 rejected with 422 `invalid_attachment` before anything is staged.
@@ -215,6 +219,22 @@ rejected with 422 `invalid_attachment` before anything is staged.
 #### Scenario: Invalid structure
 - **WHEN** a client posts a catalog request whose structure has a seed of a type outside the enum
 - **THEN** the response is 422 naming `structure.seeds` and no run is queued
+
+#### Scenario: Structure language sets the search language
+- **WHEN** a client posts a catalog request whose structure has `language` `es` and no `search_language`
+- **THEN** the response is 201 and the run resolves `search.language` to `es`
+
+#### Scenario: Equal languages accepted
+- **WHEN** a client posts a catalog request with `structure.language` `es` and `search_language` `es`
+- **THEN** the response is 201
+
+#### Scenario: Conflicting languages
+- **WHEN** a client posts a catalog request with `structure.language` `es` and `search_language` `en`
+- **THEN** the response is 422 naming `search_language`, `structure.language`, `es`, and `en`
+
+#### Scenario: Search language fills an empty structure language
+- **WHEN** a client posts a catalog request whose structure has an empty `language` and `search_language` `es-PE`
+- **THEN** the response is 201, the run resolves `search.language` to `es-PE`, and `structure.json` has `language` `es-PE`
 
 ### Requirement: Run request precedence
 A run started by the server SHALL resolve its configuration as the CLI does

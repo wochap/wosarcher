@@ -59,7 +59,7 @@ of web-run "Start a run" with the title "Couldn’t draft the structure".
 The Structure panel SHALL show the heading "Structure", the line "Drafted
 from your brief · edit anything", and these rows with the prototype's
 help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
-`c-output`, `c-limits`, `profile`, `c-lang`):
+`c-output`, `c-limits`, `profile`, `c-lang`, `c-record-lang`):
 - Record fields: one row per field with the name input (spaces become
   `_`), the type select (`text`, `slug`, `url`, `date`, `enum`, `ref`),
   the Required and Volatile switches, and a remove button; an "Add
@@ -82,8 +82,16 @@ help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
   place of the Plan, Gap, and Write thinking fields, bound to
   `llm.reasoning.draft` and `llm.reasoning.extract`; the other groups are
   unchanged;
-- Allow domains, Block domains, and Search language, as web-run "Domain
-  rows" and "Run options" define them;
+- Allow domains and Block domains, as web-run "Domain rows" defines
+  them;
+- Search language: the input and validation of web-run "Run options",
+  bound to the structure's `language` (filled by the draft, editable);
+- Record language: the same input and validation, bound to the
+  structure's `record_language`, placeholder "Same as the sources", with
+  the help entry `c-record-lang` ("Record language": "Language for text
+  fields such as descriptions. Leave empty to keep the sources' language.
+  Names, acronyms and URLs stay as the sources give them."); it reuses
+  the Search language row's styles (an addition to the prototype);
 - the estimate line "Up to <nodes> nodes · about <nodes × pages> pages ·
   <nodes> extraction calls", with " · 1 report" appended when Output is
   Report or Both.
@@ -97,14 +105,15 @@ as `writing`. With Output Table the panel is hidden and no `writing` is
 sent.
 
 Run catalog SHALL post `POST /api/runs` with `kind` `catalog`, the brief
-as `query`, the structure (with `output`), the profile and its edits
-(`use`, `llm` with `model`, `context_window`, `max_output_tokens`, and
-`reasoning.draft` and `reasoning.extract` when set), the overridden
-writing fields when Output is not Table, the domain lists, the search
-language, and the attachments, then show the Live run screen. A
-structure the server rejects SHALL show the error box with "Fix in
-Structure", which focuses the named row. Ctrl+Enter in the brief SHALL
-run the catalog when a structure exists.
+as `query`, the structure (with `output`, `language`, and
+`record_language`), the profile and its edits (`use`, `llm` with `model`,
+`context_window`, `max_output_tokens`, and `reasoning.draft` and
+`reasoning.extract` when set), the overridden writing fields when Output
+is not Table, the domain lists, and the attachments, and SHALL NOT send
+`search_language`; then show the Live run screen. A structure the server
+rejects SHALL show the error box with "Fix in Structure", which focuses
+the named row. Ctrl+Enter in the brief SHALL run the catalog when a
+structure exists.
 
 #### Scenario: Draft fills the panel
 - **WHEN** the user types a brief and presses Draft structure, and the server returns a structure with 12 fields and 6 seeds
@@ -133,6 +142,18 @@ run the catalog when a structure exists.
 #### Scenario: Table hides writing
 - **WHEN** the drafted structure has `output` `table`
 - **THEN** no Writing panel is shown and the request has no `writing`
+
+#### Scenario: Search language edits the structure
+- **WHEN** the draft returns `language` `es`, the user changes Search language to `es-PE`, and runs the catalog
+- **THEN** the request's `structure.language` is `es-PE`, the request has no `search_language`, and the server accepts it
+
+#### Scenario: Record language sent
+- **WHEN** the user sets Record language to `en` and runs the catalog
+- **THEN** the request's `structure.record_language` is `en`
+
+#### Scenario: Invalid record language
+- **WHEN** the user types `english` in Record language
+- **THEN** the row shows the danger note "Use all, auto, or a code such as es or es-PE." and Run catalog is disabled until fixed
 
 ### Requirement: Catalog live run
 The Live run screen of a catalog run SHALL match scenario `live-catalog`:

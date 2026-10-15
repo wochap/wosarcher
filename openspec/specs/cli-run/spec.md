@@ -404,28 +404,32 @@ daemon's API and accept: `--structure FILE` (a JSON structure file),
 `--seed "NAME|TYPE[|URL]"` (repeatable), `--relation TEXT`, `--leaf TYPE`
 (repeatable), `--expand links|search|both`, `--output table|report|both`,
 `--max-depth N`, `--max-nodes N`, `--pages-per-node N`,
-`--search-language CODE`, `--allow-domain` and `--block-domain`
-(repeatable), `--attach PATH` (repeatable), `--sources web|both` (default
-`both`), `--profile`, `--use BLOCK=NAME` (repeatable), `--model`,
-`--draft-thinking` and `--extract-thinking` (each `none`, `low`, `medium`,
-`high`, or `default`, acting as `--set llm.reasoning.<step>=<value>`),
-`--context-window`, `--max-output`, the writing flags of `wosarcher run`
-(`--tone`, `--tone-instructions`, `--words`, `--language`,
-`--citation-marker`, `--reference-style`, `--format report|answer`; sent
-as `writing`, and rejected with exit status 2 naming `--output` when the
-output is `table`), `--set KEY=VALUE` (repeatable), `--until STAGE`, and
-`--json`. It SHALL NOT accept `--plan-thinking`, `--gap-thinking`, or
-`--write-thinking`. The structure flags SHALL be applied over the file's
-values (seeds and leaf types from flags replace the file's lists); with no
-`--structure` and no structure flag, the request carries no structure and
-the `draft` stage derives one. With structure flags but no file, the
-command SHALL fail before a request is sent when the flags do not make a
-complete structure (no seed, or no relation), naming what is missing.
-Values the client can check (`--expand`, `--output`, the limits' ranges,
-the thinking values, `--until` against the catalog stages,
-`--search-language`, the domain entries, the block of `--use`) SHALL fail
-with exit status 2 before a request is sent; a 422 SHALL exit with 2
-printing its detail. The command SHALL follow the run's events as
+`--search-language CODE` (sets the structure's `language`),
+`--record-language CODE` (sets the structure's `record_language`),
+`--allow-domain` and `--block-domain` (repeatable), `--attach PATH`
+(repeatable), `--sources web|both` (default `both`), `--profile`, `--use
+BLOCK=NAME` (repeatable), `--model`, `--draft-thinking` and
+`--extract-thinking` (each `none`, `low`, `medium`, `high`, or `default`,
+acting as `--set llm.reasoning.<step>=<value>`), `--context-window`,
+`--max-output`, the writing flags of `wosarcher run` (`--tone`,
+`--tone-instructions`, `--words`, `--language`, `--citation-marker`,
+`--reference-style`, `--format report|answer`; sent as `writing`, and
+rejected with exit status 2 naming `--output` when the output is
+`table`), `--set KEY=VALUE` (repeatable), `--until STAGE`, and `--json`.
+It SHALL NOT accept `--plan-thinking`, `--gap-thinking`, or
+`--write-thinking`, and SHALL NOT send `search_language` in the request.
+The structure flags SHALL be applied over the file's values (seeds and
+leaf types from flags replace the file's lists); with no `--structure`
+and no structure flag other than the two language flags, the request
+carries no structure and the `draft` stage derives one, applying the
+language flags over the derived structure. With structure flags but no
+file, the command SHALL fail before a request is sent when the flags do
+not make a complete structure (no seed, or no relation), naming what is
+missing. Values the client can check (`--expand`, `--output`, the
+limits' ranges, the thinking values, `--until` against the catalog
+stages, both language flags, the domain entries, the block of `--use`)
+SHALL fail with exit status 2 before a request is sent; a 422 SHALL exit
+with 2 printing its detail. The command SHALL follow the run's events as
 `wosarcher run` does, with the catalog phases and a wave counter, and the
 report streamed when one is written. When the run ends it SHALL print:
 for `output` `table`, the `records` array of `catalog.json` as JSON; for
@@ -469,6 +473,14 @@ for `output` `table`, the `records` array of `catalog.json` as JSON; for
 #### Scenario: JSON with a report
 - **WHEN** the user runs `wosarcher catalog "brief" --structure s.json --output both --json`
 - **THEN** the printed JSON holds `records` and a `report` key with the report body and references
+
+#### Scenario: Languages with a file
+- **WHEN** the user runs `wosarcher catalog "brief" --structure s.json --search-language es --record-language en`
+- **THEN** the request's structure has `language` `es` and `record_language` `en`, and the request has no `search_language`
+
+#### Scenario: Languages with a derived structure
+- **WHEN** the user runs `wosarcher catalog "brief" --record-language en` with no other structure flag
+- **THEN** the request carries no structure, and after `draft` the run's `structure.json` has `record_language` `en`
 
 ### Requirement: Catalog draft command
 `wosarcher catalog draft "<brief>"` SHALL post the brief (and `--attach`

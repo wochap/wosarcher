@@ -23,7 +23,11 @@ A catalog run SHALL have a structure with:
 - `expand`: `links`, `search`, or `both` (default `both`);
 - `limits`: `max_depth` (1 to 10, default 3), `max_nodes` (1 to 5000,
   default 200), and `pages_per_node` (1 to 10, default 2);
-- `language`: a search language (http-api "Create a run") or empty;
+- `language`: the search language (http-api "Create a run") or empty;
+  it is the catalog's only search language setting;
+- `record_language`: a language code under the same rule, or empty
+  (default) meaning the sources' language; the language extraction
+  writes `text` values in (catalog-extraction "Extract stage");
 - `output`: `table` (default), `report`, or `both` (catalog-report
   "Output option").
 
@@ -64,6 +68,14 @@ SHALL be rejected naming the key.
 - **WHEN** a structure sets `output` to `summary`
 - **THEN** it is rejected with an error naming `output` and the three values
 
+#### Scenario: Record language default
+- **WHEN** a structure leaves `record_language` unset
+- **THEN** it resolves to empty
+
+#### Scenario: Invalid record language
+- **WHEN** a structure sets `record_language` to `spanish`
+- **THEN** it is rejected with an error naming `record_language`
+
 ### Requirement: Draft stage
 The `draft` stage SHALL run first after `load` in a catalog run. When the
 run request carries a structure, `draft` SHALL validate it (Requirement:
@@ -80,12 +92,14 @@ preamble and a delimited block holding the attachment outlines
 (research-planning "Attachment outline"), or nothing. The prompt SHALL
 ask for `output` too: `report` when the brief asks a question or for a
 summary, `table` when it asks for a list or data, `both` when it asks for
-both. The reply SHALL be JSON in the structure's shape. The stage SHALL
-read it, apply the defaults for absent optional keys, validate it, and
-fail the run with `draft failed: <reason>` when the reply cannot be read
-or is invalid. The derived structure SHALL be written as `structure.json`
-and recorded in `request.json` as the run's structure. Outlines SHALL
-never go through a template.
+both. It SHALL ask for `language` (the sources' language) and
+`record_language` (the brief's language when it differs from the
+sources', else empty). The reply SHALL be JSON in the structure's shape.
+The stage SHALL read it, apply the defaults for absent optional keys,
+validate it, and fail the run with `draft failed: <reason>` when the
+reply cannot be read or is invalid. The derived structure SHALL be
+written as `structure.json` and recorded in `request.json` as the run's
+structure. Outlines SHALL never go through a template.
 
 #### Scenario: Supplied structure
 - **WHEN** a catalog run starts with a valid structure of six seeds
@@ -106,6 +120,10 @@ never go through a template.
 #### Scenario: Output proposed
 - **WHEN** the brief reads "list every comisaría in Peru with its address and tell me how they are distributed by region" and the draft reply sets `output` `both`
 - **THEN** `structure.json` has `output` `both`
+
+#### Scenario: Languages proposed
+- **WHEN** an English brief asks for Peruvian state organizations and the draft reply sets `language` `es` and `record_language` `en`
+- **THEN** `structure.json` has both values and the run searches in `es`
 
 ### Requirement: Draft route
 `POST /api/catalog/draft` SHALL accept a multipart form with a `request`
