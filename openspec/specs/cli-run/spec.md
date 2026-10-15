@@ -336,3 +336,39 @@ event, and exit with 130.
 #### Scenario: Ctrl-C while running
 - **WHEN** the user presses Ctrl-C while the run is in `fetch`
 - **THEN** the run's log ends with `run.cancelled` and the command exits with 130
+
+### Requirement: Client environment defaults
+`wosarcher run` SHALL take `WOSARCHER_DEPTH` from the client's own
+environment as the value of `--depth`, and `WOSARCHER_PROFILE` as the value
+of `--profile`, when the flag is not given, and send it in the run request
+exactly as the flag would be sent. A flag on the command line SHALL win
+over its variable. A variable that is unset or empty SHALL count as absent,
+leaving the request's `depth` or `profile` empty as today. A name the
+daemon does not know SHALL fail like the same flag: the server's 422 detail
+printed and exit status 2. `wosarcher run --help` SHALL name each variable
+next to its flag. `wosarcher fork` SHALL NOT read either variable: a fork
+without `--profile` SHALL keep rebuilding from the parent's saved settings.
+
+#### Scenario: Depth from the environment
+- **WHEN** the client's environment has `WOSARCHER_DEPTH=quick` and the user runs `wosarcher run "q" --until select --json`
+- **THEN** the run's `request.json` records depth `quick` and the resolved `fetch.max_pages` is the `quick` preset's
+
+#### Scenario: Flag wins over the environment
+- **WHEN** the client's environment has `WOSARCHER_DEPTH=quick` and `WOSARCHER_PROFILE=lan` and the user runs `wosarcher run "q" --depth deep --profile cloud`
+- **THEN** the run's `request.json` records depth `deep` and profile `cloud`
+
+#### Scenario: Profile from the environment
+- **WHEN** the client's environment has `WOSARCHER_PROFILE=lan`, the daemon's stored default profile is `desktop`, and the user runs `wosarcher run "q"`
+- **THEN** the run's `request.json` records profile `lan`
+
+#### Scenario: Empty variable
+- **WHEN** the client's environment has `WOSARCHER_DEPTH=` (empty) and the user runs `wosarcher run "q"`
+- **THEN** the request carries no depth and the run's `request.json` records no depth
+
+#### Scenario: Unknown depth from the environment
+- **WHEN** the client's environment has `WOSARCHER_DEPTH=quik` and the user runs `wosarcher run "q"`
+- **THEN** the command exits with 2 printing the server's detail naming `depth`, and no run is created
+
+#### Scenario: Fork ignores the environment
+- **WHEN** the client's environment has `WOSARCHER_PROFILE=cloud` and the user runs `wosarcher fork <id> --from write --tone critical`
+- **THEN** the fork is rebuilt from the parent's saved settings and its record names the parent's profile, not `cloud`

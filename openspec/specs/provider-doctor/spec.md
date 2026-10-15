@@ -217,3 +217,19 @@ built-in providers.
 #### Scenario: JSON report
 - **WHEN** the user runs `wosarcher doctor --json --profile low-vram`
 - **THEN** the report has `gpu_policy` `exclusive` and every provider row has a `release` value matching the profile
+
+### Requirement: Client doctor profile from the environment
+`wosarcher doctor` SHALL take `WOSARCHER_PROFILE` from the client's own
+environment as the value of `--profile` when the flag is not given, so it
+checks the profile that `wosarcher run` from the same environment uses. The
+flag SHALL win, and an unset or empty variable SHALL count as absent,
+leaving the daemon's active profile in effect. `wosarcher doctor --help`
+SHALL name the variable next to the flag.
+
+#### Scenario: Profile from the environment
+- **WHEN** the client's environment has `WOSARCHER_PROFILE=cloud`, the daemon's active profile is `desktop`, and a member runs `wosarcher doctor --json`
+- **THEN** the entries the `cloud` profile uses are checked and the report names profile `cloud`
+
+#### Scenario: Flag wins
+- **WHEN** the client's environment has `WOSARCHER_PROFILE=cloud` and a member runs `wosarcher doctor --profile desktop`
+- **THEN** the entries the `desktop` profile uses are checked

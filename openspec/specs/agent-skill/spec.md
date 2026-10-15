@@ -26,9 +26,17 @@ The skill SHALL document, each with a command example:
 - getting a short cited answer with `wosarcher run "<query>" --format answer --json`;
 - attaching files with `--attach` and choosing sources with `--sources files|web|both`;
 - choosing a profile with `--profile`, listing profiles with `wosarcher profile list`, and overriding fields with `--set`;
+- choosing a depth preset with `--depth` and listing presets with `wosarcher depth list`;
 - writing options `--tone`, `--tone-instructions`, `--words`, `--language`, `--citation-marker`, `--reference-style`, and `--format`;
 - rewriting a finished run with `wosarcher fork <run_id> --from write`;
 - listing runs with `wosarcher runs --json` and checking providers with `wosarcher doctor`.
+
+The skill SHALL also say that the agent's environment may set
+`WOSARCHER_DEPTH` and `WOSARCHER_PROFILE` as its default depth and profile,
+and that the agent passes `--depth` or `--profile` only when the user asks
+for a different depth or profile. Its command examples outside the profile
+and depth section SHALL NOT pass `--depth` or `--profile`. Its install
+comment SHALL say where to set the two variables for an agent.
 
 #### Scenario: Cited context first
 - **WHEN** an agent reads the skill
@@ -37,6 +45,10 @@ The skill SHALL document, each with a command example:
 #### Scenario: Answer example
 - **WHEN** an agent reads the skill
 - **THEN** it finds `wosarcher run "<query>" --format answer --json` described as the way to get a short cited answer
+
+#### Scenario: Per-agent defaults documented
+- **WHEN** an agent reads the skill
+- **THEN** it finds `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE` described as its defaults, and an instruction to omit `--depth` and `--profile` unless the user asks
 
 ### Requirement: Output description
 The skill SHALL describe the JSON document printed by `--json` (run ID,
