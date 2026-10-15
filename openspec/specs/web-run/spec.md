@@ -71,7 +71,9 @@ the Run group. The Run group SHALL offer:
 - Sources (segmented, `web`, `files`, `both`);
 - Profile: with six or fewer profiles from `GET /api/profiles`, a
   segmented control with one segment per profile by name, as Depth's
-  (scenario `new-profile-custom`); with more (prototype setting
+  (scenario `new-profile-custom`): only as wide as its segments, never
+  wider than the row, and wrapping onto more rows when they do not fit,
+  each segment keeping its borders; with more (prototype setting
   `profiles = many`), a select `min(260px, 100%)` wide listing them. The
   active profile is preselected. While the profile's Advanced values have
   edits, the segmented control SHALL add a selected `custom` segment last
@@ -170,6 +172,14 @@ count.
 #### Scenario: User profile marked
 - **WHEN** `GET /api/profiles` returns a profile `nixos`
 - **THEN** its segment reads "nixos", with no "(user profile)" suffix since every profile is a user file, and selecting it sends `profile` = `nixos`
+
+#### Scenario: Profile segments fit their width
+- **WHEN** `GET /api/profiles` returns three profiles with short names on a desktop-width New run screen (scenario `new-profile`)
+- **THEN** the Profile segmented control ends after its last segment, with no empty bordered space to the right of it
+
+#### Scenario: Profile segments wrap
+- **WHEN** the Profile segments do not fit the row's width (phone width, six long profile names)
+- **THEN** the control wraps onto more rows inside the row, each segment keeping its borders, and the page does not scroll horizontally
 
 ### Requirement: Writing overrides
 The Writing group of the Options panel (scenario `new`) SHALL use the
