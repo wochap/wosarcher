@@ -460,8 +460,9 @@ def test_catalog_until_prints_nothing(daemon: Daemon) -> None:
         (["--seed", "PCM|ministry"], "--relation"),
         (["--seed", "PCM"], "--seed"),
         (["--expand", "crawl"], "--expand"),
+        (["--output", "summary"], "--output"),
         (["--max-nodes", "0"], "--max-nodes"),
-        (["--until", "write"], "catalog stage"),
+        (["--until", "score"], "catalog stage"),
         (["--sources", "files"], "--sources"),
         (["--search-language", "spanish"], "--search-language"),
         (["--allow-domain", "gob.pe/x"], "gob.pe/x"),
@@ -475,6 +476,37 @@ def test_catalog_checked_before_a_request(daemon: Daemon, args: list[str], named
     assert result.exit_code == 2
     assert named in result.output
     assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_catalog_report_output(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    result = runner.invoke(app, ["catalog", "b", "--structure", str(path), "--output", "report", "--words", "800"])
+    assert result.exit_code == 0, result.output
+    [run_id] = listed(daemon)
+    record = request_of(daemon, run_id)
+    assert record["request"]["structure"]["output"] == "report"
+    assert record["form"]["writing"]["words"] == 800
+    assert "write.words=800" in json.loads((daemon.runs_dir / run_id / "argv.json").read_text())
+    assert result.stdout.startswith("Poder Ejecutivo heads the catalog [1].")
+
+
+def test_catalog_writing_flag_without_a_report(daemon: Daemon, tmp_path: Path) -> None:
+    result = runner.invoke(app, ["catalog", "b", "--structure", str(structure_file(tmp_path)), "--tone", "critical"])
+    assert result.exit_code == 2
+    assert "--tone" in result.output
+    assert "--output" in result.output
+    assert not daemon.runs_dir.exists() or listed(daemon) == []
+
+
+def test_catalog_json_with_a_report(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    result = runner.invoke(app, ["catalog", "b", "--structure", str(path), "--output", "both", "--json"])
+    assert result.exit_code == 0, result.output
+    found = json.loads(result.stdout)
+    assert found["records"][0]["name"] == "Poder Ejecutivo"
+    assert found["output"] == "both"
+    assert found["report"]["body"] == "Poder Ejecutivo heads the catalog [1]."
+    assert "references" in found["report"]
 
 
 def test_catalog_thinking_flags(daemon: Daemon) -> None:
@@ -567,7 +599,7 @@ def test_catalog_progress_rows() -> None:
 
     out = io.StringIO()
     view = ProgressView(Console(file=out, force_terminal=False, width=200), kind="catalog")
-    assert list(view.rows) == ["load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble"]
+    assert list(view.rows) == ["load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble", "write"]
     view.update(event("stage.started", "fetch", StageStartedData(device=None, provider="firecrawl", round=2)))
     assert view.rows["fetch"].state == "running · wave 2"
     view.update(event("stage.done", "fetch", StageDoneData(count=5, seconds=1.0, round=2)))

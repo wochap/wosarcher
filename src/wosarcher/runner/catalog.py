@@ -1,4 +1,5 @@
-"""The catalog run: `draft`, then `expand`, `search`, `fetch`, `chunk`, `extract` once per wave, then `assemble`.
+"""The catalog run: `draft`, then `expand`, `search`, `fetch`, `chunk`, `extract` once per wave, then `assemble`,
+then `write` when the structure's `output` wants a report.
 
 `nodes.jsonl` is the frontier and the checkpoint. A resumed run sets every
 `expanding` node back to `discovered`, drops the interrupted wave's hits and
@@ -44,12 +45,14 @@ from wosarcher.models import (
 )
 from wosarcher.runner import steps
 from wosarcher.stages import assemble as assembling
+from wosarcher.stages import catalog_context as cataloguing
 from wosarcher.stages import chunk as chunking
 from wosarcher.stages import draft as drafting
 from wosarcher.stages import expand as expanding
 from wosarcher.stages import extract as extracting
 from wosarcher.stages import fetch as fetching
 from wosarcher.stages import load as loading
+from wosarcher.stages import select as selecting
 from wosarcher.stages.extract import Child, Extracted, NodePages, Sizing
 
 if TYPE_CHECKING:
@@ -196,6 +199,9 @@ async def run_stages(runner: "Runner", ctx: CatalogContext, todo: Sequence[Stage
             continue
         if stage == "load" and ctx.record.request.sources == "web":
             runner.skip(ctx, stage)
+            continue
+        if stage == "write" and not ctx.structure().wants_report:
+            ctx.log.emit("stage.done", stage, StageDoneData(count=0, seconds=0, skipped=True))
             continue
         ctx.round.number = ctx.log.round = 1
         await runner.run_stage(ctx, stage, CATALOG_STEPS[stage])
@@ -551,6 +557,7 @@ async def assemble(ctx: CatalogContext) -> steps.Outcome:
     )
     records = ctx.store.read_items(ctx.run_id, "records.jsonl", ExtractedRecord)
     catalog: CatalogRecord = assembling.assemble(structure, nodes, records, waves=waves, reason=reason, note=note)
+    catalog = catalog.model_copy(update={"output": structure.output})
     ctx.store.write_artifact(ctx.run_id, "catalog.json", catalog)
     flagged = sum(1 for record in catalog.records if record.get("flags"))
     data = CatalogDoneData(
@@ -558,6 +565,31 @@ async def assemble(ctx: CatalogContext) -> steps.Outcome:
     )
     ctx.log.emit("catalog.done", "assemble", data)
     return steps.Outcome(len(catalog.records))
+
+
+async def write(ctx: CatalogContext) -> steps.Outcome:
+    """Write `context.json` from the catalog's records, then the report as a research run writes it."""
+    settings = ctx.settings
+    brief = ctx.record.request.query
+    budget = selecting.budget(
+        context_window=settings.llm.context_window,
+        max_context_tokens=None if settings.select.max_context_tokens == "auto" else settings.select.max_context_tokens,
+        prompt_reserve_tokens=settings.select.prompt_reserve_tokens,
+        output_tokens=selecting.output_tokens(settings.write.words, settings.llm.max_output_tokens),
+        query_tokens=steps.estimate(settings, brief),
+    )
+    built = cataloguing.build(
+        brief,
+        ctx.structure(),
+        ctx.store.read_artifact(ctx.run_id, "catalog.json", CatalogRecord),
+        ctx.store.read_items(ctx.run_id, "nodes.jsonl", Node),
+        ctx.items("pages.jsonl", Page),
+        budget_tokens=budget,
+        chars_per_token=settings.llm.chars_per_token,
+        margin=settings.llm.token_margin,
+    )
+    ctx.store.write_artifact(ctx.run_id, "context.json", built.context)
+    return await steps.write(ctx, records=True)
 
 
 CATALOG_STEPS: dict[Stage, Step] = {
@@ -569,4 +601,5 @@ CATALOG_STEPS: dict[Stage, Step] = {
     "chunk": chunk,
     "extract": extract,
     "assemble": assemble,
+    "write": write,
 }

@@ -31,6 +31,7 @@ export type FieldType = G.StructureField["type"];
 export type Seed = G.Seed;
 export type Limits = Required<G.Limits>;
 export type ExpandBy = NonNullable<G.Structure["expand"]>;
+export type CatalogOutput = NonNullable<G.Structure["output"]>;
 export type RunCreate = G.RunCreate & { kind?: RunKind; structure?: Structure | null };
 export type ForkCreate = G.ForkCreate & { limits?: G.Limits };
 /** `POST /api/catalog/draft`: the brief and the profile's choices; attachments go alongside. */

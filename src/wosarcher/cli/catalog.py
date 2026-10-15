@@ -1,8 +1,9 @@
 """`wosarcher catalog "<brief>"` and `wosarcher catalog draft "<brief>"`, through the daemon's API.
 
 `catalog` starts a catalog run with `POST /api/runs` (`kind` `catalog`), follows
-it like `wosarcher run`, and prints the `records` array of `catalog.json` (the
-whole file with `--json`). `catalog draft` posts the brief to
+it like `wosarcher run`, and prints the `records` array of `catalog.json`, or the
+report for `--output report|both` (with `--json`, the whole file plus a `report`
+key when one was written). `catalog draft` posts the brief to
 `POST /api/catalog/draft` and prints the derived structure, ready for
 `--structure`.
 
@@ -16,6 +17,7 @@ Exit status: as `wosarcher run`; `catalog draft` exits 1 when the draft call fai
 
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, Any, cast, get_args
 
@@ -31,16 +33,33 @@ from wosarcher.cli.options import (
     ContextWindowOption,
     DraftThinkingOption,
     ExtractThinkingOption,
+    FormatOption,
+    LanguageOption,
+    MarkerOption,
     MaxOutputOption,
     ModelOption,
     SearchLanguageOption,
     SetOption,
+    StyleOption,
+    ToneInstructionsOption,
+    ToneOption,
     UseOption,
+    WordsOption,
     fail,
     use_map,
 )
-from wosarcher.cli.run import created, llm_patch, uploads, watch
-from wosarcher.models import CATALOG_STAGES, DomainPatch, DraftCreate, ExpandMode, RunCreate, Stage, Structure
+from wosarcher.cli.run import created, llm_patch, uploads, watch, writing_patch
+from wosarcher.models import (
+    CATALOG_STAGES,
+    CatalogOutput,
+    DomainPatch,
+    DraftCreate,
+    ExpandMode,
+    RunCreate,
+    Stage,
+    Structure,
+    catalog_writes,
+)
 
 DRAFT = "draft"
 DRAFT_TIMEOUT_SECONDS = 600.0
@@ -85,10 +104,11 @@ def structure_request(
     leaves: list[str],
     expand: str | None,
     limits: dict[str, int | None],
+    output: str | None = None,
 ) -> dict[str, Any] | None:
     """The file with the flags over it; None when neither is given (the `draft` stage derives one)."""
     given = {name: value for name, value in limits.items() if value is not None}
-    flagged = bool(seeds or relation is not None or leaves or expand is not None or given)
+    flagged = bool(seeds or relation is not None or leaves or expand is not None or given or output is not None)
     if path is None and not flagged:
         return None
     data = read_structure(path) if path is not None else {}
@@ -105,6 +125,8 @@ def structure_request(
         data["leaf_types"] = leaves
     if expand is not None:
         data["expand"] = expand
+    if output is not None:
+        data["output"] = output
     if given:
         data["limits"] = {**cast(dict[str, Any], data.get("limits") or {}), **given}
     if path is None:
@@ -121,6 +143,21 @@ def expand_option(value: str | None) -> str | None:
     if value is None or value in get_args(ExpandMode):
         return value
     raise typer.BadParameter(f"must be one of: {', '.join(get_args(ExpandMode))}")
+
+
+def output_option(value: str | None) -> str | None:
+    if value is None or value in get_args(CatalogOutput):
+        return value
+    raise typer.BadParameter(f"must be one of: {', '.join(get_args(CatalogOutput))}")
+
+
+def check_writing(found: dict[str, Any] | None, writing: Mapping[str, object]) -> None:
+    """Writing flags need a report: fail naming the first one and `--output` when the output is `table`."""
+    given = [flag for flag, value in writing.items() if value is not None]
+    if not given or found is None:
+        return
+    if not catalog_writes(Structure.model_validate(found)):
+        raise fail(f"{given[0]}: writes a report; pass --output report or --output both", 2)
 
 
 def until_option(value: str | None) -> Stage | None:
@@ -157,6 +194,7 @@ CATALOG_ONLY = (
     "--relation",
     "--leaf",
     "--expand",
+    "--output",
     "--max-depth",
     "--max-nodes",
     "--pages-per-node",
@@ -167,6 +205,13 @@ CATALOG_ONLY = (
     "--set",
     "--until",
     "--json",
+    "--tone",
+    "--tone-instructions",
+    "--words",
+    "--language",
+    "--citation-marker",
+    "--reference-style",
+    "--format",
 )
 
 
@@ -183,6 +228,12 @@ def catalog(
     expand: Annotated[
         str | None,
         typer.Option("--expand", metavar="links|search|both", callback=expand_option, help="How children are found."),
+    ] = None,
+    output: Annotated[
+        str | None,
+        typer.Option(
+            "--output", metavar="table|report|both", callback=output_option, help="Records, a report, or both."
+        ),
     ] = None,
     max_depth: Annotated[int | None, typer.Option("--max-depth", min=1, max=10, help="Deepest node level.")] = None,
     max_nodes: Annotated[int | None, typer.Option("--max-nodes", min=1, max=5000, help="Nodes at most.")] = None,
@@ -201,16 +252,34 @@ def catalog(
     extract_thinking: ExtractThinkingOption = None,
     context_window: ContextWindowOption = None,
     max_output: MaxOutputOption = None,
+    tone: ToneOption = None,
+    tone_instructions: ToneInstructionsOption = None,
+    length: WordsOption = None,
+    language: LanguageOption = None,
+    citation_marker: MarkerOption = None,
+    reference_style: StyleOption = None,
+    format_: FormatOption = None,
     set_: SetOption = None,
     until: Annotated[
         str | None, typer.Option("--until", help=f"Stop after this stage: {', '.join(CATALOG_STAGES)}.")
     ] = None,
-    as_json: Annotated[bool, typer.Option("--json", help="Print the whole catalog.json when the run ends.")] = False,
+    as_json: Annotated[
+        bool, typer.Option("--json", help="Print the whole catalog.json (with the report) when the run ends.")
+    ] = False,
 ) -> None:
     """Crawl BRIEF into a catalog of records on the daemon; `catalog draft BRIEF` prints a structure to edit."""
     llm = llm_patch(
         model, {"draft": draft_thinking, "extract": extract_thinking}, (context_window, max_output), (None, None)
     )
+    writing = {
+        "--tone": tone,
+        "--tone-instructions": tone_instructions,
+        "--words": length,
+        "--language": language,
+        "--citation-marker": citation_marker,
+        "--reference-style": reference_style,
+        "--format": format_,
+    }
     if words[:1] == [DRAFT] and len(words) == 2:
         catalog_flags = {
             "--structure": structure,
@@ -218,6 +287,7 @@ def catalog(
             "--relation": relation,
             "--leaf": leaf,
             "--expand": expand,
+            "--output": output,
             "--max-depth": max_depth,
             "--max-nodes": max_nodes,
             "--pages-per-node": pages_per_node,
@@ -228,6 +298,7 @@ def catalog(
             "--set": set_,
             "--until": until,
             "--json": as_json or None,
+            **writing,
         }
         given = [flag for flag in CATALOG_ONLY if catalog_flags[flag]]
         if given:
@@ -240,10 +311,11 @@ def catalog(
         raise fail(f"--sources must be one of: {', '.join(SOURCES)}", 2)
     stop = until_option(until)
     limits = {"max_depth": max_depth, "max_nodes": max_nodes, "pages_per_node": pages_per_node}
-    found = structure_request(structure, seed or [], relation, leaf or [], expand, limits)
-    language = search_language
+    found = structure_request(structure, seed or [], relation, leaf or [], expand, limits, output)
+    check_writing(found, writing)
+    search_language_value = search_language
     if found is not None and search_language is not None:
-        found["language"], language = search_language, None
+        found["language"], search_language_value = search_language, None
     try:
         request = RunCreate.model_validate(
             {
@@ -256,7 +328,16 @@ def catalog(
                 "use": use_map(use),
                 "domains": DomainPatch(allow=allow_domain or None, block=block_domain or None),
                 "llm": llm,
-                "search_language": language,
+                "writing": writing_patch(
+                    tone=tone,
+                    tone_instructions=tone_instructions,
+                    words=length,
+                    language=language,
+                    citation_marker=citation_marker,
+                    reference_style=reference_style,
+                    format=format_,
+                ),
+                "search_language": search_language_value,
                 "set": set_ or [],
             }
         )

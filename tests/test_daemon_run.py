@@ -582,7 +582,7 @@ def test_catalog_run_rejections(world: World, tmp_path: Path) -> None:
     bad = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", '{"fields": []}'])
     assert bad.exit_code == 2
     assert "--structure" in bad.output
-    until = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", structure, "--until", "write"])
+    until = runner.invoke(app, ["run", "brief", "--kind", "catalog", "--structure", structure, "--until", "score"])
     assert until.exit_code == 2
     assert "assemble" in until.output
     research = runner.invoke(app, ["run", "q", "--structure", structure])

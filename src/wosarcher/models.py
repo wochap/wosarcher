@@ -277,6 +277,8 @@ class Passage(Contract):
     block_ids: list[str] = []
     scorer: str
     display: float | None = None
+    record_id: str | None = None
+    """Catalog reports: the ID of the record the passage renders."""
 
 
 class Context(Contract):
@@ -390,6 +392,8 @@ class Report(Contract):
     """Continuation calls that added text after the output limit was reached."""
     truncated: bool = False
     """The last call ended at the output limit, or a continuation failed."""
+    records: bool = False
+    """Written from a catalog's records: each passage is a record."""
 
 
 Stage = Literal[
@@ -469,11 +473,23 @@ class ResearchRecord(Contract):
 
 RunKind = Literal["research", "catalog"]
 """`research` answers a question with a report; `catalog` crawls a structure into records."""
-CATALOG_STAGES: tuple[Stage, ...] = ("load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble")
-"""Run order of a catalog run."""
+CATALOG_STAGES: tuple[Stage, ...] = (
+    "load",
+    "draft",
+    "expand",
+    "search",
+    "fetch",
+    "chunk",
+    "extract",
+    "assemble",
+    "write",
+)
+"""Run order of a catalog run; `write` is skipped unless the structure's `output` wants a report."""
 WAVE_STAGES: tuple[Stage, ...] = ("expand", "search", "fetch", "chunk", "extract")
 """The stages that repeat once per wave."""
 FieldType = Literal["text", "slug", "url", "date", "enum", "ref"]
+CatalogOutput = Literal["table", "report", "both"]
+"""What a catalog run returns: the records, a report written from them, or both."""
 ExpandMode = Literal["links", "search", "both"]
 NodeStatus = Literal["discovered", "expanding", "extracted", "failed"]
 FoundBy = Literal["seed", "links", "search"]
@@ -578,6 +594,12 @@ class Structure(Contract):
     limits: Limits = Limits()
     language: str = ""
     """A search language, or empty for the configured one."""
+    output: CatalogOutput = "table"
+    """`report` and `both` write a report from the records after `assemble`."""
+
+    @property
+    def wants_report(self) -> bool:
+        return self.output != "table"
 
     @field_validator("relation")
     @classmethod
@@ -653,6 +675,11 @@ class Structure(Contract):
         return node_type not in self.leaf_types and depth < self.limits.max_depth
 
 
+def catalog_writes(structure: Structure | None) -> bool:
+    """A catalog run takes writing options: its structure wants a report, or `draft` has yet to derive one."""
+    return structure is None or structure.wants_report
+
+
 class Node(Contract):
     """A line of `nodes.jsonl`: one entity of the frontier."""
 
@@ -714,6 +741,8 @@ class CatalogRecord(Contract):
     by_type: dict[str, int] = {}
     by_depth: dict[str, int] = {}
     """Depth (as a string key, JSON object keys) to record count."""
+    output: CatalogOutput = "table"
+    """The structure's `output`."""
 
 
 class RunRequest(Contract):
@@ -890,7 +919,9 @@ class RunSummary(Contract):
     depth: str | None = None
     """A preset name, `custom`, or None (an older run or no depth)."""
     writing: WritingOptions | None = WritingOptions()
-    """The run's resolved writing options; None for a catalog run."""
+    """The run's resolved writing options; None for a catalog run whose `output` is `table`."""
+    output: CatalogOutput | None = None
+    """Catalog runs: the structure's `output`; None for research runs and before `draft` derives a structure."""
     nodes: int | None = None
     """Catalog runs: extracted records so far, or `catalog.json`'s record count when done; None for research."""
     duration_s: float | None = None

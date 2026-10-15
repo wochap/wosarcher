@@ -108,6 +108,8 @@ entity, each value with its source URL (see Catalog runs in the design):
 uv run wosarcher catalog draft "Every public organization of the Peruvian State" > peru.json  # edit it
 uv run wosarcher catalog "Every public organization of the Peruvian State" \
   --structure peru.json --allow-domain gob.pe --max-nodes 200 > catalog.json
+uv run wosarcher catalog "List every comisaría in Peru and how they are distributed by region" \
+  --structure comisarias.json --output both --words 800   # records plus a cited report
 uv run wosarcher fork <run-id> --from expand --max-depth 4   # Expand more
 ```
 

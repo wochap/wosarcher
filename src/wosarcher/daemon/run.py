@@ -254,8 +254,15 @@ def start(store: RunStore, settings: Settings, record: RunRecord, until: Stage |
 def output(store: RunStore, run_id: str, status: Status, as_json: bool) -> None:
     finished = store.finished_stages(run_id)
     error = next((e.data.error for e in reversed(store.read_events(run_id)) if isinstance(e, RunFailed)), None)
-    context = store.read_artifact(run_id, "context.json", Context) if "select" in finished else None
-    report = store.read_artifact(run_id, "report.json", Report) if "write" in finished else None
+    run_dir = store.run_dir(run_id)
+    catalog = (run_dir / "catalog.json").is_file()
+    context = (
+        store.read_artifact(run_id, "context.json", Context)
+        if "select" in finished and (run_dir / "context.json").is_file()
+        else None
+    )
+    has_report = "write" in finished and (run_dir / "report.json").is_file()
+    report = store.read_artifact(run_id, "report.json", Report) if has_report else None
     if as_json:
         result = RunOutput(
             run_id=run_id, status=status, error=error if status == "failed" else None, context=context, report=report
@@ -263,7 +270,7 @@ def output(store: RunStore, run_id: str, status: Status, as_json: bool) -> None:
         typer.echo(result.model_dump_json(indent=2))
         return
     err = Console(stderr=True, highlight=False)
-    if (store.run_dir(run_id) / "catalog.json").is_file() and not as_json:
+    if catalog and report is None:
         found = store.read_artifact(run_id, "catalog.json", CatalogRecord)
         typer.echo(json.dumps(found.records, indent=2, ensure_ascii=False))
     if status != "done":

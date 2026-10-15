@@ -34,6 +34,7 @@ from wosarcher.models import (
     Stage,
     Structure,
     WritingPatch,
+    catalog_writes,
 )
 from wosarcher.ports import ExportError
 from wosarcher.server import staging
@@ -107,7 +108,8 @@ def staged_summary(state: ServerState, staged: StagedRun) -> RunSummary:
         sources=staged.resolved_sources,
         until=staged.until,
         depth=staged.depth,
-        writing=None if staged.kind == "catalog" else staged.writing_options,
+        writing=staged.writing_options if staged.kind == "research" or catalog_writes(staged.structure) else None,
+        output=staged.structure.output if staged.kind == "catalog" and staged.structure else None,
         nodes=0 if staged.kind == "catalog" else None,
         queue_position=state.manager.queue_position(staged.run_id),
         model=staged.llm.model or "",
@@ -211,10 +213,12 @@ def check_reasoning(kind: RunKind, llm: LLMPatch) -> None:
 def check_kind(body: RunCreate) -> None:
     """The fields of the other kind, `sources files` for a catalog, `until` outside the kind, two languages."""
     if body.kind == "catalog":
-        defaults = {"depth": None, "research": ResearchPatch(), "writing": WritingPatch()}
+        defaults = {"depth": None, "research": ResearchPatch()}
         given = [name for name, empty in defaults.items() if getattr(body, name) != empty]
         if given:
             raise RouteError(422, "invalid_request", f"{given[0]}: not for catalog runs")
+        if body.writing != WritingPatch() and not catalog_writes(body.structure):
+            raise RouteError(422, "invalid_request", "writing: not for a catalog whose output is table")
         if body.sources == "files":
             raise RouteError(422, "invalid_request", "sources: a catalog run cannot use files only")
         language = body.structure.language if body.structure else ""
@@ -334,6 +338,9 @@ async def export_run(state: State, run_id: str, format: str | None = None) -> Re
     record = record_of(state, run_id)
     if record is None:
         raise not_found(run_id)
+    structure = record.request.structure
+    if record.kind == "catalog" and structure is not None and not structure.wants_report:
+        raise RouteError(404, "no_report", f"run {run_id} is a catalog with output table; it has no report")
     if not (state.runs_dir / run_id / "report.json").is_file():
         raise RouteError(404, "report_not_found", f"run {run_id} has no report")
     missing = state.exporter.missing(fmt)

@@ -1,7 +1,7 @@
 // The Live run's report as it streams, with citation chips and a caret, kept scrolled to the
 // bottom while the reader is near it; before writing, the waiting texts.
 import { Cpu, Hourglass, type Icon, StopCircle } from "@phosphor-icons/react";
-import { useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import type { Context, Report } from "../../api/generated";
 import type { WritingOptions } from "../../api/types";
 import { describeValue } from "../../components/WritingOptionsForm";
@@ -23,6 +23,8 @@ type Props = CiteHandlers & {
   writing: WritingOptions | null;
   isPhone: boolean;
   className?: string;
+  /** A control at the end of the header (a catalog run's "Coverage" toggle). */
+  action?: ReactNode;
 };
 
 function waiting(run: RunView): { text: string; icon: Icon; warn?: boolean } {
@@ -80,6 +82,7 @@ export function ReportPanel(props: Props) {
         <h2 className={panel.title}>Report</h2>
         <span className={panel.summary}>{summary}</span>
         <span className={css.options}>{options}</span>
+        {props.action}
       </header>
       <div
         ref={body}

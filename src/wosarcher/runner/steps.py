@@ -539,7 +539,8 @@ async def select(ctx: StepContext) -> Outcome:
     return Outcome(len(selection.context.passages))
 
 
-async def write(ctx: StepContext) -> Outcome:
+async def write(ctx: StepContext, *, records: bool = False) -> Outcome:
+    """Stream the report from `context.json`; `records` marks a report written from a catalog's records."""
     context = ctx.store.read_artifact(ctx.run_id, "context.json", Context)
     ctx.store.write_text(ctx.run_id, "report.md", "")
 
@@ -558,6 +559,8 @@ async def write(ctx: StepContext) -> Outcome:
     report = await writing.write(
         context, ctx.settings.write, ctx.adapters.writer, effort=llm.reasoning.write, sizing=sizing, on_delta=on_delta
     )
+    if records:
+        report = report.model_copy(update={"records": True})
     ctx.store.write_text(ctx.run_id, "report.md", report.markdown)
     ctx.store.write_artifact(ctx.run_id, "report.json", report)
     return Outcome(len(report.body.strip()), warnings=list(report.warnings))

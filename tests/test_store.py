@@ -616,3 +616,19 @@ async def test_catalog_fork_from_fetch_rejected(tmp_path: Path) -> None:
     store, run_id, settings = await finished_catalog(tmp_path)
     with pytest.raises(RunStoreError, match="expand or extract"):
         store.fork(run_id, "fetch", [], settings)
+
+
+async def test_catalog_files_by_output(tmp_path: Path) -> None:
+    from tests.runner.test_catalog import world
+    from tests.stages.catalog_data import structure
+
+    store, runner, run_id, _ = world(tmp_path / "table")
+    assert await runner.run(run_id) == "done"
+    names = {path.name for path in store.run_dir(run_id).iterdir()}
+    assert {"structure.json", "nodes.jsonl", "records.jsonl", "catalog.json", "plan.json", "costs.json"} <= names
+    assert names.isdisjoint({"report.md", "report.json", "context.json", "select.jsonl", "scores.jsonl"})
+    store, runner, run_id, _ = world(tmp_path / "both", structure(limits={"max_depth": 2}, output="both"))
+    assert await runner.run(run_id) == "done"
+    names = {path.name for path in store.run_dir(run_id).iterdir()}
+    assert {"context.json", "report.md", "report.json", "catalog.json"} <= names
+    assert "select.jsonl" not in names

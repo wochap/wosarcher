@@ -151,7 +151,7 @@ def test_catalog_flags(stub: Path) -> None:
     found = complete("wosarcher catalog brief --", stub)
     assert {"--structure", "--seed", "--relation", "--leaf", "--expand", "--max-nodes", "--json"} <= set(found)
     assert "--depth" not in found
-    assert "--tone" not in found
+    assert {"--output", "--tone", "--words", "--format"} <= set(found)
     assert {"--draft-thinking", "--extract-thinking"} <= set(found)
     assert "--write-thinking" not in found
 
@@ -165,6 +165,7 @@ def test_catalog_values(stub: Path) -> None:
     assert set(complete("wosarcher catalog brief --until ", stub)) == set(CATALOG_STAGES)
     assert set(complete("wosarcher catalog brief --expand ", stub)) == {"links", "search", "both"}
     assert set(complete("wosarcher catalog brief --sources ", stub)) == {"web", "both"}
+    assert set(complete("wosarcher catalog brief --output ", stub)) == {"table", "report", "both"}
     assert "draft" in complete("wosarcher catalog ", stub)
 
 

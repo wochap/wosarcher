@@ -26,6 +26,7 @@ export type NodeId = string
 export type Dropped = DroppedRecord[]
 export type Nodes1 = number
 export type Note1 = string
+export type Output = ("table" | "report" | "both")
 export type Reason1 = ("frontier empty" | "max nodes" | "page limit reached" | "extract failed")
 export type Records1 = {
 [k: string]: unknown
@@ -70,6 +71,7 @@ export type HeadingPath1 = string[]
 export type N1 = number
 export type PageId1 = (string | null)
 export type QueryId3 = string
+export type RecordId = (string | null)
 export type Scorer = string
 export type SourceId1 = string
 export type Text2 = string
@@ -375,6 +377,7 @@ export type Body = string
 export type Cited = number[]
 export type Continuations = number
 export type Markdown = string
+export type Records3 = boolean
 export type References = Reference[]
 export type Truncated1 = boolean
 export type Warnings4 = string[]
@@ -469,6 +472,7 @@ export type Volatile = boolean
 export type Fields = StructureField[]
 export type Language1 = string
 export type LeafTypes = string[]
+export type Output1 = ("table" | "report" | "both")
 export type Relation = string
 /**
  * @minItems 1
@@ -494,6 +498,7 @@ export type Model5 = string
 export type Modified = boolean
 export type Nodes2 = (number | null)
 export type Origin = ("web" | "api" | "cli")
+export type Output2 = (("table" | "report" | "both") | null)
 export type ParentRunId = (string | null)
 export type Profile3 = string
 export type Query3 = string
@@ -592,6 +597,7 @@ export type Model6 = string
 export type Modified1 = boolean
 export type Nodes3 = (number | null)
 export type Origin3 = ("web" | "api" | "cli")
+export type Output3 = (("table" | "report" | "both") | null)
 export type ParentRunId3 = (string | null)
 export type Profile6 = string
 export type Query6 = string
@@ -708,7 +714,7 @@ export type Dropped3 = number
 export type Expanded2 = number
 export type Failed3 = number
 export type Found1 = number
-export type Records3 = number
+export type Records4 = number
 export type Wave3 = number
 export type RunId35 = string
 export type Seq26 = number
@@ -794,6 +800,7 @@ dropped?: Dropped
 fill?: Fill
 nodes: Nodes1
 note?: Note1
+output?: Output
 reason: Reason1
 records: Records1
 waves?: Waves1
@@ -911,6 +918,7 @@ heading_path?: HeadingPath1
 n: N1
 page_id?: PageId1
 query_id: QueryId3
+record_id?: RecordId
 scorer: Scorer
 source_id: SourceId1
 text: Text2
@@ -1756,6 +1764,7 @@ body: Body
 cited: Cited
 continuations?: Continuations
 markdown: Markdown
+records?: Records3
 references: References
 truncated?: Truncated1
 warnings?: Warnings4
@@ -2032,6 +2041,7 @@ fields: Fields
 language?: Language1
 leaf_types?: LeafTypes
 limits?: Limits1
+output?: Output1
 relation: Relation
 seeds: Seeds
 }
@@ -2107,6 +2117,7 @@ model?: Model5
 modified?: Modified
 nodes?: Nodes2
 origin?: Origin
+output?: Output2
 parent_run_id?: ParentRunId
 profile: Profile3
 query: Query3
@@ -2327,6 +2338,7 @@ model?: Model6
 modified?: Modified1
 nodes?: Nodes3
 origin?: Origin3
+output?: Output3
 parent_run_id?: ParentRunId3
 profile: Profile6
 query: Query6
@@ -2659,7 +2671,7 @@ dropped: Dropped3
 expanded: Expanded2
 failed: Failed3
 found: Found1
-records: Records3
+records: Records4
 wave: Wave3
 }
 /**

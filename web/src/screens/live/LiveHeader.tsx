@@ -30,6 +30,8 @@ type Props = {
   isPhone: boolean;
   /** A catalog run: "catalog" leads the meta and the done action is "Open catalog". */
   kind?: RunKind;
+  /** A catalog run whose output is `report`: the done action is "Open report". */
+  reportOnly?: boolean;
   /** A cancel request is in flight. */
   cancelling: boolean;
   onCancel: () => void;
@@ -43,6 +45,7 @@ export function LiveHeader({
   files,
   isPhone,
   kind = "research",
+  reportOnly = false,
   cancelling,
   onCancel,
   onOpenReport,
@@ -112,8 +115,8 @@ export function LiveHeader({
         )}
         {status === "done" && (
           <button type="button" className="btn btn-primary" onClick={onOpenReport}>
-            {catalog ? <Table aria-hidden="true" /> : <Article aria-hidden="true" />}
-            {catalog ? "Open catalog" : "Open report"}
+            {catalog && !reportOnly ? <Table aria-hidden="true" /> : <Article aria-hidden="true" />}
+            {catalog && !reportOnly ? "Open catalog" : "Open report"}
           </button>
         )}
         {ended && (

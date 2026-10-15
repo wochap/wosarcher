@@ -45,6 +45,7 @@ from wosarcher.models import (
     Structure,
     WaveDone,
     WritingOptions,
+    catalog_writes,
     make_event,
     parse_event,
 )
@@ -646,6 +647,7 @@ class RunStore:
         error = last.data.error if isinstance(last, RunFailed) else None
         model, reasoning = settings_llm(record)
         catalog = record.kind == "catalog"
+        structure = record.request.structure
         return RunSummary(
             run_id=record.run_id,
             query=record.request.query,
@@ -659,7 +661,12 @@ class RunStore:
             until=record.request.until,
             depth=record.request.depth,
             kind=record.kind,
-            writing=None if catalog else WritingOptions.model_validate(record.settings.get("write", {})),
+            writing=(
+                WritingOptions.model_validate(record.settings.get("write", {}))
+                if not catalog or catalog_writes(structure)
+                else None
+            ),
+            output=structure.output if catalog and structure else None,
             nodes=self.node_count(record.run_id) if catalog else None,
             duration_s=duration,
             cost=costs.total.cost if costs else None,

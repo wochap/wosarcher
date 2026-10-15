@@ -163,9 +163,13 @@ def catalog(store: RunStore, record: RunRecord, first: str | None) -> int:
         store.append_event(run_id, "run.done", None, RunDoneData(until=until, totals=UsageTotals()))
         return 0
     records = [{"id": node.id, "name": node.name, "type": node.type} for node in nodes]
-    store.write_artifact(
-        run_id, "catalog.json", CatalogRecord(records=records, nodes=len(nodes), reason="frontier empty")
-    )
+    catalog = CatalogRecord(records=records, nodes=len(nodes), reason="frontier empty", output=structure.output)
+    store.write_artifact(run_id, "catalog.json", catalog)
+    if structure.wants_report:
+        body = f"{nodes[0].name} heads the catalog [1]."
+        report = Report(body=body, markdown=body + "\n\n## References\n", cited=[1], references=[], records=True)
+        store.write_text(run_id, "report.md", report.markdown)
+        store.write_artifact(run_id, "report.json", report)
     done = CatalogDoneData(waves=1, nodes=len(nodes), records=len(nodes), flagged=0, reason="frontier empty", note="")
     store.append_event(run_id, "catalog.done", "assemble", done)
     store.append_event(run_id, "run.done", None, RunDoneData(until=record.request.until, totals=UsageTotals()))

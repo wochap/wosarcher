@@ -13,7 +13,7 @@ import {
   Warning,
   XCircle,
 } from "@phosphor-icons/react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { HelpTip } from "../../components/HelpTip";
 import {
   type CatalogLive,
@@ -41,10 +41,23 @@ const ICONS: Record<CatalogPhase["state"], Icon> = {
   cancelled: StopCircle,
 };
 
-export function CatalogTimeline({ live, now }: { live: CatalogLive; now: number }) {
+export function CatalogTimeline({
+  live,
+  now,
+  write,
+}: {
+  live: CatalogLive;
+  now: number;
+  /** The Write card's detail text; undefined for a run that writes no report. */
+  write?: string;
+}) {
   return (
-    <ol aria-label="Phases" className={`${timeline.timeline} ${css.timeline}`}>
-      {phaseCards(live, now).map((card) => {
+    <ol
+      aria-label="Phases"
+      className={`${timeline.timeline} ${css.timeline}`}
+      data-phases={write === undefined ? 8 : 9}
+    >
+      {phaseCards(live, now, write).map((card) => {
         const Glyph = ICONS[card.state];
         return (
           <li key={card.id} className={timeline.card} data-state={card.state}>
@@ -265,7 +278,7 @@ export function coverageLimits(live: CatalogLive) {
   ].map((l) => ({ ...l, pct: l.max ? Math.min(100, Math.round((l.value / l.max) * 100)) : 0 }));
 }
 
-export function CoveragePanel({ live }: { live: CatalogLive }) {
+export function CoveragePanel({ live, action }: { live: CatalogLive; action?: ReactNode }) {
   const records = liveRecords(live).map((node) => nodeValues(node, live.fields));
   const fill = fillPercents(
     records,
@@ -284,6 +297,7 @@ export function CoveragePanel({ live }: { live: CatalogLive }) {
           <HelpTip help="c-coverage" />
         </span>
         <span className={panel.summary}>{summary}</span>
+        {action}
       </header>
       <div className={`${panel.body} ${css.coverage}`}>
         <section aria-label="Limits" className={css.covSection}>

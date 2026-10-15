@@ -5,7 +5,8 @@ import type { RunDetail } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
-import { countStatus, initialCatalog } from "../../run/catalog";
+import { countStatus, initialCatalog, wantsReport } from "../../run/catalog";
+import { fmtK } from "../../run/format";
 import type { RunView } from "../../run/reducer";
 import { useRunData } from "../../run/useRunData";
 import { CancelDialog } from "./CancelDialog";
@@ -18,7 +19,7 @@ import css from "./LiveScreen.module.css";
 import { elapsedSeconds, settled, useNow } from "./model";
 import { NotFound } from "./NotFound";
 import { FILTERS, type PassageFilter, PassagesPanel } from "./PassagesPanel";
-import { PhaseTimeline } from "./PhaseTimeline";
+import { PhaseTimeline, writeTokens } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
 import { ReportPanel } from "./ReportPanel";
 import { ResearchRoundsPanel } from "./ResearchRoundsPanel";
@@ -303,13 +304,27 @@ type CatalogProps = {
 };
 
 const CATALOG_TABS = { passages: "Records", report: "Coverage" };
+const CATALOG_REPORT_TABS = { passages: "Records", report: "Report" };
 
-/** The catalog variant: Frontier over Sources, Records, and Coverage under the 8 phases. */
+/** The catalog variant: Frontier over Sources, Records, and Coverage under the 8 phases; a run
+ * that writes a report adds the Write phase and streams the report in place of Coverage. */
 function CatalogLiveScreen(props: CatalogProps) {
   const { run, data, elapsed, now } = props;
   const { live: stream, isPhone, liveTab, setLiveTab } = useUi();
-  const { detail, files, context } = data;
+  const { detail, files, context, report } = data;
+  const [coverage, setCoverage] = useState(false);
+  const { cite, onCite, onLeave } = useCitation();
   const live = run.catalog ?? initialCatalog();
+  const output = detail?.output ?? detail?.request?.request.structure?.output ?? null;
+  const writes = wantsReport(output);
+  const writeState = run.phases.write.state;
+  const writeStarted = writes && (writeState !== "pending" || run.report.length > 0);
+  const writeText = !writes
+    ? undefined
+    : writeState === "pending"
+      ? ""
+      : `${fmtK(writeTokens(run))} tokens`;
+  const marker = detail?.writing?.citation_marker ?? "numeric";
   const tab = isPhone ? liveTab : null;
   const shows = (t: string) => tab === null || tab === t;
   const remote = detail?.origin === "cli" || detail?.origin === "api";
@@ -326,9 +341,12 @@ function CatalogLiveScreen(props: CatalogProps) {
         files={props.attachments}
         isPhone={isPhone}
         kind="catalog"
+        reportOnly={output === "report"}
         cancelling={props.cancelling}
         onCancel={() => (remote ? props.onConfirm(true) : props.onCancel())}
-        onOpenReport={() => go({ screen: "catalog", runId: run.runId })}
+        onOpenReport={() =>
+          go({ screen: output === "report" ? "report" : "catalog", runId: run.runId })
+        }
         onRerun={props.onRerun}
       />
       {props.confirming && remote && (
@@ -344,9 +362,16 @@ function CatalogLiveScreen(props: CatalogProps) {
       )}
       <StatusBanner run={run} conn={stream.conn} elapsed={elapsed} now={now} rewriteOf={null} />
       {isPhone && (
-        <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} labels={CATALOG_TABS} />
+        <PhoneTabs
+          tab={liveTab}
+          onTab={setLiveTab}
+          counts={counts}
+          labels={writeStarted ? CATALOG_REPORT_TABS : CATALOG_TABS}
+        />
       )}
-      {shows("progress") && <CatalogTimeline live={live} now={now - (run.clockOffset ?? 0)} />}
+      {shows("progress") && (
+        <CatalogTimeline live={live} now={now - (run.clockOffset ?? 0)} write={writeText} />
+      )}
       <div className={css.grid}>
         {(shows("progress") || shows("sources")) && (
           <div className={css.column}>
@@ -363,7 +388,42 @@ function CatalogLiveScreen(props: CatalogProps) {
           </div>
         )}
         {shows("passages") && <RecordsPanel live={live} now={now - (run.clockOffset ?? 0)} />}
-        {shows("report") && <CoveragePanel live={live} />}
+        {shows("report") &&
+          (writeStarted && !coverage ? (
+            <ReportPanel
+              run={run}
+              report={report}
+              context={context}
+              writing={detail?.writing ?? null}
+              isPhone={isPhone}
+              onCite={onCite}
+              onLeave={onLeave}
+              action={
+                <button
+                  type="button"
+                  className={`btn btn-ghost ${catalogCss.toggle}`}
+                  onClick={() => setCoverage(true)}
+                >
+                  Coverage
+                </button>
+              }
+            />
+          ) : (
+            <CoveragePanel
+              live={live}
+              action={
+                writeStarted ? (
+                  <button
+                    type="button"
+                    className={`btn btn-ghost ${catalogCss.toggle}`}
+                    onClick={() => setCoverage(false)}
+                  >
+                    Report
+                  </button>
+                ) : undefined
+              }
+            />
+          ))}
       </div>
       <LiveFooter
         run={run}
@@ -379,6 +439,7 @@ function CatalogLiveScreen(props: CatalogProps) {
           reason: live.done?.reason,
         }}
       />
+      <CitationTooltip cite={cite} context={context} marker={marker} />
     </div>
   );
 }

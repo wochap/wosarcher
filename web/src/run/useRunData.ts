@@ -188,7 +188,13 @@ export function useRunData(runId: string | null, own: RunView | null): RunData {
   const loaded = !!own && ran(own, "load") && !own.phases.load.skipped;
   const files = useArtifact(runId, "files.jsonl", loaded, parseFiles);
   const selected = !!own && ran(own, "select");
-  const context = useArtifact(runId, "context.json", selected, parseContext);
+  // A catalog run writes `context.json` (its record passages) when `write` starts.
+  const recordsReady =
+    !!own &&
+    own.kind === "catalog" &&
+    own.phases.write.state !== "pending" &&
+    !own.phases.write.skipped;
+  const context = useArtifact(runId, "context.json", selected || recordsReady, parseContext);
   const skips = useArtifact(runId, "select.jsonl", selected, parseSkips);
   const report = useArtifact(runId, "report.json", !!own && ran(own, "write"), parseReport);
   const scoreDone = wantNotKept && !!own && ran(own, "score");

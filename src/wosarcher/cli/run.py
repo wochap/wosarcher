@@ -264,12 +264,7 @@ def output(client: Api, run_id: str, status: Status, follower: Follower, as_json
     if status != "done":
         err.print(f"run {run_id} {status}" + (f": {error}" if error else ""), markup=False)
     if report is not None:
-        text = client.ok("GET", f"/api/runs/{run_id}/artifacts/report.md").text
-        out = Console()
-        if out.is_terminal:
-            out.print(Markdown(text))
-        else:
-            typer.echo(text, nl=False)
+        print_markdown(client.ok("GET", f"/api/runs/{run_id}/artifacts/report.md").text)
     elif context is not None:
         typer.echo(
             f"{len(context.passages)} passages from {len(context.sources)} sources ({context.used_tokens} tokens)"
@@ -279,18 +274,33 @@ def output(client: Api, run_id: str, status: Status, follower: Follower, as_json
     err.print(f"run: {run_id}", markup=False)
 
 
+def print_markdown(text: str) -> None:
+    out = Console()
+    if out.is_terminal:
+        out.print(Markdown(text))
+    else:
+        typer.echo(text, nl=False)
+
+
 def catalog_output(client: Api, run_id: str, status: Status, follower: Follower, as_json: bool) -> None:
-    """The `records` array of `catalog.json`, or the whole file with `--json`; nothing when there is none."""
+    """The report when one was written, else the `records` array of `catalog.json`; with `--json`, the whole
+    file plus a `report` key. Nothing when there is no catalog."""
     event = follower.terminal
     if status != "done":
         error = event.data.error if isinstance(event, RunFailed) else None
         message = f"run {run_id} {status}" + (f": {error}" if error else "")
         Console(stderr=True, highlight=False).print(message, markup=False)
     found = artifact(client, run_id, "catalog.json", CatalogRecord) if "assemble" in follower.finished else None
-    if found is not None:
-        typer.echo(
-            found.model_dump_json(indent=2) if as_json else json.dumps(found.records, indent=2, ensure_ascii=False)
-        )
+    report = artifact(client, run_id, "report.json", Report) if found and "write" in follower.finished else None
+    if found is not None and as_json:
+        data = found.model_dump(mode="json")
+        if report is not None:
+            data["report"] = report.model_dump(mode="json")
+        typer.echo(json.dumps(data, indent=2, ensure_ascii=False))
+    elif report is not None:
+        print_markdown(client.ok("GET", f"/api/runs/{run_id}/artifacts/report.md").text)
+    elif found is not None:
+        typer.echo(json.dumps(found.records, indent=2, ensure_ascii=False))
     Console(stderr=True, highlight=False).print(f"run: {run_id}", markup=False)
 
 

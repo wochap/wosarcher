@@ -8,7 +8,10 @@ from fastapi.testclient import TestClient
 
 from tests.fixtures.recorded import copy_fixture
 from tests.server.conftest import BASE_URL, MakeApp
+from tests.server.test_runs import on_disk
+from tests.stages.catalog_data import structure
 from wosarcher.adapters.fakes import FakeExporter
+from wosarcher.models import RunRequest
 
 
 @pytest.fixture
@@ -71,3 +74,18 @@ def test_export_failed(client: TestClient, runs_dir: Path, exporter: FakeExporte
     response = client.get(f"/api/runs/{run_id}/export", params={"format": "pdf"})
     assert response.status_code == 500
     assert response.json() == {"error": "export_failed", "detail": "error: unknown table"}
+
+
+def test_catalog_report_export(client: TestClient, runs_dir: Path, exporter: FakeExporter) -> None:
+    fixture = copy_fixture(runs_dir)
+    on_disk(runs_dir, "c", ends=True, request=RunRequest(query="q", kind="catalog", structure=structure(output="both")))
+    (runs_dir / "c" / "report.json").write_bytes((runs_dir / fixture / "report.json").read_bytes())
+    response = client.get("/api/runs/c/export", params={"format": "pdf"})
+    assert response.status_code == 200
+    assert "## References" in exporter.inputs[0][0]
+
+
+def test_table_catalog_has_no_report(client: TestClient, runs_dir: Path) -> None:
+    on_disk(runs_dir, "c", ends=True, request=RunRequest(query="q", kind="catalog", structure=structure()))
+    response = client.get("/api/runs/c/export", params={"format": "pdf"})
+    assert (response.status_code, response.json()["error"]) == (404, "no_report")

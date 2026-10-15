@@ -781,3 +781,15 @@
   align-items: center;
   gap: 5px;
 }
+
+.reportView {
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.optsLine {
+  font-size: 12.5px;
+  color: var(--muted);
+}

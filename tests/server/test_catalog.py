@@ -63,7 +63,7 @@ def test_no_structure_sends_none(client: TestClient, runs_dir: Path) -> None:
         ({"depth": "quick"}, "depth"),
         ({"research": {"rounds": 2}}, "research"),
         ({"sources": "files"}, "sources"),
-        ({"until": "write"}, "until"),
+        ({"until": "score"}, "until"),
     ],
 )
 def test_research_fields_on_catalog_422(client: TestClient, changes: dict[str, Any], named: str) -> None:
@@ -73,6 +73,23 @@ def test_research_fields_on_catalog_422(client: TestClient, changes: dict[str, A
     assert detail.startswith(f"{named}:")
     if named in ("writing", "depth", "research"):
         assert "catalog" in detail
+    if named == "writing":
+        assert "output" in detail
+
+
+def test_writing_on_catalog_with_report(client: TestClient, runs_dir: Path) -> None:
+    request = catalog_request(structure=structure_data(output="both"), writing={"words": 800})
+    run_id = create(client, request)
+    summary = client.get(f"/api/runs/{run_id}").json()
+    assert summary["output"] == "both"
+    assert summary["writing"]["words"] == 800
+    finished(client, run_id)
+    assert "write.words=800" in argv(runs_dir, run_id)
+
+
+def test_writing_on_derived_catalog(client: TestClient) -> None:
+    response = post(client, {"query": BRIEF, "kind": "catalog", "writing": {"tone": "critical"}})
+    assert response.status_code == 201
 
 
 def test_structure_on_research_422(client: TestClient) -> None:
@@ -109,11 +126,19 @@ def test_catalog_summary(client: TestClient, runs_dir: Path) -> None:
     nodes.append(Node(id="todo", name="Todo", type="ministry"))
     store.write_text("c", "nodes.jsonl", "".join(node.model_dump_json() + "\n" for node in nodes))
     found = client.get("/api/runs/c").json()
-    assert (found["kind"], found["nodes"], found["writing"]) == ("catalog", 72, None)
+    assert (found["kind"], found["nodes"], found["writing"], found["output"]) == ("catalog", 72, None, "table")
     records = [{"id": "a"}, {"id": "b"}]
     store.write_artifact("c", "catalog.json", CatalogRecord(records=records, nodes=73, reason="max nodes"))
     listed = next(run for run in client.get("/api/runs").json() if run["run_id"] == "c")
     assert listed["nodes"] == 2
+
+
+def test_catalog_summary_with_report(client: TestClient, runs_dir: Path) -> None:
+    request = RunRequest(query="q", kind="catalog", structure=structure(output="both"))
+    on_disk(runs_dir, "c", ends=True, request=request)
+    found = client.get("/api/runs/c").json()
+    assert found["output"] == "both"
+    assert found["writing"] is not None
 
 
 def test_older_run_without_kind(client: TestClient, runs_dir: Path) -> None:
@@ -123,7 +148,7 @@ def test_older_run_without_kind(client: TestClient, runs_dir: Path) -> None:
     record["request"].pop("kind", None)
     path.write_text(json.dumps(record))
     found = client.get("/api/runs/r").json()
-    assert (found["kind"], found["nodes"]) == ("research", None)
+    assert (found["kind"], found["nodes"], found["output"]) == ("research", None, None)
     assert found["writing"] is not None
 
 

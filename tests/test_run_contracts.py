@@ -101,7 +101,7 @@ DATA: dict[str, BaseModel] = {
 
 def test_stage_order() -> None:
     assert STAGES == ("load", "plan", "search", "fetch", "chunk", "prefilter", "score", "gap", "select", "write")
-    assert CATALOG_STAGES == ("load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble")
+    assert CATALOG_STAGES == ("load", "draft", "expand", "search", "fetch", "chunk", "extract", "assemble", "write")
     assert set(get_args(Stage)) == set(STAGES) | set(CATALOG_STAGES)
 
 

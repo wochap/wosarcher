@@ -2,6 +2,7 @@
 // catalog events (frontier, records, coverage). Pure, like the research reducer.
 import type * as G from "../api/generated";
 import type {
+  CatalogOutput,
   DomainLists,
   FieldType,
   Limits,
@@ -9,6 +10,7 @@ import type {
   RunEvent,
   Structure,
   StructureField,
+  WritingOptions,
 } from "../api/types";
 import { type ProfileChoice, profilePatch } from "./profileValues";
 import { KIND_STEPS } from "./thinking";
@@ -41,11 +43,17 @@ export function limitsOf(structure: Structure | null | undefined): Limits {
 
 const num = (n: number) => (Number.isFinite(n) ? n : 0);
 
-/** "Up to 200 nodes · about 400 pages · 200 extraction calls". */
-export function estimate(limits: Limits): string {
+/** "Up to 200 nodes · about 400 pages · 200 extraction calls", with " · 1 report" for a report. */
+export function estimate(limits: Limits, output: CatalogOutput = "table"): string {
   const nodes = num(limits.max_nodes);
   const pages = nodes * num(limits.pages_per_node);
-  return `Up to ${nodes} nodes · about ${pages} pages · ${nodes} extraction calls`;
+  const report = wantsReport(output) ? " · 1 report" : "";
+  return `Up to ${nodes} nodes · about ${pages} pages · ${nodes} extraction calls${report}`;
+}
+
+/** Report and Both write a report from the records; Table does not. */
+export function wantsReport(output: CatalogOutput | null | undefined): boolean {
+  return output === "report" || output === "both";
 }
 
 /** The field holding the node type, whose `values` are the types. */
@@ -81,6 +89,8 @@ export type CatalogForm = {
   domains: Partial<DomainLists>;
   searchLanguage: string;
   choice: ProfileChoice;
+  /** The overridden writing fields; sent only when the output wants a report. */
+  writing?: Partial<WritingOptions>;
 };
 
 /** `POST /api/runs` for a catalog: the brief as `query`, the structure, and the shared fields. */
@@ -96,6 +106,9 @@ export function catalogRequest(form: CatalogForm): RunCreate {
     structure,
     profile: form.profile,
   };
+  if (form.writing && wantsReport(structure.output) && Object.keys(form.writing).length) {
+    request.writing = form.writing;
+  }
   if (Object.keys(form.domains).length) request.domains = form.domains;
   if (form.searchLanguage.trim()) request.search_language = form.searchLanguage.trim();
   return { ...request, ...profilePatch(form.choice, KIND_STEPS.catalog) };
@@ -108,6 +121,7 @@ export const STRUCTURE_ROWS: Record<string, string> = {
   seeds: "c-seeds",
   leaf_types: "c-leaf",
   expand: "c-expand",
+  output: "c-output",
   limits: "c-limits",
   language: "c-lang",
 };
@@ -132,6 +146,7 @@ export const CATALOG_PHASES = [
   "chunk",
   "extract",
   "assemble",
+  "write",
 ] as const;
 export type CatalogPhaseId = (typeof CATALOG_PHASES)[number];
 export const CATALOG_LOOP: readonly CatalogPhaseId[] = [
@@ -425,6 +440,7 @@ export const CATALOG_PHASE_LABELS: Record<CatalogPhaseId, string> = {
   chunk: "Chunk",
   extract: "Extract",
   assemble: "Assemble",
+  write: "Write",
 };
 
 export type PhaseCard = {
@@ -441,8 +457,9 @@ export type PhaseCard = {
 
 const n = (value: number) => value.toLocaleString("en-US");
 
-/** The eight phase cards: state, detail text, time, wave counter, and bar. */
-export function phaseCards(live: CatalogLive, now: number): PhaseCard[] {
+/** The eight phase cards: state, detail text, time, wave counter, and bar; with `write` (its
+ * detail text) a ninth Write card for a run that writes a report. */
+export function phaseCards(live: CatalogLive, now: number, write?: string): PhaseCard[] {
   const loopOver = live.phases.assemble.state !== "pending" || !!live.done;
   const expanding = countStatus(live, "expanding");
   const flagged = live.done?.flagged ?? 0;
@@ -459,14 +476,16 @@ export function phaseCards(live: CatalogLive, now: number): PhaseCard[] {
     assemble: live.done
       ? `${n(live.done.records)} records · ${n(flagged)} flagged`
       : "after the last wave",
+    write: write ?? "",
   };
-  return CATALOG_PHASES.map((id) => {
+  const ids = CATALOG_PHASES.filter((id) => id !== "write" || write !== undefined);
+  return ids.map((id) => {
     const phase = live.phases[id];
     const loop = CATALOG_LOOP.includes(id);
     // Between waves a loop stage that finished its wave is still part of the running loop.
-    // `catalog.done` ends every phase, whatever `stage.done` is still on its way.
+    // `catalog.done` ends every phase before Write, whatever `stage.done` is still on its way.
     const state: CatalogPhase["state"] =
-      live.done && (phase.state === "running" || phase.state === "pending")
+      live.done && id !== "write" && (phase.state === "running" || phase.state === "pending")
         ? "done"
         : loop && phase.state === "done" && !loopOver
           ? "running"

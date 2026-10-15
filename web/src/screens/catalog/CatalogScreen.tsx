@@ -1,8 +1,10 @@
 // The Catalog result screen (`#/catalog/<id>`, scenario `catalog-result`): header and actions,
 // the Table, Graph, and JSON views, the Summary aside, the record drawer, and the fork dialogs.
-// A research run's ID shows the Report screen instead.
+// A research run's ID, and a catalog whose output is a report only (unless the records are
+// asked for), show the Report screen instead. A catalog with output `both` adds the Report view.
 import {
   ArrowsClockwise,
+  Article,
   BracketsCurly,
   Check,
   CheckCircle,
@@ -18,8 +20,9 @@ import {
   Warning,
   X,
 } from "@phosphor-icons/react";
-import { type KeyboardEvent, useEffect, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
+import type { Context, Report } from "../../api/generated";
 import type { Catalog, CatalogRecord, RunDetail, Structure } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
@@ -46,10 +49,13 @@ import {
   typeOf,
   worstFilled,
 } from "../../run/catalogResult";
+import { wSummary } from "../../run/format";
+import { openRecord, RecordPopover, useRecordCitation } from "../../run/RecordCitation";
+import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { fmtDuration } from "../../run/stageTimes";
 import { EFFORT_LABELS, EFFORTS } from "../../run/thinking";
 import { NotFound } from "../live/NotFound";
-import { download } from "../report/exportReport";
+import { download, markdownFile } from "../report/exportReport";
 import { ReportScreen } from "../report/ReportScreen";
 import css from "./CatalogScreen.module.css";
 
@@ -63,15 +69,26 @@ export const TYPE_COLORS = [
   "var(--color-neutral-700)",
 ];
 
-type View = "table" | "graph" | "json";
-type Props = { runId: string; detail?: RunDetail };
+type View = "table" | "graph" | "json" | "report";
+type Props = {
+  runId: string;
+  detail?: RunDetail;
+  /** Show the records even for a run whose output is a report only. */
+  records?: boolean;
+  /** The record whose drawer opens. */
+  record?: string;
+};
 
-export function CatalogScreen({ runId, detail: given }: Props) {
+/** A catalog run's written report: `report.json`, `report.md`, and its record passages. */
+export type CatalogReport = { report: Report; markdown: string; context: Context | null };
+
+export function CatalogScreen({ runId, detail: given, records, record }: Props) {
   const api = useApi();
   const [detail, setDetail] = useState<RunDetail | null>(given ?? null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [structure, setStructure] = useState<Structure | null>(null);
   const [missing, setMissing] = useState(false);
+  const [written, setWritten] = useState<CatalogReport | null>(null);
 
   useEffect(() => {
     if (given) return;
@@ -81,6 +98,24 @@ export function CatalogScreen({ runId, detail: given }: Props) {
   }, [api, runId, given]);
 
   const catalogRun = detail?.kind === "catalog";
+  const reportOnly = catalogRun && detail?.output === "report" && !records;
+  const both = catalogRun && detail?.output === "both";
+  useEffect(() => {
+    if (!both) return;
+    Promise.all([
+      api.getArtifact(runId, "report.json"),
+      api.getArtifact(runId, "report.md"),
+      api.getArtifact(runId, "context.json").catch(() => null),
+    ]).then(
+      ([report, markdown, context]) =>
+        setWritten({
+          report: JSON.parse(report) as Report,
+          markdown,
+          context: context ? (JSON.parse(context) as Context) : null,
+        }),
+      () => {},
+    );
+  }, [api, runId, both]);
   useEffect(() => {
     if (!catalogRun) return;
     api.getArtifact(runId, "catalog.json").then(
@@ -95,18 +130,40 @@ export function CatalogScreen({ runId, detail: given }: Props) {
 
   if (missing) return <NotFound runId={runId} />;
   if (!detail) return null;
-  if (!catalogRun) return <ReportScreen runId={runId} />;
+  if (!catalogRun || reportOnly) return <ReportScreen runId={runId} />;
   if (!catalog) return null;
-  return <CatalogResult detail={detail} catalog={catalog} structure={structure} />;
+  return (
+    <CatalogResult
+      detail={detail}
+      catalog={catalog}
+      structure={structure}
+      written={written}
+      record={record}
+    />
+  );
 }
 
-type ResultProps = { detail: RunDetail; catalog: Catalog; structure: Structure | null };
+type ResultProps = {
+  detail: RunDetail;
+  catalog: Catalog;
+  structure: Structure | null;
+  /** The report of a run with output `both`. */
+  written: CatalogReport | null;
+  record?: string;
+};
 
-function CatalogResult({ detail, catalog, structure }: ResultProps) {
+function CatalogResult({ detail, catalog, structure, written, record }: ResultProps) {
   const { toast, isPhone } = useUi();
   const [view, setView] = useState<View>("table");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(record ?? null);
+  const citation = useRecordCitation();
+  const both = detail.output === "both";
+  const marker = detail.writing?.citation_marker ?? "numeric";
+
+  useEffect(() => {
+    if (record) setSelected(record);
+  }, [record]);
   const [dialog, setDialog] = useState<"expand" | "reextract" | null>(null);
   const records = catalog.records;
   const fields = columnsOf(structure, records);
@@ -137,6 +194,22 @@ function CatalogResult({ detail, catalog, structure }: ResultProps) {
     toast(`Downloaded ${name}`);
   };
   const setFilter = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
+  async function copyMarkdown() {
+    if (!written) return;
+    await navigator.clipboard?.writeText(written.markdown).catch(() => {});
+    toast("Copied markdown");
+  }
+  const { hide } = citation;
+  const passages = written?.context?.passages;
+  const runId = detail.run_id;
+  const pick = useCallback(
+    (n: number) => {
+      const id = passages?.find((p) => p.n === n)?.record_id;
+      hide();
+      if (id) openRecord(runId, id);
+    },
+    [passages, hide, runId],
+  );
 
   return (
     <div className={css.screen}>
@@ -173,6 +246,35 @@ function CatalogResult({ detail, catalog, structure }: ResultProps) {
                 <FileCsv aria-hidden="true" />
                 Download CSV
               </button>
+              {both && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!written}
+                    onClick={() => void copyMarkdown()}
+                  >
+                    <Copy aria-hidden="true" />
+                    Copy markdown
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!written}
+                    onClick={() =>
+                      written &&
+                      save(
+                        `${detail.run_id}.md`,
+                        markdownFile(detail.query, written.markdown),
+                        "text/markdown",
+                      )
+                    }
+                  >
+                    <DownloadSimple aria-hidden="true" />
+                    Download .md
+                  </button>
+                </>
+              )}
               <span className={css.withHelp}>
                 <button
                   type="button"
@@ -204,6 +306,7 @@ function CatalogResult({ detail, catalog, structure }: ResultProps) {
                 ["table", "Table", Table],
                 ["graph", "Graph", GraphIcon],
                 ["json", "JSON", BracketsCurly],
+                ...(both ? ([["report", "Report", Article]] as const) : []),
               ] as const
             ).map(([value, label, Icon]) => (
               <label key={value} className={`seg-opt ${css.viewOpt}`}>
@@ -388,8 +491,45 @@ function CatalogResult({ detail, catalog, structure }: ResultProps) {
           )}
 
           {view === "json" && <JsonView records={records} />}
+
+          {view === "report" && (
+            <article aria-label="Report" className={css.reportView}>
+              {written && (
+                <>
+                  <div className={css.optsLine}>
+                    {detail.writing ? `Written with ${wSummary(detail.writing)}` : ""}
+                  </div>
+                  <ReportMarkdown
+                    body={written.report.body}
+                    marker={marker}
+                    context={written.context}
+                    variant="article"
+                    onCite={citation.onCite}
+                    onLeave={citation.onLeave}
+                    onPick={pick}
+                  />
+                  <References
+                    entries={written.report.references.map((r) => r.entry)}
+                    style={detail.writing?.reference_style ?? "APA"}
+                    variant="article"
+                  />
+                </>
+              )}
+            </article>
+          )}
         </div>
       </div>
+      <RecordPopover
+        cite={citation.cite}
+        context={written?.context ?? null}
+        marker={marker}
+        onOpen={(id) => {
+          citation.hide();
+          openRecord(detail.run_id, id);
+        }}
+        onKeep={citation.keep}
+        onLeave={citation.onLeave}
+      />
       {sel && (
         <Drawer
           record={sel}

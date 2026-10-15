@@ -441,3 +441,17 @@ def test_run_request_kind_and_structure() -> None:
     assert record.structure == request.structure
     with pytest.raises(ValidationError):
         RunRequest(query="q", kind="crawl")  # type: ignore[arg-type]
+
+
+def test_output_defaults_to_table() -> None:
+    structure = Structure.model_validate(structure_data())
+    assert structure.output == "table"
+    assert not structure.wants_report
+
+
+def test_invalid_output_names_the_values() -> None:
+    with pytest.raises(ValidationError) as error:
+        Structure.model_validate(structure_data(output="summary"))
+    text = str(error.value)
+    assert "output" in text
+    assert all(value in text for value in ("table", "report", "both"))

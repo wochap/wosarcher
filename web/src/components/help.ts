@@ -424,6 +424,10 @@ Object.assign(HELP, {
     title: "Expand by",
     body: "How children are found. Links follows links on the node’s own pages, Search queries the web for the child relation, Both does each and merges the results.",
   },
+  "c-output": {
+    title: "Output",
+    body: "Table returns the records as JSON, a table and a graph. Report also writes a cited report from the records, with the Writing options below. Both returns the table with a Report view added.",
+  },
   "c-limits": {
     title: "Limits",
     body: "Max depth counts levels below the seeds. The run stops at Max nodes. Pages per node caps fetches for each record.",
@@ -454,6 +458,10 @@ Object.assign(HELP, {
   "cp-assemble": {
     title: "Assemble",
     body: "Merges duplicates, resolves parent_id references and writes the table.",
+  },
+  "cp-write": {
+    title: "Write",
+    body: "Writes a cited report from the assembled records, with the run’s writing options. Runs only when Output is Report or Both.",
   },
   "c-frontier": {
     title: "Frontier",

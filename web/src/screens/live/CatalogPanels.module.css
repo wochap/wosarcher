@@ -2,6 +2,16 @@
   grid-template-columns: repeat(8, minmax(98px, 1fr));
 }
 
+.timeline[data-phases="9"] {
+  grid-template-columns: repeat(9, minmax(90px, 1fr));
+}
+
+.toggle {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 1px 6px;
+}
+
 [data-phone="true"] .timeline {
   grid-template-columns: 1fr 1fr;
 }

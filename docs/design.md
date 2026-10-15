@@ -205,9 +205,27 @@ A catalog run answers a tree-shaped brief ("every public organization of
 the Peruvian State, with its head and website") with a validated JSON
 array of records, one per entity, each value traceable to a page URL. Its
 frontier is nodes, not question parts; it has no planner, gap step,
-scoring, select, or writer. `Runner.run` dispatches on the run's kind; the
+scoring, or select. `Runner.run` dispatches on the run's kind; the
 wave loop and `WaveState` (wave, nodes expanded, new nodes, records,
 failures, URLs seen, pages fetched) live in `runner/catalog.py`.
+
+**Output and the write step.** The structure's `output` (`table`, the
+default; `report`; or `both`) decides what the run returns; draft proposes
+it from the brief (`report` for a question or summary, `table` for a list
+or data, `both` for both). After `assemble`, `write` is reported skipped
+for `table`. Otherwise `stages/catalog_context.py` turns `catalog.json`
+into a `Context`: one passage per record in discovery order (the name, the
+type, then `field: value` per other non-null field; heading path type and
+parent name; source the record's first page, or a source named after the
+record; `record_id` on the passage), added while they fit the
+context-selection budget. The task is the brief, plus "The catalog has N
+records; the passages hold the first M." when the budget cut some. The
+research writer then writes `context.json`, `report.md`, and `report.json`
+(with `records` true) with the run's writing options; citations,
+references, streaming, continuation, and export are shared. `catalog.json`
+carries `output`; `writing` is accepted on a catalog request only when the
+output is not `table` (or no structure is sent), and exporting a
+table-only catalog answers 404 `no_report`.
 
 **Structure.** `Structure` (`models.py`) holds `fields` (name, type one of
 `text`, `slug`, `url`, `date`, `enum`, `ref`, `required`, `volatile`),
@@ -1033,7 +1051,8 @@ runs/<id>/
   structure.json     # draft: catalog runs only; the Structure the run uses
   nodes.jsonl        # catalog: the frontier and checkpoint, one line per node
   records.jsonl      # extract: checked records with their node ID
-  catalog.json       # assemble: records, dropped, waves, reason, note, fill, by_type, by_depth, nodes
+  catalog.json       # assemble: records, dropped, waves, reason, note, fill, by_type, by_depth, nodes, output
+                     # (a catalog with output report or both also has context.json, report.md, report.json from write)
   events.jsonl
   costs.json         # usage and cost per stage, per provider, and in total
 ```
@@ -1143,13 +1162,16 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
   kind exits 2 naming the flag and the kind) with `POST /api/runs/{id}/fork` and follows it like
   `run`; a queued or running parent exits 2 printing the server's 409
   detail, and a fork that fails before its first stage exits 1.
-- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--model NAME] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--context-window N] [--max-output N] [--set k=v]... [--until STAGE] [--json]`:
+- `wosarcher catalog "<brief>" [--structure FILE] [--seed "name|type|url"]... [--relation TEXT] [--leaf TYPE]... [--expand links|search|both] [--output table|report|both] [--max-depth N] [--max-nodes N] [--pages-per-node N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--attach ...] [--profile NAME] [--use BLOCK=NAME]... [--model NAME] [--draft-thinking LEVEL] [--extract-thinking LEVEL] [--context-window N] [--max-output N] [the writing flags of run] [--set k=v]... [--until STAGE] [--json]`:
   creates a run with `kind` `catalog` (see Catalog runs); the flags
   override the structure file's values, and without `--structure` the run's
   `draft` stage derives one. It follows the run like `run`, with
   `wave.done` lines ("wave 1 expanded 6 found 14 records 6 failed 0") and
   the `catalog.done` stop reason, and prints the `records` array of
-  `catalog.json` (`--json`: the `RunOutput` with the catalog). `wosarcher
+  `catalog.json`, or the Markdown report for `--output report|both`
+  (`--json`: `catalog.json` with a `report` key when one was written). The
+  writing flags (`--tone`, `--words`, …, `--format`) need `--output report`
+  or `both` and fail with exit status 2 naming `--output` otherwise. `wosarcher
   catalog draft "<brief>" [--attach ...] [--profile NAME]` calls `POST
   /api/catalog/draft` and prints the structure JSON, which `--structure`
   accepts; it creates no run. `wosarcher fork` gains `--max-depth`,
@@ -2567,7 +2589,13 @@ Catalog runs use three screens of the prototype and a History change:
   "wave <k>"), Frontier (a tree from `node.found` and node status events)
   over Sources, Records (from `node.extracted`, newest first), and
   Coverage (limit bars, fill per field, nodes by type, from `wave.done`
-  and the node events); "Open catalog" when it ends.
+  and the node events); "Open catalog" when it ends ("Open report" for
+  output `report`). A run that writes a report adds a ninth Write phase,
+  and once `write` starts column 3 streams the report with a "Coverage"
+  toggle back (the phone tab reads Report).
+- **New run, catalog**: the Structure panel's Output row (Table, Report,
+  Both; help `c-output`), " · 1 report" on the estimate, and a Writing
+  panel under it for Report and Both, sent as `writing`.
 - **Catalog result** (`catalog-result`, `#/catalog/<id>`), built from
   `catalog.json`: Download JSON, Copy JSON, Download CSV (built in the
   client), Expand more (a dialog with the three limits, posting the
@@ -2575,7 +2603,14 @@ Catalog runs use three screens of the prototype and a History change:
   "Extract thinking", posting the `extract` fork with `reasoning.extract`); Table (filters by text, type,
   flagged only, missing field), Graph (inline SVG tree from the ref
   field), and JSON views; a Summary aside; and the record drawer with each
-  value's source link.
+  value's source link. With output `both` (`catalog-result-both`), Copy
+  markdown, Download .md, and a Report view whose citation chips show the
+  record popover and open the record's drawer
+  (`#/catalog/<id>/records/<record>`).
+- **Catalog report** (`finished-catalog`): a catalog with output `report`
+  opens on the Report screen (`#/runs/<id>` and `#/catalog/<id>`) with a
+  Records action (`#/catalog/<id>/records`), the cited records in the
+  aside, record citations, and no Rewrite.
 - **History** (`history`): a Kind column (`catalog` accent-tinted,
   `research` outlined) and a Kind filter (Any, Research, Catalog); a
   catalog row's Recipe reads "<n> nodes" from the summary's `nodes`, a

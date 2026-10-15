@@ -90,3 +90,52 @@ export function ReportAside({ run, created, rounds = 1, files, context, marker }
     </aside>
   );
 }
+
+type CatalogAsideProps = {
+  context: Context | null;
+  /** The report's cited passage numbers, in order of first citation. */
+  cited: number[];
+  marker: WritingOptions["citation_marker"];
+  onOpen: (record: string) => void;
+};
+
+/** A catalog report's aside: the cited records as its sources, and no selected passages. */
+export function CatalogReportAside({ context, cited, marker, onOpen }: CatalogAsideProps) {
+  const passages = cited
+    .map((n) => context?.passages.find((p) => p.n === n))
+    .filter((p): p is NonNullable<typeof p> => !!p?.record_id);
+  return (
+    <aside className={css.aside}>
+      <section>
+        <h2 className={css.asideTitle}>
+          Sources <span className={css.asideCount}>{passages.length}</span>
+        </h2>
+        <ol className={css.sources}>
+          {passages.map((p) => {
+            const [name, type] = p.text.split("\n");
+            return (
+              <li key={p.n} className={css.source}>
+                <button
+                  type="button"
+                  className={`btn btn-ghost ${css.sourceTitle}`}
+                  onClick={() => onOpen(p.record_id as string)}
+                >
+                  {name}
+                </button>
+                <span className={css.sourceUrl}>
+                  {type} · {p.record_id}
+                </span>
+                <span className={css.sourceCites}>{label(p.n, marker, context)}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+      <section>
+        <h2 className={css.asideTitle}>
+          Selected passages <span className={css.asideCount}>0</span>
+        </h2>
+      </section>
+    </aside>
+  );
+}

@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client";
 import type { RunCreate } from "../../api/types";
@@ -128,5 +128,42 @@ describe("catalog form", () => {
     expect((screen.getByRole("radio", { name: "workstation" }) as HTMLInputElement).checked).toBe(
       true,
     );
+  });
+
+  it("hides Writing for Table and sends no writing", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    expect(screen.queryByRole("group", { name: "Writing" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.structure?.output ?? "table").toBe("table");
+    expect(request.writing).toBeUndefined();
+  });
+
+  it("shows Writing for Report and sends the output and the length", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    const output = screen.getByRole("radiogroup", { name: "Output" });
+    fireEvent.click(within(output).getByRole("radio", { name: "Report" }));
+    const writing = screen.getByRole("group", { name: "Writing" });
+    expect(screen.getByText(/extraction calls · 1 report$/)).toBeTruthy();
+    const length = within(writing).getByLabelText("Length (words)");
+    fireEvent.change(length, { target: { value: "800" } });
+    fireEvent.blur(length);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.structure?.output).toBe("report");
+    expect(request.writing).toEqual({ words: 800 });
+  });
+
+  it("shows the Output help", async () => {
+    const { brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Help: Output" }));
+    expect(screen.getByRole("tooltip").textContent).toContain(HELP["c-output"].body);
   });
 });

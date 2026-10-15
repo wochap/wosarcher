@@ -33,7 +33,7 @@ import {
 } from "../../components/DomainRows";
 import { HelpTip } from "../../components/HelpTip";
 import type { WritingField } from "../../components/WritingOptionsForm";
-import { catalogRequest, structureRow } from "../../run/catalog";
+import { catalogRequest, structureRow, wantsReport } from "../../run/catalog";
 import {
   CUSTOM_DESCRIPTION,
   type Depth,
@@ -60,6 +60,7 @@ import {
 } from "../../run/recent";
 import { KIND_STEPS } from "../../run/thinking";
 import { Attachments } from "./Attachments";
+import { CatalogWriting } from "./CatalogWriting";
 import { DeleteDialog } from "./DeleteDialog";
 import css from "./NewRunScreen.module.css";
 import {
@@ -246,6 +247,8 @@ export function NewRunScreen() {
   const defaults = saved && { ...saved, words: wordsOf(options.depth) ?? saved.words };
   const writing = defaults && { ...defaults, ...draft.writing };
   const catalog = draft.kind === "catalog";
+  /** The catalog's writing: Length defaults to the saved default, not a depth's. */
+  const catalogWriting = saved && { ...saved, ...draft.writing };
   const blank = !draft.query.trim();
   const blankBrief = !draft.brief.trim();
   const languageInvalid = !isSearchLanguage(draft.searchLanguage.trim());
@@ -379,6 +382,7 @@ export function NewRunScreen() {
         domains: overriddenDomains(domains, domainDefaults),
         searchLanguage: draft.searchLanguage,
         choice,
+        writing: catalogWriting && saved ? overriddenFields(catalogWriting, saved) : undefined,
       });
       if (draft.reused.length) {
         const names = draft.reused.map((f) => f.name);
@@ -556,7 +560,8 @@ export function NewRunScreen() {
   function setWriting<F extends WritingField>(field: F, value: WritingOptions[F]) {
     setDraft((d) => {
       const { [field]: _, ...rest } = d.writing;
-      const same = defaults && String(defaults[field]) === String(value);
+      const base = catalog ? saved : defaults;
+      const same = base && String(base[field]) === String(value);
       return { ...d, writing: same ? rest : { ...rest, [field]: value } };
     });
   }
@@ -766,6 +771,14 @@ export function NewRunScreen() {
                 running.
               </span>
             ))}
+          {catalog && wantsReport(draft.structure?.output) && catalogWriting && saved && (
+            <CatalogWriting
+              value={catalogWriting}
+              defaults={saved}
+              onChange={setWriting}
+              onReset={() => setDraft((d) => ({ ...d, writing: {} }))}
+            />
+          )}
           {!catalog && defaults && writing && values && (
             <OptionsPanel
               open={optionsOpen}

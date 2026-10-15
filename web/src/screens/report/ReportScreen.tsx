@@ -1,5 +1,7 @@
 // The Report screen: a run's cited report (or, for the context recipe, its selected
 // passages), its sources and passages, exports, versions, and Rewrite. Keyed by run id.
+// A catalog run whose output is a report only shows here too: a Records action instead of
+// Rewrite, the cited records in the aside, and citations that open the record.
 import {
   ArrowBendDownRight,
   BracketsCurly,
@@ -8,10 +10,11 @@ import {
   PenNib,
   Pulse,
   Scissors,
+  Table,
 } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Report } from "../../api/generated";
-import type { RunSummary } from "../../api/types";
+import type { RunSummary, WritingOptions } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { DepthTag } from "../../components/DepthTag";
@@ -24,6 +27,7 @@ import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
 import { aSummary, fmtElapsed, recipeOf, wDiff, wSummary } from "../../run/format";
 import { lineage } from "../../run/lineage";
+import { openRecord, RecordPopover, useRecordCitation } from "../../run/RecordCitation";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { useRun } from "../../run/useRun";
 import { useRunData } from "../../run/useRunData";
@@ -31,10 +35,21 @@ import { CatalogScreen } from "../catalog/CatalogScreen";
 import { NotFound } from "../live/NotFound";
 import { Downloads } from "./Downloads";
 import { contextJson, download, markdownFile } from "./exportReport";
-import { ReportAside, SelectedPassages } from "./ReportAside";
+import { CatalogReportAside, ReportAside, SelectedPassages } from "./ReportAside";
 import css from "./ReportScreen.module.css";
 import { RewriteDialog } from "./RewriteDialog";
 import { VersionsNav } from "./VersionsNav";
+
+/** A catalog summary may carry no writing options; the report still renders with these. */
+const DEFAULT_WRITING: WritingOptions = {
+  format: "report",
+  tone: "objective",
+  tone_instructions: "",
+  words: 1200,
+  language: "english",
+  citation_marker: "numeric",
+  reference_style: "APA",
+};
 
 export function ReportScreen({ runId }: { runId: string }) {
   const api = useApi();
@@ -45,6 +60,10 @@ export function ReportScreen({ runId }: { runId: string }) {
   const [rewriting, setRewriting] = useState(false);
   const [queryOpen, setQueryOpen] = useState(false);
   const { cite, onCite, onLeave } = useCitation();
+  const records = useRecordCitation();
+  // A stable chip handler, so the report's chips are not remounted on every render.
+  const pickRef = useRef<(n: number) => void>(() => {});
+  const onPick = useCallback((n: number) => pickRef.current(n), []);
 
   useEffect(() => {
     api.listRuns().then(setRuns, () => {});
@@ -52,24 +71,44 @@ export function ReportScreen({ runId }: { runId: string }) {
 
   if (notFound) return <NotFound runId={runId} />;
   if (!detail) return null;
-  if (detail.kind === "catalog") return <CatalogScreen runId={runId} detail={detail} />;
+  const catalog = detail.kind === "catalog";
+  if (catalog && detail.output !== "report") {
+    return <CatalogScreen runId={runId} detail={detail} />;
+  }
+  const writing = detail.writing ?? DEFAULT_WRITING;
   const versions = lineage(runs, runId);
   const parent = runs.find((r) => r.run_id === detail.parent_run_id);
-  const recipe = recipeOf(detail.until, detail.writing.format);
-  const marker = detail.writing.citation_marker;
+  const recipe = recipeOf(detail.until, writing.format);
+  const marker = writing.citation_marker;
   const web = Object.values(view?.sources ?? {}).filter((s) => s.kind === "web");
   const sourceCount = web.filter((s) => s.state !== "failed").length + files.length;
   const passageCount = context?.passages.length ?? 0;
-  const meta = [
-    dateTime(detail.created),
-    detail.duration_s == null ? "–" : fmtElapsed(detail.duration_s),
-    recipe,
-    `${sourceCount} sources`,
-    `${passageCount} passages`,
-    ...(detail.rounds_planned && detail.rounds_planned > 1 && detail.rounds_ran
-      ? [`${detail.rounds_ran} of ${detail.rounds_planned} rounds`]
-      : []),
-  ].join(" · ");
+  const meta = (
+    catalog
+      ? [
+          dateTime(detail.created),
+          detail.duration_s == null ? "–" : fmtElapsed(detail.duration_s),
+          "catalog",
+          `${detail.nodes ?? 0} nodes`,
+          `${context?.sources.length ?? 0} sources`,
+        ]
+      : [
+          dateTime(detail.created),
+          detail.duration_s == null ? "–" : fmtElapsed(detail.duration_s),
+          recipe,
+          `${sourceCount} sources`,
+          `${passageCount} passages`,
+          ...(detail.rounds_planned && detail.rounds_planned > 1 && detail.rounds_ran
+            ? [`${detail.rounds_ran} of ${detail.rounds_planned} rounds`]
+            : []),
+        ]
+  ).join(" · ");
+  const pick = (n: number) => {
+    const id = context?.passages.find((p) => p.n === n)?.record_id;
+    records.hide();
+    if (id) openRecord(runId, id);
+  };
+  pickRef.current = pick;
 
   async function copy(text: string, message: string) {
     await navigator.clipboard?.writeText(text).catch(() => {});
@@ -113,19 +152,31 @@ export function ReportScreen({ runId }: { runId: string }) {
             />
           )}
           <div className={css.actions}>
+            {catalog && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => go({ screen: "catalog", runId, records: true })}
+              >
+                <Table aria-hidden="true" />
+                Records
+              </button>
+            )}
             {recipe !== "context" && (
               <>
-                <span className={`${css.withHelp} ${css.rewrite}`}>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => setRewriting(true)}
-                  >
-                    <PenNib aria-hidden="true" />
-                    Rewrite
-                  </button>
-                  <HelpTip help="rewrite" />
-                </span>
+                {!catalog && (
+                  <span className={`${css.withHelp} ${css.rewrite}`}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setRewriting(true)}
+                    >
+                      <PenNib aria-hidden="true" />
+                      Rewrite
+                    </button>
+                    <HelpTip help="rewrite" />
+                  </span>
+                )}
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -185,10 +236,8 @@ export function ReportScreen({ runId }: { runId: string }) {
             ) : (
               <>
                 <div className={css.optsLine}>
-                  {recipe === "answer"
-                    ? aSummary(detail.writing)
-                    : `Written with ${wSummary(detail.writing)}`}
-                  {detail.writing.tone_instructions ? " · custom instructions" : ""}
+                  {recipe === "answer" ? aSummary(writing) : `Written with ${wSummary(writing)}`}
+                  {writing.tone_instructions ? " · custom instructions" : ""}
                 </div>
                 {report && <ContinuationNote report={report} />}
                 {report && (
@@ -198,8 +247,9 @@ export function ReportScreen({ runId }: { runId: string }) {
                       marker={marker}
                       context={context}
                       variant="article"
-                      onCite={onCite}
-                      onLeave={onLeave}
+                      onCite={catalog ? records.onCite : onCite}
+                      onLeave={catalog ? records.onLeave : onLeave}
+                      onPick={catalog ? onPick : undefined}
                     />
                     {report.truncated && (
                       <div className={css.cutEnd}>
@@ -209,7 +259,7 @@ export function ReportScreen({ runId }: { runId: string }) {
                     )}
                     <References
                       entries={report.references.map((r) => r.entry)}
-                      style={detail.writing.reference_style}
+                      style={writing.reference_style}
                       variant="article"
                     />
                   </>
@@ -217,14 +267,23 @@ export function ReportScreen({ runId }: { runId: string }) {
               </>
             )}
           </article>
-          <ReportAside
-            run={view}
-            created={detail?.created}
-            rounds={detail?.rounds_planned ?? 1}
-            files={files}
-            context={context}
-            marker={marker}
-          />
+          {catalog ? (
+            <CatalogReportAside
+              context={context}
+              cited={report?.cited ?? []}
+              marker={marker}
+              onOpen={(id) => openRecord(runId, id)}
+            />
+          ) : (
+            <ReportAside
+              run={view}
+              created={detail?.created}
+              rounds={detail?.rounds_planned ?? 1}
+              files={files}
+              context={context}
+              marker={marker}
+            />
+          )}
         </div>
       </div>
       {rewriting && (
@@ -237,6 +296,19 @@ export function ReportScreen({ runId }: { runId: string }) {
         />
       )}
       <CitationTooltip cite={cite} context={context} marker={marker} />
+      {catalog && (
+        <RecordPopover
+          cite={records.cite}
+          context={context}
+          marker={marker}
+          onOpen={(id) => {
+            records.hide();
+            openRecord(runId, id);
+          }}
+          onKeep={records.keep}
+          onLeave={records.onLeave}
+        />
+      )}
     </div>
   );
 }

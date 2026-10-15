@@ -232,7 +232,14 @@ function Current({ route }: { route: Route }) {
     case "report":
       return <ReportScreen key={route.runId} runId={route.runId ?? ""} />;
     case "catalog":
-      return <CatalogScreen key={route.runId} runId={route.runId ?? ""} />;
+      return (
+        <CatalogScreen
+          key={route.runId}
+          runId={route.runId ?? ""}
+          records={route.records}
+          record={route.record}
+        />
+      );
     case "history":
       return <HistoryScreen />;
     case "settings":

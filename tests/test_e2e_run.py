@@ -497,7 +497,7 @@ def test_catalog_run(runs: Path) -> None:
     assert types.count("catalog.done") == 1
     done = [event.stage for event in events if event.type == "stage.done"]
     assert done[:2] == ["load", "draft"]
-    assert done[-1] == "assemble"
+    assert done[-2:] == ["assemble", "write"]
     for name in ("structure.json", "nodes.jsonl", "records.jsonl", "catalog.json", "request.json", "costs.json"):
         assert (run_dir / name).is_file(), name
     assert json.loads(result.stdout) == found.records

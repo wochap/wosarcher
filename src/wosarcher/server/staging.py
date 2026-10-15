@@ -29,6 +29,7 @@ from wosarcher.models import (
     Stage,
     WritingOptions,
     WritingPatch,
+    catalog_writes,
 )
 from wosarcher.store import new_run_id
 
@@ -210,7 +211,7 @@ def stage_run(
         resolved_sources=request.sources or defaults.sources,
         resolved_profile=request.profile or profile,
         writing_options=writing,
-        writing_flags={} if request.kind == "catalog" else writing.model_dump(),
+        writing_flags=writing.model_dump() if request.kind == "research" or catalog_writes(request.structure) else {},
         domain_flags=domain_lists(request, defaults, own),
         origin=origin,
         token_name=token_name,

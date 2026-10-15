@@ -1,9 +1,16 @@
 // The catalog form's Structure panel: record fields, child relation, seeds, leaf types, Expand
-// by, limits, the Profile row with Advanced, domain rows, search language, and the estimate line (prototype scenario `new`
+// by, Output, limits, the Profile row with Advanced, domain rows, search language, and the estimate line (prototype scenario `new`
 // with Catalog picked).
 import { Check, Link, Plus, X } from "@phosphor-icons/react";
 import { type KeyboardEvent, type ReactNode, useState } from "react";
-import type { ExpandBy, ProfileInfo, Seed, Structure, StructureField } from "../../api/types";
+import type {
+  CatalogOutput,
+  ExpandBy,
+  ProfileInfo,
+  Seed,
+  Structure,
+  StructureField,
+} from "../../api/types";
 import { DomainRows } from "../../components/DomainRows";
 import { HelpTip } from "../../components/HelpTip";
 import { Seg } from "../../components/Seg";
@@ -195,6 +202,19 @@ export function StructurePanel(props: Props) {
             ]}
           />
         </Row>
+        <Row label="Output" help="c-output" id="c-out-l" row="c-output">
+          <Seg<CatalogOutput>
+            label="Output"
+            name="c-out"
+            value={structure.output ?? "table"}
+            onChange={(output) => set({ output })}
+            options={[
+              { value: "table", label: "Table" },
+              { value: "report", label: "Report" },
+              { value: "both", label: "Both" },
+            ]}
+          />
+        </Row>
         <Row label="Limits" help="c-limits" id="c-lim-l" row="c-limits">
           {/* biome-ignore lint/a11y/useSemanticElements: the prototype's labelled group of controls */}
           <div role="group" aria-labelledby="c-lim-l" className={css.limits}>
@@ -255,7 +275,7 @@ export function StructurePanel(props: Props) {
         </Row>
       </div>
       <span aria-live="polite" className={css.estimate}>
-        {estimate(limits)}
+        {estimate(limits, structure.output ?? "table")}
       </span>
     </div>
   );

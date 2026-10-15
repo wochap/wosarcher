@@ -232,6 +232,7 @@ _wosarcher_catalog() {
     '--relation[the child relation]:relation:' \
     '*--leaf[a leaf type]:type:' \
     '--expand[how children are found]:mode:(links search both)' \
+    '--output[records, a report, or both]:output:(table report both)' \
     '--max-depth[deepest node level]:depth:' \
     '--max-nodes[nodes at most]:nodes:' \
     '--pages-per-node[pages fetched per node]:pages:' \
@@ -247,9 +248,16 @@ _wosarcher_catalog() {
     '--extract-thinking[thinking for the extract step]:level:_wosarcher_efforts' \
     '--context-window[the model'\''s context window in tokens]:tokens:' \
     '--max-output[the model'\''s output limit in tokens]:tokens:' \
+    '--tone[writing tone]:tone:_wosarcher_tones' \
+    '--tone-instructions[extra tone instructions]:instructions:' \
+    '--words[target report length in words]:words:' \
+    '--language[report language]:language:' \
+    '--citation-marker[citation marker]:marker:_wosarcher_markers' \
+    '--reference-style[reference style]:style:_wosarcher_styles' \
+    '--format[write a report or an answer]:format:_wosarcher_formats' \
     '*--set[override one field]:dotted.key=value:' \
-    '--until[stop after this stage]:stage:(load draft expand search fetch chunk extract assemble)' \
-    '--json[print the whole catalog.json when the run ends]' \
+    '--until[stop after this stage]:stage:(load draft expand search fetch chunk extract assemble write)' \
+    '--json[print the whole catalog.json (with the report) when the run ends]' \
     '--help[show help]' \
     '1:brief or draft:(draft)' \
     '2::brief:'

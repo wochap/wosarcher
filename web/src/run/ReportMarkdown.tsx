@@ -12,6 +12,8 @@ import css from "./ReportMarkdown.module.css";
 export type CiteHandlers = {
   onCite: (n: number, rect: DOMRect) => void;
   onLeave: () => void;
+  /** Pressing a chip (or Enter on it): a catalog report opens the cited record. */
+  onPick?: (n: number) => void;
 };
 
 type Props = CiteHandlers & {
@@ -30,11 +32,12 @@ export function ReportMarkdown({
   variant,
   onCite,
   onLeave,
+  onPick,
 }: Props) {
   // One component per marker, context, and handlers, so chips keep focus while text streams.
   const components = useMemo(
-    () => ({ a: link({ marker, context, onCite, onLeave }), table: Table }),
-    [marker, context, onCite, onLeave],
+    () => ({ a: link({ marker, context, onCite, onLeave, onPick }), table: Table }),
+    [marker, context, onCite, onLeave, onPick],
   );
   return (
     <div className={css.report} data-variant={variant}>
@@ -56,7 +59,13 @@ function Table({ children }: ComponentProps<"table">) {
   );
 }
 
-function link({ marker, context, onCite, onLeave }: Omit<Props, "body" | "streaming" | "variant">) {
+function link({
+  marker,
+  context,
+  onCite,
+  onLeave,
+  onPick,
+}: Omit<Props, "body" | "streaming" | "variant">) {
   return function Link({ href, children }: ComponentProps<"a">) {
     if (href === "#caret") return <span className={css.caret} aria-hidden="true" />;
     const cite = /^#cite-(\d+)$/.exec(href ?? "");
@@ -69,7 +78,8 @@ function link({ marker, context, onCite, onLeave }: Omit<Props, "body" | "stream
           type="button"
           className={css.chip}
           data-marker={marker}
-          aria-label={`Citation ${n}, show passage`}
+          aria-label={onPick ? `Citation ${n}, open record` : `Citation ${n}, show passage`}
+          onClick={onPick ? () => onPick(n) : undefined}
           onMouseEnter={show}
           onFocus={show}
           onMouseLeave={onLeave}

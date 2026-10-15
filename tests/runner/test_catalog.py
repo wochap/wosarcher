@@ -16,10 +16,12 @@ from wosarcher.models import (
     CatalogDone,
     CatalogRecord,
     Completion,
+    Context,
     Effort,
     Message,
     Node,
     NodeFailed,
+    Report,
     RunFailed,
     RunRecord,
     RunRequest,
@@ -149,8 +151,8 @@ async def test_three_waves(tmp_path: Path) -> None:
     assert done[:2] == [("load", 1), ("draft", 1)]
     assert done[2:7] == [(stage, 1) for stage in ("expand", "search", "fetch", "chunk", "extract")]
     assert done[7:12] == [(stage, 2) for stage in ("expand", "search", "fetch", "chunk", "extract")]
-    assert done[-1] == ("assemble", 1)
-    assert {stage for stage, _ in done}.isdisjoint({"plan", "score", "write"})
+    assert done[-2:] == [("assemble", 1), ("write", 1)]
+    assert {stage for stage, _ in done}.isdisjoint({"plan", "score", "select"})
     started = [event.data.round for event in events if isinstance(event, StageStarted) and event.stage == "fetch"]
     assert started == [1, 2, 3]
     waves = [event.data for event in events if isinstance(event, WaveDone)]
@@ -273,11 +275,11 @@ async def test_extract_failed(tmp_path: Path) -> None:
     assert assemble.data.warnings == ["extract failed: provider down"]
 
 
-async def test_until_write_rejected(tmp_path: Path) -> None:
+async def test_until_score_rejected(tmp_path: Path) -> None:
     store, runner, run_id, fakes = world(tmp_path)
-    assert await runner.run(run_id, "write") == "failed"
+    assert await runner.run(run_id, "score") == "failed"
     failed = next(e for e in store.read_events(run_id) if isinstance(e, RunFailed))
-    assert "load, draft, expand, search, fetch, chunk, extract, assemble" in failed.data.error
+    assert "load, draft, expand, search, fetch, chunk, extract, assemble, write" in failed.data.error
     assert fakes.searcher.calls == []  # type: ignore[attr-defined]
 
 
@@ -395,3 +397,35 @@ def test_record_kind(tmp_path: Path) -> None:
     record = RunRecord.model_validate_json((store.run_dir(run_id) / "request.json").read_text())
     assert (record.kind, record.request.depth) == ("catalog", None)
     assert record.structure == structure()
+
+
+async def test_table_output_skips_write(tmp_path: Path) -> None:
+    store, runner, run_id, _ = world(tmp_path)
+    assert await runner.run(run_id) == "done"
+    write = next(e for e in store.read_events(run_id) if isinstance(e, StageDone) and e.stage == "write")
+    assert write.data.skipped
+    run_dir = store.run_dir(run_id)
+    assert not (run_dir / "report.md").exists()
+    assert not (run_dir / "context.json").exists()
+    assert catalog(store, run_id).output == "table"
+
+
+async def test_both_output_writes_a_report(tmp_path: Path) -> None:
+    store, runner, run_id, fakes = world(tmp_path, structure(limits={"max_depth": 2}, output="both"))
+    assert await runner.run(run_id) == "done"
+    events = store.read_events(run_id)
+    write = next(e for e in events if isinstance(e, StageDone) and e.stage == "write")
+    assert not write.data.skipped
+    assert catalog(store, run_id).output == "both"
+    context = store.read_artifact(run_id, "context.json", Context)
+    assert [p.record_id for p in context.passages] == ["poder-ejecutivo", "mef", "pcm", "inei"]
+    assert context.query == BRIEF
+    report = store.read_artifact(run_id, "report.json", Report)
+    assert report.records
+    assert report.cited == [1]
+    assert report.references[0].source_id == context.passages[0].source_id
+    assert "## References" in (store.run_dir(run_id) / "report.md").read_text()
+    writer = fakes.writer
+    assert isinstance(writer, FakeLLM)
+    user = writer.calls[0][-1].content
+    assert "Poder Ejecutivo\npower" in user.split("<passages>", 1)[1]

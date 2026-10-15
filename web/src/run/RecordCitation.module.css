@@ -1,0 +1,96 @@
+.popover {
+  position: fixed;
+  z-index: 30;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.popover[data-above="true"] {
+  transform: translateY(-100%);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+
+.label {
+  font-family: var(--mono);
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--color-accent-900);
+  color: var(--color-accent-200);
+}
+
+.type {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.id {
+  margin-left: auto;
+  font-family: var(--mono);
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.name {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.citedFor {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.key {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.value {
+  overflow-wrap: anywhere;
+}
+
+.open {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 1px 4px;
+  gap: 4px;
+  margin-left: -4px;
+}

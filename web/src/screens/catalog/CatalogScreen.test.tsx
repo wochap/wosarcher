@@ -160,4 +160,155 @@ describe("CatalogScreen", () => {
     expect(screen.getAllByText("wave 3").length).toBeGreaterThan(1);
     expect(screen.getByText("1 extracted")).toBeTruthy();
   });
+
+  it("streams a catalog report in a ninth Write phase with a Coverage toggle", async () => {
+    const fake = fakeApi({
+      runs: [{ ...catRun("running"), output: "both" }, ...runs],
+      artifacts: { r_cat: {} },
+    });
+    const done = { waves: 1, nodes: 1, records: 1, flagged: 0, reason: "frontier empty" };
+    const events: RunEvent[] = [
+      ev(
+        1,
+        "run.started",
+        {
+          query: CATALOG_BRIEF,
+          kind: "catalog",
+          profile: "p",
+          parent_run_id: null,
+          version: 1,
+          until: null,
+        },
+        null,
+        "r_cat",
+      ),
+      ev(2, "catalog.done", { ...done, note: "" } as never, "assemble", "r_cat"),
+      ev(3, "stage.started", { device: null, provider: "llm", round: 1 }, "write", "r_cat"),
+      ev(4, "report.delta", { text: "SUNAT reports to the MEF [1]." }, "write", "r_cat"),
+    ];
+    renderApp({ hash: "#/live/r_cat", api: fake });
+    await play("r_cat", events);
+    const phases = within(await screen.findByRole("list", { name: "Phases" })).getAllByRole(
+      "listitem",
+    );
+    expect(phases).toHaveLength(9);
+    expect(phases[8].textContent).toContain("Write");
+    expect(phases[8].dataset.state).toBe("running");
+    const report = screen.getByRole("region", { name: "Report" });
+    expect(report.textContent).toContain("SUNAT reports to the MEF");
+    fireEvent.click(within(report).getByRole("button", { name: "Coverage" }));
+    expect(screen.getByRole("region", { name: "Coverage" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Report" })).toBeNull();
+  });
+
+  it("keeps eight phases for a table-only catalog", async () => {
+    renderApp({ hash: "#/live/r_cat", api: api("running") });
+    await play("r_cat", [
+      ev(
+        1,
+        "run.started",
+        {
+          query: CATALOG_BRIEF,
+          kind: "catalog",
+          profile: "p",
+          parent_run_id: null,
+          version: 1,
+          until: null,
+        },
+        null,
+        "r_cat",
+      ),
+    ]);
+    const phases = within(await screen.findByRole("list", { name: "Phases" })).getAllByRole(
+      "listitem",
+    );
+    expect(phases).toHaveLength(8);
+  });
+
+  const context = {
+    query: CATALOG_BRIEF,
+    passages: [
+      {
+        n: 1,
+        chunk_id: "record:sunat",
+        source_id: "s1",
+        query_id: "q0",
+        text: "SUNAT\npublic_body\nacronym: SUNAT",
+        heading_path: ["public_body"],
+        scorer: "catalog",
+        record_id: "sunat",
+      },
+    ],
+    sources: [{ source_id: "s1", kind: "web", uri: "https://www.gob.pe/sunat", title: "SUNAT" }],
+    budget_tokens: 1000,
+    used_tokens: 10,
+  };
+  const report = {
+    body: "SUNAT collects taxes [1].",
+    markdown: "SUNAT collects taxes [1].",
+    cited: [1],
+    references: [{ source_id: "s1", entry: "SUNAT. gob.pe", passages: [1] }],
+    records: true,
+  };
+  const withReport = (output: "both" | "report") =>
+    fakeApi({
+      runs: [{ ...catRun("done"), output }, ...runs],
+      artifacts: {
+        r_cat: {
+          "catalog.json": JSON.stringify(catalog),
+          "structure.json": JSON.stringify(structure),
+          "report.json": JSON.stringify(report),
+          "report.md": report.markdown,
+          "context.json": JSON.stringify(context),
+        },
+      },
+    });
+
+  it("shows the Report view of a catalog with output both, and a citation opens the record", async () => {
+    renderApp({ hash: "#/catalog/r_cat", api: withReport("both") });
+    await screen.findByRole("heading", { name: CATALOG_BRIEF });
+    expect(screen.getByRole("button", { name: "Copy markdown" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download .md" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "Report" }));
+    const article = await screen.findByRole("article", { name: "Report" });
+    expect(await within(article).findByText(/SUNAT collects taxes/)).toBeTruthy();
+    const chip = within(article).getByRole("button", { name: "Citation 1, open record" });
+    fireEvent.mouseEnter(chip);
+    expect(screen.getByRole("tooltip").textContent).toContain("Open record");
+    await act(async () => {
+      fireEvent.click(chip);
+    });
+    expect(window.location.hash).toBe("#/catalog/r_cat/records/sunat");
+  });
+
+  it("shows a report-only catalog on the Report screen with a Records action", async () => {
+    const fake = withReport("report");
+    renderApp({ hash: "#/runs/r_cat", api: fake });
+    await play("r_cat", [
+      ev(
+        1,
+        "run.started",
+        {
+          query: CATALOG_BRIEF,
+          kind: "catalog",
+          profile: "p",
+          parent_run_id: null,
+          version: 1,
+          until: null,
+        },
+        null,
+        "r_cat",
+      ),
+      ev(2, "stage.done", { count: 1, seconds: 1, skipped: false } as never, "write", "r_cat"),
+      ev(3, "run.done", { until: null } as never, null, "r_cat"),
+    ]);
+    const records = await screen.findByRole("button", { name: "Records" });
+    expect(screen.queryByRole("button", { name: "Rewrite" })).toBeNull();
+    expect(await screen.findByText(/SUNAT collects taxes/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(records);
+    });
+    expect(window.location.hash).toBe("#/catalog/r_cat/records");
+    expect(await screen.findByText("6 records")).toBeTruthy();
+  });
 });
