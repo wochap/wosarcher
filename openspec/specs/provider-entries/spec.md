@@ -80,11 +80,11 @@ An `llm` entry SHALL be an OpenAI-compatible endpoint (`provider =
 "openai"`) with a default `model`. It MAY have a `models` table keyed by
 model ID; each model MAY set only `context_window` (positive integer),
 `max_output_tokens` (positive integer), `reasoning` (a table with `plan`,
-`gap`, and `write`, each `none`, `low`, `medium`, `high`, or `default`),
-and `gap_context_tokens` (a positive integer or `auto`). Any other key
-SHALL fail naming the entry file and the model. When a run's model is
-listed, these values SHALL apply as the model layer of run-config
-"Precedence" (`llm.context_window`, `llm.max_output_tokens`,
+`gap`, `write`, `draft`, and `extract`, each `none`, `low`, `medium`,
+`high`, or `default`), and `gap_context_tokens` (a positive integer or
+`auto`). Any other key SHALL fail naming the entry file and the model.
+When a run's model is listed, these values SHALL apply as the model layer
+of run-config "Precedence" (`llm.context_window`, `llm.max_output_tokens`,
 `llm.reasoning.*`, `research.gap_context_tokens`). When it is not listed,
 the built-in defaults SHALL apply: `context_window` 32768,
 `max_output_tokens` 8192, every reasoning step `none`, and
@@ -95,7 +95,7 @@ the built-in defaults SHALL apply: `context_window` 32768,
 - **THEN** the run resolves `llm.model` `research-smart`, `llm.context_window` 1048576, `llm.max_output_tokens` 131072, `research.gap_context_tokens` `auto`, and `llm.reasoning.write` `low`
 
 #### Scenario: Unlisted model
-- **WHEN** a run uses `llm = "omniroute"` with `llm.model = "qwen3-30b-a3b"`, which `models` does not list
+- **WHEN** a run uses a model that has no `models` entry
 - **THEN** the run resolves `llm.context_window` 32768, `llm.max_output_tokens` 8192, every reasoning step `none`, and `research.gap_context_tokens` 4000
 
 #### Scenario: Run overrides a model limit
@@ -105,6 +105,14 @@ the built-in defaults SHALL apply: `context_window` 32768,
 #### Scenario: Unknown model key
 - **WHEN** `models.research-smart` sets `timeout = 900`
 - **THEN** loading fails naming the entry file, `research-smart`, and `timeout`
+
+#### Scenario: Catalog steps for a model
+- **WHEN** `models.research-smart` sets `reasoning = { extract = "low", draft = "high" }`
+- **THEN** a catalog run with that model resolves `llm.reasoning.extract` `low` and `llm.reasoning.draft` `high`
+
+#### Scenario: Unknown step
+- **WHEN** `models.research-smart` sets `reasoning = { crawl = "low" }`
+- **THEN** loading fails naming the entry file, the model, and `crawl`
 
 ### Requirement: Providers list command
 `wosarcher providers list [--block BLOCK] [--json]` SHALL print, through the

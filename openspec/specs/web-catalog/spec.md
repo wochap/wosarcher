@@ -10,12 +10,23 @@ the catalog Live run variant, and the Catalog result screen.
 ### Requirement: Kind switch
 The New run screen SHALL start with the prototype's Kind segmented
 control (scenario `new`): "Research" (magnifying-glass icon) and
-"Catalog" (tree-structure icon), Research selected by default. With
-Research selected the screen SHALL be the research form (web-run "New run
-form"). With Catalog selected it SHALL show the catalog form (Requirement:
-Catalog form). The chosen kind and the catalog form's values SHALL be kept
-with the New run draft while the user moves between screens and cleared
-with it after a run starts.
+"Catalog" (tree-structure icon), Research selected by default, followed
+by a help button with the prototype's `kind` entry ("Kind": "Research
+answers a question: it plans searches, scores passages and writes a cited
+report or answer. Catalog builds a table: it crawls out from seed
+records, extracts one structured record per node and returns them as
+JSON, a table and a graph. Pick Research for “what, why, compare”; pick
+Catalog for “every X with its Y”."). Each segment SHALL carry the
+prototype's title: "Cited report or answer to a question" for Research
+and "Structured records, one per entity, from a crawl" for Catalog. The
+`kind` entry SHALL appear on the Help spec page's New run group before
+`recipe`. With Research selected the screen SHALL be the research form
+(web-run "New run form"). With Catalog selected it SHALL show the catalog
+form (Requirement: Catalog form). The chosen kind, the catalog form's
+values, and the profile choice with its Advanced edits SHALL be kept with
+the New run draft while the user moves between screens and cleared with
+it after a run starts; the profile choice and edits are shared by both
+kinds.
 
 #### Scenario: Pick Catalog
 - **WHEN** the user picks Catalog
@@ -25,6 +36,14 @@ with it after a run starts.
 - **WHEN** the user picks Catalog, types a brief, opens History, and returns to New run
 - **THEN** Catalog is still selected with the brief
 
+#### Scenario: Kind help
+- **WHEN** the user hovers the help button after the Kind control
+- **THEN** the popover shows the `kind` text
+
+#### Scenario: Profile shared across kinds
+- **WHEN** the user picks profile `cloud` and sets the model in Advanced on the research form, then picks Catalog
+- **THEN** the catalog form's Profile row shows `cloud` with "1 edit" and the same model
+
 ### Requirement: Catalog form
 With Catalog selected, the New run screen SHALL match the prototype
 (scenario `new`, Catalog picked): the brief textarea (placeholder from the
@@ -32,14 +51,15 @@ prototype), the Attachments zone, the "Draft structure" secondary button
 (sparkle icon; "Drafting…" with a spinning icon while the draft request
 runs; disabled while the brief is blank), and the primary "Run catalog"
 button, disabled until a structure exists. Draft structure SHALL post the
-brief, the attachments, and the profile to `POST /api/catalog/draft` and
+brief, the attachments, the profile, and the profile edits (`use` and
+`llm`, with `reasoning.draft` when set) to `POST /api/catalog/draft` and
 fill the Structure panel from the reply; a 502 SHALL show the error box
 of web-run "Start a run" with the title "Couldn’t draft the structure".
 
 The Structure panel SHALL show the heading "Structure", the line "Drafted
 from your brief · edit anything", and these rows with the prototype's
 help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
-`c-limits`, `c-lang`):
+`c-limits`, `profile`, `c-lang`):
 - Record fields: one row per field with the name input (spaces become
   `_`), the type select (`text`, `slug`, `url`, `date`, `enum`, `ref`),
   the Required and Volatile switches, and a remove button; an "Add
@@ -52,17 +72,28 @@ help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
 - Expand by: segmented Links, Search, Both;
 - Limits: Max depth (1 to 10), Max nodes (1 to 5000), Pages per node (1
   to 10);
+- Profile: the research form's Profile row (web-run "Run options") with
+  its description line, the "based on <profile> · N edit(s)" line, and
+  the Advanced toggle and box (web-run "Profile advanced values"), bound
+  to the same choice and edits as the research form. In catalog mode the
+  Advanced box's LLM group SHALL show "Draft thinking" (help
+  `p-think-draft`) and "Extract thinking" (help `p-think-extract`) in
+  place of the Plan, Gap, and Write thinking fields, bound to
+  `llm.reasoning.draft` and `llm.reasoning.extract`; the other groups are
+  unchanged;
 - Allow domains, Block domains, and Search language, as web-run "Domain
   rows" and "Run options" define them;
 - the estimate line "Up to <nodes> nodes · about <nodes × pages> pages ·
   <nodes> extraction calls".
 
 Run catalog SHALL post `POST /api/runs` with `kind` `catalog`, the brief
-as `query`, the structure, the profile, the domain lists, the search
-language, and the attachments, then show the Live run screen. A
-structure the server rejects SHALL show the error box with "Fix in
-Structure", which focuses the named row. Ctrl+Enter in the brief SHALL
-run the catalog when a structure exists.
+as `query`, the structure, the profile and its edits (`use`, `llm` with
+`model`, `context_window`, `max_output_tokens`, and `reasoning.draft`
+and `reasoning.extract` when set), the domain lists, the search language,
+and the attachments, then show the Live run screen. A structure the
+server rejects SHALL show the error box with "Fix in Structure", which
+focuses the named row. Ctrl+Enter in the brief SHALL run the catalog when
+a structure exists.
 
 #### Scenario: Draft fills the panel
 - **WHEN** the user types a brief and presses Draft structure, and the server returns a structure with 12 fields and 6 seeds
@@ -75,6 +106,14 @@ run the catalog when a structure exists.
 #### Scenario: Rejected structure
 - **WHEN** the server answers 422 naming `structure.seeds`
 - **THEN** the error box shows the message and "Fix in Structure", which focuses the Seeds row
+
+#### Scenario: Extract thinking sent
+- **WHEN** the user opens Advanced on the catalog form, sets Extract thinking to `low`, and runs the catalog
+- **THEN** the request has `llm.reasoning.extract` `low` and no `plan`, `gap`, or `write` step
+
+#### Scenario: Profile picked on the catalog form
+- **WHEN** the user picks profile `workstation` in the catalog form's Profile row
+- **THEN** the request has `profile` `workstation`, and the research form shows `workstation` when the user switches back
 
 ### Requirement: Catalog live run
 The Live run screen of a catalog run SHALL match scenario `live-catalog`:
@@ -145,9 +184,11 @@ parent" for a null ref), and the pages used; Escape closes it.
 
 Expand more SHALL open a dialog with the three limits prefilled with the
 run's, each at least the run's, and post `POST /api/runs/{id}/fork` with
-`from` `expand` and `limits`; Re-extract SHALL open the Rewrite dialog's
-model and thinking fields only and post the fork with `from` `extract`.
-Both SHALL show the new run on the Live run screen.
+`from` `expand` and `limits`; Re-extract SHALL open a dialog with the
+Rewrite dialog's model field and one thinking field "Extract thinking"
+(help `p-think-extract`), and post the fork with `from` `extract` and
+`llm` holding `model` and `reasoning.extract` when set. Both SHALL show
+the new run on the Live run screen.
 
 #### Scenario: Filter by missing field
 - **WHEN** the user presses "website" in the Summary's worst-filled list
@@ -164,3 +205,7 @@ Both SHALL show the new run on the Live run screen.
 #### Scenario: Download CSV
 - **WHEN** the user presses Download CSV for a catalog of 118 records and 12 fields
 - **THEN** a file with a header of 13 columns and 118 rows is downloaded, values with commas, quotes, or newlines quoted
+
+#### Scenario: Re-extract with a level
+- **WHEN** the user opens Re-extract, picks the model `deepseek-v4-flash` and Extract thinking `medium`, and confirms
+- **THEN** `POST /api/runs/{id}/fork` is sent with `{"from": "extract", "llm": {"model": "deepseek-v4-flash", "reasoning": {"extract": "medium"}}}`

@@ -301,14 +301,17 @@ after each gap step. When research ends, the view SHALL print one line:
 `--set llm.model="NAME"` and choosing the model whose entry values apply
 (run-config "Precedence"), `--context-window N` and `--max-output N`
 (positive integers), acting as `--set llm.context_window=N` and
-`--set llm.max_output_tokens=N`, and `--plan-thinking`, `--gap-thinking`,
-and `--write-thinking`, each taking `none`, `low`, `medium`, `high`, or
-`default` and acting as `--set llm.reasoning.<step>=<value>`. Any other
-value SHALL exit 2 before a run is created, naming the flag and the
-allowed values. These flags SHALL take precedence over `--set` for the
-same field and SHALL be recorded in `request.json` like other overrides,
-so forks and reruns keep them. Without a flag the configured value is left
-unchanged.
+`--set llm.max_output_tokens=N`, and the thinking flags, each taking
+`none`, `low`, `medium`, `high`, or `default` and acting as `--set
+llm.reasoning.<step>=<value>`: `wosarcher run` takes `--plan-thinking`,
+`--gap-thinking`, and `--write-thinking`; `wosarcher fork` takes all five
+(`--draft-thinking` and `--extract-thinking` too) and SHALL fail with exit
+status 2 before a request is sent when a flag's step does not belong to
+the parent run's kind, naming the flag and the kind. Any other value SHALL
+exit 2 before a run is created, naming the flag and the allowed values.
+These flags SHALL take precedence over `--set` for the same field and
+SHALL be recorded in `request.json` like other overrides, so forks and
+reruns keep them. Without a flag the configured value is left unchanged.
 
 #### Scenario: Model flag
 - **WHEN** the user runs `wosarcher run "q" --model deepseek-v4-flash`
@@ -329,6 +332,14 @@ unchanged.
 #### Scenario: Fork keeps thinking
 - **WHEN** a run was started with `--write-thinking high` and the user runs `wosarcher fork <id> --from write --tone critical`
 - **THEN** the fork's resolved `llm.reasoning.write` is `high`
+
+#### Scenario: Re-extract with a level
+- **WHEN** the user runs `wosarcher fork <id> --from extract --extract-thinking medium` on a catalog run
+- **THEN** the fork's resolved `llm.reasoning.extract` is `medium`
+
+#### Scenario: Wrong kind for a fork flag
+- **WHEN** the user runs `wosarcher fork <id> --from write --extract-thinking low` on a research run
+- **THEN** the command exits with status 2 naming `--extract-thinking` and `research`
 
 ### Requirement: Queued run shown
 While a run created by `wosarcher run` or `wosarcher fork` is queued, the
@@ -395,20 +406,23 @@ daemon's API and accept: `--structure FILE` (a JSON structure file),
 `--max-nodes N`, `--pages-per-node N`, `--search-language CODE`,
 `--allow-domain` and `--block-domain` (repeatable), `--attach PATH`
 (repeatable), `--sources web|both` (default `both`), `--profile`, `--use
-BLOCK=NAME` (repeatable), `--model`, the thinking flags,
-`--context-window`, `--max-output`, `--set KEY=VALUE` (repeatable),
-`--until STAGE`, and `--json`. The structure flags SHALL be applied over
-the file's values (seeds and leaf types from flags replace the file's
-lists); with no `--structure` and no structure flag, the request carries
-no structure and the `draft` stage derives one. With structure flags but
-no file, the command SHALL fail before a request is sent when the flags do
-not make a complete structure (no seed, or no relation), naming what is
-missing. Values the client can check (`--expand`, the limits' ranges,
-`--until` against the catalog stages, `--search-language`, the domain
-entries, the block of `--use`) SHALL fail with exit status 2 before a
-request is sent; a 422 SHALL exit with 2 printing its detail. The command
-SHALL follow the run's events as `wosarcher run` does, with the catalog
-phases and a wave counter, and SHALL print the `records` array of
+BLOCK=NAME` (repeatable), `--model`, `--draft-thinking` and
+`--extract-thinking` (each `none`, `low`, `medium`, `high`, or `default`,
+acting as `--set llm.reasoning.<step>=<value>`), `--context-window`,
+`--max-output`, `--set KEY=VALUE` (repeatable), `--until STAGE`, and
+`--json`. It SHALL NOT accept `--plan-thinking`, `--gap-thinking`, or
+`--write-thinking`. The structure flags SHALL be applied over the file's
+values (seeds and leaf types from flags replace the file's lists); with no
+`--structure` and no structure flag, the request carries no structure and
+the `draft` stage derives one. With structure flags but no file, the
+command SHALL fail before a request is sent when the flags do not make a
+complete structure (no seed, or no relation), naming what is missing.
+Values the client can check (`--expand`, the limits' ranges, the thinking
+values, `--until` against the catalog stages, `--search-language`, the
+domain entries, the block of `--use`) SHALL fail with exit status 2 before
+a request is sent; a 422 SHALL exit with 2 printing its detail. The
+command SHALL follow the run's events as `wosarcher run` does, with the
+catalog phases and a wave counter, and SHALL print the `records` array of
 `catalog.json` as JSON when the run ends; `--json` SHALL print the whole
 `catalog.json`. A run that ends without `catalog.json` (stopped early with
 `--until`) SHALL print nothing and exit 0.
@@ -428,6 +442,14 @@ phases and a wave counter, and SHALL print the `records` array of
 #### Scenario: Incomplete flags
 - **WHEN** the user passes `--seed "PCM|ministry"` and no `--relation` or `--structure`
 - **THEN** the command fails with exit status 2 naming `--relation`
+
+#### Scenario: Extract thinking flag
+- **WHEN** the user runs `wosarcher catalog "brief" --extract-thinking low`
+- **THEN** the request has `llm.reasoning.extract` `low` and `request.json` records the override
+
+#### Scenario: Research thinking flag rejected
+- **WHEN** the user runs `wosarcher catalog "brief" --write-thinking high`
+- **THEN** the command fails with exit status 2 as an unknown option
 
 ### Requirement: Catalog draft command
 `wosarcher catalog draft "<brief>"` SHALL post the brief (and `--attach`

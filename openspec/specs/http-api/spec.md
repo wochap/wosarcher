@@ -844,8 +844,11 @@ presets is saved-presets "Save a depth preset". Run summaries from
 The request JSON of `POST /api/runs` SHALL accept an optional `llm`
 object with:
 - `model` (a non-empty string) setting `llm.model`;
-- `reasoning` (any subset of `plan`, `gap`, `write`, each `none`, `low`,
-  `medium`, `high`, or `default`) setting `llm.reasoning.<step>`;
+- `reasoning` (a subset of the run kind's steps, each `none`, `low`,
+  `medium`, `high`, or `default`) setting `llm.reasoning.<step>`: `plan`,
+  `gap`, and `write` for a research run; `draft` and `extract` for a
+  catalog run. A step of the other kind SHALL be rejected with 422 naming
+  `llm.reasoning`, the step, and the kind;
 - `context_window` and `max_output_tokens` (positive integers) setting
   `llm.context_window` and `llm.max_output_tokens`;
 - `context_tokens` and `gap_context_tokens` (a positive integer or `auto`)
@@ -856,7 +859,9 @@ they win over the chosen model's values and the profile, and the request's
 `set` still wins over them. `model` also chooses the model whose values
 apply below them (run-config "Precedence"). An invalid value SHALL be
 rejected with 422 naming `llm.<field>`. `POST /api/runs/{id}/fork` SHALL
-accept the same `llm` object. Absent fields leave the configured values.
+accept the same `llm` object under the same kind rule; a catalog fork from
+`extract` with `reasoning.extract` SHALL apply it to its extraction calls.
+Absent fields leave the configured values.
 
 #### Scenario: Model and thinking for one run
 - **WHEN** a client posts `request = {"query": "q", "llm": {"model": "deepseek-v4-flash", "reasoning": {"write": "high"}}}`
@@ -877,6 +882,18 @@ accept the same `llm` object. Absent fields leave the configured values.
 #### Scenario: Set wins over the llm object
 - **WHEN** a client posts `request = {"query": "q", "llm": {"model": "a"}, "set": ["llm.model=\"b\""]}`
 - **THEN** the run resolves `llm.model` to `b`
+
+#### Scenario: Catalog thinking
+- **WHEN** a client posts `request = {"query": "q", "kind": "catalog", "structure": {...}, "llm": {"reasoning": {"extract": "low"}}}`
+- **THEN** the run resolves `llm.reasoning.extract` to `low` and its extraction calls use it
+
+#### Scenario: Research step on a catalog run
+- **WHEN** a client posts a catalog request with `"llm": {"reasoning": {"write": "high"}}`
+- **THEN** the response is 422 naming `llm.reasoning`, `write`, and `catalog`
+
+#### Scenario: Re-extract with a level
+- **WHEN** a client forks a catalog run with `{"from": "extract", "llm": {"reasoning": {"extract": "medium"}}}`
+- **THEN** the fork's extraction calls use reasoning `medium`
 
 ### Requirement: Models route
 `GET /api/models?llm=NAME` SHALL return `{"models": [...]}`: the model IDs

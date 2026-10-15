@@ -108,3 +108,17 @@ authentication as `POST /api/runs`.
 #### Scenario: Draft failed
 - **WHEN** the llm provider is unreachable
 - **THEN** the response is 502 with `error = "draft_failed"` and no run is created
+
+### Requirement: Catalog reasoning levels
+The `draft` stage's LLM call SHALL use the reasoning level
+`llm.reasoning.draft`, and every `extract` call SHALL use
+`llm.reasoning.extract`. Neither SHALL read `plan`, `gap`, or `write`.
+Both default to `none`.
+
+#### Scenario: Extract level
+- **WHEN** a catalog run resolves `llm.reasoning.extract` to `low` and `llm.reasoning.gap` to `high`
+- **THEN** every extraction call is made with reasoning `low`
+
+#### Scenario: Draft level
+- **WHEN** a catalog run resolves `llm.reasoning.draft` to `medium`
+- **THEN** the draft call is made with reasoning `medium`
