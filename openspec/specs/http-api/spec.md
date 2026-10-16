@@ -526,17 +526,21 @@ answer 404 `run_not_found`. A source ID not in the run's `files.jsonl` or `pages
 
 ### Requirement: Fork a run
 `POST /api/runs/{id}/fork` SHALL accept JSON with `from` (a stage name) and
-optional `writing`, `llm`, `use`, `set`, `profile`, and, for a catalog
-run forked from `expand`, `limits` (any of `max_depth`, `max_nodes`,
-`pages_per_node`), and start `wosarcher fork <id> --from <stage>` with
-those overrides through the run queue, as run-store "Fork" defines. The
+optional `writing`, `llm`, `use`, `set`, `profile`, for a catalog run
+forked from `expand`, `limits` (any of `max_depth`, `max_nodes`,
+`pages_per_node`), and, for a catalog run forked from `extract`, `fields`
+(a map of field name to description, each a string of at most 200
+characters), and start `wosarcher fork <id> --from <stage>` with those
+overrides through the run queue, as run-store "Fork" defines. The
 response SHALL be 201 with the new `run_id`. Forking a run that is queued
 or running SHALL answer 409; an unknown stage name, or a stage that is not
 a fork stage of the run's kind, SHALL answer 422 listing the stages
 allowed for that kind; an unknown entry in `use` SHALL answer 422 naming
-`use.<block>` and that block's entries; `writing` on a catalog fork, or
-`limits` on any other fork, SHALL answer 422 naming the field; a limit
-below the parent's SHALL answer 422 naming it.
+`use.<block>` and that block's entries; `writing` on a catalog fork,
+`limits` on any other fork, or `fields` on a fork that is not a catalog
+fork from `extract`, SHALL answer 422 naming the field; a limit below the
+parent's SHALL answer 422 naming it; a `fields` key that is not a field of
+the parent's structure SHALL answer 422 naming `fields.<name>`.
 
 #### Scenario: Rewrite with a new tone
 - **WHEN** a client forks a finished run with `{"from": "write", "writing": {"tone": "critical"}}`
@@ -561,6 +565,18 @@ below the parent's SHALL answer 422 naming it.
 #### Scenario: Catalog fork from write
 - **WHEN** a client forks a catalog run with `{"from": "write"}`
 - **THEN** the response is 422 listing `expand` and `extract`
+
+#### Scenario: Re-extract with new descriptions
+- **WHEN** a client forks a finished catalog run with `{"from": "extract", "fields": {"head_name": "Current minister's full name"}}`
+- **THEN** the response is 201 and the fork's `structure.json` has that description on `head_name` and the parent's on every other field
+
+#### Scenario: Unknown field
+- **WHEN** a client forks a catalog run with `{"from": "extract", "fields": {"minister": "x"}}` and the structure has no field `minister`
+- **THEN** the response is 422 naming `fields.minister`
+
+#### Scenario: Fields on an expand fork
+- **WHEN** a client forks a catalog run with `{"from": "expand", "limits": {"max_depth": 4}, "fields": {"name": "x"}}`
+- **THEN** the response is 422 naming `fields`
 
 ### Requirement: Rerun a run
 `POST /api/runs/{id}/rerun` SHALL start, through the run queue, a new

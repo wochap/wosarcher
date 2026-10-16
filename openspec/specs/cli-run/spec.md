@@ -175,18 +175,21 @@ when the daemon cannot be reached.
 `wosarcher fork <run_id> --from <stage>` SHALL accept `--set`, the writing
 flags, `--model`, the thinking flags, `--context-window`, `--max-output`,
 `--context-tokens`, `--gap-context-tokens`, `--use`, `--until`,
-`--profile`, and `--json`, and create the fork through
-`POST /api/runs/{id}/fork`. The server's `wosarcherd fork` SHALL resolve
-the fork as the run store defines (run-store "Fork"): with `--profile
-NAME` from that profile, the fork's `--use`, and the parent's overrides
-plus the new overrides, recording `NAME` as its profile; without
-`--profile`, from the parent's saved settings with each `--use` block
-replaced by the current entry. When the parent's saved settings hold a key
-the current configuration does not know, it SHALL drop that key before
-validation, print one warning line naming every dropped key as a dotted
-path, and continue with a `request.json` without those keys; a saved value
-the current configuration rejects SHALL still fail. A queued or running
-parent SHALL exit with 2 printing the server's 409 detail.
+`--profile`, `--describe FIELD=TEXT` (repeatable; sent as `fields`,
+with `FIELD` matching the structure field name pattern, else exit 2
+before sending naming `--describe`), and `--json`, and create the fork
+through `POST /api/runs/{id}/fork`. The server's `wosarcherd fork` SHALL
+resolve the fork as the run store defines (run-store "Fork"): with
+`--profile NAME` from that profile, the fork's `--use`, and the parent's
+overrides plus the new overrides, recording `NAME` as its profile;
+without `--profile`, from the parent's saved settings with each `--use`
+block replaced by the current entry. When the parent's saved settings
+hold a key the current configuration does not know, it SHALL drop that
+key before validation, print one warning line naming every dropped key
+as a dotted path, and continue with a `request.json` without those keys;
+a saved value the current configuration rejects SHALL still fail. A
+queued or running parent SHALL exit with 2 printing the server's 409
+detail.
 
 #### Scenario: Change the tone
 - **WHEN** the user runs `wosarcher fork <id> --from write --tone critical`
@@ -211,6 +214,14 @@ parent SHALL exit with 2 printing the server's 409 detail.
 #### Scenario: Rewrite as an answer
 - **WHEN** the user runs `wosarcher fork <id> --from write --format answer`
 - **THEN** only the write stage runs, with format `answer`, and the fork's `request.json` records the `write.format` override
+
+#### Scenario: Re-extract with a description
+- **WHEN** the user runs `wosarcher fork <id> --from extract --describe head_name="Current minister's full name"` on a catalog run
+- **THEN** the request has `fields` `{"head_name": "Current minister's full name"}` and the fork's structure carries it
+
+#### Scenario: Bad describe name
+- **WHEN** the user runs `wosarcher fork <id> --from extract --describe "Head Name=x"`
+- **THEN** the command exits with 2 before sending a request, naming `--describe`
 
 #### Scenario: Stale saved value
 - **WHEN** the parent's settings hold `llm.provider = "llm"` and only `openai` is accepted

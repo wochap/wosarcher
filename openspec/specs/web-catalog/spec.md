@@ -221,10 +221,20 @@ first from `node.extracted`: name, type chip, a field grid with null
 values as "—" in the warn colour, a source link per filled value, and a
 flags line in the warn colour. Coverage SHALL show Limits (Nodes
 <n>/<max>, Depth <d>/<max>, Pages <n>/<max> as bars), Fill per field
-(sorted ascending, bars warn below 50%), and Nodes by type. Phone mode
+(sorted ascending, bars warn below 50%), and Nodes by type. Each Fill
+row SHALL show under its bar, as the prototype does, a muted 12px line
+with the field's **sample**: the value of the first `node.extracted`
+whose record has the field non-null, cut to one line with an ellipsis,
+and a source-link icon opening that field's URL from the event's
+`sources` (omitted when the event gives none); the sample is kept once
+set. A field with no sample yet SHALL show "— nothing found yet" in the
+warn colour. Hovering or focusing a Fill row SHALL show a help tip with
+the field's name as title and its `description` from `structure.ready`'s
+structure as body, and no tip when the description is empty. Phone mode
 SHALL use the tabs Progress, Sources, Records, Coverage (the last named
-Report once `write` starts). When the run ends, the action SHALL be "Open
-catalog" for `output` `table` and `both`, and "Open report" for `report`.
+Report once `write` starts), with the same Fill rows. When the run ends,
+the action SHALL be "Open catalog" for `output` `table` and `both`, and
+"Open report" for `report`.
 
 #### Scenario: Node extracted
 - **WHEN** `node.extracted` arrives for INEI with `website` null and the flag "head_name from a source dated 2025-10-02"
@@ -242,6 +252,18 @@ catalog" for `output` `table` and `both`, and "Open report" for `report`.
 - **WHEN** a catalog run with `output` `both` reaches `write`
 - **THEN** the timeline shows a ninth phase Write running, column 3 streams the report, and the run ends with "Open catalog"
 
+#### Scenario: First sample
+- **WHEN** the first `node.extracted` has `website` null and the second has `website` "https://www.gob.pe/mef" with that URL in its `sources`
+- **THEN** the `website` Fill row shows "— nothing found yet" after the first event and "https://www.gob.pe/mef" with a source link after the second
+
+#### Scenario: Sample is kept
+- **WHEN** a third `node.extracted` arrives with another `website` value
+- **THEN** the `website` row still shows "https://www.gob.pe/mef"
+
+#### Scenario: Description tip
+- **WHEN** the user hovers the `head_name` Fill row and the structure's `head_name` description is "Name of the current holder of the leading position"
+- **THEN** a tip titled "head_name" shows that text
+
 ### Requirement: Catalog result screen
 `#/catalog/<run id>` SHALL show the Catalog result screen of scenario
 `catalog-result`, built from `catalog.json`: the Completed tag, the run
@@ -250,15 +272,26 @@ the H1 from the brief; the actions Download JSON (primary; the `records`
 array as `catalog.json`), Copy JSON, Download CSV (one column per field
 plus `flags`, built in the client), Expand more (help `cr-expand`), and
 Re-extract (help `cr-reextract`); the view switch Table, Graph, JSON; and
-the Summary aside with the stop note, Nodes by depth bars, and the three
-worst-filled fields, each a button that sets the "missing field" filter.
-For a run with `output` `both` (scenario `catalog-result-both`), the
-actions SHALL add Copy markdown and Download .md, and the view switch
-SHALL add Report after JSON: the Report view shows the Report screen's
-article (the "Written with …" line, the report, the References heading
-with the reference style and its help button, and the references built
-from the cited records) with record citations (Requirement: Record
-citations).
+the Summary aside with the stop note, Nodes by depth bars, the Fields
+section, and the three worst-filled fields, each a button that sets the
+"missing field" filter. For a run with `output` `both` (scenario
+`catalog-result-both`), the actions SHALL add Copy markdown and Download
+.md, and the view switch SHALL add Report after JSON: the Report view
+shows the Report screen's article (the "Written with …" line, the
+report, the References heading with the reference style and its help
+button, and the references built from the cited records) with record
+citations (Requirement: Record citations).
+
+The Fields section (heading "Fields" with help `cr-fields`, between
+Nodes by depth and the worst-filled list, as the prototype shows) SHALL
+list every field in structure order with its name as a button, its fill
+"<n>/<N>" from `catalog.json`'s `fill` and record count (in the warn
+colour below 50%), and its **sample**: the field's value in the
+**sample record**, which is the first seed's record when that record has
+the field non-null, else the first record in `catalog.json` order that
+has it, else "—" in the warn colour; a `ref` sample is the parent's
+name. Pressing the name SHALL open the drawer of the sample record, and
+SHALL do nothing when there is none.
 
 Table SHALL show one column per field in order plus Flags (a warn badge
 with the count), the type as a chip, the ref field as the parent's name,
@@ -279,13 +312,26 @@ Expand more SHALL open a dialog with the three limits prefilled with the
 run's, each at least the run's, and post `POST /api/runs/{id}/fork` with
 `from` `expand` and `limits`. Re-extract SHALL open the prototype's
 "Re-extract" dialog (arrows-clockwise icon): the note with the
-`cr-reextract` help body, the Model group always open (web-run "Fork
-model group", with Extract thinking and no Context tokens), "Creates
-v<N> linked to <id>" (N as web-run "Rewrite" defines), Cancel, and
-"Re-extract", which posts the fork with `from` `extract` and the Model
-group's fields. Cancel, the close button, Escape, and a backdrop click
-SHALL close it without a request. Both dialogs SHALL show the new run on
-the Live run screen.
+`cr-reextract` help body, the Fields group, the Model group always open
+(web-run "Fork model group", with Extract thinking and no Context
+tokens), "Creates v<N> linked to <id>" (N as web-run "Rewrite" defines),
+Cancel, and "Re-extract", which posts the fork with `from` `extract`,
+the Model group's fields, and `fields` holding the descriptions that
+differ from the run's structure (omitted when none differ). The Fields
+group SHALL be open by default, headed "Fields" with " · <n> changed"
+appended once any description differs, and SHALL show one row per field
+in structure order: the name and type chip, a single-line description
+input (prefilled from the run's structure, placeholder "What this field
+holds", at most 200 characters, dashed border while edited), and the
+fill "<n>/<N>" (warn colour below 50%) with the sample of the Fields
+section in muted text; the list SHALL scroll inside the dialog at 320px;
+the line "Changed descriptions are sent to the new run; pages are not
+fetched again." SHALL follow the group. The started toast SHALL read
+"Re-extract started as <id> · pages reused", with " · <n> description
+changed" or " · <n> descriptions changed" appended when any were sent.
+Cancel, the close button, Escape, and a backdrop click SHALL close the
+dialog without a request and discard the edits. Both dialogs SHALL show
+the new run on the Live run screen.
 
 #### Scenario: Filter by missing field
 - **WHEN** the user presses "website" in the Summary's worst-filled list
@@ -318,6 +364,22 @@ the Live run screen.
 #### Scenario: Report view
 - **WHEN** the user opens a catalog run with `output` `both` and picks the Report view
 - **THEN** the report is shown with its references, Copy markdown copies it, and a citation chip opens the record popover
+
+#### Scenario: Fields section
+- **WHEN** a catalog of 118 records has `fill.head_name` 41 and the first seed's record has `head_name` null while SUNAT's record has "L. Mendoza Vargas"
+- **THEN** the Fields section shows `head_name` with "41/118" in the warn colour and the sample "L. Mendoza Vargas", and pressing `head_name` opens SUNAT's drawer
+
+#### Scenario: Field with no value
+- **WHEN** `fill.legal_basis` is 0
+- **THEN** its row shows "0/118" in the warn colour and "—" as the sample, and pressing the name does nothing
+
+#### Scenario: Re-extract with changed descriptions
+- **WHEN** the user opens Re-extract, changes the description of `head_name` to "Current minister's full name", leaves the others, and confirms
+- **THEN** the group header reads "Fields · 1 changed" before confirming, the fork is sent with `{"from": "extract", "fields": {"head_name": "Current minister's full name"}}`, and the toast reads "Re-extract started as <id> · pages reused · 1 description changed"
+
+#### Scenario: Re-extract without changes
+- **WHEN** the user opens Re-extract and confirms without editing any description
+- **THEN** the fork body has no `fields` key and the toast ends with "pages reused"
 
 ### Requirement: Catalog report screen
 A finished catalog run with `output` `report` SHALL open on the Report

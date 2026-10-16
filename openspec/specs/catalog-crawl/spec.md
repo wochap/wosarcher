@@ -175,7 +175,11 @@ SHALL fail naming the limits. `fork --from extract` SHALL copy
 and `nodes.jsonl` with every node's status reset to `discovered` and
 `expanded` kept, SHALL NOT copy `records.jsonl` or `catalog.json`, and
 SHALL run one `extract` pass over every node with its recorded pages,
-then `assemble`, with `expand`, `search`, and `fetch` skipped. Any other
+then `assemble`, with `expand`, `search`, and `fetch` skipped. When the
+fork carries `fields` (http-api "Fork a run"), the copied
+`structure.json` SHALL have each named field's `description` replaced by
+the given text before `extract` runs, every other key unchanged, and the
+fork's `request.json` SHALL record the resulting structure. Any other
 `--from` on a catalog run SHALL fail listing `expand` and `extract`.
 
 #### Scenario: Interrupted in wave 3
@@ -189,6 +193,10 @@ then `assemble`, with `expand`, `search`, and `fetch` skipped. Any other
 #### Scenario: Re-extract
 - **WHEN** a finished run is forked from `extract` with `--use llm=sonnet`
 - **THEN** no search or fetch request is made, every node is extracted again from its recorded pages with the `sonnet` entry, and a new `catalog.json` is written
+
+#### Scenario: Re-extract with a changed description
+- **WHEN** a finished run is forked from `extract` with `fields` `{"legal_basis": "The law or decree number that created it, as cited on its own site"}`
+- **THEN** the fork's `structure.json` carries that description on `legal_basis`, the extract system message carries it, and the fields' names and types equal the parent's
 
 #### Scenario: Fork from fetch
 - **WHEN** a catalog run is forked with `--from fetch`
