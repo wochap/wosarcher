@@ -303,7 +303,10 @@ async def draft(ctx: CatalogContext) -> steps.Outcome:
         ctx.record = ctx.record.model_copy(update={"request": request.model_copy(update={"structure": structure})})
         ctx.store.write_artifact(run_id, "request.json", ctx.record)
     data = StructureReadyData(
-        fields=[StructureFieldInfo(name=item.name, type=item.type) for item in structure.fields],
+        fields=[
+            StructureFieldInfo(name=item.name, type=item.type, description=item.description)
+            for item in structure.fields
+        ],
         seeds=len(structure.seeds),
         relation=structure.relation,
         limits=structure.limits,

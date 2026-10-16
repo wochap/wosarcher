@@ -1,6 +1,7 @@
 // The Live run screen of a catalog run (scenario `live-catalog`): the 8-phase timeline, the
 // Frontier tree, the Records cards, and Coverage.
 import {
+  ArrowSquareOut,
   ArrowsClockwise,
   CaretDown,
   CaretRight,
@@ -349,21 +350,56 @@ export function CoveragePanel({ live, action }: { live: CatalogLive; action?: Re
             <h3 className={css.h3}>Fill per field</h3>
             <span className={css.lowest}>lowest first</span>
           </div>
-          {fill.map((f) => (
-            <div
-              key={f.field}
-              role="img"
-              aria-label={`${f.field} filled in ${f.pct}% of records`}
-              className={css.fillRow}
-              data-low={f.pct < 50 || undefined}
-            >
-              <span className={css.fillName}>{f.field}</span>
-              <div className={css.track4}>
-                <div className={css.fillBar} style={{ width: `${f.pct}%` }} />
+          {fill.map((f) => {
+            const sample = live.samples[f.field];
+            const description = live.fields.find((x) => x.name === f.field)?.description;
+            return (
+              <div key={f.field} className={css.fillItem}>
+                <div className={css.fillRow} data-low={f.pct < 50 || undefined}>
+                  {description ? (
+                    <HelpTip
+                      help="c-fill-field"
+                      entry={{ title: f.field, body: description }}
+                      ariaLabel={`Description of ${f.field}`}
+                      className={`${css.fillName} ${css.fillTip}`}
+                    >
+                      {f.field}
+                    </HelpTip>
+                  ) : (
+                    <span className={css.fillName}>{f.field}</span>
+                  )}
+                  <div
+                    role="img"
+                    aria-label={`${f.field} filled in ${f.pct}% of records`}
+                    className={css.track4}
+                  >
+                    <div className={css.fillBar} style={{ width: `${f.pct}%` }} />
+                  </div>
+                  <span className={css.fillPct}>{f.pct}%</span>
+                </div>
+                {sample ? (
+                  <div className={css.sample}>
+                    <span className={css.sampleText} title={String(sample.value)}>
+                      {String(sample.value)}
+                    </span>
+                    {sample.url && (
+                      <a
+                        href={sample.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open the page ${f.field} came from`}
+                        className={css.src}
+                      >
+                        <ArrowSquareOut aria-hidden="true" />
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className={css.sampleNone}>— nothing found yet</div>
+                )}
               </div>
-              <span className={css.fillPct}>{f.pct}%</span>
-            </div>
-          ))}
+            );
+          })}
         </section>
         <section aria-label="Nodes by type" className={css.covSection}>
           <h3 className={css.h3}>Nodes by type</h3>

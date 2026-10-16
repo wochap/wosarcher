@@ -297,6 +297,7 @@ _wosarcher_fork() {
     '--max-depth[catalog fork from expand: max depth]:depth:' \
     '--max-nodes[catalog fork from expand: max nodes]:nodes:' \
     '--pages-per-node[catalog fork from expand: pages per node]:pages:' \
+    '*--describe[catalog fork from extract: new field description]:field=text:' \
     '--json[print one JSON document when the run ends]' \
     '--help[show help]' \
     '1:run:_wosarcher_run_ids'

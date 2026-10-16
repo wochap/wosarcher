@@ -77,6 +77,7 @@ from wosarcher.cli.options import (
 from wosarcher.cli.progress import ProgressView
 from wosarcher.cli.questions import Questioner, question_flags
 from wosarcher.models import (
+    FIELD_NAME_PATTERN,
     KIND_STEPS,
     CatalogRecord,
     Context,
@@ -443,6 +444,10 @@ def fork(
     pages_per_node: Annotated[
         int | None, typer.Option("--pages-per-node", help="Catalog fork from expand: pages per node.")
     ] = None,
+    describe: Annotated[
+        list[str] | None,
+        typer.Option("--describe", metavar="FIELD=TEXT", help="Catalog fork from extract: a new field description."),
+    ] = None,
     as_json: JsonOption = False,
 ) -> None:
     """Copy a run up to --from and run the rest with the saved configuration plus new overrides."""
@@ -487,13 +492,27 @@ def fork(
             set=set_ or [],
             profile=profile,
             limits=LimitsPatch(max_depth=max_depth, max_nodes=max_nodes, pages_per_node=pages_per_node),
+            fields=described_fields(describe),
         )
     except ValidationError as error:
         raise fail(error, 2) from None
     rounds = parent.json().get("rounds_planned", 1) if parent.is_success else 1
     body = request.model_dump(mode="json", by_alias=True, exclude_none=True)
+    if not request.fields:
+        body.pop("fields", None)
     run = created(client, f"/api/runs/{parent_id}/fork", json=body)
     watch(client, run, rounds, as_json, early_exit=1)
+
+
+def described_fields(describe: list[str] | None) -> dict[str, str]:
+    """`--describe FIELD=TEXT` pairs as a map; a name that is not a field name exits 2."""
+    found: dict[str, str] = {}
+    for item in describe or []:
+        name, sep, text = item.partition("=")
+        if not sep or not FIELD_NAME_PATTERN.match(name):
+            raise fail(f"--describe {item!r}: expected FIELD=TEXT with FIELD matching {FIELD_NAME_PATTERN.pattern}", 2)
+        found[name] = text
+    return found
 
 
 def origin_label(item: RunSummary) -> str:

@@ -487,6 +487,10 @@ Object.assign(HELP, {
     title: "Re-extract",
     body: "Runs extract and assemble again with another model. The fetched pages are kept, so nothing is crawled again.",
   },
+  "cr-fields": {
+    title: "Fields",
+    body: "Each field’s fill and one value a record holds for it. A low fill with a wrong-looking sample usually means the description told the extractor the wrong thing. Fix it in Re-extract.",
+  },
   qtimeout: {
     title: "Timeout",
     body: "The run waits while you are here. When you are away, it counts down and then continues with the recommended answers. Set the default in Settings; override it per run in Options.",

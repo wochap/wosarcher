@@ -560,6 +560,28 @@ def test_fork_reextract_with_a_level(daemon: Daemon) -> None:
     assert 'llm.reasoning.extract="medium"' in request_of(daemon, fork)["overrides"]
 
 
+def test_fork_reextract_with_a_description(daemon: Daemon, tmp_path: Path) -> None:
+    path = structure_file(tmp_path)
+    assert runner.invoke(app, ["catalog", "b", "--structure", str(path)]).exit_code == 0
+    [parent] = listed(daemon)
+    describe = "name=Official name of the body"
+    result = runner.invoke(app, ["fork", parent, "--from", "extract", "--describe", describe, "--json"])
+    assert result.exit_code == 0, result.output
+    fork = next(run_id for run_id in listed(daemon) if run_id != parent)
+    fields = request_of(daemon, fork)["request"]["structure"]["fields"]
+    described = {field["name"]: field["description"] for field in fields}
+    assert described["name"] == "Official name of the body"
+
+
+def test_fork_bad_describe_name(daemon: Daemon) -> None:
+    assert runner.invoke(app, ["catalog", "b"]).exit_code == 0
+    [parent] = listed(daemon)
+    result = runner.invoke(app, ["fork", parent, "--from", "extract", "--describe", "Head Name=x"])
+    assert result.exit_code == 2
+    assert "--describe" in result.output
+    assert listed(daemon) == [parent]
+
+
 def test_fork_flag_of_the_other_kind(daemon: Daemon) -> None:
     parent = RunOutput.model_validate_json(runner.invoke(app, ["run", "q", "--json"]).stdout).run_id
     result = runner.invoke(app, ["fork", parent, "--from", "write", "--extract-thinking", "low"])

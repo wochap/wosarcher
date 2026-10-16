@@ -388,7 +388,11 @@ the old limits left unexpanded (Expand more); `extract` copies
 `expanded` kept), `hits.jsonl`, `pages.jsonl`, and `chunks.jsonl`, drops
 `records.jsonl`, and extracts every node again from its recorded pages,
 then assembles, with no search or fetch (Re-extract, usually with another
-model). Any other `from` is 422.
+model). An `extract` fork may carry `fields` (field name to description,
+at most 200 characters each; an unknown name or any other fork is 422):
+the fork's `structure.json` has those descriptions replaced and nothing
+else changed, so the extractor reads the new definitions over the same
+pages (`wosarcher fork --describe FIELD=TEXT`). Any other `from` is 422.
 
 ### Initial search
 
@@ -2722,8 +2726,9 @@ Catalog runs use three screens of the prototype and a History change:
   Draft, Expand, Search, Fetch, Chunk, Extract, Assemble; loop phases show
   "wave <k>"), Frontier (a tree from `node.found` and node status events)
   over Sources, Records (from `node.extracted`, newest first), and
-  Coverage (limit bars, fill per field, nodes by type, from `wave.done`
-  and the node events); "Open catalog" when it ends ("Open report" for
+  Coverage (limit bars, fill per field each with the first value found
+  and its source link or "— nothing found yet", and the field's
+  description as a tip, nodes by type, from the node events); "Open catalog" when it ends ("Open report" for
   output `report`). A run that writes a report adds a ninth Write phase,
   and once `write` starts column 3 streams the report with a "Coverage"
   toggle back (the phone tab reads Report).
@@ -2733,11 +2738,14 @@ Catalog runs use three screens of the prototype and a History change:
 - **Catalog result** (`catalog-result`, `#/catalog/<id>`), built from
   `catalog.json`: Download JSON, Copy JSON, Download CSV (built in the
   client), Expand more (a dialog with the three limits, posting the
-  `expand` fork), and Re-extract (a dialog with the always-open Model
-  group, Extract thinking and no Context tokens, posting the `extract`
-  fork with `use`/`llm` for the changed rows); Table (filters by text, type,
+  `expand` fork), and Re-extract (a dialog with a Fields group, an
+  editable description per field beside its fill and sample, and the
+  always-open Model group, Extract thinking and no Context tokens, posting
+  the `extract` fork with `use`/`llm` for the changed rows and `fields`
+  for the changed descriptions); Table (filters by text, type,
   flagged only, missing field), Graph (inline SVG tree from the ref
-  field), and JSON views; a Summary aside; and the record drawer with each
+  field), and JSON views; a Summary aside with a Fields section (fill `n/N` and a sample per field,
+  the name opening the sample record, help `cr-fields`); and the record drawer with each
   value's source link. With output `both` (`catalog-result-both`), Copy
   markdown, Download .md, and a Report view whose citation chips show the
   record popover and open the record's drawer

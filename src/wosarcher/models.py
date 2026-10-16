@@ -1377,6 +1377,16 @@ class ForkCreate(Contract):
     profile: str | None = None
     limits: LimitsPatch = LimitsPatch()
     """Catalog runs forked from `expand`: the raised limits."""
+    fields: dict[str, str] = {}
+    """Catalog runs forked from `extract`: new descriptions by field name."""
+
+    @field_validator("fields")
+    @classmethod
+    def check_fields(cls, value: dict[str, str]) -> dict[str, str]:
+        for name, text in value.items():
+            if len(text) > 200:
+                raise ValueError(f"fields.{name}: at most 200 characters")
+        return value
 
     @field_validator("use")
     @classmethod
@@ -1772,6 +1782,7 @@ class ReportTextData(Contract):
 class StructureFieldInfo(Contract):
     name: str
     type: FieldType
+    description: str = ""
 
 
 class StructureReadyData(Contract):

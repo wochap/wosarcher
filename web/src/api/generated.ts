@@ -553,7 +553,7 @@ export type Required = boolean
 export type Type21 = ("text" | "slug" | "url" | "date" | "enum" | "ref")
 export type Values = string[]
 export type Volatile = boolean
-export type Fields = StructureField[]
+export type Fields1 = StructureField[]
 export type Language1 = string
 export type LeafTypes = string[]
 export type Output1 = ("table" | "report" | "both")
@@ -776,10 +776,11 @@ export type Seq26 = number
 export type Stage28 = (("load" | "plan" | "search" | "fetch" | "chunk" | "prefilter" | "score" | "gap" | "select" | "write" | "draft" | "expand" | "extract" | "assemble") | null)
 export type Ts26 = string
 export type Type30 = "stage.started"
+export type Description9 = string
 export type Name11 = string
 export type Type31 = ("text" | "slug" | "url" | "date" | "enum" | "ref")
 export type Derived = boolean
-export type Fields1 = StructureFieldInfo[]
+export type Fields2 = StructureFieldInfo[]
 export type Relation1 = string
 export type Seeds1 = number
 export type RunId36 = string
@@ -1230,6 +1231,7 @@ truncated?: Truncated
  * via the `definition` "ForkCreate".
  */
 export interface ForkCreate {
+fields?: Fields
 from: From
 limits?: LimitsPatch
 llm?: LLMPatch
@@ -1238,6 +1240,9 @@ set?: Set
 until?: Until
 use?: Use
 writing?: WritingPatch
+}
+export interface Fields {
+[k: string]: string
 }
 /**
  * Raised catalog limits for a fork from `expand`; unset ones keep the parent's.
@@ -2316,7 +2321,7 @@ sub_queries?: SubQueries2
  */
 export interface Structure {
 expand?: Expand
-fields: Fields
+fields: Fields1
 language?: Language1
 leaf_types?: LeafTypes
 limits?: Limits1
@@ -2888,6 +2893,7 @@ round?: Round10
  * via the `definition` "StructureFieldInfo".
  */
 export interface StructureFieldInfo {
+description?: Description9
 name: Name11
 type: Type31
 }
@@ -2909,7 +2915,7 @@ type?: Type32
  */
 export interface StructureReadyData {
 derived: Derived
-fields: Fields1
+fields: Fields2
 limits: Limits
 relation: Relation1
 seeds: Seeds1

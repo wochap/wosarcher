@@ -221,6 +221,22 @@ def raised_limits(structure: Structure, limits: Mapping[str, int]) -> Structure:
     return structure.model_copy(update={"limits": new})
 
 
+def described(structure: Structure, fields: Mapping[str, str]) -> Structure:
+    """The structure with each named field's description replaced."""
+    known = {field.name for field in structure.fields}
+    unknown = [name for name in fields if name not in known]
+    if unknown:
+        raise RunStoreError(f"--describe: not a field of the structure: {', '.join(unknown)}")
+    changed = [
+        field.model_copy(update={"description": fields[field.name]}) if field.name in fields else field
+        for field in structure.fields
+    ]
+    try:
+        return Structure.model_validate({**structure.model_dump(), "fields": [f.model_dump() for f in changed]})
+    except ValueError as error:
+        raise RunStoreError(f"--describe: {error}") from None
+
+
 def forked_nodes(nodes: Sequence[Node], structure: Structure, from_stage: Stage) -> list[Node]:
     """`extract`: every node `discovered`, `expanded` kept. `expand`: extracted nodes left unexpanded that the
     new limits make expandable go back to `discovered`."""
@@ -339,8 +355,11 @@ class RunStore:
         lock: bool = False,
         use: Mapping[str, str] | None = None,
         limits: Mapping[str, int] | None = None,
+        fields: Mapping[str, str] | None = None,
     ) -> RunRecord:
-        """`limits`: raised catalog limits (`max_depth`, `max_nodes`, `pages_per_node`), for `--from expand` only."""
+        """`limits`: raised catalog limits (`max_depth`, `max_nodes`, `pages_per_node`), for `--from expand` only.
+
+        `fields`: new field descriptions by name, for a catalog `--from extract` only."""
         parent = self.read_record(parent_id)
         if parent.kind == "catalog":
             return self.fork_catalog(
@@ -349,6 +368,7 @@ class RunStore:
                 overrides,
                 settings,
                 limits=limits,
+                fields=fields,
                 profile=profile,
                 until=until,
                 run_id=run_id,
@@ -359,6 +379,8 @@ class RunStore:
             )
         if limits:
             raise RunStoreError(f"{', '.join(LIMIT_FLAGS[name] for name in limits)}: only for catalog runs")
+        if fields:
+            raise RunStoreError("--describe: only for catalog runs")
         done = self.done_events(parent_id)
         missing = self.missing_stages(parent_id, from_stage)
         if missing:
@@ -410,6 +432,7 @@ class RunStore:
         settings: Settings,
         *,
         limits: Mapping[str, int] | None,
+        fields: Mapping[str, str] | None,
         profile: str | None,
         until: Stage | None,
         run_id: str | None,
@@ -435,6 +458,10 @@ class RunStore:
             structure = raised_limits(structure, limits or {})
         elif limits:
             raise RunStoreError(f"{', '.join(LIMIT_FLAGS[name] for name in limits)}: only with --from expand")
+        if from_stage == "extract":
+            structure = described(structure, fields or {})
+        elif fields:
+            raise RunStoreError("--describe: only with --from extract")
         done = self.done_events(parent_id)
         run_id, path = self.new_dir(run_id, lock)
         source = self.run_dir(parent_id)

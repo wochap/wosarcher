@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RunEvent, RunSummary } from "../../api/types";
 import { ev } from "../../test/events";
 import { callsTo, fakeApi } from "../../test/fakeApi";
-import { CATALOG_BRIEF, catalog, structure } from "../../test/fixtures/catalog";
+import { CATALOG_BRIEF, catalog, records, structure } from "../../test/fixtures/catalog";
 import { runs } from "../../test/fixtures/data";
 import { renderApp } from "../../test/renderApp";
 import { play } from "../../test/scenario";
@@ -194,6 +194,171 @@ describe("CatalogScreen", () => {
     expect(within(records).getAllByText("—").length).toBeGreaterThan(0);
     expect(screen.getAllByText("wave 3").length).toBeGreaterThan(1);
     expect(screen.getByText("1 extracted")).toBeTruthy();
+  });
+
+  describe("live samples", () => {
+    const liveEvents = (extra: RunEvent[]): RunEvent[] => [
+      ev(
+        1,
+        "run.started",
+        {
+          query: CATALOG_BRIEF,
+          kind: "catalog",
+          profile: "p",
+          parent_run_id: null,
+          version: 1,
+          until: null,
+        },
+        null,
+        "r_cat",
+      ),
+      ev(
+        2,
+        "structure.ready",
+        {
+          fields: structure.fields.map((f) => ({
+            name: f.name,
+            type: f.type,
+            description: f.description ?? "",
+          })),
+          seeds: 6,
+          relation: "r",
+          limits: { max_depth: 3, max_nodes: 200, pages_per_node: 2 },
+          derived: false,
+        },
+        "draft",
+        "r_cat",
+      ),
+      ...["mef", "pcm", "inei"].map((id, i) =>
+        ev(
+          3 + i,
+          "node.found",
+          {
+            node_id: id,
+            name: id.toUpperCase(),
+            type: "public_body",
+            parent_id: null,
+            depth: 0,
+            url: null,
+            wave: 1,
+            found_by: "seed",
+          },
+          "draft",
+          "r_cat",
+        ),
+      ),
+      ...extra,
+    ];
+    const extractedEvent = (
+      seq: number,
+      id: string,
+      record: Record<string, unknown>,
+      sources = {},
+    ) =>
+      ev(
+        seq,
+        "node.extracted",
+        { node_id: id, record, sources, flags: [], children: 0 },
+        "extract",
+        "r_cat",
+      );
+
+    it("shows the first sample with its source, and keeps it", async () => {
+      renderApp({ hash: "#/live/r_cat", api: api("running") });
+      const fill = () => screen.getByRole("region", { name: "Fill per field" });
+      await play("r_cat", liveEvents([extractedEvent(6, "mef", { name: "MEF", website: null })]));
+      expect(await within(fill()).findAllByText("— nothing found yet")).toBeTruthy();
+      await play("r_cat", [
+        extractedEvent(
+          7,
+          "pcm",
+          { name: "PCM", website: "https://www.gob.pe/mef" },
+          {
+            website: "https://www.gob.pe/mef",
+          },
+        ),
+      ]);
+      expect(within(fill()).getByText("https://www.gob.pe/mef")).toBeTruthy();
+      const link = within(fill()).getByRole("link", { name: "Open the page website came from" });
+      expect(link.getAttribute("href")).toBe("https://www.gob.pe/mef");
+      await play("r_cat", [
+        extractedEvent(8, "inei", { name: "INEI", website: "https://other.pe" }),
+      ]);
+      expect(within(fill()).getByText("https://www.gob.pe/mef")).toBeTruthy();
+      expect(within(fill()).queryByText("https://other.pe")).toBeNull();
+    });
+
+    it("shows the description in a tip titled with the field", async () => {
+      renderApp({ hash: "#/live/r_cat", api: api("running") });
+      await play("r_cat", liveEvents([]));
+      const fill = await screen.findByRole("region", { name: "Fill per field" });
+      fireEvent.mouseEnter(within(fill).getByRole("button", { name: "Description of head_name" }));
+      const tip = await screen.findByRole("tooltip");
+      expect(tip.textContent).toContain("head_name");
+      expect(tip.textContent).toContain("Name of the current holder");
+    });
+  });
+
+  it("lists every field with its fill and sample, and opens the sample's record", async () => {
+    renderApp({ hash: "#/catalog/r_cat", api: api() });
+    await screen.findByRole("heading", { name: CATALOG_BRIEF });
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const open = within(aside).getByRole("button", {
+      name: "Open the record behind the head_name sample",
+    });
+    expect(aside.textContent).toContain("1/6");
+    expect(aside.textContent).toContain("R. Salazar");
+    fireEvent.click(open);
+    expect(screen.getByRole("dialog", { name: /Ministerio de Economía/ })).toBeTruthy();
+  });
+
+  it("shows — and does nothing for a field no record has", async () => {
+    const empty = { ...catalog, records: records.map((r) => ({ ...r, website: null })) };
+    const fake = fakeApi({
+      runs: [catRun("done"), ...runs],
+      artifacts: {
+        r_cat: {
+          "catalog.json": JSON.stringify(empty),
+          "structure.json": JSON.stringify(structure),
+        },
+      },
+    });
+    renderApp({ hash: "#/catalog/r_cat", api: fake });
+    await screen.findByRole("heading", { name: CATALOG_BRIEF });
+    const aside = screen.getByRole("complementary", { name: "Summary" });
+    const button = within(aside).getByRole("button", {
+      name: "Open the record behind the website sample",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.closest("li")?.textContent).toContain("0/6");
+    expect(button.closest("li")?.textContent).toContain("—");
+  });
+
+  it("re-extracts with a changed description", async () => {
+    const { fake, dialog } = await openReextract();
+    const input = within(dialog).getByLabelText("Description of head_name");
+    fireEvent.change(input, { target: { value: "Current minister's full name" } });
+    expect(within(dialog).getByText("Fields · 1 changed")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Re-extract" }));
+    });
+    expect(callsTo(fake, "forkRun")[0]).toEqual([
+      "r_cat",
+      { from: "extract", fields: { head_name: "Current minister's full name" } },
+    ]);
+    expect(await screen.findByText(/pages reused · 1 description changed$/)).toBeTruthy();
+  });
+
+  it("re-extracts without changes and sends no fields", async () => {
+    const { fake, dialog } = await openReextract();
+    expect(dialog.textContent).toContain(
+      "Changed descriptions are sent to the new run; pages are not fetched again.",
+    );
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Re-extract" }));
+    });
+    expect(callsTo(fake, "forkRun")[0]).toEqual(["r_cat", { from: "extract" }]);
+    expect(await screen.findByText(/Re-extract started as .* · pages reused$/)).toBeTruthy();
   });
 
   it("streams a catalog report in a ninth Write phase with a Coverage toggle", async () => {

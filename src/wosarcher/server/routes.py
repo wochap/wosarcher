@@ -459,7 +459,14 @@ def check_fork(state: ServerState, parent: RunRecord, body: ForkCreate) -> None:
         raise RouteError(422, "invalid_request", "writing: not for catalog runs")
     if limits and (parent.kind != "catalog" or body.from_stage != "expand"):
         raise RouteError(422, "invalid_request", "limits: only for a catalog fork from expand")
+    if body.fields and (parent.kind != "catalog" or body.from_stage != "extract"):
+        raise RouteError(422, "invalid_request", "fields: only for a catalog fork from extract")
     structure = parent_structure(state, parent)
+    if body.fields and structure is not None:
+        known = {field.name for field in structure.fields}
+        for name in body.fields:
+            if name not in known:
+                raise RouteError(422, "invalid_request", f"fields.{name}: not a field of the structure")
     if parent.kind != "catalog" or body.from_stage != "expand" or structure is None:
         return
     for name, value in limits.items():

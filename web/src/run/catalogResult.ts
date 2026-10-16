@@ -118,6 +118,46 @@ export function worstFilled(
     .slice(0, n);
 }
 
+const hasValue = (record: CatalogRecord, name: string) =>
+  record[name] != null && record[name] !== "";
+
+export type FieldSummary = {
+  field: string;
+  type: StructureField["type"];
+  /** Records with a value, from `fill` when the catalog has it. */
+  filled: number;
+  /** The record the sample comes from; null when no record has the field. */
+  record: CatalogRecord | null;
+  /** The sample as text: a `ref` as the parent's name; empty when there is none. */
+  sample: string;
+};
+
+/** Per field in structure order: its fill and sample. The sample record is the first seed's
+ * record when it has the field, else the first record in `catalog.json` order that has it. */
+export function fieldSummaries(
+  records: CatalogRecord[],
+  fields: Field[],
+  seeds: { name: string }[],
+  fill: Record<string, number> = {},
+): FieldSummary[] {
+  const byName = new Map(records.map((r) => [nameOf(r, fields), r]));
+  const seed = seeds.length ? byName.get(seeds[0].name) : undefined;
+  const byId = new Map(records.map((r) => [idOf(r, fields), r]));
+  return fields.map((f) => {
+    const record =
+      (seed && hasValue(seed, f.name) ? seed : records.find((r) => hasValue(r, f.name))) ?? null;
+    const value = record?.[f.name];
+    let sample = "";
+    if (record && value != null) {
+      const parent = f.type === "ref" ? byId.get(String(value)) : undefined;
+      if (parent) sample = nameOf(parent, fields);
+      else sample = Array.isArray(value) ? value.join("; ") : String(value);
+    }
+    const filled = fill[f.name] ?? records.filter((r) => hasValue(r, f.name)).length;
+    return { field: f.name, type: f.type, filled, record, sample };
+  });
+}
+
 /** The distinct source URLs the records cite. */
 export function sourceUrls(records: CatalogRecord[]): string[] {
   return [...new Set(records.flatMap((r) => Object.values(r.sources ?? {})).filter(Boolean))];

@@ -37,7 +37,9 @@ import {
   catalogCsv,
   columnsOf,
   depths,
+  type FieldSummary,
   type Filters,
+  fieldSummaries,
   filterRecords,
   flagsOf,
   graphLabel,
@@ -179,6 +181,12 @@ function CatalogResult({ detail, catalog, structure, written, record }: ResultPr
   const n = records.length;
   const sel = selected ? byId.get(selected) : undefined;
   const depthOf = depths(records, fields);
+  const summaries = fieldSummaries(
+    records,
+    fields,
+    (structure ?? detail.form?.structure)?.seeds ?? [],
+    catalog.fill,
+  );
 
   const meta = [
     dateTime(detail.created),
@@ -474,6 +482,8 @@ function CatalogResult({ detail, catalog, structure, written, record }: ResultPr
                 catalog={catalog}
                 records={records}
                 fields={fields}
+                summaries={summaries}
+                onOpen={(id) => setSelected(id)}
                 onMissing={(field) => {
                   setFilters({ ...NO_FILTERS, missing: field });
                   setView("table");
@@ -547,7 +557,13 @@ function CatalogResult({ detail, catalog, structure, written, record }: ResultPr
         <ExpandDialog detail={detail} structure={structure} onClose={() => setDialog(null)} />
       )}
       {dialog === "reextract" && (
-        <ReextractDialog detail={detail} onClose={() => setDialog(null)} />
+        <ReextractDialog
+          detail={detail}
+          structure={structure}
+          summaries={summaries}
+          total={n}
+          onClose={() => setDialog(null)}
+        />
       )}
     </div>
   );
@@ -605,6 +621,8 @@ function Summary(props: {
   catalog: Catalog;
   records: CatalogRecord[];
   fields: Field[];
+  summaries: FieldSummary[];
+  onOpen: (id: string) => void;
   onMissing: (field: string) => void;
 }) {
   const { catalog, records, fields } = props;
@@ -632,6 +650,35 @@ function Summary(props: {
                 <div className={css.bar} style={{ width: `${Math.round((c / most) * 100)}%` }} />
               </div>
               <span className={css.num}>{c}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section className={css.sumSection}>
+        <div className={css.h3Help}>
+          <h3 className={css.h3}>Fields</h3>
+          <HelpTip help="cr-fields" label="Fields" />
+        </div>
+        <ul className={css.fieldsList}>
+          {props.summaries.map((f) => (
+            <li key={f.field}>
+              <div className={css.fieldHead}>
+                <button
+                  type="button"
+                  className={css.fieldName}
+                  disabled={!f.record}
+                  aria-label={`Open the record behind the ${f.field} sample`}
+                  onClick={() => f.record && props.onOpen(idOf(f.record, fields))}
+                >
+                  {f.field}
+                </button>
+                <span className={css.fieldFill} data-low={fillLow(f.filled, n) || undefined}>
+                  {f.filled}/{n}
+                </span>
+              </div>
+              <span className={css.fieldSample} data-none={!f.sample || undefined} title={f.sample}>
+                {f.sample || "—"}
+              </span>
             </li>
           ))}
         </ul>
@@ -962,13 +1009,37 @@ function ExpandDialog(props: {
   );
 }
 
-function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () => void }) {
+/** Fill below 50% of the records. */
+const fillLow = (filled: number, total: number) => filled * 2 < total;
+
+function ReextractDialog({
+  detail,
+  structure,
+  summaries,
+  total,
+  onClose,
+}: {
+  detail: RunDetail;
+  structure: Structure | null;
+  summaries: FieldSummary[];
+  total: number;
+  onClose: () => void;
+}) {
   const api = useApi();
   const { follow, toast } = useUi();
   const base = useMemo(() => forkModelBase(detail, "extract"), [detail]);
   const [model, setModel] = useState(() => initialState(base));
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  const described = (structure ?? detail.form?.structure)?.fields ?? [];
+  const original = Object.fromEntries(described.map((f) => [f.name, f.description ?? ""]));
+  const [texts, setTexts] = useState<Record<string, string>>(original);
+  const changed = Object.fromEntries(
+    summaries
+      .filter((f) => (texts[f.field] ?? "") !== (original[f.field] ?? ""))
+      .map((f) => [f.field, texts[f.field] ?? ""]),
+  );
+  const changes = Object.keys(changed).length;
   const nextVersion =
     Math.max(0, ...lineage(runs, detail.run_id).map((v) => v.run.version ?? 1)) + 1;
 
@@ -982,7 +1053,12 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
       const created = await api.forkRun(detail.run_id, {
         from: "extract",
         ...forkModelPatch(model, base, "extract"),
+        ...(changes ? { fields: changed } : {}),
       });
+      const suffix = changes
+        ? ` · ${changes} ${changes === 1 ? "description" : "descriptions"} changed`
+        : "";
+      toast(`Re-extract started as ${created.run_id} · pages reused${suffix}`);
       follow(created.run_id);
       go({ screen: "live", runId: created.run_id });
     } catch (e) {
@@ -1010,6 +1086,39 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
         </span>
         <HelpTip help="cr-reextract" />
       </div>
+      <details className={css.rxFields} open>
+        <summary className={css.rxFieldsHead}>
+          Fields{changes ? ` · ${changes} changed` : ""}
+        </summary>
+        <ul className={css.rxFieldsList}>
+          {summaries.map((f) => (
+            <li key={f.field} className={css.rxField}>
+              <div className={css.rxFieldHead}>
+                <span className={css.mono}>{f.field}</span>
+                <span className={`tag tag-neutral ${css.rxType}`}>{f.type}</span>
+                <span className={css.rxFill} data-low={fillLow(f.filled, total) || undefined}>
+                  {f.filled}/{total}
+                </span>
+                <span className={css.rxSample} title={f.sample}>
+                  {f.sample || "—"}
+                </span>
+              </div>
+              <input
+                className={`input ${css.rxInput}`}
+                aria-label={`Description of ${f.field}`}
+                placeholder="What this field holds"
+                maxLength={200}
+                value={texts[f.field] ?? ""}
+                data-edited={f.field in changed || undefined}
+                onChange={(e) => setTexts({ ...texts, [f.field]: e.target.value })}
+              />
+            </li>
+          ))}
+        </ul>
+        <p className={css.rxFieldsNote}>
+          Changed descriptions are sent to the new run; pages are not fetched again.
+        </p>
+      </details>
       <ForkModelGroup run={detail} step="extract" base={base} value={model} onChange={setModel} />
       <div className={`dialog-actions ${css.rxActions}`}>
         <span className={css.rxCreates}>

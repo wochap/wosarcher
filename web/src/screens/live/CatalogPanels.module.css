@@ -369,6 +369,44 @@
   color: var(--faint);
 }
 
+.fillItem {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.fillTip {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: help;
+}
+
+.sample {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-left: calc(min(104px, 30%) + 8px);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sampleText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sampleNone {
+  margin-left: calc(min(104px, 30%) + 8px);
+  font-size: 12px;
+  color: var(--color-warn);
+}
+
 .fillRow {
   display: grid;
   grid-template-columns: minmax(72px, 104px) minmax(0, 1fr) 36px;

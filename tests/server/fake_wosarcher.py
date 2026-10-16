@@ -62,7 +62,7 @@ from wosarcher.models import (
     Structure,
     UsageTotals,
 )
-from wosarcher.store import RunStore
+from wosarcher.store import RunStore, described
 
 MODES = ("ok", "slow", "crash", "ignore-term", "bad-line", "huge-stderr", "early-exit", "partial-kill", "ask")
 CHUNKS = 20
@@ -79,6 +79,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     fork = commands.add_parser("fork")
     fork.add_argument("parent")
     fork.add_argument("--from", dest="from_stage", required=True)
+    fork.add_argument("--describe", action="append", default=[])
     for command in (run, fork):
         command.add_argument("--run-id", required=True)
         command.add_argument("--until")
@@ -149,7 +150,9 @@ def raised(parent: RunRecord, args: argparse.Namespace) -> Structure | None:
         return None
     flags = {"max_depth": args.max_depth, "max_nodes": args.max_nodes, "pages_per_node": args.pages_per_node}
     limits = parent.request.structure.limits.model_copy(update={k: v for k, v in flags.items() if v is not None})
-    return parent.request.structure.model_copy(update={"limits": limits})
+    structure = parent.request.structure.model_copy(update={"limits": limits})
+    texts = dict(item.split("=", 1) for item in args.describe)
+    return described(structure, texts) if texts else structure
 
 
 def catalog(store: RunStore, record: RunRecord, first: str | None) -> int:

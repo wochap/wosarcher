@@ -238,6 +238,41 @@ def test_catalog_fork_from_extract(client: TestClient, runs_dir: Path) -> None:
     assert "--max-depth" not in argv(runs_dir, response.json()["run_id"])
 
 
+def test_reextract_with_new_descriptions(client: TestClient, runs_dir: Path) -> None:
+    parent = finished_catalog(client)
+    body = {"from": "extract", "fields": {"head_name": "Current minister's full name"}}
+    response = client.post(f"/api/runs/{parent}/fork", json=body)
+    assert response.status_code == 201, response.text
+    child = response.json()["run_id"]
+    finished(client, child)
+    args = argv(runs_dir, child)
+    assert args[args.index("--describe") + 1] == "head_name=Current minister's full name"
+    made = json.loads((runs_dir / child / "structure.json").read_text())
+    old = json.loads((runs_dir / parent / "structure.json").read_text())
+    by_name = {field["name"]: field for field in made["fields"]}
+    assert by_name["head_name"]["description"] == "Current minister's full name"
+    others = [f for f in made["fields"] if f["name"] != "head_name"]
+    assert others == [f for f in old["fields"] if f["name"] != "head_name"]
+    record = json.loads((runs_dir / child / "request.json").read_text())
+    recorded = {f["name"]: f for f in record["request"]["structure"]["fields"]}
+    assert recorded["head_name"]["description"] == "Current minister's full name"
+
+
+def test_reextract_unknown_field_422(client: TestClient) -> None:
+    parent = finished_catalog(client)
+    response = client.post(f"/api/runs/{parent}/fork", json={"from": "extract", "fields": {"minister": "x"}})
+    assert response.status_code == 422
+    assert "fields.minister" in response.json()["detail"]
+
+
+def test_fields_on_expand_fork_422(client: TestClient) -> None:
+    parent = finished_catalog(client)
+    body = {"from": "expand", "limits": {"max_depth": 4}, "fields": {"name": "x"}}
+    response = client.post(f"/api/runs/{parent}/fork", json=body)
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("fields:")
+
+
 def test_research_fork_limits_422(client: TestClient, runs_dir: Path) -> None:
     on_disk(runs_dir, "r", ends=True)
     response = client.post("/api/runs/r/fork", json={"from": "write", "limits": {"max_depth": 4}})

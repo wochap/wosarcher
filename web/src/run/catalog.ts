@@ -189,6 +189,8 @@ export type CatalogPhase = {
   progress?: { done: number; total: number };
 };
 
+export type FieldSample = { value: unknown; url: string | null };
+
 export type CatalogLive = {
   fields: G.StructureFieldInfo[];
   seeds: number;
@@ -199,6 +201,8 @@ export type CatalogLive = {
   order: string[];
   /** Extracted node IDs, newest first, with the event time. */
   records: { id: string; ts: string }[];
+  /** The first non-null value found per field, with its source URL; never replaced. */
+  samples: Record<string, FieldSample>;
   failed: number;
   /** The wave running (or last run). */
   wave: number;
@@ -219,6 +223,7 @@ export function initialCatalog(): CatalogLive {
     nodes: {},
     order: [],
     records: [],
+    samples: {},
     failed: 0,
     wave: 0,
     wavesDone: 0,
@@ -339,7 +344,12 @@ export function catalogReducer(state: CatalogLive, event: RunEvent): CatalogLive
         { id: d.node_id, ts: event.ts },
         ...state.records.filter((r) => r.id !== d.node_id),
       ];
-      return { ...next, records };
+      const samples = { ...state.samples };
+      for (const [name, value] of Object.entries(d.record)) {
+        if (value == null || value === "" || samples[name]) continue;
+        samples[name] = { value, url: d.sources?.[name] ?? null };
+      }
+      return { ...next, records, samples };
     }
     case "node.failed": {
       const known = state.nodes[event.data.node_id];

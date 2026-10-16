@@ -117,6 +117,19 @@ StructureOption = Annotated[
 MaxDepthOption = Annotated[int | None, typer.Option("--max-depth", help="Catalog limit: deepest node level.")]
 MaxNodesOption = Annotated[int | None, typer.Option("--max-nodes", help="Catalog limit: nodes in the run.")]
 PagesPerNodeOption = Annotated[int | None, typer.Option("--pages-per-node", help="Catalog limit: pages per node.")]
+DescribeOption = Annotated[
+    list[str] | None, typer.Option("--describe", help="Catalog fork from extract: FIELD=TEXT, a new description.")
+]
+
+
+def described_fields(describe: list[str] | None) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for item in describe or []:
+        name, sep, text = item.partition("=")
+        if not sep:
+            raise fail(f"--describe {item!r}: expected FIELD=TEXT", 2)
+        found[name] = text
+    return found
 
 
 def catalog_limits(max_depth: int | None, max_nodes: int | None, pages_per_node: int | None) -> dict[str, int]:
@@ -430,6 +443,7 @@ def fork(
     max_depth: MaxDepthOption = None,
     max_nodes: MaxNodesOption = None,
     pages_per_node: PagesPerNodeOption = None,
+    describe: DescribeOption = None,
     run_id: RunIdOption = None,
     as_json: JsonOption = False,
     origin: OriginOption = "cli",
@@ -500,6 +514,7 @@ def fork(
             token_name=token,
             lock=True,
             limits=caps,
+            fields=described_fields(describe),
         )
     except RunStoreError as error:
         raise fail(error, 2) from None

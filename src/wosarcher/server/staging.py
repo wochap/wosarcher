@@ -80,6 +80,8 @@ class StagedRun(RunCreate):
     """Recorded in the run's `request.json`; None for forks."""
     limits: LimitsPatch = LimitsPatch()
     """A catalog fork's raised limits, emitted as the limit flags."""
+    fields: dict[str, str] = Field(default_factory=dict[str, str])
+    """A catalog fork's new field descriptions, emitted as `--describe` flags."""
 
     @model_validator(mode="before")
     @classmethod
@@ -254,6 +256,7 @@ def stage_fork(
         writing_options=merged(writing, request.writing),
         writing_flags=request.writing.model_dump(exclude_none=True),
         limits=request.limits,
+        fields=request.fields,
         parent=parent.run_id,
         from_stage=request.from_stage,
         version=parent.version + 1,
@@ -387,6 +390,10 @@ def limit_flags(staged: StagedRun) -> list[str]:
     return [flag for name, value in raised for flag in (LIMIT_FLAGS[name], str(value))]
 
 
+def describe_flags(staged: StagedRun) -> list[str]:
+    return [flag for name, text in staged.fields.items() for flag in ("--describe", f"{name}={text}")]
+
+
 def build_run_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
     argv = [*command, "run", staged.query, "--run-id", staged.run_id, "--sources", staged.resolved_sources]
     if staged.until:
@@ -405,7 +412,7 @@ def build_fork_argv(command: list[str], staged: StagedRun) -> list[str]:
         argv += ["--until", staged.until]
     if staged.profile:
         argv += ["--profile", staged.profile]
-    return argv + use_flags(staged) + limit_flags(staged) + set_flags(staged)
+    return argv + use_flags(staged) + limit_flags(staged) + describe_flags(staged) + set_flags(staged)
 
 
 def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[str]:
