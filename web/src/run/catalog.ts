@@ -6,6 +6,7 @@ import type {
   DomainLists,
   FieldType,
   Limits,
+  QuestionsPatch,
   RunCreate,
   RunEvent,
   Structure,
@@ -90,6 +91,8 @@ export type CatalogForm = {
   choice: ProfileChoice;
   /** The overridden writing fields; sent only when the output wants a report. */
   writing?: Partial<WritingOptions>;
+  /** The Questions row's `questions`. */
+  questions?: QuestionsPatch;
 };
 
 /** `POST /api/runs` for a catalog: the brief as `query`, the structure, and the shared fields. */
@@ -110,6 +113,7 @@ export function catalogRequest(form: CatalogForm): RunCreate {
   if (form.writing && wantsReport(structure.output) && Object.keys(form.writing).length) {
     request.writing = form.writing;
   }
+  if (form.questions) request.questions = form.questions;
   if (Object.keys(form.domains).length) request.domains = form.domains;
   return { ...request, ...profilePatch(form.choice, KIND_STEPS.catalog) };
 }

@@ -1,9 +1,11 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from wosarcher.models import (
+    Answer,
     Attachment,
     Candidate,
     CatalogRecord,
@@ -18,16 +20,20 @@ from wosarcher.models import (
     ExtractedRecord,
     FetchResult,
     Hit,
+    InputAnsweredData,
     LoadResult,
     Message,
     Node,
     Page,
     Passage,
+    Pause,
     Plan,
     PrefilterResult,
     ProviderHealth,
     Query,
     QueryScores,
+    Question,
+    QuestionOption,
     Reference,
     Report,
     RunRecord,
@@ -42,6 +48,8 @@ from wosarcher.models import (
     Structure,
     WaveEntry,
     WritingOptions,
+    answer_text,
+    check_answers,
     chunk_id,
     file_source_id,
     is_node_query_id,
@@ -462,3 +470,84 @@ def test_record_language_default_and_invalid() -> None:
     assert Structure.model_validate(structure_data()).record_language == ""
     with pytest.raises(ValidationError, match="record_language"):
         Structure.model_validate(structure_data(record_language="spanish"))
+
+
+# Run questions
+
+
+def options(*recommended: bool) -> list[QuestionOption]:
+    return [QuestionOption(id="abcdef"[n], label=f"Option {n}", recommended=mark) for n, mark in enumerate(recommended)]
+
+
+def test_question_without_recommendation_takes_the_first() -> None:
+    question = Question(id="q1", text="t", kind="single", options=options(False, False))
+    assert question.recommended_ids() == ["a"]
+
+
+def test_question_with_several_recommendations_takes_the_first_marked() -> None:
+    question = Question(id="q1", text="t", kind="confirm", options=options(False, True, True))
+    assert question.recommended_ids() == ["b"]
+
+
+def test_multi_keeps_any_number_of_recommendations() -> None:
+    assert Question(id="q1", text="t", kind="multi", options=options(True, True, False)).recommended_ids() == ["a", "b"]
+    assert Question(id="q1", text="t", kind="multi", options=options(False, False)).recommended_ids() == []
+
+
+def test_confirm_cannot_allow_other() -> None:
+    with pytest.raises(ValidationError, match="confirm"):
+        Question(id="q1", text="t", kind="confirm", options=options(True, False), allow_other=True)
+
+
+def test_pause_round_trip() -> None:
+    question = Question(id="q1", text="t", kind="multi", options=options(True, False), allow_other=True)
+    pause = Pause(
+        id=1,
+        kind="round",
+        after=2,
+        questions=[question],
+        created=datetime(2026, 1, 1, tzinfo=UTC),
+        timeout=60,
+        max_wait=1800,
+        answers=[Answer(question_id="q1", other="Add a query")],
+        answered_by="user",
+    )
+    assert Pause.model_validate_json(pause.model_dump_json()) == pause
+
+
+def test_pause_needs_one_to_four_questions() -> None:
+    question = Question(id="q1", text="t", kind="single", options=options(True, False))
+    created = datetime(2026, 1, 1, tzinfo=UTC)
+    with pytest.raises(ValidationError):
+        Pause(id=1, kind="clarify", questions=[], created=created, timeout=0, max_wait=60)
+    with pytest.raises(ValidationError):
+        Pause(id=1, kind="clarify", questions=[question] * 5, created=created, timeout=0, max_wait=60)
+
+
+def test_unknown_event_field_rejected() -> None:
+    with pytest.raises(ValidationError, match="surprise"):
+        InputAnsweredData.model_validate(
+            {"pause_id": 1, "answers": [], "answered_by": "user", "seconds_waited": 1, "surprise": 1}
+        )
+
+
+def test_check_answers() -> None:
+    question = Question(id="q1", text="t", kind="single", options=options(True, False))
+    multi = Question(id="q2", text="t", kind="multi", options=options(True, False), allow_other=True)
+    ok = [Answer(question_id="q1", option_ids=["a"]), Answer(question_id="q2", other="Diario Oficial")]
+    check_answers([question, multi], ok)
+    for bad, text in [
+        ([ok[0]], "q2: no answer"),
+        ([Answer(question_id="q1", option_ids=["z"]), ok[1]], "q1: unknown option z"),
+        ([Answer(question_id="q1", option_ids=["a", "b"]), ok[1]], "q1: single takes one option"),
+        ([Answer(question_id="q1", option_ids=["a"], other="x"), ok[1]], "q1: does not allow other"),
+    ]:
+        with pytest.raises(ValueError, match=text):
+            check_answers([question, multi], bad)
+
+
+def test_answer_text() -> None:
+    question = Question(id="q1", text="t", kind="multi", options=options(True, False), allow_other=True)
+    assert answer_text(question, Answer(question_id="q1", option_ids=["a", "b"], other=" more ")) == (
+        "Option 0, Option 1, more"
+    )

@@ -306,6 +306,19 @@ def catalog_structure(structure: Structure | dict[str, Any], catalog: CatalogCon
     return Structure.model_validate(data)
 
 
+class QuestionsConfig(Block):
+    """Run questions: the pauses a run may make and how long each waits."""
+
+    clarify: StrictBool = True
+    """Ask about the brief after the plan (or the draft) and before any search."""
+    rounds: StrictBool = True
+    """Ask between research rounds and catalog waves."""
+    timeout: int = Field(default=60, ge=0, le=3600)
+    """Seconds without a user present before a pause continues with the recommended answers; 0 does not wait."""
+    max_wait: int = Field(default=1800, ge=60, le=86400)
+    """Seconds after which a pause continues whether or not a user is present."""
+
+
 class RunConfig(Block):
     gpu_policy: Literal["shared", "exclusive"] = "shared"
     runs_dir: Path | None = None
@@ -364,6 +377,7 @@ class Settings(Block):
     select: SelectConfig = SelectConfig()
     research: ResearchConfig = ResearchConfig()
     catalog: CatalogConfig = CatalogConfig()
+    questions: QuestionsConfig = QuestionsConfig()
     run: RunConfig = RunConfig()
     write: WritingOptions = WritingOptions()
     server: ServerConfig = ServerConfig()

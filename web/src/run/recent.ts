@@ -10,6 +10,7 @@ import type {
 } from "../api/types";
 import { type Draft, EMPTY_DRAFT, type RunOptions } from "../app/context";
 import { shortDate } from "../format";
+import type { AskDraft } from "./ask";
 import { depthLabel, researchOf } from "./depth";
 import { recipeOf } from "./format";
 import type { ProfileEdits } from "./profileValues";
@@ -155,6 +156,15 @@ function editsOf(llm: RunCreate["llm"]): ProfileEdits {
   return edits;
 }
 
+/** The Questions row a run's request set: Ask when either pause was on, and its timeout. */
+function askOf(questions: RunCreate["questions"]): AskDraft {
+  const out: AskDraft = {};
+  if (questions?.clarify != null || questions?.rounds != null)
+    out.ask = !!(questions.clarify || questions.rounds);
+  if (questions?.timeout != null) out.timeout = questions.timeout;
+  return out;
+}
+
 /** The entries a patch sets: the API sends its unset fields as null. */
 function present<T extends object>(patch: T | undefined): Partial<T> {
   return Object.fromEntries(Object.entries(patch ?? {}).filter(([, v]) => v != null)) as Partial<T>;
@@ -204,6 +214,7 @@ export function draftFromRun(run: RunSummary, name: string, known: Known): Draft
     searchLanguage: form.search_language ?? "",
     use: profileKnown ? { ...(form.use ?? {}) } : {},
     profileEdits: profileKnown ? editsOf(form.llm) : {},
+    questions: askOf(form.questions),
   };
   if (depth === "custom") {
     const standard = known.depths.find((d) => d.name === "standard");

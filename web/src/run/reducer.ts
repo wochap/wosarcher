@@ -3,7 +3,10 @@
 import { ENDED, LIVE_ONLY, TERMINAL } from "../api/events";
 import type * as G from "../api/generated";
 import type {
+  AnsweredBy,
   KeptPassage,
+  PauseKind,
+  Question,
   RunDetail,
   RunEvent,
   RunKind,
@@ -130,6 +133,33 @@ export type ScoredQuery = {
   items: KeptPassage[];
 };
 
+/** The pause a `waiting` run holds, from `input.needed`. */
+export type OpenPause = {
+  pauseId: number;
+  kind: PauseKind;
+  /** The timeline card that waits: `plan` or `draft` before searching, `gap` or `extract` after. */
+  stage: string;
+  /** The round or wave the pause follows; null for a clarify pause. */
+  after: number | null;
+  context: string;
+  questions: Question[];
+  created: string;
+  /** Seconds the run waits while nobody is present; 0 never times out. */
+  timeout: number;
+  maxWait: number;
+};
+
+/** An answered pause, from `input.answered`. */
+export type AnsweredPause = {
+  pauseId: number;
+  kind: PauseKind;
+  stage: string;
+  after: number | null;
+  count: number;
+  answeredBy: AnsweredBy;
+  secondsWaited: number;
+};
+
 export type RunView = {
   runId: string;
   lastSeq: number;
@@ -138,6 +168,10 @@ export type RunView = {
   kind?: RunKind;
   /** A catalog run's frontier, records, and phases; null for research runs. */
   catalog: CatalogLive | null;
+  /** The open pause while the run is `waiting`. */
+  pause: OpenPause | null;
+  /** Pauses answered so far, by whom and after how long. */
+  answered: AnsweredPause[];
   query?: string;
   profile?: string;
   parentRunId?: string | null;
@@ -188,6 +222,8 @@ export function initialRunView(runId: string): RunView {
     lastSeq: 0,
     status: "queued",
     catalog: null,
+    pause: null,
+    answered: [],
     phases,
     subQueries: [],
     earlyHits: {},
@@ -292,6 +328,14 @@ function roundStarted(state: RunView, stage: PhaseId, round: number): RunView {
   return withRound({ ...state, rounds }, round, { state: "running", stage });
 }
 
+/** The card a pause holds: the event's stage, else by kind (catalog runs name Draft and Extract). */
+function pauseStage(kind: PauseKind, stage: string | null | undefined, state: RunView): string {
+  if (stage) return stage;
+  const catalog = state.kind === "catalog";
+  if (kind === "clarify") return catalog ? "draft" : "plan";
+  return catalog ? "extract" : "gap";
+}
+
 function apply(state: RunView, event: RunEvent): RunView {
   switch (event.type) {
     case "run.queued":
@@ -312,7 +356,7 @@ function apply(state: RunView, event: RunEvent): RunView {
       };
     }
     case "run.done":
-      return { ...state, status: "done", endedAt: event.ts };
+      return { ...state, status: "done", endedAt: event.ts, pause: null };
     case "run.failed": {
       const stage = event.data.stage ?? "";
       const failed = withPhase(state, stage, { state: "failed", error: event.data.error });
@@ -320,11 +364,17 @@ function apply(state: RunView, event: RunEvent): RunView {
         ...stopRunning(failed, "cancelled"),
         status: "failed",
         endedAt: event.ts,
+        pause: null,
         failure: { stage, error: event.data.error },
       };
     }
     case "run.cancelled":
-      return { ...stopRunning(state, "cancelled"), status: "cancelled", endedAt: event.ts };
+      return {
+        ...stopRunning(state, "cancelled"),
+        status: "cancelled",
+        endedAt: event.ts,
+        pause: null,
+      };
     case "stage.started": {
       const round = event.data.round ?? 1;
       const phase = isPhase(event.stage) ? state.phases[event.stage] : undefined;
@@ -506,6 +556,41 @@ function apply(state: RunView, event: RunEvent): RunView {
       const research = { planned: d.planned, ran: d.ran, reason: d.reason, note: d.note };
       return { ...state, rounds, research };
     }
+    case "input.needed": {
+      const d = event.data;
+      const pause: OpenPause = {
+        pauseId: d.pause_id,
+        kind: d.kind,
+        stage: pauseStage(d.kind, event.stage, state),
+        after: d.after ?? null,
+        context: d.context ?? "",
+        questions: d.questions,
+        created: d.created,
+        timeout: d.timeout,
+        maxWait: d.max_wait,
+      };
+      return { ...state, status: "waiting", pause };
+    }
+    case "input.answered": {
+      const d = event.data;
+      const open = state.pause?.pauseId === d.pause_id ? state.pause : null;
+      const note: AnsweredPause = {
+        pauseId: d.pause_id,
+        kind: open?.kind ?? "round",
+        stage: open?.stage ?? pauseStage("round", event.stage, state),
+        after: open?.after ?? null,
+        count: d.answers.length,
+        answeredBy: d.answered_by,
+        secondsWaited: d.seconds_waited,
+      };
+      const answered = [...state.answered.filter((a) => a.pauseId !== d.pause_id), note];
+      return {
+        ...state,
+        status: state.status === "waiting" ? "running" : state.status,
+        pause: open ? null : state.pause,
+        answered,
+      };
+    }
     case "report.delta":
       return { ...state, report: state.report + event.data.text };
     case "report.snapshot":
@@ -556,8 +641,9 @@ export function isEnded(status: RunStatus): boolean {
 export type RunEnd = Pick<RunDetail, "status"> & Partial<Pick<RunDetail, "error" | "end_stage">>;
 
 /** Sets an ended status from the server's summary on a view that still shows the run open. */
-export function applySummary(state: RunView, summary: RunEnd): RunView {
-  if (!isEnded(summary.status) || isEnded(state.status)) return state;
+export function applySummary(held: RunView, summary: RunEnd): RunView {
+  if (!isEnded(summary.status) || isEnded(held.status)) return held;
+  const state = { ...held, pause: null };
   if (summary.status === "failed") {
     const stage = summary.end_stage ?? "";
     const error = summary.error ?? "";

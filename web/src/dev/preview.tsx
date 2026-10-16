@@ -14,6 +14,12 @@ import { finished } from "../test/fixtures/finished";
 import { live } from "../test/fixtures/live";
 import { loading } from "../test/fixtures/loading";
 import { liveApi, liveCli, queued, queuedCli } from "../test/fixtures/origins";
+import {
+  finishedTimeout,
+  liveClarify,
+  liveClarifyIdle,
+  liveRoundInput,
+} from "../test/fixtures/questions";
 import { reconnecting } from "../test/fixtures/reconnecting";
 import { type Fixture, otherRuns, sourceViews, TRUNCATED_SOURCE } from "../test/fixtures/sample";
 import { versions } from "../test/fixtures/versions";
@@ -56,6 +62,10 @@ const SCENARIOS: Record<string, Scenario> = {
   "cancel-cli": { ...liveCli, press: "Cancel" },
   "live-api": liveApi,
   reconnecting,
+  "live-clarify": liveClarify,
+  "live-clarify-idle": liveClarifyIdle,
+  "live-round-input": liveRoundInput,
+  "finished-timeout": finishedTimeout,
   failure,
   cancelled,
   finished,
@@ -165,6 +175,7 @@ function previewSocket(
       if (TERMINAL.has(event.type)) return this.onclose?.({ code: 1000 });
       this.later(event.type === "report.delta" ? 40 : 160, () => this.play(list, i + 1));
     }
+    send() {}
     close() {
       for (const timer of this.timers) clearTimeout(timer);
     }

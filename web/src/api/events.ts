@@ -19,6 +19,7 @@ type Socket = {
   onopen: (() => void) | null;
   onmessage: ((message: { data: string }) => void) | null;
   onclose: ((close: { code: number }) => void) | null;
+  send(data: string): void;
   close(): void;
 };
 export type SocketFactory = new (url: string) => Socket;
@@ -65,6 +66,16 @@ export class RunEvents {
     // Runs beside the first socket; a failure here only matters for a 404.
     this.summary().catch(() => {});
     this.open(0);
+  }
+
+  /** Tells the server the user is here (`{"type": "presence"}`); dropped without an open socket. */
+  presence() {
+    if (this.conn.state === "closed" || this.conn.state === "unavailable") return;
+    try {
+      this.socket?.send(JSON.stringify({ type: "presence" }));
+    } catch {
+      // A socket that is not open yet or any more: the next presence follows.
+    }
   }
 
   /** Stops for good: closes the socket and cancels a pending reconnect. */

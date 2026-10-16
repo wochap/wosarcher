@@ -199,3 +199,22 @@ GapThinkingOption = Annotated[str | None, thinking("gap")]
 WriteThinkingOption = Annotated[str | None, thinking("write")]
 DraftThinkingOption = Annotated[str | None, thinking("draft")]
 ExtractThinkingOption = Annotated[str | None, thinking("extract")]
+ClarifyOption = Annotated[
+    bool, typer.Option("--clarify", help="Let the run ask questions about the brief before it searches.")
+]
+InteractiveOption = Annotated[
+    bool,
+    typer.Option(
+        "--interactive", help="Ask which follow-ups to search, and whether to go on, between rounds or waves."
+    ),
+]
+InputTimeoutOption = Annotated[
+    int | None,
+    typer.Option(
+        "--input-timeout",
+        min=0,
+        max=3600,
+        metavar="SECONDS",
+        help="Seconds a question waits for an answer before the run goes on with the recommended one (default 0).",
+    ),
+]

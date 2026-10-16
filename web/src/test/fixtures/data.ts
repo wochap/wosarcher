@@ -31,6 +31,7 @@ export const settings: ServerSettings = {
   sources: "both",
   domains: { allow: [], block: [] },
   max_concurrent_runs: 2,
+  questions: { clarify: true, rounds: true, timeout: 60, max_wait: 1800 },
 };
 
 /** Slots as in prototype scenario `settings`: a web run and a CLI run hold both, one waits. */

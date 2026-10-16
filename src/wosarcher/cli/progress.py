@@ -1,5 +1,7 @@
 """Live progress on standard error: one row per stage, fed by run events."""
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from rich.console import Console
@@ -14,6 +16,8 @@ from wosarcher.models import (
     CatalogDone,
     Event,
     GapReady,
+    InputAnswered,
+    InputNeeded,
     PageFailed,
     PageFetched,
     ResearchDone,
@@ -68,6 +72,15 @@ class ProgressView:
         self.update(event)
         self.live.update(self.table(), refresh=True)
 
+    @contextmanager
+    def paused(self) -> Generator[None]:
+        """Stop redrawing while the user answers a question at the prompt."""
+        self.live.stop()
+        try:
+            yield
+        finally:
+            self.live.start()
+
     def show_notice(self, text: str) -> None:
         self.notice = text
         self.live.update(self.table(), refresh=True)
@@ -81,6 +94,10 @@ class ProgressView:
         if self.catalog and self.catalog_update(event, row):
             return
         match event:
+            case InputNeeded():
+                row.state = "waiting for you"
+            case InputAnswered():
+                row.state = "running"
             case StageStarted():
                 row.state, row.device, row.provider = "running", event.data.device or "", event.data.provider
                 if self.rounds > 1 and event.stage in LOOP_STAGES:

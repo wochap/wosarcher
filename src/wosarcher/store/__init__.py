@@ -26,10 +26,16 @@ from wosarcher.models import (
     CatalogDone,
     CatalogRecord,
     Event,
+    InputAnswered,
+    InputNeeded,
     Limits,
     Node,
+    OpenPause,
     Origin,
+    Pause,
+    PendingPause,
     Plan,
+    QuestionsAnswered,
     ReasoningOptions,
     ResearchDone,
     RunCancelled,
@@ -97,6 +103,21 @@ LOCK = ".lock"
 
 
 TAIL_BLOCK = 8192
+INPUT_DIR = "input"
+CLARIFICATIONS = "\n\nClarifications:\n"
+"""What precedes the clarifications block the clarify pause appends to a request's query."""
+
+
+def plain_query(query: str) -> str:
+    """The query without the clarifications block."""
+    return query.split(CLARIFICATIONS, 1)[0]
+
+
+def deadline_of(pause: Pause, held: float | None) -> datetime:
+    """The later of the pause's creation and the last presence, plus the timeout, capped at creation plus `max_wait`."""
+    created = pause.created.timestamp()
+    start = created if held is None else max(created, held)
+    return datetime.fromtimestamp(min(start + pause.timeout, created + pause.max_wait), UTC)
 
 
 def line_seq(line: bytes) -> int | None:
@@ -626,7 +647,99 @@ class RunStore:
         return END_STATUS.get(runs[-1] if runs else "") or self.live(run_id)
 
     def live(self, run_id: str) -> RunStatus:
-        return "running" if self.is_running(run_id) else "interrupted"
+        if not self.is_running(run_id):
+            return "interrupted"
+        return "waiting" if self.open_pause(run_id) is not None else "running"
+
+    # Questions
+
+    def input_dir(self, run_id: str) -> Path:
+        return self.run_dir(run_id) / INPUT_DIR
+
+    def write_pause(self, run_id: str, pause: Pause) -> None:
+        (self.input_dir(run_id)).mkdir(exist_ok=True)
+        self.write_artifact(run_id, f"{INPUT_DIR}/{pause.id}.json", pause)
+
+    def read_pause(self, run_id: str, pause_id: int) -> Pause | None:
+        path = self.input_dir(run_id) / f"{pause_id}.json"
+        try:
+            return Pause.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def read_pauses(self, run_id: str) -> list[Pause]:
+        """Every pause of the run, in order."""
+        found = [self.read_pause(run_id, int(path.name.split(".")[0])) for path in self.pause_files(run_id)]
+        return [pause for pause in found if pause is not None]
+
+    def pause_files(self, run_id: str) -> list[Path]:
+        folder = self.input_dir(run_id)
+        if not folder.is_dir():
+            return []
+        files = [path for path in folder.glob("*.json") if path.name.removesuffix(".json").isdigit()]
+        return sorted(files, key=lambda path: int(path.name.removesuffix(".json")))
+
+    def write_answer(self, run_id: str, pause_id: int, answered: QuestionsAnswered) -> None:
+        self.write_artifact(run_id, f"{INPUT_DIR}/{pause_id}.answer.json", answered)
+
+    def read_answer(self, run_id: str, pause_id: int) -> QuestionsAnswered | None:
+        path = self.input_dir(run_id) / f"{pause_id}.answer.json"
+        try:
+            return QuestionsAnswered.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def touch_hold(self, run_id: str, pause_id: int) -> None:
+        """Presence: the hold file's modification time moves the pause's deadline."""
+        path = self.input_dir(run_id) / f"{pause_id}.hold"
+        path.touch()
+        os.utime(path)
+
+    def hold_time(self, run_id: str, pause_id: int) -> float | None:
+        try:
+            return (self.input_dir(run_id) / f"{pause_id}.hold").stat().st_mtime
+        except OSError:
+            return None
+
+    def open_pause_id(self, run_id: str) -> int | None:
+        """The pause of the log's last `input.needed` when no `input.answered` follows it."""
+        last: InputNeeded | InputAnswered | None = None
+        for event in self.read_events(run_id):
+            if isinstance(event, InputNeeded | InputAnswered):
+                last = event
+        return last.data.pause_id if isinstance(last, InputNeeded) else None
+
+    def open_pause(self, run_id: str) -> OpenPause | None:
+        """The open pause with the deadline the engine enforces now; None when the run is not paused."""
+        pause_id = self.open_pause_id(run_id)
+        if pause_id is None:
+            return None
+        pause = self.read_pause(run_id, pause_id)
+        if pause is None:
+            return None
+        return OpenPause(
+            pause_id=pause.id,
+            kind=pause.kind,
+            after=pause.after,
+            context=pause.context,
+            questions=pause.questions,
+            created=pause.created,
+            timeout=pause.timeout,
+            max_wait=pause.max_wait,
+            deadline=deadline_of(pause, self.hold_time(run_id, pause.id)),
+        )
+
+    def pending(self, run_id: str) -> PendingPause | None:
+        found = self.open_pause(run_id)
+        if found is None:
+            return None
+        return PendingPause(
+            id=found.pause_id,
+            kind=found.kind,
+            after=found.after,
+            questions=len(found.questions),
+            deadline=found.deadline,
+        )
 
     def read_costs(self, run_id: str) -> RunCosts | None:
         path = self.run_dir(run_id) / "costs.json"
@@ -637,6 +750,7 @@ class RunStore:
         events = [event for event in self.read_events(record.run_id) if event.type.startswith("run.")]
         ended_status = END_STATUS.get(events[-1].type) if events else None
         status = ended_status or self.live(record.run_id)
+        pending = self.pending(record.run_id) if status == "waiting" else None
         started = next((event.ts for event in events if event.type == "run.started"), None)
         duration = (events[-1].ts - started).total_seconds() if started and ended_status else None
         costs = self.read_costs(record.run_id)
@@ -650,7 +764,7 @@ class RunStore:
         structure = record.request.structure
         return RunSummary(
             run_id=record.run_id,
-            query=record.request.query,
+            query=plain_query(record.request.query),
             status=status,
             created=record.created_at,
             parent_run_id=record.parent_run_id,
@@ -683,6 +797,7 @@ class RunStore:
             token_name=record.token_name,
             form=record.form,
             attachments=attachment_infos(self.run_dir(record.run_id) / "attachments"),
+            pending=pending,
         )
 
     def node_count(self, run_id: str) -> int:

@@ -32,6 +32,7 @@ from wosarcher.cli.options import (
     AllowDomainOption,
     AttachOption,
     BlockDomainOption,
+    ClarifyOption,
     ClientDepthOption,
     ClientProfileOption,
     ContextTokensOption,
@@ -42,6 +43,8 @@ from wosarcher.cli.options import (
     FromOption,
     GapContextTokensOption,
     GapThinkingOption,
+    InputTimeoutOption,
+    InteractiveOption,
     JsonOption,
     LanguageOption,
     MarkerOption,
@@ -72,6 +75,7 @@ from wosarcher.cli.options import (
     use_map,
 )
 from wosarcher.cli.progress import ProgressView
+from wosarcher.cli.questions import Questioner, question_flags
 from wosarcher.models import (
     KIND_STEPS,
     CatalogRecord,
@@ -79,6 +83,7 @@ from wosarcher.models import (
     DomainPatch,
     Event,
     ForkCreate,
+    InputNeeded,
     LimitsPatch,
     LLMPatch,
     ReasoningPatch,
@@ -152,6 +157,8 @@ class Follower:
         self.finished: set[str] = set()
         self.terminal: Event | None = None
         self.last = 0
+        self.pause: InputNeeded | None = None
+        """The last `input.needed` not yet shown to the user."""
 
     def notify(self, text: str) -> None:
         if self.view is not None:
@@ -176,12 +183,16 @@ class Follower:
             self.finished.add(event.stage)
         if event.type in TERMINAL:
             self.terminal = event
+        self.pause = event if isinstance(event, InputNeeded) else self.pause
         for listener in self.listeners:
             listener(event)
 
 
-async def follow(client: Api, run_id: str, follower: Follower) -> None:
-    """Read the run's events until a terminal one; cancel the run on SIGINT or SIGTERM."""
+async def follow(client: Api, run_id: str, follower: Follower, questioner: Questioner | None = None) -> None:
+    """Read the run's events until a terminal one; cancel the run on SIGINT or SIGTERM.
+
+    A pause is shown through `questioner`, which prompts, or prints the pause as JSON when there is no terminal.
+    """
     loop = asyncio.get_running_loop()
     cancelling: list[asyncio.Future[object]] = []
 
@@ -197,6 +208,9 @@ async def follow(client: Api, run_id: str, follower: Follower) -> None:
                 follower(event)
                 if follower.terminal is not None:
                     break
+                if follower.pause is not None and questioner is not None:
+                    pause, follower.pause = follower.pause, None
+                    await loop.run_in_executor(None, questioner, client, run_id, pause.data)
             if follower.terminal is None:
                 await asyncio.sleep(RECONNECT_SECONDS)
         for future in cancelling:
@@ -240,7 +254,8 @@ def watch(
             listeners.append(view)
         listeners.extend(diagnostics(view_shown=view is not None))
         follower = Follower(listeners, view)
-        asyncio.run(follow(client, created.run_id, follower))
+        questioner = Questioner(paused=view.paused if view is not None else None)
+        asyncio.run(follow(client, created.run_id, follower, questioner))
     assert follower.terminal is not None
     status = STATUS[follower.terminal.type]
     if kind == "catalog":
@@ -344,6 +359,9 @@ def run(
     plan_thinking: PlanThinkingOption = None,
     gap_thinking: GapThinkingOption = None,
     write_thinking: WriteThinkingOption = None,
+    clarify: ClarifyOption = False,
+    interactive: InteractiveOption = False,
+    input_timeout: InputTimeoutOption = None,
     as_json: JsonOption = False,
 ) -> None:
     """Research QUERY on the daemon and print the report (or stop early with --until)."""
@@ -384,6 +402,7 @@ def run(
                 (context_tokens, gap_context_tokens),
             ),
             search_language=search_language,
+            questions=question_flags(clarify, interactive, input_timeout),
             set=set_ or [],
         )
     except ValidationError as error:

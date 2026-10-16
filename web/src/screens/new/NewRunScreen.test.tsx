@@ -41,6 +41,7 @@ describe("NewRunScreen", () => {
       profile: "low-vram",
       depth: "standard",
       writing: { format: "report" },
+      questions: { clarify: true, rounds: true },
     });
     expect(files).toEqual([]);
     expect(window.location.hash).toBe("#/live/r_new1");

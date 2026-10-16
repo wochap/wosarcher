@@ -3,6 +3,7 @@ import type { ServerSettings } from "../../api/types";
 import { useApi } from "../../app/context";
 import page from "../../components/Page.module.css";
 import { ProvidersSection } from "./ProvidersSection";
+import { QuestionsDefaults } from "./QuestionsDefaults";
 import { RunDefaults } from "./RunDefaults";
 import { RunSlots } from "./RunSlots";
 import { SecuritySection } from "./SecuritySection";
@@ -24,6 +25,7 @@ export function SettingsScreen() {
         <RunSlots settings={settings} setSettings={setSettings} />
         <RunDefaults settings={settings} setSettings={setSettings} />
         <WritingDefaults settings={settings} setSettings={setSettings} />
+        <QuestionsDefaults settings={settings} setSettings={setSettings} />
         <SecuritySection />
       </div>
     </div>

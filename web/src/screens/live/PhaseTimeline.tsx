@@ -5,6 +5,7 @@ import {
   Circle,
   CircleNotch,
   Cpu,
+  Hourglass,
   type Icon,
   Recycle,
   StopCircle,
@@ -15,6 +16,7 @@ import { HelpTip } from "../../components/HelpTip";
 import type { Help } from "../../components/help";
 import { fmtK } from "../../run/format";
 import { isFallback, methodOf, modelOf } from "../../run/providers";
+import type { AskState } from "../../run/questions";
 import {
   LOOP_PHASES,
   PHASES,
@@ -314,13 +316,15 @@ type Props = {
   candidates?: number;
   /** The run's `research.rounds`; the Gap card and round texts show only above 1. */
   rounds?: number;
+  /** The run's questions: the card that waits for the user and the answered pauses' notes. */
+  ask?: AskState | null;
 };
 
 /** The phases a run shows: Gap only with more than one round. */
 export const shownPhases = (rounds: number): readonly PhaseId[] =>
   rounds > 1 ? PHASES : PHASES.filter((id) => id !== "gap");
 
-export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
+export function PhaseTimeline({ run, candidates, rounds = 1, ask }: Props) {
   const phases = shownPhases(rounds);
   return (
     <ol aria-label="Phases" className={css.timeline}>
@@ -329,15 +333,23 @@ export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
         const Glyph = ICONS[card.state];
         const label = stageLabel(id);
         const waiting = card.state === "waiting";
+        const asking = ask?.waiting?.stage === id ? ask.waiting : null;
+        const note = asking ? undefined : ask?.stages[id];
         const tag = methodTag(id, run, candidates);
-        const detail =
-          roundDetail(id, run, rounds) ||
-          (id === "prefilter" ? prefilterDetail(run, candidates) : "");
+        const detail = asking
+          ? `${asking.answered} of ${asking.total} answered`
+          : (note?.text ??
+            (roundDetail(id, run, rounds) ||
+              (id === "prefilter" ? prefilterDetail(run, candidates) : "")));
         const filtered = id === "search" ? filteredDetail(run) : "";
         return (
-          <li key={id} className={css.card} data-state={card.state}>
+          <li key={id} className={css.card} data-state={asking ? "asking" : card.state}>
             <div className={css.head}>
-              <Glyph className={css.icon} aria-hidden="true" />
+              {asking ? (
+                <Hourglass className={css.icon} aria-hidden="true" />
+              ) : (
+                <Glyph className={css.icon} aria-hidden="true" />
+              )}
               <span className={css.label}>{label}</span>
               <HelpTip
                 help={`${waiting ? "wait" : "ph"}-${id}`}
@@ -355,16 +367,29 @@ export function PhaseTimeline({ run, candidates, rounds = 1 }: Props) {
                 <span className={css.tagText}>{tag.text}</span>
               </HelpTip>
             )}
-            <div className={css.text}>{card.text}</div>
+            <div className={css.text}>{asking ? "waiting for you" : card.text}</div>
             <TimeRowView run={run} id={id} />
-            {detail && <div className={css.detail}>{detail}</div>}
+            {detail && (
+              <div
+                className={css.detail}
+                data-tone={note?.warn ? "warn" : undefined}
+                title={detail}
+              >
+                {detail}
+              </div>
+            )}
             {filtered && (
               <div className={css.detail} title={filtered}>
                 {filtered}
               </div>
             )}
             <div className={css.track}>
-              <div className={css.bar} style={{ width: `${card.pct}%` }} />
+              <div
+                className={css.bar}
+                style={{
+                  width: `${asking ? Math.round((asking.answered / asking.total) * 100) : card.pct}%`,
+                }}
+              />
             </div>
           </li>
         );

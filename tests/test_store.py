@@ -2,6 +2,7 @@
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,11 +22,18 @@ from wosarcher.config import (
 )
 from wosarcher.models import (
     STAGES,
+    Answer,
     DepthSaveValues,
     DepthUpdate,
     Hit,
+    InputAnsweredData,
+    InputNeededData,
     Page,
+    Pause,
     ProfileUpdate,
+    Question,
+    QuestionOption,
+    QuestionsAnswered,
     RunCancelledData,
     RunCosts,
     RunDoneData,
@@ -632,3 +640,74 @@ async def test_catalog_files_by_output(tmp_path: Path) -> None:
     names = {path.name for path in store.run_dir(run_id).iterdir()}
     assert {"context.json", "report.md", "report.json", "catalog.json"} <= names
     assert "select.jsonl" not in names
+
+
+def pausing(store: RunStore, lock: bool) -> str:
+    """A run whose log ends with `input.needed`, holding its lock when `lock`."""
+    record = store.create(RunRequest(query="q"), "p", [], Settings(), [], lock=lock)
+    run_id = record.run_id
+    question = Question(
+        id="q1",
+        text="Go on?",
+        kind="confirm",
+        options=[QuestionOption(id="a", label="Yes", recommended=True), QuestionOption(id="b", label="No")],
+    )
+    created = datetime.now(UTC)
+    pause = Pause(id=1, kind="round", after=1, questions=[question], created=created, timeout=60, max_wait=1800)
+    store.write_pause(run_id, pause)
+    needed = InputNeededData(
+        pause_id=1, kind="round", after=1, questions=[question], created=created, timeout=60, max_wait=1800
+    )
+    store.append_event(run_id, "input.needed", "gap", needed)
+    return run_id
+
+
+def test_waiting_status_and_pending(store: RunStore) -> None:
+    run_id = pausing(store, lock=True)
+    summary = store.summary(store.read_record(run_id))
+    assert summary.status == "waiting"
+    assert summary.pending is not None
+    assert (summary.pending.id, summary.pending.kind, summary.pending.after, summary.pending.questions) == (
+        1,
+        "round",
+        1,
+        1,
+    )
+    answered = InputAnsweredData(
+        pause_id=1, answers=[Answer(question_id="q1", option_ids=["a"])], answered_by="user", seconds_waited=3
+    )
+    store.append_event(run_id, "input.answered", "gap", answered)
+    assert store.summary(store.read_record(run_id)).status == "running"
+    assert store.summary(store.read_record(run_id)).pending is None
+
+
+def test_killed_while_waiting_is_interrupted(store: RunStore) -> None:
+    run_id = pausing(RunStore(store.runs_dir, store.cache_dir), lock=False)
+    assert store.summary(store.read_record(run_id)).status == "interrupted"
+
+
+def test_deadline_follows_presence(store: RunStore) -> None:
+    run_id = pausing(store, lock=True)
+    open_pause = store.open_pause(run_id)
+    assert open_pause is not None
+    created = open_pause.created.timestamp()
+    assert abs(open_pause.deadline.timestamp() - (created + 60)) < 0.01
+    store.touch_hold(run_id, 1)
+    os.utime(store.input_dir(run_id) / "1.hold", (created + 30, created + 30))
+    moved = store.open_pause(run_id)
+    assert moved is not None
+    assert abs(moved.deadline.timestamp() - (created + 90)) < 0.01
+    os.utime(store.input_dir(run_id) / "1.hold", (created + 5000, created + 5000))
+    capped = store.open_pause(run_id)
+    assert capped is not None
+    assert abs(capped.deadline.timestamp() - (created + 1800)) < 0.01
+
+
+def test_pause_files_listed(store: RunStore) -> None:
+    run_id = pausing(store, lock=True)
+    store.write_answer(
+        run_id, 1, QuestionsAnswered(answers=[Answer(question_id="q1", option_ids=["a"])], answered_by="user")
+    )
+    names = sorted(path.name for path in store.input_dir(run_id).iterdir())
+    assert names == ["1.answer.json", "1.json"]
+    assert [pause.id for pause in store.read_pauses(run_id)] == [1]

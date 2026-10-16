@@ -282,7 +282,11 @@ def test_rerun_copies_attachments(client: TestClient, runs_dir: Path) -> None:
     assert "/.queue/" in args[args.index("--attach") + 1]
     flags = [args[n + 1] for n, flag in enumerate(args) if flag == "--set"]
     first = argv(runs_dir, original)
-    assert flags == [first[n + 1] for n, flag in enumerate(first) if flag == "--set"]
+    original = [first[n + 1] for n, flag in enumerate(first) if flag == "--set"]
+    assert [flag for flag in flags if not flag.startswith("questions.")] == [
+        flag for flag in original if not flag.startswith("questions.")
+    ]
+    assert flags[:2] == ["questions.clarify=false", "questions.rounds=false"]
     assert "score.top_k=5" in flags
     found = summary(client, rerun)
     assert (found["version"], found["parent_run_id"]) == (1, None)

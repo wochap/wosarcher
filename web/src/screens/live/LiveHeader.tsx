@@ -17,6 +17,7 @@ import css from "./LiveHeader.module.css";
 const LABELS: Record<RunStatus, string> = {
   queued: "Connecting",
   running: "Running",
+  waiting: "Waiting",
   done: "Completed",
   failed: "Failed",
   interrupted: "Interrupted",
@@ -52,7 +53,7 @@ export function LiveHeader({
   onRerun,
 }: Props) {
   const status = run.status;
-  const active = status === "queued" || status === "running";
+  const active = status === "queued" || status === "running" || status === "waiting";
   const ended = status === "failed" || status === "cancelled" || status === "interrupted";
   // The profile line names the profile; a run without one keeps it in the meta line.
   const catalog = kind === "catalog";

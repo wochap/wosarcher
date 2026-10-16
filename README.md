@@ -96,6 +96,8 @@ uv run wosarcher run "..." --rounds 2 --queries-per-round 6  # follow-up searche
 uv run wosarcher run "..." --search-language es-PE  # SearXNG search language
 uv run wosarcher run "..." --use score=jev-strict    # another scorer entry for this run
 uv run wosarcher providers list                  # entries per block, models per llm entry
+uv run wosarcher run "..." --rounds 3 --interactive  # choose follow-ups between rounds, stop when covered
+uv run wosarcher continue <run-id> --recommended   # answer a waiting run (agents: --answer q1=a)
 uv run wosarcher runs                            # list runs
 uv run wosarcher fork <run-id> --from write --tone critical  # rewrite only
 uv run wosarcherd run "..." --until select --json  # the engine in this process, without a daemon

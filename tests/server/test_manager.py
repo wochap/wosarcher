@@ -97,4 +97,4 @@ def test_rerun_argv_uses_saved_overrides(tmp_path: Path) -> None:
     assert argv[argv.index("--sources") + 1] == "files"
     assert argv[argv.index("--until") + 1] == "select"
     assert argv[argv.index("--profile") + 1] == "cloud"
-    assert sets(argv) == ["score.top_k=5", 'write.tone="critical"']
+    assert sets(argv) == ["questions.clarify=false", "questions.rounds=false", "score.top_k=5", 'write.tone="critical"']

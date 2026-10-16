@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from wosarcher.attachments import collect
 from wosarcher.config import DEFAULT_CONCURRENCY, Settings
 from wosarcher.models import (
+    Answer,
     Attachment,
     Candidate,
     Chunk,
@@ -32,6 +33,7 @@ from wosarcher.models import (
     PlanReadyData,
     Query,
     QueryScores,
+    Question,
     ReportTextData,
     RunRecord,
     Score,
@@ -45,7 +47,9 @@ from wosarcher.ports import Adapters, Searcher
 from wosarcher.runner.caches import CachedFetcher, EmbeddingMapping
 from wosarcher.runner.devices import stage_provider
 from wosarcher.runner.events import EventLog
+from wosarcher.runner.questions import Asker
 from wosarcher.stages import chunk as chunking
+from wosarcher.stages import clarify as clarifying
 from wosarcher.stages import fetch as fetching
 from wosarcher.stages import gap as gapping
 from wosarcher.stages import load as loading
@@ -98,6 +102,8 @@ class StepContext:
     log: EventLog
     fetcher: CachedFetcher
     round: RoundState = field(default_factory=RoundState)
+    asker: Asker | None = None
+    """Set by the runner; pauses go through it."""
 
     @property
     def run_id(self) -> str:
@@ -121,7 +127,7 @@ class StepContext:
         return self.settings.research.rounds
 
     def round_queries(self) -> list[Query]:
-        return [query for query in self.plan().queries if query.round == self.round.number]
+        return [query for query in self.plan().queries if query.round == self.round.number and not query.dropped_by]
 
     def round_pages(self) -> list[Page]:
         """Round 1: every page; later rounds: the files and the pages fetched this round."""
@@ -220,6 +226,56 @@ def searches_first(ctx: StepContext) -> bool:
     return request.sources != "files" and len(request.query.strip()) <= searching.MAX_SEARCH_CHARS
 
 
+@dataclass
+class Clarified:
+    """What the clarify pause settled: the questions asked and answered, or a warning when it could not run."""
+
+    questions: list[Question] = field(default_factory=list[Question])
+    answers: list[Answer] = field(default_factory=list[Answer])
+    warning: str | None = None
+
+    @property
+    def changed(self) -> bool:
+        """Whether any answer differs from the recommendation, so the plan or structure must be redone."""
+        return bool(self.questions) and clarifying.changed(self.questions, self.answers)
+
+
+async def clarify_brief(ctx: StepContext, summary: str, topic: str, initial: Sequence[Hit] = ()) -> Clarified:
+    """The clarify call and pause; the answers are recorded on the run and appended to the request query.
+
+    Nothing is asked when clarify is off, for a fork, when the model writes no question, or when its call fails.
+    """
+    asker = ctx.asker
+    if asker is None or not asker.enabled or not ctx.settings.questions.clarify:
+        return Clarified()
+    request = ctx.record.request
+    research = ctx.record.kind == "research"
+    reasoning = ctx.settings.llm.reasoning
+    try:
+        questions = await clarifying.clarify(
+            request.query,
+            summary,
+            initial,
+            ctx.adapters.planner if research else ctx.adapters.draft_llm,
+            effort=reasoning.plan if research else reasoning.draft,
+            today=date.today().isoformat(),
+        )
+    except Exception as error:
+        return Clarified(warning=f"clarify failed: {short_reason(str(error) or type(error).__name__)}")
+    if not questions:
+        return Clarified()
+    reply = await asker.ask(
+        "plan" if research else "draft", "clarify", questions, context=f"I read the brief as: {topic}"
+    )
+    found = clarifying.clarifications(questions, reply.answers)
+    query = clarifying.clarified_query(request.query, found)
+    ctx.record = ctx.record.model_copy(
+        update={"clarifications": found, "request": request.model_copy(update={"query": query})}
+    )
+    ctx.store.write_artifact(ctx.run_id, "request.json", ctx.record)
+    return Clarified(questions, reply.answers)
+
+
 async def plan(ctx: StepContext) -> Outcome:
     request = ctx.record.request
     files = ctx.items("files.jsonl", Page)
@@ -230,15 +286,27 @@ async def plan(ctx: StepContext) -> Outcome:
         found = await run_search(ctx, [Query(id="q0", text=request.query)], ctx.adapters.searcher, "plan")
         initial, warnings, filtered = found.hits, failures(found.failures), found.filtered
     ctx.store.write_artifact(ctx.run_id, "initial.jsonl", initial)
-    planned = await planning.plan(
-        request.query,
-        initial,
-        [loading.outline(page) for page in files],
-        ctx.adapters.planner,
-        effort=ctx.settings.llm.reasoning.plan,
-        sources=request.sources,
-        max_sub_queries=ctx.settings.plan.max_sub_queries,
-    )
+    outlines = [loading.outline(page) for page in files]
+
+    async def make_plan(query: str) -> Plan:
+        return await planning.plan(
+            query,
+            initial,
+            outlines,
+            ctx.adapters.planner,
+            effort=ctx.settings.llm.reasoning.plan,
+            sources=request.sources,
+            max_sub_queries=ctx.settings.plan.max_sub_queries,
+        )
+
+    planned = await make_plan(request.query)
+    topic = planned.queries[0].text
+    summary = clarifying.plan_summary(topic, planned.parts, [item.text for item in planned.queries[1:]])
+    clarified = await clarify_brief(ctx, summary, topic, initial)
+    if clarified.warning:
+        warnings.append(clarified.warning)
+    if clarified.changed:
+        planned = await make_plan(ctx.record.request.query)
     ctx.store.write_artifact(ctx.run_id, "plan.json", planned)
     ctx.log.emit("plan.ready", "plan", PlanReadyData(queries=planned.queries))
     return Outcome(len(planned.queries), warnings=[*warnings, *planned.warnings], filtered=filtered)
@@ -400,7 +468,7 @@ async def score(ctx: StepContext) -> Outcome:
     """
     state = ctx.round
     plan = ctx.plan()
-    queries = [query for query in plan.queries if query.round == state.number]
+    queries = ctx.round_queries()
     pages = ctx.pages()
     chunks = ctx.items("chunks.jsonl", Chunk)
     chunk_of = {piece.chunk_id: piece for piece in chunks}

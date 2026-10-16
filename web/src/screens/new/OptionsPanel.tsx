@@ -7,6 +7,7 @@ import type {
   DomainLists,
   ProfileInfo,
   ProviderEntry,
+  QuestionsOptions,
   ResearchValues,
   RunKind,
   WritingOptions,
@@ -21,11 +22,13 @@ import {
   type WritingField,
   WritingOptionsForm,
 } from "../../components/WritingOptionsForm";
+import type { AskDraft } from "../../run/ask";
 import { type Depth, depthLabel } from "../../run/depth";
 import { changedCount, type ProfileChoice } from "../../run/profileValues";
 import { type DepthActions, DepthGroup } from "./DepthGroup";
 import css from "./OptionsPanel.module.css";
 import { type ProfileActions, ProfileAdvanced } from "./ProfileAdvanced";
+import { QuestionsRow } from "./QuestionsRow";
 
 /** The fields of `value` that differ from `defaults`. */
 export function overriddenFields(
@@ -103,6 +106,8 @@ type Props = {
   /** The search language as typed. */
   searchLanguage: string;
   onSearchLanguage: (value: string) => void;
+  /** The Questions row: the draft's choice and the Settings it starts from. */
+  questions: { value: AskDraft; defaults: QuestionsOptions; onChange: (value: AskDraft) => void };
 };
 
 export function OptionsPanel(props: Props) {
@@ -212,6 +217,12 @@ export function OptionsPanel(props: Props) {
               </div>
             )}
           </Row>
+          <QuestionsRow
+            idPrefix="nq"
+            value={props.questions.value}
+            defaults={props.questions.defaults}
+            onChange={props.questions.onChange}
+          />
           <div className={css.writingHead}>
             <span className={css.group}>Writing</span>
             <span className={css.note}>Preselected from your defaults ·</span>

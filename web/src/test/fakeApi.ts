@@ -123,8 +123,12 @@ export function fakeApi(overrides: Partial<FakeData> = {}): FakeApi {
       record("cancelRun", id);
       const { status } = find(id);
       if (status === "queued") return { kind: "dequeued" };
-      if (status === "running") return { kind: "signalled" };
+      if (status === "running" || status === "waiting") return { kind: "signalled" };
       return { kind: "not_active", status };
+    },
+    async continueRun(id, body) {
+      record("continueRun", id, body);
+      find(id);
     },
     async deleteRun(id) {
       record("deleteRun", id);

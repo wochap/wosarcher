@@ -7,6 +7,7 @@ import {
   Check,
   Circle,
   CircleNotch,
+  Hourglass,
   type Icon,
   Link,
   StopCircle,
@@ -28,6 +29,7 @@ import {
   phaseCards,
   shortField,
 } from "../../run/catalog";
+import type { AskState } from "../../run/questions";
 import { fmtDuration } from "../../run/stageTimes";
 import css from "./CatalogPanels.module.css";
 import panel from "./Panel.module.css";
@@ -45,11 +47,14 @@ export function CatalogTimeline({
   live,
   now,
   write,
+  ask,
 }: {
   live: CatalogLive;
   now: number;
   /** The Write card's detail text; undefined for a run that writes no report. */
   write?: string;
+  /** The run's questions: the Draft or Extract card that waits, and the answered notes. */
+  ask?: AskState | null;
 }) {
   return (
     <ol
@@ -58,22 +63,34 @@ export function CatalogTimeline({
       data-phases={write === undefined ? 8 : 9}
     >
       {phaseCards(live, now, write).map((card) => {
-        const Glyph = ICONS[card.state];
+        const asking = ask?.waiting?.stage === card.id ? ask.waiting : null;
+        const note = asking ? undefined : ask?.stages[card.id];
+        const Glyph = asking ? Hourglass : ICONS[card.state];
+        const text = asking ? "waiting for you" : card.text;
         return (
-          <li key={card.id} className={timeline.card} data-state={card.state}>
+          <li key={card.id} className={timeline.card} data-state={asking ? "asking" : card.state}>
             <div className={timeline.head}>
               <Glyph className={timeline.icon} aria-hidden="true" />
               <span className={timeline.label}>{card.label}</span>
               <HelpTip help={`cp-${card.id}`} label={card.label} />
             </div>
-            <div className={timeline.text} title={card.text}>
-              {card.text}
+            <div className={timeline.text} title={text}>
+              {text}
             </div>
             <div className={timeline.time}>
               <span data-tone={card.seconds === null ? "faint" : undefined}>
                 {card.seconds === null ? "—" : fmtDuration(card.seconds)}
               </span>
             </div>
+            {(asking || note) && (
+              <div
+                className={timeline.detail}
+                data-tone={note?.warn ? "warn" : undefined}
+                title={asking ? undefined : note?.text}
+              >
+                {asking ? `${asking.answered} of ${asking.total} answered` : note?.text}
+              </div>
+            )}
             {card.loop && (
               <div className={css.loop}>
                 <ArrowsClockwise aria-hidden="true" />
@@ -81,7 +98,12 @@ export function CatalogTimeline({
               </div>
             )}
             <div className={timeline.track}>
-              <div className={timeline.bar} style={{ width: `${card.pct}%` }} />
+              <div
+                className={timeline.bar}
+                style={{
+                  width: `${asking ? Math.round((asking.answered / asking.total) * 100) : card.pct}%`,
+                }}
+              />
             </div>
           </li>
         );

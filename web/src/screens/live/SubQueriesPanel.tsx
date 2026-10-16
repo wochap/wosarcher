@@ -1,6 +1,7 @@
 // The planner's sub-queries with their search state and result counts.
 import { Check, CircleNotch, Clock, type Icon, Recycle, StopCircle } from "@phosphor-icons/react";
 import { HelpTip } from "../../components/HelpTip";
+import type { AskState } from "../../run/questions";
 import type { RunView, SubQuery } from "../../run/reducer";
 import panel from "./Panel.module.css";
 import css from "./SubQueriesPanel.module.css";
@@ -37,7 +38,15 @@ export function QueryText({
   );
 }
 
-export function SubQueriesPanel({ run, className }: { run: RunView; className?: string }) {
+export function SubQueriesPanel({
+  run,
+  className,
+  ask,
+}: {
+  run: RunView;
+  className?: string;
+  ask?: AskState | null;
+}) {
   const queued = run.status === "queued";
   const total = run.subQueries.length;
   const done = run.subQueries.filter((q) => q.done).length;
@@ -47,6 +56,11 @@ export function SubQueriesPanel({ run, className }: { run: RunView; className?: 
         <h2 className={panel.title}>Sub-queries</h2>
         <span className={panel.summary}>{queued || !total ? "" : `${done}/${total}`}</span>
       </header>
+      {ask?.rounds[1] && (
+        <div className={css.note} data-tone={ask.rounds[1].warn ? "warn" : undefined}>
+          {ask.rounds[1].text}
+        </div>
+      )}
       {!total && (
         <div className={css.empty}>
           {queued ? "Waiting for the planner…" : "Planning sub-queries…"}

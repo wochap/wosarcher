@@ -180,4 +180,16 @@ describe("RunEvents", () => {
     await vi.advanceTimersByTimeAsync(4000);
     expect(FakeWebSocket.instances).toHaveLength(1);
   });
+
+  it("sends the presence message on the open socket and drops it before it opens", () => {
+    const { stream } = setup(400);
+    const socket = FakeWebSocket.last();
+    stream.presence();
+    socket.open();
+    stream.presence();
+    expect(socket.sent).toEqual([JSON.stringify({ type: "presence" })]);
+    stream.close();
+    stream.presence();
+    expect(socket.sent).toHaveLength(1);
+  });
 });

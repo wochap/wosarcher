@@ -16,10 +16,13 @@ from wosarcher.models import (
     KIND_STEPS,
     STAGES,
     Attachment,
+    ContinueRequest,
     ExportFormat,
     ForkCreate,
     LLMPatch,
+    OpenPause,
     Origin,
+    QuestionsAnswered,
     ReasoningOptions,
     Report,
     ResearchPatch,
@@ -35,6 +38,7 @@ from wosarcher.models import (
     Structure,
     WritingPatch,
     catalog_writes,
+    check_answers,
 )
 from wosarcher.ports import ExportError
 from wosarcher.server import staging
@@ -145,7 +149,8 @@ def summary(state: ServerState, run_id: str) -> RunSummary | None:
         return staged_summary(state, active.staged) if active else ended_summary(state, run_id)
     found = state.store.summary(record)
     if active is not None:
-        return found.model_copy(update={"status": "running", "duration_s": None})
+        status = "waiting" if found.status == "waiting" else "running"
+        return found.model_copy(update={"status": status, "duration_s": None})
     return found
 
 
@@ -361,6 +366,43 @@ async def export_run(state: State, run_id: str, format: str | None = None) -> Re
         raise RouteError(500, "export_failed", str(error)) from None
     headers = {"Content-Disposition": f'attachment; filename="{run_id}.{fmt}"'}
     return Response(data, media_type=EXPORT_TYPES[fmt], headers=headers)
+
+
+def waiting_pause(state: ServerState, run_id: str) -> OpenPause:
+    """The open pause of a waiting run; 404 for an unknown run, 409 `not_waiting` otherwise."""
+    found = summary(state, run_id)
+    if found is None:
+        raise not_found(run_id)
+    pause = state.store.open_pause(run_id) if found.status == "waiting" else None
+    if pause is None:
+        raise RouteError(409, "not_waiting", f"run {run_id} is not waiting for answers (status {found.status})")
+    return pause
+
+
+@router.get("/{run_id}/questions")
+async def run_questions(state: State, run_id: str) -> OpenPause:
+    found = summary(state, run_id)
+    if found is None:
+        raise not_found(run_id)
+    pause = state.store.open_pause(run_id) if found.status == "waiting" else None
+    if pause is None:
+        raise RouteError(404, "not_waiting", f"run {run_id} is not waiting for answers")
+    return pause
+
+
+@router.post("/{run_id}/continue", status_code=202)
+async def continue_run(state: State, http: Request, run_id: str, body: ContinueRequest) -> JSONResponse:
+    pause = waiting_pause(state, run_id)
+    if pause.pause_id != body.pause_id or state.store.read_answer(run_id, pause.pause_id) is not None:
+        raise RouteError(409, "not_waiting", f"run {run_id} is not waiting for pause {body.pause_id}")
+    try:
+        check_answers(pause.questions, body.answers)
+    except ValueError as error:
+        raise RouteError(422, "invalid_request", str(error)) from None
+    answered_by = "user" if origin_of(http)[0] == "web" else "agent"
+    state.store.write_answer(run_id, pause.pause_id, QuestionsAnswered(answers=body.answers, answered_by=answered_by))
+    found = summary(state, run_id)
+    return JSONResponse({"run_id": run_id, "status": found.status if found else "running"}, status_code=202)
 
 
 @router.post("/{run_id}/cancel")

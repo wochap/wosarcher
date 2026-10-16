@@ -1,7 +1,9 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { callsTo, fakeApi } from "../../test/fakeApi";
+import { clarifyLog } from "../../test/fixtures/questions";
 import { renderApp } from "../../test/renderApp";
+import { play } from "../../test/scenario";
 
 const rowOf = (text: string) =>
   screen
@@ -175,5 +177,40 @@ describe("HistoryScreen depth tags", () => {
     await open(api);
     expect(within(rows()[0]).getByText("Exhaustive")).toBeTruthy();
     expect(within(rows()[1]).getByText("Standard")).toBeTruthy();
+  });
+});
+
+describe("HistoryScreen waiting runs", () => {
+  async function openWaiting() {
+    const api = fakeApi();
+    api.data.runs[0] = { ...api.data.runs[0], status: "waiting" };
+    await open(api);
+    return api;
+  }
+
+  it("tags a waiting run with the hourglass and keeps it out of the finished filters", async () => {
+    await openWaiting();
+    const tag = within(rows()[0]).getByText("Waiting");
+    expect(tag.dataset.state).toBe("waiting");
+    expect(tag.querySelector("svg")).toBeTruthy();
+    for (const label of ["Completed", "Failed", "Cancelled"]) {
+      fireEvent.click(screen.getByRole("radio", { name: label }));
+      expect(screen.queryByText("Waiting")).toBeNull();
+    }
+    fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    expect(screen.getByText("Waiting")).toBeTruthy();
+  });
+
+  it("opens a waiting run on the Live run screen with the question card", async () => {
+    const api = await openWaiting();
+    const id = api.data.runs[0].run_id;
+    fireEvent.click(within(rows()[0]).getByRole("button", { name: "Open" }));
+    expect(window.location.hash).toBe(`#/live/${id}`);
+    // The event stream replays the log: an input.needed without an input.answered opens the card.
+    await play(
+      id,
+      clarifyLog().map((e) => ({ ...e, run_id: id })),
+    );
+    expect(await screen.findByRole("region", { name: "Run questions" })).toBeTruthy();
   });
 });

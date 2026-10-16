@@ -109,3 +109,11 @@ def test_catalog_prompts_name_no_page_placeholder(name: str) -> None:
         match[1] or match[2] for match in Template.pattern.findall(load(name).template) if match[1] or match[2]
     }
     assert not placeholders & {"pages", "outlines", "data", "text"}
+
+
+def test_clarify_prompts() -> None:
+    text = load("clarify").substitute(brief="a $b", plan="Topic line: t", today="2026-10-15")
+    assert "a $b" in text
+    assert "Topic line: t" in text
+    assert "$" not in text.replace("a $b", "")
+    assert "data" in load("clarify_data").template

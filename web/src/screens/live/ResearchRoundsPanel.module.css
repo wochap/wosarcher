@@ -176,3 +176,7 @@
   padding-left: 21px;
   text-wrap: pretty;
 }
+
+.note[data-tone="warn"] {
+  color: var(--color-warn);
+}

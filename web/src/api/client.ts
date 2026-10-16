@@ -1,5 +1,6 @@
 // Typed client for the server's /api routes. Everything goes to the page's own origin.
 import type {
+  ContinueRequest,
   DepthInfo,
   DepthSave,
   DepthUpdate,
@@ -42,6 +43,8 @@ export interface ApiClient {
   /** Drafts a catalog structure from the brief (`POST /api/catalog/draft`); 502 `draft_failed`. */
   draftStructure(request: DraftRequest, attachments: File[]): Promise<Structure>;
   cancelRun(id: string): Promise<CancelOutcome>;
+  /** Answers the open pause of a waiting run (`POST /api/runs/{id}/continue`); 409 `not_waiting`. */
+  continueRun(id: string, body: ContinueRequest): Promise<void>;
   deleteRun(id: string): Promise<void>;
   getArtifact(id: string, name: string): Promise<string>;
   /** A finished report or answer converted on the server (`GET /api/runs/{id}/export`). */
@@ -174,6 +177,7 @@ export function httpApi(onUnauthorized: () => void): ApiClient {
       }
       return fail(response, error);
     },
+    continueRun: async (id, body) => void (await send("POST", `${run(id)}/continue`, body)),
     deleteRun: async (id) => void (await send("DELETE", run(id))),
     getArtifact: async (id, name) =>
       (await send("GET", `${run(id)}/artifacts/${encodeURIComponent(name)}`)).text(),

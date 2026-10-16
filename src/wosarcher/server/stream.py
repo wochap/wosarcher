@@ -13,7 +13,10 @@ closed like a finished run. A run the manager remembers as ended without a run
 directory gets its terminal event and 1000.
 """
 
+import asyncio
+import json
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -26,6 +29,32 @@ router = APIRouter(prefix="/api")
 CLOSE_UNKNOWN = 4404
 CLOSE_SLOW = 4408
 LIVE_ONLY = {"report.delta", "report.snapshot", "run.queued"}
+
+
+def is_presence(text: str) -> bool:
+    try:
+        message: object = json.loads(text)
+    except ValueError:
+        return False
+    return isinstance(message, dict) and cast(dict[str, object], message).get("type") == "presence"
+
+
+async def listen(socket: WebSocket, run_id: str) -> None:
+    """Read the client's messages until it disconnects; a presence message touches the open pause's hold file.
+
+    Any other message is ignored, and so is presence for a run that is not waiting.
+    """
+    state = get_state(socket)
+    try:
+        while True:
+            text = await socket.receive_text()
+            if not is_presence(text):
+                continue
+            pause_id = state.store.open_pause_id(run_id)
+            if pause_id is not None and state.store.is_running(run_id):
+                state.store.touch_hold(run_id, pause_id)
+    except WebSocketDisconnect:
+        return
 
 
 class Client:
@@ -94,11 +123,20 @@ async def stream(
     if subscriber is None or ended:
         await socket.close(1000)
         return
-    while True:
-        event = await subscriber.queue.get()
-        if event is None:
-            await socket.close(CLOSE_SLOW if subscriber.overflowed else 1000)
-            return
-        if await client.send(event):
-            await socket.close(1000)
-            return
+    reader = asyncio.create_task(listen(socket, run_id))
+    try:
+        while True:
+            getter = asyncio.ensure_future(subscriber.queue.get())
+            await asyncio.wait({getter, reader}, return_when=asyncio.FIRST_COMPLETED)
+            if not getter.done():
+                getter.cancel()
+                raise WebSocketDisconnect
+            event = getter.result()
+            if event is None:
+                await socket.close(CLOSE_SLOW if subscriber.overflowed else 1000)
+                return
+            if await client.send(event):
+                await socket.close(1000)
+                return
+    finally:
+        reader.cancel()

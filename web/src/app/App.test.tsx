@@ -12,6 +12,15 @@ describe("App", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
   });
 
+  it("counts a waiting run as active", () => {
+    const api = fakeApi();
+    api.data.runs = [
+      { ...api.data.runs[1], run_id: "r_wait", status: "waiting", created: "2026-10-05T00:00:00Z" },
+      { ...api.data.runs[1], run_id: "r_done", status: "done", created: "2026-10-06T00:00:00Z" },
+    ];
+    expect(newestActive(api.data.runs)).toBe("r_wait");
+  });
+
   it("follows the newest running run at start and opens it with Alt+2", async () => {
     const api = fakeApi();
     api.data.runs = [

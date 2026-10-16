@@ -1,6 +1,6 @@
 """`wosarcher`: a client of the `wosarcherd` API; it holds no secret and reads no run directory.
 
-Commands: `run`, `catalog`, `fork`, `runs`, `logs`, `cancel`, `export`, `doctor`,
+Commands: `run`, `catalog`, `fork`, `runs`, `logs`, `cancel`, `questions`, `continue`, `export`, `doctor`,
 `profile list|show`, `providers list`, `depth list|show`, `tokens new|list|revoke`, `schema`.
 """
 
@@ -17,6 +17,7 @@ from rich.table import Table
 from wosarcher.cli import catalog as catalog_command
 from wosarcher.cli import export as export_command
 from wosarcher.cli import logs as logs_command
+from wosarcher.cli import questions as questions_command
 from wosarcher.cli import run as run_commands
 from wosarcher.cli.api import api
 from wosarcher.cli.depth import depth_app
@@ -168,6 +169,8 @@ app.command("fork")(run_commands.fork)
 app.command("runs")(run_commands.runs)
 app.command("logs")(logs_command.logs)
 app.command("cancel")(run_commands.cancel)
+app.command("questions")(questions_command.questions)
+app.command("continue")(questions_command.continue_)
 app.command("export")(export_command.export)
 app.add_typer(depth_app, name="depth")
 app.add_typer(tokens_app, name="tokens")

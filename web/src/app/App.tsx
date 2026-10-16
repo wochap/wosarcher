@@ -39,7 +39,7 @@ type Props = {
   login?: LoginState;
 };
 
-const ACTIVE = new Set(["queued", "running"]);
+const ACTIVE = new Set(["queued", "running", "waiting"]);
 
 /** The newest queued or running run, which "Live run" follows at start. */
 export function newestActive(runs: RunSummary[]): string | null {

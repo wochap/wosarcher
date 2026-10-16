@@ -55,6 +55,7 @@ STOP_NOTES: dict[CatalogStopReason, str] = {
     "max nodes": "Max nodes {max_nodes} reached.",
     "page limit reached": "Page limit {max_pages} reached.",
     "extract failed": "Every extraction of wave {wave} failed.",
+    "stopped by user": "Stopped by the user after wave {wave}.",
 }
 
 

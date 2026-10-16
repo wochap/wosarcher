@@ -216,3 +216,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.card[data-state="asking"] {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 16px -6px var(--color-accent);
+  --label: var(--color-text);
+  --icon: var(--color-accent);
+  --text: var(--color-accent-300);
+  --bar: var(--color-accent);
+}
+
+.card[data-state="asking"] .detail {
+  color: var(--color-accent-300);
+}
+
+.detail[data-tone="warn"] {
+  color: var(--color-warn);
+}

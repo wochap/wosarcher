@@ -8,19 +8,23 @@ from typing import Any
 import pytest
 
 from tests.runner.helpers import adapters, kinds, settings
+from tests.runner.test_questions import Clock
 from tests.stages.catalog_data import structure, structure_data
 from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeSearcher
-from wosarcher.config import CatalogConfig, ReasoningConfig, Settings
+from wosarcher.config import CatalogConfig, QuestionsConfig, ReasoningConfig, Settings
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
+    Answer,
     CatalogDone,
     CatalogRecord,
     Completion,
     Context,
     Effort,
+    InputNeeded,
     Message,
     Node,
     NodeFailed,
+    QuestionsAnswered,
     Report,
     RunFailed,
     RunRecord,
@@ -429,3 +433,54 @@ async def test_both_output_writes_a_report(tmp_path: Path) -> None:
     assert isinstance(writer, FakeLLM)
     user = writer.calls[0][-1].content
     assert "Poder Ejecutivo\npower" in user.split("<passages>", 1)[1]
+
+
+# Wave pause
+
+
+def pausing(tmp_path: Path) -> Settings:
+    cfg = catalog_settings(tmp_path)
+    return cfg.model_copy(update={"questions": QuestionsConfig(clarify=False, rounds=True)})
+
+
+def answer_waves(store: RunStore, run_id: str, *stops: str) -> Callable[[Clock], None]:
+    """Answers pause n with `stops[n - 1]`: "a" continues, "b" assembles now."""
+
+    def hook(_clock: Clock) -> None:
+        for number, stop in enumerate(stops, start=1):
+            pause = store.read_pause(run_id, number)
+            if pause is not None and store.read_answer(run_id, number) is None:
+                answers = [Answer(question_id="q1", option_ids=[stop])]
+                store.write_answer(run_id, number, QuestionsAnswered(answers=answers, answered_by="user"))
+
+    return hook
+
+
+async def test_wave_pause_continue(tmp_path: Path) -> None:
+    store, runner, run_id, _ = world(tmp_path, cfg=pausing(tmp_path))
+    runner.waiter = Clock(answer_waves(store, run_id, "a", "a")).waiter
+    assert await runner.run(run_id) == "done"
+    pauses = [e for e in store.read_events(run_id) if isinstance(e, InputNeeded)]
+    assert [(p.data.after, p.data.context) for p in pauses] == [
+        (1, "Wave 1 found 2 new nodes."),
+        (2, "Wave 2 found 1 new nodes."),
+    ]
+    assert pauses[0].data.questions[0].text == "Continue to wave 2?"
+    assert catalog(store, run_id).reason == "frontier empty"
+
+
+async def test_wave_pause_no_new_nodes_no_pause(tmp_path: Path) -> None:
+    store, runner, run_id, _ = world(tmp_path, cfg=pausing(tmp_path))
+    runner.waiter = Clock(answer_waves(store, run_id, "a", "a", "a")).waiter
+    await runner.run(run_id)
+    assert len([e for e in store.read_events(run_id) if isinstance(e, InputNeeded)]) == 2
+
+
+async def test_stopped_by_the_user(tmp_path: Path) -> None:
+    store, runner, run_id, _ = world(tmp_path, cfg=pausing(tmp_path))
+    runner.waiter = Clock(answer_waves(store, run_id, "a", "b")).waiter
+    assert await runner.run(run_id) == "done"
+    result = catalog(store, run_id)
+    assert (result.reason, result.note) == ("stopped by user", "Stopped by the user after wave 2.")
+    done = [e for e in store.read_events(run_id) if isinstance(e, StageDone) and e.stage == "assemble"]
+    assert done

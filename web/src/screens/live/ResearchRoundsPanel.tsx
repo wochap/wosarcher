@@ -7,6 +7,7 @@ import {
   CircleNotch,
   Clock,
   Files,
+  Hand,
   type Icon,
   MinusCircle,
   PencilSlash,
@@ -17,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { HelpTip } from "../../components/HelpTip";
+import type { AskNote, AskState } from "../../run/questions";
 import type { RoundQuery, RoundView, RunView, StopReason } from "../../run/reducer";
 import panel from "./Panel.module.css";
 import css from "./ResearchRoundsPanel.module.css";
@@ -39,6 +41,7 @@ const STOP_ICONS: Record<StopReason, Icon> = {
   "no follow-ups": PencilSlash,
   "max rounds": Stack,
   "gap step failed": Warning,
+  "stopped by user": Hand,
 };
 
 type Look = { text: string; icon: Icon; spin?: boolean; tone?: "accent" };
@@ -88,7 +91,15 @@ function gapLine(round: RoundView, next: RoundView | undefined): Look | null {
   return null;
 }
 
-function Round({ round, next }: { round: RoundView; next: RoundView | undefined }) {
+function Round({
+  round,
+  next,
+  ask,
+}: {
+  round: RoundView;
+  next: RoundView | undefined;
+  ask?: AskNote;
+}) {
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? round.state === "running";
   const look = roundLook(round);
@@ -111,6 +122,11 @@ function Round({ round, next }: { round: RoundView; next: RoundView | undefined 
           {look.text}
         </span>
       </div>
+      {ask && (
+        <div className={css.note} data-tone={ask.warn ? "warn" : undefined}>
+          {ask.text}
+        </div>
+      )}
       {round.note && <div className={css.note}>{round.note}</div>}
       {round.missing.length > 0 && (
         <div className={css.note}>Missing: {round.missing.join("; ")}</div>
@@ -166,9 +182,11 @@ type Props = {
   /** The run's `research.rounds`. */
   planned: number;
   className?: string;
+  /** The run's questions; an answered pause's note shows under its round. */
+  ask?: AskState | null;
 };
 
-export function ResearchRoundsPanel({ run, planned, className }: Props) {
+export function ResearchRoundsPanel({ run, planned, className, ask }: Props) {
   const started = run.rounds.filter((r) => r.state !== "queued");
   const research = run.research;
   const total = research?.planned ?? planned;
@@ -194,6 +212,7 @@ export function ResearchRoundsPanel({ run, planned, className }: Props) {
           <Round
             key={round.round}
             round={round}
+            ask={ask?.rounds[round.round]}
             next={started.find((r) => r.round === round.round + 1)}
           />
         ))}

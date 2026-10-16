@@ -4,7 +4,14 @@ import type * as G from "./generated";
 
 export type Stage = NonNullable<G.RunStarted["stage"]>;
 export type WritingOptions = Required<NonNullable<G.RunSummary["writing"]>>;
-export type RunStatus = "queued" | "running" | "done" | "failed" | "cancelled" | "interrupted";
+export type RunStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "done"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
 /** `research` (the default for older runs) or `catalog`. */
 export type RunKind = "research" | "catalog";
 /** Added by hand until the server's summary carries them: the kind, and a catalog's records. */
@@ -59,12 +66,23 @@ export type CatalogNode = {
 export type RunCreated = G.RunCreated;
 /** Domain lists: entries are bare domains, matched with their subdomains. */
 export type DomainLists = { allow: string[]; block: string[] };
+export type QuestionsOptions = Required<G.QuestionsOptions>;
+export type QuestionsPatch = G.QuestionsPatch;
 export type ServerSettings = {
   writing: WritingOptions;
   sources: string;
   domains: DomainLists;
   max_concurrent_runs: number;
+  questions: QuestionsOptions;
 };
+/** One question of a pause, its option, and an answer to it. */
+export type Question = G.Question1;
+export type QuestionOption = G.QuestionOption;
+export type Answer = G.Answer;
+export type ContinueRequest = G.ContinueRequest;
+export type PauseKind = G.InputNeededData["kind"];
+export type AnsweredBy = G.InputAnsweredData["answered_by"];
+export type OpenPause = G.OpenPause;
 /** Where a run was started: the browser, an API token, or the `wosarcher` CLI. */
 export type Origin = G.Origin;
 export type SlotHolder = G.SlotHolder;
@@ -129,4 +147,6 @@ export type RunEvent =
   | Ev<"node.extracted", G.NodeExtracted>
   | Ev<"node.failed", G.NodeFailed>
   | Ev<"wave.done", G.WaveDone>
-  | Ev<"catalog.done", G.CatalogDone>;
+  | Ev<"catalog.done", G.CatalogDone>
+  | Ev<"input.needed", G.InputNeeded>
+  | Ev<"input.answered", G.InputAnswered>;

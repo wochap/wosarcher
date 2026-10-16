@@ -23,6 +23,8 @@ COMMANDS = {
     "runs",
     "logs",
     "cancel",
+    "questions",
+    "continue",
     "export",
     "doctor",
     "profile",

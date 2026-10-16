@@ -19,6 +19,9 @@ from wosarcher.models import (
     STAGES,
     Page,
     Plan,
+    Query,
+    Question,
+    QuestionOption,
     ResearchDoneData,
     ResearchRecord,
     ResourceData,
@@ -43,6 +46,8 @@ from wosarcher.runner.caches import CachedFetcher
 from wosarcher.runner.devices import GPU_BLOCK, gpu_device, needs_release, next_gpu_stage, stage_provider
 from wosarcher.runner.events import EventLog, Listener
 from wosarcher.runner.preflight import preflight
+from wosarcher.runner.questions import Asker, Waiter
+from wosarcher.stages import gap as gapping
 from wosarcher.store import STAGE_ARTIFACTS, RunStore
 from wosarcher.store.caches import PageCache
 
@@ -55,6 +60,8 @@ END_NOTES: dict[StopReason, str] = {
     "no new sources": "Follow-up searches returned only pages fetched in earlier rounds.",
     "no follow-ups": "The gap step wrote no usable follow-up query.",
 }
+MAX_PAUSE_OPTIONS = 6
+LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
 
 class StageError(Exception):
@@ -109,6 +116,8 @@ class Runner:
     """Release errors, reported on the next `stage.done`."""
     current: Stage | None = None
     """The stage running now; a cancelled run reports it."""
+    waiter: Waiter = field(default_factory=Waiter)
+    """The clock and sleep of a pause; tests replace it."""
 
     async def run(self, run_id: str, until: Stage | None = None) -> RunEnd:
         """Run every unfinished stage up to `until`; return `done` or `failed`. Cancellation re-raises."""
@@ -119,6 +128,17 @@ class Runner:
         is_catalog = record.kind == "catalog"
         context = catalog.CatalogContext if is_catalog else steps.StepContext
         ctx = context(self.store, record, self.settings, self.adapters, log, fetcher)
+        questions = self.settings.questions
+        ctx.asker = Asker(
+            self.store,
+            log,
+            run_id,
+            enabled=record.parent_run_id is None,
+            timeout=questions.timeout,
+            max_wait=questions.max_wait,
+            waiter=self.waiter,
+            runner=self,
+        )
         order = CATALOG_STAGES if is_catalog else STAGES
         if until is not None and until not in order:
             log.emit("run.started", None, self.started(record, until))
@@ -237,16 +257,80 @@ class Runner:
                 )
                 if not state.gap.queries:
                     reason = "no follow-ups"
+                else:
+                    reason, rounds[-1] = await self.round_pause(ctx, rounds[-1])
             if reason is None:
                 state.next()
                 ctx.log.round = state.number
-        note = END_NOTES.get(reason, "")
+        note = self.end_note(reason, state.number, dropped=bool(rounds[-1].dropped))
         record = ResearchRecord(planned=planned, ran=state.number, reason=reason, note=note, rounds=rounds)
         self.store.write_artifact(ctx.run_id, "research.json", record)
         if not gap_ran:
             ctx.log.emit("stage.done", "gap", StageDoneData(count=0, seconds=0, skipped=True, round=state.number))
         done = ResearchDoneData(planned=planned, ran=state.number, reason=reason, note=note)
         ctx.log.emit("research.done", "gap", done)
+
+    def end_note(self, reason: StopReason, number: int, *, dropped: bool) -> str:
+        if reason == "stopped by user":
+            return f"Research stopped by the user after round {number}."
+        if reason == "no follow-ups" and dropped:
+            return "Every follow-up was dropped by the user."
+        return END_NOTES.get(reason, "")
+
+    async def round_pause(self, ctx: steps.StepContext, record: RoundRecord) -> tuple[StopReason | None, RoundRecord]:
+        """Ask which follow-ups to search and whether to stop; the plan keeps the answer. No model call.
+
+        Returns the stop reason when the user stopped research or dropped every follow-up.
+        """
+        asker, state = ctx.asker, ctx.round
+        gap = state.gap
+        if asker is None or gap is None or not asker.enabled or not self.settings.questions.rounds:
+            return None, record
+        shown, hidden = gap.queries[:MAX_PAUSE_OPTIONS], gap.queries[MAX_PAUSE_OPTIONS:]
+        questions = [
+            Question(
+                id="q1",
+                text="Search these next?",
+                kind="multi",
+                options=[
+                    QuestionOption(id=LETTERS[n], label=query.text, recommended=True) for n, query in enumerate(shown)
+                ],
+                allow_other=True,
+            ),
+            Question(
+                id="q2",
+                text="Stop research here and write?",
+                kind="confirm",
+                options=[
+                    QuestionOption(id="a", label="No, keep going", recommended=True),
+                    QuestionOption(id="b", label="Yes, write now"),
+                ],
+            ),
+        ]
+        reply = await asker.ask("gap", "round", questions, after=state.number, context=gap.note)
+        answers = {answer.question_id: answer for answer in reply.answers}
+        if "b" in answers["q2"].option_ids:
+            return "stopped by user", record
+        chosen = set(answers["q1"].option_ids)
+        kept = [query for n, query in enumerate(shown) if LETTERS[n] in chosen] + list(hidden)
+        dropped = [query for query in shown if query not in kept]
+        plan = ctx.plan()
+        extra = (answers["q1"].other or "").strip()
+        added: list[Query] = []
+        if extra:
+            found, rejected = gapping.follow_ups([extra], plan.queries, limit=1)
+            added = [query.model_copy(update={"round": state.number + 1}) for query in found]
+            self.warnings.extend(f"added query not used: {text} ({why})" for text, why in rejected)
+        dropped_ids = {query.id for query in dropped}
+        marked = [
+            query.model_copy(update={"dropped_by": "user"}) if query.id in dropped_ids else query
+            for query in plan.queries
+        ]
+        ctx.store.write_artifact(ctx.run_id, "plan.json", plan.model_copy(update={"queries": [*marked, *added]}))
+        record = record.model_copy(
+            update={"dropped": [query.id for query in dropped], "added": [query.id for query in added]}
+        )
+        return ("no follow-ups" if not kept and not added else None), record
 
     def stop_before_gap(self, state: steps.RoundState, planned: int) -> StopReason | None:
         if state.number >= planned:

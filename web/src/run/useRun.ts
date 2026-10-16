@@ -21,7 +21,7 @@ function reduce(state: RunView, action: Action): RunView {
   if ("summary" in action) return applySummary(state, action.summary);
   const next = withOffset(runReducer(state, action.event), action.event, action.received);
   // A summary can arrive before the replayed log, whose events cannot reopen an ended run.
-  const open = next.status === "running" || next.status === "queued";
+  const open = next.status === "running" || next.status === "queued" || next.status === "waiting";
   return isEnded(state.status) && open ? { ...next, status: state.status } : next;
 }
 
@@ -43,6 +43,8 @@ export type LiveRun = {
   end(summary: RunEnd): void;
   /** Reads the run summary once and applies it; a 404 shows the run as not found. */
   refresh(): void;
+  /** Sends the presence message on the run's event socket. */
+  presence(): void;
 };
 
 /** `services` overrides the ApiContext, for the App that provides it. */
@@ -90,6 +92,11 @@ export function useRun(runId: string | null, services?: Services): LiveRun {
     );
   }, [runId, api]);
 
+  const presence = useCallback(() => stream.current?.presence(), []);
+
   const current = runId && view.runId === runId ? view : null;
-  return useMemo(() => ({ view: current, conn, end, refresh }), [current, conn, end, refresh]);
+  return useMemo(
+    () => ({ view: current, conn, end, refresh, presence }),
+    [current, conn, end, refresh, presence],
+  );
 }

@@ -29,3 +29,24 @@ def test_limit_out_of_range(client: TestClient, config_dir: Path) -> None:
     assert response.status_code == 422
     assert "max_concurrent_runs" in response.json()["detail"]
     assert not (config_dir / "server-settings.json").exists()
+
+
+def test_questions_default(client: TestClient) -> None:
+    found = client.get("/api/settings").json()["questions"]
+    assert found == {"clarify": True, "rounds": True, "timeout": 60, "max_wait": 1800}
+
+
+def test_questions_saved(client: TestClient, config_dir: Path) -> None:
+    body = client.get("/api/settings").json()
+    body["questions"]["timeout"] = 120
+    assert client.put("/api/settings", json=body).status_code == 200
+    assert client.get("/api/settings").json()["questions"]["timeout"] == 120
+    assert settings.load(config_dir).questions.timeout == 120
+
+
+def test_questions_out_of_range(client: TestClient) -> None:
+    body = client.get("/api/settings").json()
+    body["questions"]["max_wait"] = 10
+    response = client.put("/api/settings", json=body)
+    assert response.status_code == 422
+    assert "questions.max_wait" in response.json()["detail"]

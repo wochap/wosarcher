@@ -7,6 +7,7 @@ const CASES: [RunStatus, string][] = [
   ["done", "Completed"],
   ["running", "Running"],
   ["queued", "Queued"],
+  ["waiting", "Waiting"],
   ["failed", "Failed"],
   ["interrupted", "Interrupted"],
   ["cancelled", "Cancelled"],

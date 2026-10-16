@@ -11,6 +11,7 @@ import type {
   WritingOptions,
 } from "../api/types";
 import type { Help } from "../components/help";
+import type { AskDraft } from "../run/ask";
 import type { Depth } from "../run/depth";
 import type { Recipe } from "../run/format";
 import type { ProfileEdits } from "../run/profileValues";
@@ -67,6 +68,8 @@ export type Draft = {
   use: Use;
   /** The profile's Model and Budgets fields edited for this run. */
   profileEdits: ProfileEdits;
+  /** The Questions row: Ask or Don't ask and the timeout; unset ones follow the settings. */
+  questions: AskDraft;
 };
 export const EMPTY_DRAFT: Draft = {
   kind: "research",
@@ -81,6 +84,7 @@ export const EMPTY_DRAFT: Draft = {
   searchLanguage: "",
   use: {},
   profileEdits: {},
+  questions: {},
 };
 
 export type LiveTab = "progress" | "sources" | "passages" | "report";

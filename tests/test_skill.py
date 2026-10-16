@@ -230,3 +230,10 @@ def test_skill_connection() -> None:
 
 def test_skill_json_attachments() -> None:
     assert "`.json` files" in " ".join(SKILL.read_text().split())
+
+
+def test_skill_questions() -> None:
+    text = SKILL.read_text()
+    assert "asks nothing unless" in text
+    assert "wosarcher continue <run_id> --answer q1=a" in text
+    assert "wosarcher continue <run_id> --recommended" in text

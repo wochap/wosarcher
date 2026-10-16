@@ -67,6 +67,8 @@ class StagedRun(RunCreate):
     """The writing options the run will use (for its summary)."""
     writing_flags: dict[str, object] = Field(default_factory=dict[str, object])
     """Emitted as `--set write.<field>=...` before `set`."""
+    questions_flags: dict[str, object] = Field(default_factory=dict[str, object])
+    """`questions.<field>` overrides: the global settings under the request's `questions`."""
     domain_flags: dict[str, list[str]] = Field(default_factory=dict[str, list[str]])
     """`search.allow_domains` and `search.block_domains` overrides, emitted after research and before `set`."""
     parent: str | None = None
@@ -132,6 +134,13 @@ def domain_lists(request: RunCreate, defaults: ServerSettings, own: Collection[s
         elif default and key not in own:
             lists[key] = default
     return lists
+
+
+def question_flags(request: RunCreate, defaults: ServerSettings) -> dict[str, object]:
+    """The run's `questions` block: the global settings, then the fields the request sets."""
+    resolved = defaults.questions.model_dump()
+    resolved.update(request.questions.model_dump(exclude_none=True))
+    return resolved
 
 
 def base_name(name: str) -> str:
@@ -212,6 +221,7 @@ def stage_run(
         resolved_profile=request.profile or profile,
         writing_options=writing,
         writing_flags=writing.model_dump() if request.kind == "research" or catalog_writes(request.structure) else {},
+        questions_flags=question_flags(request, defaults),
         domain_flags=domain_lists(request, defaults, own),
         origin=origin,
         token_name=token_name,
@@ -267,7 +277,7 @@ def stage_rerun(
         profile=original.profile,
         use=original.use or {},
         depth=original.request.depth,
-        set=without_use(original.overrides),
+        set=[value for value in without_use(original.overrides) if not value.startswith("questions.")],
         run_id=fresh_id(runs_dir),
         action="rerun",
         created=datetime.now(UTC),
@@ -347,6 +357,7 @@ def set_flags(staged: StagedRun) -> list[str]:
         f"{RESEARCH_KEYS[name]}={value}" for name, value in staged.research.model_dump(exclude_none=True).items()
     ]
     domains = [f"{key}={toml_value(value)}" for key, value in staged.domain_flags.items()]
+    domains += [f"questions.{name}={toml_value(value)}" for name, value in staged.questions_flags.items()]
     if staged.search_language is not None:
         domains.append(f"search.language={toml_value(staged.search_language)}")
     return [
@@ -402,7 +413,8 @@ def build_rerun_argv(command: list[str], staged: StagedRun, path: Path) -> list[
     if staged.until:
         argv += ["--until", staged.until]
     argv += ["--profile", staged.resolved_profile, *kind_flags(staged), *use_flags(staged), *depth_flags(staged)]
-    return argv + attach_flags(path) + [flag for value in staged.set for flag in ("--set", value)]
+    asking_off = ["questions.clarify=false", "questions.rounds=false"]
+    return argv + attach_flags(path) + [flag for value in [*asking_off, *staged.set] for flag in ("--set", value)]
 
 
 def origin_flags(staged: StagedRun) -> list[str]:

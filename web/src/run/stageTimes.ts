@@ -202,7 +202,7 @@ export function timeBar(
     });
   return {
     total,
-    running: run.status === "running",
+    running: run.status === "running" || run.status === "waiting",
     parts,
     top,
     all,

@@ -14,6 +14,8 @@ export class FakeWebSocket {
 
   readyState = 0;
   closedByClient = false;
+  /** Text messages the client sent. */
+  sent: string[] = [];
   onopen: (() => void) | null = null;
   onmessage: ((message: { data: string }) => void) | null = null;
   onclose: ((close: { code: number }) => void) | null = null;
@@ -34,6 +36,11 @@ export class FakeWebSocket {
   serverClose(code: number) {
     this.readyState = 3;
     this.onclose?.({ code });
+  }
+
+  send(data: string) {
+    if (this.readyState !== 1) throw new Error("socket is not open");
+    this.sent.push(data);
   }
 
   close() {

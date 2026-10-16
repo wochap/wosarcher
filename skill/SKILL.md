@@ -136,6 +136,35 @@ wosarcher doctor
 providers answer (`--use BLOCK=NAME` checks another entry); run it when a
 run fails with a provider error.
 
+## 8b. Catalogs
+
+```sh
+wosarcher catalog draft "<brief>"
+wosarcher catalog "<brief>" --json
+```
+
+`catalog` crawls a brief into records; `catalog draft` prints the structure
+it would use, ready to edit and pass back with `--structure`.
+
+## 8c. Steering a run with questions
+
+A run asks nothing unless you opt in with `--clarify` (questions about the
+brief before any search) or `--interactive` (which follow-ups to search, and
+whether to stop, between rounds). With `--json` or any redirected standard
+input, a pause is printed as JSON on standard error and the command keeps
+waiting. Answer it from another shell:
+
+```sh
+wosarcher questions <run_id> --json
+wosarcher continue <run_id> --answer q1=a --answer q2=a,c
+wosarcher continue <run_id> --recommended
+```
+
+`--answer QID=VALUE` takes an option ID, option IDs joined by commas, or
+`other:<text>`. `--recommended` answers every question with its recommended
+option. `--input-timeout SECONDS` makes an unanswered pause continue with the
+recommended answers.
+
 ## 9. Output
 
 `--json` prints one `RunOutput` document when the run ends:

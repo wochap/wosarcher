@@ -213,7 +213,7 @@ async def gap(
 
     `parts` are the plan's question parts, or nothing to leave them out of the call.
     """
-    table, uncovered = coverage(queries, scores, score_cfg)
+    table, uncovered = coverage([item for item in queries if not item.dropped_by], scores, score_cfg)
     sent = messages(query, table, known, context, parts=parts, limit=limit, today=today)
     completion: Completion = await llm.complete(sent, max_tokens=MAX_TOKENS, effort=effort)
     found, note, named = parse(completion.text)

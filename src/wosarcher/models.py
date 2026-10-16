@@ -3,7 +3,7 @@
 import re
 from datetime import datetime
 from hashlib import sha256
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal, cast, get_args
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import (
@@ -113,6 +113,8 @@ class Query(Contract):
     """The research round (or the wave of a catalog run) that searches it; follow-ups start at 2."""
     node_id: str | None = None
     """The catalog node a node query (`n<k>s`, `n<k>c`) is about; None otherwise."""
+    dropped_by: Literal["user"] | None = None
+    """Set on a follow-up the user dropped at a round pause; it is kept in the plan and never searched."""
 
 
 class Plan(Contract):
@@ -428,7 +430,9 @@ STAGES: tuple[Stage, ...] = (
 LOOP_STAGES: tuple[Stage, ...] = ("search", "fetch", "chunk", "prefilter", "score", "gap")
 """The stages that repeat once per research round."""
 
-StopReason = Literal["max rounds", "no new sources", "page limit reached", "no follow-ups", "gap step failed"]
+StopReason = Literal[
+    "max rounds", "no new sources", "page limit reached", "no follow-ups", "gap step failed", "stopped by user"
+]
 
 
 class GapResult(Contract):
@@ -457,6 +461,10 @@ class RoundRecord(Contract):
     """Question parts the gap step after this round named as not yet answerable; empty for the last round."""
     uncovered: list[str] = []
     """Query IDs the coverage table marked `uncovered` after this round; empty for the last round."""
+    dropped: list[str] = []
+    """Follow-ups of the gap step after this round that the user dropped at the round pause."""
+    added: list[str] = []
+    """Query IDs the user added at the round pause."""
 
 
 class ResearchRecord(Contract):
@@ -467,6 +475,182 @@ class ResearchRecord(Contract):
     reason: StopReason
     note: str = ""
     rounds: list[RoundRecord]
+
+
+# Run questions
+
+QuestionKind = Literal["confirm", "single", "multi"]
+PauseKind = Literal["clarify", "round"]
+AnsweredBy = Literal["user", "agent", "timeout"]
+MAX_QUESTIONS = 4
+MIN_OPTIONS, MAX_OPTIONS = 2, 6
+
+
+class QuestionOption(Contract):
+    id: str
+    label: str
+    description: str = ""
+    recommended: bool = False
+
+
+class Question(Contract):
+    """One question of a pause. `confirm` and `single` have exactly one recommended option; `multi` any number."""
+
+    id: str
+    text: str
+    kind: QuestionKind
+    options: list[QuestionOption] = Field(min_length=1, max_length=MAX_OPTIONS)
+    allow_other: bool = False
+    """Free text as an answer; `single` and `multi` only."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def one_recommendation(cls, data: Any) -> Any:
+        """`confirm` and `single`: the first option marked recommended, else the first option, is the only one."""
+        if not isinstance(data, dict):
+            return data
+        fields = cast(dict[str, Any], data)
+        raw: Any = fields.get("options")
+        if fields.get("kind") == "multi" or not isinstance(raw, list) or not raw:
+            return fields
+        entries = [
+            dict(cast(dict[str, Any], item))
+            if isinstance(item, dict)
+            else QuestionOption.model_validate(item).model_dump()
+            for item in cast(list[Any], raw)
+        ]
+        marked = next((n for n, item in enumerate(entries) if item.get("recommended")), 0)
+        for n, item in enumerate(entries):
+            item["recommended"] = n == marked
+        return {**fields, "options": entries}
+
+    @model_validator(mode="after")
+    def check_other(self) -> "Question":
+        if self.kind == "confirm" and self.allow_other:
+            raise ValueError("a confirm question cannot allow other")
+        return self
+
+    def recommended_ids(self) -> list[str]:
+        return [option.id for option in self.options if option.recommended]
+
+
+class Answer(Contract):
+    question_id: str
+    option_ids: list[str] = []
+    other: str | None = None
+    """Free text, only for a question that allows it; with no option it is the whole answer."""
+
+
+class QuestionsAnswered(Contract):
+    """`input/<id>.answer.json`: the answers and who gave them."""
+
+    answers: list[Answer]
+    answered_by: AnsweredBy
+
+
+class Pause(Contract):
+    """`input/<id>.json`: one pause of a run and, once answered, its answers."""
+
+    id: int = Field(ge=1)
+    kind: PauseKind
+    after: int | None = None
+    """The research round or catalog wave a round pause follows; None for clarify."""
+    context: str = ""
+    questions: list[Question] = Field(min_length=1, max_length=MAX_QUESTIONS)
+    created: datetime
+    timeout: int = Field(ge=0)
+    max_wait: int = Field(ge=1)
+    answers: list[Answer] = []
+    answered_by: AnsweredBy | None = None
+
+
+class PendingPause(Contract):
+    """The open pause of a `waiting` run in its summary."""
+
+    id: int
+    kind: PauseKind
+    after: int | None = None
+    questions: int
+    deadline: datetime
+
+
+class Clarification(Contract):
+    """One answered clarify question as `request.json` records it."""
+
+    question: str
+    answer: str
+
+
+def recommended_answers(questions: list[Question]) -> list[Answer]:
+    return [Answer(question_id=question.id, option_ids=question.recommended_ids()) for question in questions]
+
+
+def answer_text(question: Question, answer: Answer) -> str:
+    """The chosen labels and the free text of an answer, joined with commas."""
+    labels = {option.id: option.label for option in question.options}
+    parts = [labels.get(option_id, option_id) for option_id in answer.option_ids]
+    if answer.other and answer.other.strip():
+        parts.append(answer.other.strip())
+    return ", ".join(parts)
+
+
+def check_answers(questions: list[Question], answers: list[Answer]) -> None:
+    """Raises `ValueError` naming the question when an answer is missing or invalid for its question."""
+    by_id = {answer.question_id: answer for answer in answers}
+    unknown = [answer.question_id for answer in answers if answer.question_id not in {q.id for q in questions}]
+    if unknown:
+        raise ValueError(f"{unknown[0]}: no such question")
+    for question in questions:
+        answer = by_id.get(question.id)
+        other = (answer.other or "").strip() if answer else ""
+        if answer is None or (not answer.option_ids and not other):
+            raise ValueError(f"{question.id}: no answer")
+        known = {option.id for option in question.options}
+        bad = [option_id for option_id in answer.option_ids if option_id not in known]
+        if bad:
+            raise ValueError(f"{question.id}: unknown option {bad[0]}")
+        if question.kind != "multi" and len(answer.option_ids) > 1:
+            raise ValueError(f"{question.id}: {question.kind} takes one option")
+        if answer.other is not None and answer.other.strip() and not question.allow_other:
+            raise ValueError(f"{question.id}: does not allow other")
+
+
+class QuestionsOptions(Contract):
+    """The `questions` global settings: the pauses a run may make and how long each waits."""
+
+    clarify: bool = True
+    rounds: bool = True
+    timeout: int = Field(default=60, ge=0, le=3600)
+    max_wait: int = Field(default=1800, ge=60, le=86400)
+
+
+class QuestionsPatch(Contract):
+    """The `questions` field of a run request; absent fields take the global settings."""
+
+    clarify: bool | None = None
+    rounds: bool | None = None
+    timeout: int | None = Field(default=None, ge=0, le=3600)
+
+
+class ContinueRequest(Contract):
+    """The body of `POST /api/runs/{id}/continue`."""
+
+    pause_id: int
+    answers: list[Answer]
+
+
+class OpenPause(Contract):
+    """`GET /api/runs/{id}/questions`: the open pause and the server's current deadline."""
+
+    pause_id: int
+    kind: PauseKind
+    after: int | None = None
+    context: str = ""
+    questions: list[Question]
+    created: datetime
+    timeout: int
+    max_wait: int
+    deadline: datetime
 
 
 # Catalog runs
@@ -493,7 +677,7 @@ CatalogOutput = Literal["table", "report", "both"]
 ExpandMode = Literal["links", "search", "both"]
 NodeStatus = Literal["discovered", "expanding", "extracted", "failed"]
 FoundBy = Literal["seed", "links", "search"]
-CatalogStopReason = Literal["frontier empty", "max nodes", "page limit reached", "extract failed"]
+CatalogStopReason = Literal["frontier empty", "max nodes", "page limit reached", "extract failed", "stopped by user"]
 FIELD_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 NODE_QUERY_PATTERN = re.compile(r"^n([0-9]+)([sc])$")
 
@@ -866,6 +1050,8 @@ class RunRecord(Contract):
     """The API token's name for origin `api`."""
     form: "RunCreate | None" = None
     """The request the run was created with through the API, `set` cleared; a rerun copies it; None for forks."""
+    clarifications: list[Clarification] = []
+    """The answers of the clarify pause; the request query ends with the same answers as a block."""
 
     @property
     def kind(self) -> RunKind:
@@ -876,8 +1062,10 @@ class RunRecord(Contract):
         return self.request.structure
 
 
-RunStatus = Literal["queued", "running", "done", "failed", "cancelled", "interrupted"]
-"""`queued` and `running` come from the server; a run with no terminal event and no process is `interrupted`."""
+RunStatus = Literal["queued", "running", "waiting", "done", "failed", "cancelled", "interrupted"]
+"""`queued` and `running` come from the server; a run with no terminal event and no process is `interrupted`.
+
+`waiting` is a live run paused on questions."""
 
 
 FinishedStatus = Literal["done", "failed", "cancelled"]
@@ -957,6 +1145,8 @@ class RunSummary(Contract):
     """The request the run was created with; None for forks and older runs."""
     attachments: list["AttachmentInfo"] = []
     """The run's attachments, in the order stored."""
+    pending: PendingPause | None = None
+    """The open pause of a `waiting` run; None otherwise."""
 
 
 class AttachmentInfo(Contract):
@@ -1122,6 +1312,8 @@ class RunCreate(Contract):
     set: list[str] = []
     """`dotted.key=value` overrides, applied last."""
     reuse_attachments: ReuseAttachments | None = None
+    questions: QuestionsPatch = QuestionsPatch()
+    """Per-run overrides of the global `questions` settings."""
 
     @field_validator("search_language")
     @classmethod
@@ -1208,6 +1400,7 @@ class ServerSettings(Contract):
     domains: DomainDefaults = DomainDefaults()
     max_concurrent_runs: int = Field(default=1, ge=1, le=8)
     """Run processes the server executes at once."""
+    questions: QuestionsOptions = QuestionsOptions()
 
 
 class ModelList(Contract):
@@ -1626,6 +1819,24 @@ class CatalogDoneData(Contract):
     note: str
 
 
+class InputNeededData(Contract):
+    pause_id: int
+    kind: PauseKind
+    after: int | None = None
+    context: str = ""
+    questions: list[Question]
+    created: datetime
+    timeout: int
+    max_wait: int
+
+
+class InputAnsweredData(Contract):
+    pause_id: int
+    answers: list[Answer]
+    answered_by: AnsweredBy
+    seconds_waited: float
+
+
 class EventBase(Contract):
     seq: int = Field(ge=0)
     run_id: str
@@ -1776,6 +1987,16 @@ class CatalogDone(EventBase):
     data: CatalogDoneData
 
 
+class InputNeeded(EventBase):
+    type: Literal["input.needed"] = "input.needed"
+    data: InputNeededData
+
+
+class InputAnswered(EventBase):
+    type: Literal["input.answered"] = "input.answered"
+    data: InputAnsweredData
+
+
 EVENT_TYPES: tuple[type[EventBase], ...] = (
     RunQueued,
     RunStarted,
@@ -1804,6 +2025,8 @@ EVENT_TYPES: tuple[type[EventBase], ...] = (
     NodeFailed,
     WaveDone,
     CatalogDone,
+    InputNeeded,
+    InputAnswered,
 )
 
 Event = Annotated[
@@ -1833,7 +2056,9 @@ Event = Annotated[
     | NodeExtracted
     | NodeFailed
     | WaveDone
-    | CatalogDone,
+    | CatalogDone
+    | InputNeeded
+    | InputAnswered,
     Field(discriminator="type"),
 ]
 EVENT: TypeAdapter[Event] = TypeAdapter(Event)
@@ -1852,6 +2077,17 @@ def make_event(seq: int, run_id: str, ts: datetime, event_type: str, stage: Stag
 
 CONTRACTS: tuple[type[Contract], ...] = (
     RunRequest,
+    QuestionOption,
+    Question,
+    Answer,
+    QuestionsAnswered,
+    Pause,
+    PendingPause,
+    Clarification,
+    QuestionsOptions,
+    QuestionsPatch,
+    ContinueRequest,
+    OpenPause,
     Query,
     Plan,
     Hit,

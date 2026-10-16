@@ -15,10 +15,13 @@ from wosarcher.models import (
     CATALOG_STAGES,
     EVENT_TYPES,
     STAGES,
+    Answer,
     CatalogDoneData,
     Context,
     GapReadyData,
     HitFoundData,
+    InputAnsweredData,
+    InputNeededData,
     KeptPassage,
     Limits,
     NodeExtractedData,
@@ -29,6 +32,8 @@ from wosarcher.models import (
     PassagesScoredData,
     PlanReadyData,
     Query,
+    Question,
+    QuestionOption,
     ReportTextData,
     ResearchDoneData,
     ResourceData,
@@ -95,6 +100,26 @@ DATA: dict[str, BaseModel] = {
     ),
     "node.failed": NodeFailedData(node_id="mef", reason="no page"),
     "wave.done": WaveDoneData(wave=1, expanded=6, found=14, records=5, failed=1, dropped=0),
+    "input.needed": InputNeededData(
+        pause_id=1,
+        kind="round",
+        after=1,
+        context="More on prices.",
+        questions=[
+            Question(
+                id="q1",
+                text="Stop research here and write?",
+                kind="confirm",
+                options=[QuestionOption(id="a", label="No, keep going", recommended=True)],
+            )
+        ],
+        created=TS,
+        timeout=60,
+        max_wait=1800,
+    ),
+    "input.answered": InputAnsweredData(
+        pause_id=1, answers=[Answer(question_id="q1", option_ids=["a"])], answered_by="timeout", seconds_waited=60.0
+    ),
     "catalog.done": CatalogDoneData(waves=2, nodes=20, records=18, flagged=2, reason="frontier empty", note="n"),
 }
 

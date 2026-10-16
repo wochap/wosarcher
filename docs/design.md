@@ -199,6 +199,52 @@ cyclic inside the loop (score, gap, search, …, prefilter), so a low-VRAM
 machine swaps models up to three times per round. Fewer rounds or a remote
 scorer keeps that down.
 
+### Run questions
+
+A run can stop and ask a person. Two pauses exist, both optional and both
+off for an agent unless it asks (`--clarify`, `--interactive`):
+
+- **Clarify.** After the planner (research) or the draft (catalog) and before
+  any search, one LLM call (`prompts/clarify.md`, built by `stages/clarify.py`)
+  writes up to four questions about scope, sources, depth, and freshness. Each
+  is `confirm`, `single`, or `multi` with 2 to 6 options, one recommended (what
+  the plan already assumes), and optionally a free-text "other". The answers
+  are recorded as `clarifications` in `request.json` and appended to the
+  request query as a "Clarifications:" block, so the gap, write, and extract
+  prompts see them. The plan (or the structure) is made again only when an
+  answer differs from the recommendation; otherwise nothing extra is spent. A
+  failed or unreadable clarify call adds the warning `clarify failed: <reason>`
+  and the run goes on.
+- **Round pause.** After each gap step that kept follow-ups (research), a card
+  built from the gap output with no model call: which follow-ups to search
+  (all recommended, plus "other" as a new query) and "Stop research here and
+  write?". Dropped follow-ups stay in `plan.json` with `dropped_by: "user"`.
+  Stopping adds the stop reason `stopped by user`. A catalog run asks after
+  each wave that found nodes: "Continue to wave k+1?".
+
+A pause is a protocol through the run directory (`runner/questions.py`):
+the run writes `input/<id>.json` and emits `input.needed`, releases a GPU model
+as the exclusive policy would, then polls once per second for
+`input/<id>.answer.json` and the presence file `input/<id>.hold`. The server
+writes the answer file on `POST /api/runs/{id}/continue` and touches the hold
+file on each `{"type": "presence"}` message on the event socket. The deadline
+is the later of the pause's creation and the hold file's modification time,
+plus `questions.timeout`, capped at creation plus `questions.max_wait`; when it
+passes the run writes the answer file itself with every recommendation and
+`answered_by: "timeout"`. A `timeout` of 0 continues at once. The pause keeps
+the run's slot and lock; its status is `waiting` (the log's last `input.*`
+event is `input.needed`). Forks and reruns never pause.
+
+Defaults by client: the `questions` block (`clarify`, `rounds`, `timeout`,
+`max_wait`) comes from the server's global settings (all four) and a run
+request's `questions` (the first three) wins. The web sends the form's
+choice. The CLI sends `clarify` false, `rounds` false, and `timeout` 0 unless
+`--clarify`, `--interactive`, or `--input-timeout` say otherwise; a run that
+asks and has no `--input-timeout` waits as long as `max_wait` allows, since a
+CLI has no presence to report. In a terminal the CLI prints the card and posts
+the answers; without one it prints the pause as JSON on standard error, and
+an agent answers with `wosarcher questions <id>` and `wosarcher continue <id>`.
+
 ### Catalog runs
 
 A catalog run answers a tree-shaped brief ("every public organization of
@@ -1071,6 +1117,7 @@ runs/<id>/
   records.jsonl      # extract: checked records with their node ID
   catalog.json       # assemble: records, dropped, waves, reason, note, fill, by_type, by_depth, nodes, output
                      # (a catalog with output report or both also has context.json, report.md, report.json from write)
+  input/             # pauses: <id>.json (the pause), <id>.answer.json, <id>.hold (presence); only for runs that paused
   events.jsonl
   costs.json         # usage and cost per stage, per provider, and in total
 ```
@@ -1099,8 +1146,9 @@ right after it creates the run directory, before `request.json` is
 written, and holds it until it exits; the kernel drops the lock on any
 exit, even SIGKILL. `RunStore.is_running(run_id)` tries `LOCK_SH |
 LOCK_NB` on it and releases at once. A run with no terminal event has
-status `queued` while the server has it staged, `running` while its lock
-is held, and `interrupted` otherwise, the same for every reader and for
+status `queued` while the server has it staged, `waiting` while its lock
+is held and its last `input.needed` has no `input.answered`, `running` while
+its lock is held otherwise, and `interrupted` otherwise, the same for every reader and for
 the server after a restart. Only the server queues runs (see Server); a
 direct `wosarcherd run` is not queued or counted, but shows as `running`
 through its lock.
@@ -1143,7 +1191,7 @@ streams use the same connection as a WebSocket. These three names and
 prints one error naming the socket path or URL and `wosarcherd`, and exits
 69 (`EX_UNAVAILABLE`); a 401 exits 2 naming `WOSARCHER_TOKEN`.
 
-- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--profile NAME] [--use BLOCK=NAME]... [--depth NAME] [--set k=v]... [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--json]`:
+- `wosarcher run "q" [--attach ...] [--sources ...] [--until select] [--profile NAME] [--use BLOCK=NAME]... [--depth NAME] [--set k=v]... [--tone ...] [--words ...] [--sub-queries N] [--results-per-query N] [--max-pages N] [--passages-per-query N] [--context-tokens N|auto] [--gap-context-tokens N|auto] [--rounds N] [--queries-per-round N] [--search-language CODE] [--allow-domain DOMAIN]... [--block-domain DOMAIN]... [--model NAME] [--context-window N] [--max-output N] [--plan-thinking LEVEL] [--gap-thinking LEVEL] [--write-thinking LEVEL] [--clarify] [--interactive] [--input-timeout SECONDS] [--json]`:
   creates the run with `POST /api/runs`: the writing flags as `writing`,
   the research flags as `research`, the domain flags as `domains`,
   `--search-language` as `search_language`, `--use` as `use`, `--model`,
@@ -1208,6 +1256,18 @@ prints one error naming the socket path or URL and `wosarcherd`, and exits
 - `wosarcher cancel <id>`: `POST /api/runs/{id}/cancel`; prints `run <id>:
   signalled` or `dequeued`; a run that is not active exits 2 with the
   detail.
+- `wosarcher questions <id> [--json]`: `GET /api/runs/{id}/questions`; prints
+  the open pause as the text card (`<n>/<N> text`, numbered options with
+  "(recommended)", `o) other`) or as JSON; exits 1 with "not waiting" when
+  the run is not paused.
+- `wosarcher continue <id> [--answer QID=VALUE]... [--recommended]`:
+  `POST /api/runs/{id}/continue` for the open pause; `VALUE` is an option ID,
+  option IDs joined by commas, or `other:<text>`; `--recommended` answers
+  every question with its recommendation. A missing or invalid answer exits 2
+  with the server's detail; a run that is not waiting exits 1.
+- `wosarcher run` and `wosarcher catalog` take `--clarify` (questions about the
+  brief), `--interactive` (the round and wave pauses), and `--input-timeout
+  SECONDS` (0 to 3600); the request carries them as `questions`.
 - `wosarcher export <id> --format pdf|docx [--output PATH] [--force]`:
   downloads `GET /api/runs/{id}/export` (see Report export) to `PATH`, by
   default `<id>.<format>` in the current directory, and prints the path. An
@@ -1341,6 +1401,10 @@ commands, flags, or the value lists that mirror package constants.
   error text), `run.cancelled`.
 - Stage: `stage.started`, `stage.progress` (counters), `stage.done` (with
   cost), `stage.failed` (error text).
+- Questions: `input.needed` (pause ID, kind, after, context, questions,
+  created, timeout, max wait) and `input.answered` (pause ID, answers,
+  `answered_by`, seconds waited); both are logged, and a run between them is
+  `waiting`.
 - Resources: `resource.waiting` (stage waits for a device, for example while
   the previous model unloads), `resource.released`.
 - Plan and search: `plan.ready` (sub-queries), `hit.found` (URL, title,
@@ -1374,6 +1438,8 @@ Each event: `{seq, run_id, ts, type, stage?, data}`. Event models live in
 | `stage.done` | `count`, `seconds`, `usage` (`UsageTotals` with `cost`, that round's), `provider`, `skipped`, `copied_from`, `warnings`, `passthrough`, `unfetched`, `filtered`, `round` |
 | `stage.failed` | `error`, `next` (empty when none) |
 | `resource.waiting`, `resource.released` | `device`, `released_stage` |
+| `input.needed` | `pause_id`, `kind` (`clarify`, `round`), `after`, `context`, `questions`, `created`, `timeout`, `max_wait` |
+| `input.answered` | `pause_id`, `answers`, `answered_by` (`user`, `agent`, `timeout`), `seconds_waited` |
 | `plan.ready` | `queries` |
 | `hit.found` | `url`, `title`, `query_ids` |
 | `page.fetched` | `url`, `source_id`, `title`, `chars`, `cached`, `thin` (a thin page; always false for attached files and old runs), `round` |
@@ -1518,7 +1584,8 @@ run is 404 `run_not_found`, an invalid body 422 naming each field.
   resolution `GET /api/profiles` uses), so a profile's own list wins. The
   decision is recorded with the run's overrides, so a rerun repeats it.
 - `GET /api/runs`, `GET /api/runs/{id}`: `RunSummary` (status `queued`,
-  `running`, `done`, `failed`, `cancelled`, `interrupted`; lineage;
+  `running`, `waiting`, `done`, `failed`, `cancelled`, `interrupted`; `pending`, the
+  open pause of a `waiting` run; lineage;
   `until`; `depth`, null for older runs; resolved writing options; `duration_s`; `cost`;
   `queue_position`; `error`, the `run.failed` text when failed; `end_stage`,
   the stage named by a final `run.failed` or `run.cancelled`;
@@ -1651,12 +1718,21 @@ filter replaces images with their alt text, so no file or URL is read.
 - `GET /api/settings` and `PUT /api/settings`: global defaults
   (`ServerSettings`: all writing options, `sources`, `domains` with
   `allow` and `block`, empty by default and validated like
-  `search.allow_domains`, and `max_concurrent_runs`, 1 to 8, default 1),
+  `search.allow_domains`, `max_concurrent_runs`, 1 to 8, default 1, and
+  `questions`: `clarify`, `rounds`, `timeout` 0 to 3600, `max_wait` 60 to 86400),
   stored in `<config dir>/server-settings.json` (`store/settings.py`). The
   run defaults apply only to runs started by the server, as `--set
   write.*` values after the profile and before the request's `writing` and
   `set` (request wins); a direct `wosarcherd run` uses the profile.
   `max_concurrent_runs` limits the run processes the server executes.
+- `GET /api/runs/{id}/questions` and `POST /api/runs/{id}/continue`: the open
+  pause with the server's deadline, and its answers (`pause_id` and one answer
+  per question; `answered_by` is `user` for a browser session, `agent` for an
+  API token or the socket). 409 `not_waiting` when the run is not paused or
+  `pause_id` is not the open pause; 422 naming the question for a missing or
+  invalid answer. `POST /api/runs` accepts `questions` (`clarify`, `rounds`,
+  `timeout`). On the event socket a `{"type": "presence"}` message touches the
+  open pause's hold file; the socket stays open while the run waits.
 - `GET /api/slots`: `SlotState` from the server's own queue: `limit`, `held`
   (the run processes it executes, oldest first: `run_id`, `origin`,
   `token_name`, `started`), and `queued` (staged runs in queue order:
@@ -1957,6 +2033,9 @@ runs have origin `cli` and no user name.
 Settings: `auth.password_hash` (or `_file`, `_command`), `auth.session_days`, `auth.allowed_origins`.
 
 ### Configuration
+
+The `questions` block (`clarify`, `rounds`, `timeout`, `max_wait`) sets the run
+questions described in Run questions; a depth preset cannot set it.
 
 Precedence, lowest first:
 
@@ -2398,6 +2477,11 @@ that is not reachable. Agents usually want cited context: `wosarcher run "q" --u
 default `wosarcher run`; `wosarcher run "q" --format answer --json` gives a
 short cited answer.
 
+A run asks nothing unless the agent passes `--clarify` or `--interactive`;
+then a pause is printed as JSON on standard error and the agent answers with
+`wosarcher questions <id> --json` and `wosarcher continue <id> --answer
+q1=<option>` (or `--recommended`).
+
 Each agent sets its own defaults in its environment (for Claude Code, the
 `env` block of `settings.json`): `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE`,
 which `wosarcher run` sends as `--depth` and `--profile`. The skill's
@@ -2558,6 +2642,15 @@ from the Pydantic models (JSON Schema, then json-schema-to-typescript); a
 check fails when they drift.
 
 ### Frontend design
+
+Run questions: the Live run screen shows the question card (scenarios
+`live-clarify`, `live-clarify-idle`, `live-round-input`) while the run is
+`waiting`, built from `input.needed` and closed on `input.answered`; presence
+is sent on the event socket at most every 10 seconds while the user is active,
+and the timeout chip counts down from the full timeout once idle. The Plan,
+Draft, Gap, and Extract cards show the Waiting state and the answers or timeout
+note; Settings has a "Run questions" panel, and both New run forms a Questions
+row (the catalog form's Run group holds Profile and Questions).
 
 The visual design is the Claude Design handoff bundle in `design/`. It is
 the source of truth for the frontend: the built UI matches it screen by

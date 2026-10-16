@@ -17,6 +17,8 @@ when it names a mode, else `FAKE_MODE`:
 - `early-exit`: prints `error: unknown profile 'x'` to standard error and exits with 2 before creating the run
   directory.
 - `partial-kill`: like `ignore-term`, but first writes half an event line without a newline.
+- `ask`: after `run.started`, pauses with two questions (`input.needed`, status `waiting`) until the answer
+  file appears (at most 20 s), then logs `input.answered` and ends like `ok`.
 
 SIGTERM logs `run.cancelled` at the next chunk and exits 130. `doctor --json` prints a
 `DoctorReport` chosen by `FAKE_DOCTOR` (`ok`, `slow`, `failed`, `hang`, or `garbage`),
@@ -41,8 +43,13 @@ from wosarcher.models import (
     CatalogRecord,
     Context,
     DoctorReport,
+    InputAnsweredData,
+    InputNeededData,
     Node,
+    Pause,
     ProviderHealth,
+    Question,
+    QuestionOption,
     Report,
     RunCancelledData,
     RunDoneData,
@@ -57,7 +64,7 @@ from wosarcher.models import (
 )
 from wosarcher.store import RunStore
 
-MODES = ("ok", "slow", "crash", "ignore-term", "bad-line", "huge-stderr", "early-exit", "partial-kill")
+MODES = ("ok", "slow", "crash", "ignore-term", "bad-line", "huge-stderr", "early-exit", "partial-kill", "ask")
 CHUNKS = 20
 FINAL_SUFFIX = "\n\n## References\n"
 
@@ -176,6 +183,37 @@ def catalog(store: RunStore, record: RunRecord, first: str | None) -> int:
     return 0
 
 
+def ask(store: RunStore, run_id: str) -> None:
+    """Pause on two questions until the answer file appears."""
+    options = [QuestionOption(id="a", label="Yes", recommended=True), QuestionOption(id="b", label="No")]
+    questions = [
+        Question(id="q1", text="Include regional governments?", kind="confirm", options=options),
+        Question(id="q2", text="Which sources?", kind="multi", options=options, allow_other=True),
+    ]
+    pause = Pause(id=1, kind="clarify", questions=questions, created=datetime.now(UTC), timeout=60, max_wait=1800)
+    store.write_pause(run_id, pause)
+    data = InputNeededData(
+        pause_id=1,
+        kind="clarify",
+        questions=questions,
+        created=pause.created,
+        timeout=60,
+        max_wait=1800,
+    )
+    store.append_event(run_id, "input.needed", "plan", data)
+    deadline = time.monotonic() + 20
+    found = store.read_answer(run_id, 1)
+    while found is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+        found = store.read_answer(run_id, 1)
+    if found is not None:
+        waited = (datetime.now(UTC) - pause.created).total_seconds()
+        answered = InputAnsweredData(
+            pause_id=1, answers=found.answers, answered_by=found.answered_by, seconds_waited=waited
+        )
+        store.append_event(run_id, "input.answered", "plan", answered)
+
+
 def create(store: RunStore, args: argparse.Namespace) -> RunRecord:
     run_dir = store.run_dir(args.run_id)
     if run_dir.exists():
@@ -266,6 +304,8 @@ def main(argv: list[str]) -> int:
         until=record.request.until,
     )
     store.append_event(run_id, "run.started", None, started)
+    if mode == "ask":
+        ask(store, run_id)
     if mode == "crash":
         store.append_event(run_id, "stage.started", "score", StageStartedData(device=None, provider="rerank"))
         for n in range(30):

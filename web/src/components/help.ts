@@ -483,4 +483,28 @@ Object.assign(HELP, {
     title: "Re-extract",
     body: "Runs extract and assemble again with another model. The fetched pages are kept, so nothing is crawled again.",
   },
+  qtimeout: {
+    title: "Timeout",
+    body: "The run waits while you are here. When you are away, it counts down and then continues with the recommended answers. Set the default in Settings; override it per run in Options.",
+  },
+  "q-timeout": {
+    title: "Timeout",
+    body: "The run waits while you are here. When you are away, it counts down and then continues with the recommended answers. Set the default in Settings; override it per run in Options.",
+  },
+  "q-clarify": {
+    title: "Ask before searching",
+    body: "After planning, the run shows up to four questions about scope and sources, with a recommended answer each.",
+  },
+  "q-rounds": {
+    title: "Ask between rounds",
+    body: "After each research round, the run shows the proposed follow-up searches to edit, and lets you stop early.",
+  },
+  "q-ask": {
+    title: "Questions",
+    body: "Whether this run may pause to ask about scope and follow-up searches. Preselected from Settings.",
+  },
+  "q-over": {
+    title: "Overridden",
+    body: "Changed for this run only. Settings keeps its default.",
+  },
 } satisfies Record<string, Help>);

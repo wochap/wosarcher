@@ -31,6 +31,8 @@ from wosarcher.models import (
     PageFetchedData,
     Plan,
     Query,
+    Question,
+    QuestionOption,
     Skipped,
     Stage,
     StageDoneData,
@@ -47,6 +49,7 @@ from wosarcher.runner import steps
 from wosarcher.stages import assemble as assembling
 from wosarcher.stages import catalog_context as cataloguing
 from wosarcher.stages import chunk as chunking
+from wosarcher.stages import clarify as clarifying
 from wosarcher.stages import draft as drafting
 from wosarcher.stages import expand as expanding
 from wosarcher.stages import extract as extracting
@@ -236,6 +239,8 @@ async def waves(runner: "Runner", ctx: CatalogContext, until: Stage | None) -> b
             break
         ctx.log.emit("wave.done", "extract", WaveDoneData(**state.entry().model_dump()))
         state.reason = stop_rule(ctx)
+        if state.reason is None and await wave_pause(ctx):
+            state.reason = "stopped by user"
         if state.reason is not None:
             break
         state.next()
@@ -244,21 +249,49 @@ async def waves(runner: "Runner", ctx: CatalogContext, until: Stage | None) -> b
     return False
 
 
+async def wave_pause(ctx: CatalogContext) -> bool:
+    """Ask whether to continue to the next wave after a wave that found nodes; true when the user stopped the crawl."""
+    asker, state = ctx.asker, ctx.wave
+    if asker is None or not asker.enabled or not ctx.settings.questions.rounds or state.found == 0:
+        return False
+    question = Question(
+        id="q1",
+        text=f"Continue to wave {state.number + 1}?",
+        kind="confirm",
+        options=[
+            QuestionOption(id="a", label="Yes", recommended=True),
+            QuestionOption(id="b", label="No, assemble now"),
+        ],
+    )
+    context = f"Wave {state.number} found {state.found} new nodes."
+    reply = await asker.ask("extract", "round", [question], after=state.number, context=context)
+    return "b" in reply.answers[0].option_ids
+
+
 # Steps
 
 
 async def draft(ctx: CatalogContext) -> steps.Outcome:
     request = ctx.record.request
     outlines = [loading.outline(page) for page in ctx.items("files.jsonl", Page)]
-    result = await drafting.draft(
-        request.query,
-        request.structure,
-        outlines,
-        ctx.adapters.draft_llm,
-        catalog=ctx.settings.catalog,
-        today=date.today().isoformat(),
-        effort=ctx.settings.llm.reasoning.draft,
-    )
+
+    async def make_structure(brief: str, given: Structure | None) -> drafting.DraftResult:
+        return await drafting.draft(
+            brief,
+            given,
+            outlines,
+            ctx.adapters.draft_llm,
+            catalog=ctx.settings.catalog,
+            today=date.today().isoformat(),
+            effort=ctx.settings.llm.reasoning.draft,
+        )
+
+    result = await make_structure(request.query, request.structure)
+    topic = steps.short_reason(request.query)
+    clarified = await steps.clarify_brief(ctx, clarifying.structure_summary(result.structure), topic)
+    if clarified.changed and result.derived:
+        result = await make_structure(ctx.record.request.query, None)
+    request = ctx.record.request
     structure = result.structure
     run_id = ctx.run_id
     ctx.store.write_artifact(run_id, "structure.json", structure)
@@ -279,7 +312,7 @@ async def draft(ctx: CatalogContext) -> steps.Outcome:
     ctx.log.emit("structure.ready", "draft", data)
     for node in result.nodes:
         ctx.found(node, "draft")
-    return steps.Outcome(len(result.nodes))
+    return steps.Outcome(len(result.nodes), warnings=[clarified.warning] if clarified.warning else [])
 
 
 def wave_nodes(ctx: CatalogContext) -> list[tuple[int, Node]]:

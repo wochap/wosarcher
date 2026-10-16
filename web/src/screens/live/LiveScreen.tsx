@@ -1,12 +1,13 @@
 // Live run: the followed run's header, banner, phase timeline, panels, and footer; one panel
 // at a time on phones. Nothing followed shows the empty state.
 import { useCallback, useEffect, useState } from "react";
-import type { RunDetail } from "../../api/types";
+import type { ContinueRequest, RunDetail } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
 import { countStatus, initialCatalog, wantsReport } from "../../run/catalog";
 import { fmtK } from "../../run/format";
+import { type AskState, askState } from "../../run/questions";
 import type { RunView } from "../../run/reducer";
 import { useRunData } from "../../run/useRunData";
 import { CancelDialog } from "./CancelDialog";
@@ -21,6 +22,7 @@ import { NotFound } from "./NotFound";
 import { FILTERS, type PassageFilter, PassagesPanel } from "./PassagesPanel";
 import { PhaseTimeline, writeTokens } from "./PhaseTimeline";
 import { PhoneTabs } from "./PhoneTabs";
+import { QuestionCard } from "./QuestionCard";
 import { ReportPanel } from "./ReportPanel";
 import { ResearchRoundsPanel } from "./ResearchRoundsPanel";
 import { SourceDialog } from "./SourceDialog";
@@ -28,6 +30,7 @@ import { SourcesPanel } from "./SourcesPanel";
 import { StatusBanner } from "./StatusBanner";
 import { SubQueriesPanel } from "./SubQueriesPanel";
 import { TimeSection } from "./TimeSection";
+import { type QuestionCardState, useQuestionCard } from "./useQuestionCard";
 
 /** The run's configured `score.provider`, from the settings in its `request.json`. */
 function configuredScorer(detail: RunDetail | null | undefined): string | undefined {
@@ -110,8 +113,14 @@ export function LiveScreen() {
   }, [filter, pickFilter, source]);
 
   const view = data.view ?? live.view;
-  const running = view?.status === "running";
+  const running = view?.status === "running" || view?.status === "waiting";
   const now = useNow(running || view?.status === "queued");
+  const post = useCallback(
+    (body: ContinueRequest) => (followed ? api.continueRun(followed, body) : Promise.resolve()),
+    [api, followed],
+  );
+  const card = useQuestionCard(view?.pause ?? null, post);
+  const ask = view ? askState(view, card?.index ?? 0) : null;
   if (followed && (live.conn.notFound || data.notFound)) return <NotFound runId={followed} />;
   if (!followed || !view) return <EmptyLive />;
 
@@ -158,6 +167,8 @@ export function LiveScreen() {
         elapsed={elapsed}
         now={now}
         attachments={attachments}
+        card={card}
+        ask={ask}
         cancelling={cancelling}
         confirming={confirming}
         onConfirm={setConfirming}
@@ -168,6 +179,9 @@ export function LiveScreen() {
 
   const tab = isPhone ? liveTab : null;
   const shows = (t: string) => tab === null || tab === t;
+  // A waiting run's card sits above the grid, and on a phone replaces the Progress tab.
+  const cover = isPhone && tab === "progress" && !!card;
+  const progress = shows("progress") && !cover;
   const selected = run.phases.select.state === "done" || run.phases.select.state === "reused";
   const kept = run.passages.reduce((n, q) => n + q.items.length, 0);
   const writing = run.phases.write.state;
@@ -217,20 +231,21 @@ export function LiveScreen() {
         rewriteOf={detail?.fork_from === "write" ? detail.parent_run_id : null}
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
-      {shows("progress") && (
+      {progress && (
         <>
-          <PhaseTimeline run={run} candidates={candidates(detail)} rounds={rounds} />
+          <PhaseTimeline run={run} candidates={candidates(detail)} rounds={rounds} ask={ask} />
           <TimeSection run={run} created={detail?.created} rounds={rounds} now={now} />
         </>
       )}
+      {card && (!isPhone || cover) && <QuestionCard card={card} onPresence={live.presence} />}
       <div className={css.grid}>
-        {(shows("progress") || shows("sources")) && (
+        {(progress || shows("sources")) && (
           <div className={css.column}>
-            {shows("progress") &&
+            {progress &&
               (rounds > 1 ? (
-                <ResearchRoundsPanel run={run} planned={rounds} className={css.rounds} />
+                <ResearchRoundsPanel run={run} planned={rounds} className={css.rounds} ask={ask} />
               ) : (
-                <SubQueriesPanel run={run} className={css.subQueries} />
+                <SubQueriesPanel run={run} className={css.subQueries} ask={ask} />
               ))}
             {shows("sources") && (
               <SourcesPanel
@@ -292,6 +307,8 @@ export function LiveScreen() {
 
 type CatalogProps = {
   run: RunView;
+  card: QuestionCardState | null;
+  ask: AskState | null;
   data: ReturnType<typeof useRunData>;
   elapsed: number;
   now: number;
@@ -327,6 +344,8 @@ function CatalogLiveScreen(props: CatalogProps) {
   const marker = detail?.writing?.citation_marker ?? "numeric";
   const tab = isPhone ? liveTab : null;
   const shows = (t: string) => tab === null || tab === t;
+  const cover = isPhone && tab === "progress" && !!props.card;
+  const progress = shows("progress") && !cover;
   const remote = detail?.origin === "cli" || detail?.origin === "api";
   const counts = {
     sources: run.status === "queued" ? "" : String(Object.keys(run.sources).length + files.length),
@@ -369,13 +388,21 @@ function CatalogLiveScreen(props: CatalogProps) {
           labels={writeStarted ? CATALOG_REPORT_TABS : CATALOG_TABS}
         />
       )}
-      {shows("progress") && (
-        <CatalogTimeline live={live} now={now - (run.clockOffset ?? 0)} write={writeText} />
+      {progress && (
+        <CatalogTimeline
+          live={live}
+          now={now - (run.clockOffset ?? 0)}
+          write={writeText}
+          ask={props.ask}
+        />
+      )}
+      {props.card && (!isPhone || cover) && (
+        <QuestionCard card={props.card} onPresence={stream.presence} />
       )}
       <div className={css.grid}>
-        {(shows("progress") || shows("sources")) && (
+        {(progress || shows("sources")) && (
           <div className={css.column}>
-            {shows("progress") && <FrontierPanel live={live} className={catalogCss.frontier} />}
+            {progress && <FrontierPanel live={live} className={catalogCss.frontier} />}
             {shows("sources") && (
               <SourcesPanel
                 run={run}

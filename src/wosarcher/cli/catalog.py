@@ -29,11 +29,14 @@ from wosarcher.cli.options import (
     AllowDomainOption,
     AttachOption,
     BlockDomainOption,
+    ClarifyOption,
     ClientProfileOption,
     ContextWindowOption,
     DraftThinkingOption,
     ExtractThinkingOption,
     FormatOption,
+    InputTimeoutOption,
+    InteractiveOption,
     LanguageOption,
     MarkerOption,
     MaxOutputOption,
@@ -49,6 +52,7 @@ from wosarcher.cli.options import (
     language_option,
     use_map,
 )
+from wosarcher.cli.questions import question_flags
 from wosarcher.cli.run import created, llm_patch, uploads, watch, writing_patch
 from wosarcher.models import (
     CATALOG_STAGES,
@@ -190,6 +194,9 @@ def draft(
 
 
 CATALOG_ONLY = (
+    "--clarify",
+    "--interactive",
+    "--input-timeout",
     "--structure",
     "--seed",
     "--relation",
@@ -271,6 +278,9 @@ def catalog(
     until: Annotated[
         str | None, typer.Option("--until", help=f"Stop after this stage: {', '.join(CATALOG_STAGES)}.")
     ] = None,
+    clarify: ClarifyOption = False,
+    interactive: InteractiveOption = False,
+    input_timeout: InputTimeoutOption = None,
     as_json: Annotated[
         bool, typer.Option("--json", help="Print the whole catalog.json (with the report) when the run ends.")
     ] = False,
@@ -307,6 +317,9 @@ def catalog(
             "--set": set_,
             "--until": until,
             "--json": as_json or None,
+            "--clarify": clarify or None,
+            "--interactive": interactive or None,
+            "--input-timeout": input_timeout,
             **writing,
         }
         given = [flag for flag in CATALOG_ONLY if catalog_flags[flag]]
@@ -352,6 +365,7 @@ def catalog(
                     reference_style=reference_style,
                     format=format_,
                 ),
+                "questions": question_flags(clarify, interactive, input_timeout),
                 "set": extra_set,
             }
         )

@@ -23,6 +23,7 @@ describe("httpApi", () => {
         writing: {} as never,
         domains: { allow: [], block: [] },
         max_concurrent_runs: 1,
+        questions: { clarify: true, rounds: true, timeout: 60, max_wait: 1800 },
       })
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ApiError);

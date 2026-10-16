@@ -10,6 +10,7 @@
 }
 
 .status[data-state="running"],
+.status[data-state="waiting"],
 .status[data-state="queued"] {
   background: var(--color-accent-800);
   color: var(--color-accent-100);

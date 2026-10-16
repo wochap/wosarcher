@@ -15,6 +15,7 @@ import type {
   DomainLists,
   ProfileInfo,
   ProviderEntry,
+  QuestionsPatch,
   ResearchValues,
   RunCreate,
   RunKind,
@@ -33,6 +34,7 @@ import {
 } from "../../components/DomainRows";
 import { HelpTip } from "../../components/HelpTip";
 import type { WritingField } from "../../components/WritingOptionsForm";
+import { type AskDraft, DEFAULT_QUESTIONS, questionsPatch } from "../../run/ask";
 import { catalogRequest, structureRow, wantsReport } from "../../run/catalog";
 import {
   CUSTOM_DESCRIPTION,
@@ -60,6 +62,7 @@ import {
 } from "../../run/recent";
 import { KIND_STEPS } from "../../run/thinking";
 import { Attachments } from "./Attachments";
+import { CatalogRun } from "./CatalogRun";
 import { CatalogWriting } from "./CatalogWriting";
 import { DeleteDialog } from "./DeleteDialog";
 import css from "./NewRunScreen.module.css";
@@ -153,6 +156,7 @@ export function runRequest(
   domains: Partial<DomainLists> = {},
   searchLanguage = "",
   profile: ProfileChoice = { use: {}, edits: {} },
+  questions?: QuestionsPatch,
 ): RunCreate {
   const request: RunCreate = {
     query,
@@ -170,6 +174,7 @@ export function runRequest(
   if (Object.keys(overrides).length) request.writing = overrides;
   if (Object.keys(domains).length) request.domains = domains;
   if (searchLanguage.trim()) request.search_language = searchLanguage.trim();
+  if (questions) request.questions = questions;
   return { ...request, ...profilePatch(profile, KIND_STEPS.research) };
 }
 
@@ -261,6 +266,12 @@ export function NewRunScreen() {
     block: selected?.block_domains ?? settings?.domains.block ?? [],
   };
   const domains: DomainLists = { ...domainDefaults, ...draft.domains };
+  const askDefaults = settings?.questions ?? DEFAULT_QUESTIONS;
+  const askRow = {
+    value: draft.questions,
+    defaults: askDefaults,
+    onChange: (questions: AskDraft) => setDraft((d) => ({ ...d, questions })),
+  };
   const choice: ProfileChoice = { use: draft.use, edits: draft.profileEdits };
   /** The profile's Advanced values, shared by the research and catalog forms. */
   const profileView: ProfileView = {
@@ -329,6 +340,7 @@ export function NewRunScreen() {
         overriddenDomains(domains, domainDefaults),
         draft.searchLanguage,
         choice,
+        questionsPatch(draft.questions, askDefaults),
       );
       if (draft.reused.length) {
         const names = draft.reused.map((f) => f.name);
@@ -384,6 +396,7 @@ export function NewRunScreen() {
         profile: options.profile,
         domains: overriddenDomains(domains, domainDefaults),
         choice,
+        questions: questionsPatch(draft.questions, askDefaults),
         writing: catalogWriting && saved ? overriddenFields(catalogWriting, saved) : undefined,
       });
       if (draft.reused.length) {
@@ -745,6 +758,18 @@ export function NewRunScreen() {
             onChange={(files) => setDraft((d) => ({ ...d, files }))}
             onReused={(reused) => setDraft((d) => ({ ...d, reused }))}
           />
+          {catalog && (
+            <CatalogRun
+              profile={{
+                ...profileView,
+                profiles: profileList,
+                name: options.profile,
+                words: writing?.words ?? defaults?.words ?? 0,
+                onPick: pickProfile,
+              }}
+              questions={askRow}
+            />
+          )}
           {catalog &&
             (draft.structure ? (
               <StructurePanel
@@ -755,13 +780,6 @@ export function NewRunScreen() {
                   defaults: domainDefaults,
                   invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
                   onChange: setDomains,
-                }}
-                profile={{
-                  ...profileView,
-                  profiles: profileList,
-                  name: options.profile,
-                  words: writing?.words ?? defaults?.words ?? 0,
-                  onPick: pickProfile,
                 }}
                 isPhone={isPhone}
               />
@@ -816,6 +834,7 @@ export function NewRunScreen() {
                 invalid: error?.field && error.entry ? { [error.field]: error.entry } : {},
                 onChange: setDomains,
               }}
+              questions={askRow}
               searchLanguage={draft.searchLanguage}
               onSearchLanguage={(searchLanguage) => setDraft((d) => ({ ...d, searchLanguage }))}
             />

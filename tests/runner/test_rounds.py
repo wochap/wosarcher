@@ -2,15 +2,18 @@
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from tests.runner.helpers import PAGES, PLAN_REPLY, QUERY, SEARCH, adapters, kinds, new_run, settings
+from tests.runner.test_questions import Clock
 from wosarcher.adapters.fakes import FakeFetcher, FakeLLM, FakeScorer, FakeSearcher
 from wosarcher.config import (
     ChunkConfig,
     FetchConfig,
+    QuestionsConfig,
     ReasoningConfig,
     ResearchConfig,
     ScoreConfig,
@@ -19,15 +22,19 @@ from wosarcher.config import (
 )
 from wosarcher.http import UsageLedger
 from wosarcher.models import (
+    Answer,
     Candidate,
     Chunk,
     Completion,
     Effort,
     GapReady,
+    InputAnswered,
+    InputNeeded,
     Message,
     Page,
     Plan,
     Query,
+    QuestionsAnswered,
     ResearchDone,
     ResearchRecord,
     RoundDone,
@@ -491,3 +498,113 @@ async def test_thinking_per_step(tmp_path: Path) -> None:
     )
     assert await run(cfg, run_id, fakes) == "done"
     assert (planner.efforts, gapper.efforts, writer.efforts) == (["low"], ["high"], ["default"])
+
+
+# Round pause
+
+
+def pausing(tmp_path: Path, rounds: int = 3) -> Settings:
+    cfg = configured(tmp_path, rounds=rounds)
+    return cfg.model_copy(update={"questions": QuestionsConfig(clarify=False, rounds=True)})
+
+
+def answering(store: RunStore, run_id: str, *replies: tuple[list[str], str | None, str]) -> Callable[[Clock], None]:
+    """Answers pause n with `(kept option IDs, other text, "a" keep going or "b" write now)`."""
+
+    def hook(_clock: Clock) -> None:
+        for number, (kept, other, stop) in enumerate(replies, start=1):
+            pause = store.read_pause(run_id, number)
+            if pause is None or store.read_answer(run_id, number) is not None:
+                continue
+            answers = [
+                Answer(question_id="q1", option_ids=kept, other=other),
+                Answer(question_id="q2", option_ids=[stop]),
+            ]
+            store.write_answer(run_id, number, QuestionsAnswered(answers=answers, answered_by="user"))
+
+    return hook
+
+
+async def run_asking(cfg: Settings, run_id: str, fakes: Adapters, clock: Clock) -> str:
+    store = RunStore.from_settings(cfg)
+    return await Runner(store, cfg, fakes, UsageLedger({}), waiter=clock.waiter).run(run_id)
+
+
+async def test_keep_two_of_three(tmp_path: Path) -> None:
+    cfg = pausing(tmp_path, rounds=2)
+    cfg = cfg.model_copy(update={"research": ResearchConfig(rounds=2, queries_per_round=3)})
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price", "cobalt supply", "again"))
+    clock = Clock(answering(store, run_id, (["a", "c"], "recycling economics", "a")))
+    assert await run_asking(cfg, run_id, fakes, clock) == "done"
+    plan = store.read_artifact(run_id, "plan.json", Plan)
+    assert [(q.id, q.text, q.round, q.dropped_by) for q in plan.queries[2:]] == [
+        ("q2", "lithium price", 2, None),
+        ("q3", "cobalt supply", 2, "user"),
+        ("q4", "again", 2, None),
+        ("q5", "recycling economics", 2, None),
+    ]
+    searched = [event.data.query_ids for event in store.read_events(run_id) if isinstance(event, RoundDone)]
+    assert searched == [["q1"], ["q2", "q4", "q5"]]
+    record = research(store, run_id)
+    assert (record.rounds[0].dropped, record.rounds[0].added) == (["q3"], ["q5"])
+    pause = store.read_pause(run_id, 1)
+    assert pause is not None
+    assert [o.label for o in pause.questions[0].options] == ["lithium price", "cobalt supply", "again"]
+
+
+async def test_stop_and_write(tmp_path: Path) -> None:
+    cfg = pausing(tmp_path, rounds=4)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price"), gap_reply("cobalt supply"))
+    clock = Clock(answering(store, run_id, (["a"], None, "a"), (["a"], None, "b")))
+    assert await run_asking(cfg, run_id, fakes, clock) == "done"
+    record = research(store, run_id)
+    assert (record.ran, record.reason) == (2, "stopped by user")
+    assert record.note == "Research stopped by the user after round 2."
+    names = kinds(store.read_events(run_id))
+    assert "stage.started:select" in names
+    assert "stage.started:write" in names
+
+
+async def test_timeout_keeps_going(tmp_path: Path) -> None:
+    cfg = pausing(tmp_path, rounds=2)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    fakes = world(gap_reply("lithium price"))
+    assert await run_asking(cfg, run_id, fakes, Clock()) == "done"
+    assert research(store, run_id).ran == 2
+    answered = [e for e in store.read_events(run_id) if isinstance(e, InputAnswered)]
+    assert [e.data.answered_by for e in answered] == ["timeout"]
+
+
+async def test_drop_every_follow_up(tmp_path: Path) -> None:
+    cfg = pausing(tmp_path, rounds=3)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    clock = Clock(answering(store, run_id, ([], None, "a")))
+    assert await run_asking(cfg, run_id, world(gap_reply("lithium price")), clock) == "done"
+    record = research(store, run_id)
+    assert (record.reason, record.note) == ("no follow-ups", "Every follow-up was dropped by the user.")
+
+
+async def test_duplicate_added_query_not_used(tmp_path: Path) -> None:
+    cfg = pausing(tmp_path, rounds=2)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    clock = Clock(answering(store, run_id, (["a"], "recycling cost", "a")))
+    assert await run_asking(cfg, run_id, world(gap_reply("lithium price")), clock) == "done"
+    plan = store.read_artifact(run_id, "plan.json", Plan)
+    assert [q.text for q in plan.queries].count("recycling cost") == 1
+    warnings = [w for e in store.read_events(run_id) if isinstance(e, StageDone) for w in e.data.warnings]
+    assert "added query not used: recycling cost (duplicate)" in warnings
+
+
+async def test_rounds_off_does_not_pause(tmp_path: Path) -> None:
+    cfg = configured(tmp_path, rounds=2)
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg, sources="web")
+    assert await run(cfg, run_id, world(gap_reply("lithium price"))) == "done"
+    assert not [e for e in store.read_events(run_id) if isinstance(e, InputNeeded)]

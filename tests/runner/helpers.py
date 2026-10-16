@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from wosarcher.adapters.fakes import FakeEmbedder, FakeFetcher, FakeLLM, FakeManaged, FakeSearcher, healthy
-from wosarcher.config import RunConfig, Settings
+from wosarcher.config import QuestionsConfig, RunConfig, Settings
 from wosarcher.models import Event, RunRequest, Sources, Stage
 from wosarcher.ports import LLM, Adapters, Embedder, Fetcher, Managed, Scorer, Searcher
 from wosarcher.store import RunStore
@@ -23,9 +23,11 @@ PLAN_REPLY = '{"topic": "battery recycling", "queries": ["recycling cost"], "par
 REPORT_REPLY = "Battery recycling recovers lithium [1]."
 
 
-def settings(tmp_path: Path, **run: object) -> Settings:
+def settings(tmp_path: Path, questions: QuestionsConfig | None = None, **run: object) -> Settings:
+    """No question is asked unless `questions` says so."""
     return Settings(
-        run=RunConfig.model_validate({"runs_dir": tmp_path / "runs", "cache_dir": tmp_path / "cache", **run})
+        run=RunConfig.model_validate({"runs_dir": tmp_path / "runs", "cache_dir": tmp_path / "cache", **run}),
+        questions=questions or QuestionsConfig(clarify=False, rounds=False),
     )
 
 

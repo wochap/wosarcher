@@ -645,3 +645,47 @@ def test_catalog_progress_rows() -> None:
     done = CatalogDoneData(waves=2, nodes=9, records=8, flagged=1, reason="max nodes", note="")
     view.update(event("catalog.done", "assemble", done))
     assert "catalog: 8 records in 2 waves · 1 flagged · max nodes" in out.getvalue()
+
+
+def sent_questions(daemon: Daemon, run_id: str) -> dict[str, object]:
+    request = json.loads((daemon.runs_dir / run_id / "request.json").read_text())
+    return request["settings"]["questions"]
+
+
+def test_agent_default_asks_nothing(daemon: Daemon) -> None:
+    assert runner.invoke(app, ["run", "q", "--json"]).exit_code == 0
+    [run_id] = listed(daemon)
+    questions = sent_questions(daemon, run_id)
+    assert (questions["clarify"], questions["rounds"], questions["timeout"]) == (False, False, 0)
+
+
+def test_interactive_without_a_terminal_waits_for_an_agent(daemon: Daemon) -> None:
+    """The pause is printed as JSON on standard error; `wosarcher continue` answers it."""
+    command = [sys.executable, "-m", "wosarcher", "run", "ask", "--clarify", "--input-timeout", "300", "--json"]
+    process = subprocess.Popen(
+        command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=ROOT
+    )
+    try:
+        wait_until(
+            lambda: daemon.runs_dir.exists() and [p for p in daemon.runs_dir.iterdir() if (p / "input").exists()]
+        )
+        [run_id] = listed(daemon)
+        shown = runner.invoke(app, ["questions", run_id, "--json"])
+        assert shown.exit_code == 0, shown.output
+        assert json.loads(shown.stdout)["pause_id"] == 1
+        done = runner.invoke(app, ["continue", run_id, "--recommended"])
+        assert done.exit_code == 0, done.output
+        _, stderr = process.communicate(timeout=30)
+    finally:
+        process.kill()
+    assert process.returncode == 0, stderr
+    assert sent_questions(daemon, run_id)["clarify"] is True
+    assert sent_questions(daemon, run_id)["timeout"] == 300
+    assert '"pause"' in stderr
+    assert '"answered_by":"agent"' in (daemon.runs_dir / run_id / "events.jsonl").read_text()
+
+
+def test_invalid_input_timeout_exits_2(daemon: Daemon) -> None:
+    result = runner.invoke(app, ["run", "q", "--input-timeout", "4000"])
+    assert result.exit_code == 2
+    assert not daemon.runs_dir.exists() or listed(daemon) == []

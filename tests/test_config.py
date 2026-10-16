@@ -989,3 +989,20 @@ def test_structure_wins_over_catalog_block() -> None:
     assert (resolved.limits.max_nodes, resolved.limits.max_depth, resolved.expand) == (200, 5, "links")
     structure["expand"] = "search"
     assert catalog_structure(structure, CatalogConfig(expand="links")).expand == "search"
+
+
+def test_questions_defaults() -> None:
+    questions = Settings().questions
+    assert (questions.clarify, questions.rounds, questions.timeout, questions.max_wait) == (True, True, 60, 1800)
+
+
+def test_questions_timeout_range(env: dict[str, str]) -> None:
+    user_profile(env, "bad", BASE_PROFILE + "[questions]\ntimeout = -1\n")
+    with pytest.raises(ConfigError, match=r"questions\.timeout"):
+        resolve("bad", [], env)
+
+
+def test_depth_preset_cannot_set_questions(env: dict[str, str]) -> None:
+    write(env, "depths/ask.toml", "[questions]\nrounds = false\n")
+    with pytest.raises(ConfigError, match=r"questions\.rounds"):
+        resolve("p", [], env, "ask")
