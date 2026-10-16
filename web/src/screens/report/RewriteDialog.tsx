@@ -14,6 +14,8 @@ import css from "./RewriteDialog.module.css";
 
 type Props = {
   run: RunDetail;
+  /** The run's writing options, or the defaults when it has none. */
+  writing: WritingOptions;
   sources: number;
   /** The passages the score stage kept: the selected ones plus those select skipped. */
   scored: number;
@@ -21,10 +23,17 @@ type Props = {
   onClose: () => void;
 };
 
-export function RewriteDialog({ run, sources, scored, nextVersion, onClose }: Props) {
+export function RewriteDialog({
+  run,
+  writing: current,
+  sources,
+  scored,
+  nextVersion,
+  onClose,
+}: Props) {
   const api = useApi();
   const { follow, setLiveTab, toast } = useUi();
-  const [value, setValue] = useState<WritingOptions>(run.writing);
+  const [value, setValue] = useState<WritingOptions>(current);
   const [busy, setBusy] = useState(false);
   const base = useMemo(() => forkModelBase(run, "write"), [run]);
   const [model, setModel] = useState(() => initialState(base));
@@ -35,7 +44,7 @@ export function RewriteDialog({ run, sources, scored, nextVersion, onClose }: Pr
   async function confirm() {
     setBusy(true);
     try {
-      const writing = overriddenFields(value, run.writing);
+      const writing = overriddenFields(value, current);
       const created = await api.forkRun(run.run_id, {
         from: "select",
         writing,
@@ -71,7 +80,7 @@ export function RewriteDialog({ run, sources, scored, nextVersion, onClose }: Pr
       <WritingOptionsForm
         idPrefix="rw"
         value={value}
-        base={run.writing}
+        base={current}
         mark="changed"
         baseLabel="was "
         compact

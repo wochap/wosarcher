@@ -23,13 +23,13 @@ type KindFields = {
 export type RunSummary = Omit<G.RunSummary, "status" | "writing" | "form"> &
   KindFields & {
     status: RunStatus;
-    writing: WritingOptions;
+    writing: WritingOptions | null;
     form?: RunCreate | null;
   };
 export type RunDetail = Omit<G.RunDetail, "status" | "writing" | "form"> &
   KindFields & {
     status: RunStatus;
-    writing: WritingOptions;
+    writing: WritingOptions | null;
     form?: RunCreate | null;
   };
 export type Structure = G.Structure;

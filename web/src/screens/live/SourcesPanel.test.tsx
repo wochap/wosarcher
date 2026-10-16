@@ -19,11 +19,26 @@ describe("SourcesPanel", () => {
     let pages = 0;
     const events = upTo(all, (e) => e.type === "page.fetched" && ++pages === 14);
     render(<SourcesPanel run={viewOf(events)} files={files} context={null} />);
-    expect(screen.getByText("403 Forbidden").dataset.tone).toBe("danger");
+    const failed = screen.getByLabelText("failed: 403 Forbidden");
+    expect(failed.textContent).toBe("failed");
+    expect(failed.parentElement?.dataset.tone).toBe("danger");
+    expect(failed.getAttribute("title")).toBe("403 Forbidden");
     expect(screen.getByText("1 failed · run continues")).toBeTruthy();
     expect(screen.getByText("13 of 22 fetched · 1 files")).toBeTruthy();
     expect(screen.getByText("4.3 KB")).toBeTruthy();
     expect(screen.getAllByText("found").length).toBeGreaterThan(0);
+  });
+
+  it("keeps a long failure reason out of the row and in the tooltip", () => {
+    const reason = "connection reset by peer while reading the response body after 30s".repeat(4);
+    let pages = 0;
+    const events = upTo(all, (e) => e.type === "page.fetched" && ++pages === 14).map((e) =>
+      e.type === "page.failed" ? { ...e, data: { ...e.data, reason } } : e,
+    ) as RunEvent[];
+    render(<SourcesPanel run={viewOf(events)} files={files} context={null} />);
+    const failed = screen.getByLabelText(`failed: ${reason}`);
+    expect(failed.textContent).toBe("failed");
+    expect(failed.getAttribute("title")).toBe(reason);
   });
 
   it("lists newest first and counts kept passages once selected", () => {

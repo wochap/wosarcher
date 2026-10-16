@@ -309,6 +309,23 @@ describe("Recent & pinned", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("lists a catalog run with null writing and fills without starting a run", async () => {
+    const api = fakeApi();
+    const catalog = {
+      ...api.data.runs[0],
+      run_id: "run-catalog",
+      query: "Catalog of rust crates",
+      kind: "catalog" as const,
+      writing: null,
+      nodes: 7,
+    };
+    api.data.runs = [catalog];
+    const { question } = await open(api);
+    fillRow("Catalog of rust crates");
+    expect(question.value).toBe("Catalog of rust crates");
+    expect(callsTo(api, "createRun")).toHaveLength(0);
+  });
+
   it("offers Undo when the form had a question", async () => {
     await open(ragApi());
     await screen.findByText("· 8");

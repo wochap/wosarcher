@@ -308,6 +308,33 @@ describe("timeout chip", () => {
     expect(chip().textContent).toBe("1:00");
   });
 
+  it("draws the 3px line full while active, draining when idle, full again on activity", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={60} />);
+    const fill = () => container.querySelector<HTMLElement>('[class*="fill"]');
+    expect(container.querySelector('[class*="track"]')).toBeTruthy();
+    expect(fill()?.style.width).toBe("100%");
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(fill()?.style.width).toBe("100%");
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    const idle = Number.parseFloat(fill()?.style.width ?? "100");
+    expect(idle).toBeLessThan(100);
+    act(() => {
+      window.dispatchEvent(new Event("pointermove"));
+    });
+    expect(fill()?.style.width).toBe("100%");
+  });
+
+  it("draws no line for a timeout of 0", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={0} />);
+    expect(container.querySelector('[class*="track"]')).toBeNull();
+  });
+
   it("shows no chip for a timeout of 0", () => {
     vi.useFakeTimers();
     renderWithHelp(<Harness presence={() => {}} timeout={0} />);

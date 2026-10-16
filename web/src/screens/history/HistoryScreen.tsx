@@ -28,7 +28,7 @@ export function historyFilter(
       (!needle || r.query.toLowerCase().includes(needle)) &&
       (f.kind === "any" || (f.kind === "catalog") === isCatalog(r)) &&
       STATUS_MATCH[f.status](r) &&
-      (f.recipe === "any" || (!isCatalog(r) && recipeOf(r.until, r.writing.format) === f.recipe)),
+      (f.recipe === "any" || (!isCatalog(r) && recipeOf(r.until, r.writing?.format) === f.recipe)),
   );
 }
 

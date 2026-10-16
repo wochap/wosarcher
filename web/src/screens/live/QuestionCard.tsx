@@ -91,8 +91,11 @@ export function QuestionCard({ card, onPresence }: Props) {
 
   const group = `qa-opt-${pause.pauseId}-${index}`;
   const type = isMulti ? "checkbox" : "radio";
+  // Full while the user is active; drains with the idle countdown.
   const pct =
-    left === null || !pause.timeout ? 0 : Math.max(0, Math.min(100, (left / pause.timeout) * 100));
+    left === null || !pause.timeout
+      ? 100
+      : Math.max(0, Math.min(100, (left / pause.timeout) * 100));
   const keys = (n: number) => (n < 9 ? String(n + 1) : "");
   return (
     <section aria-label="Run questions" className={css.card}>
@@ -112,9 +115,11 @@ export function QuestionCard({ card, onPresence }: Props) {
         </span>
         {pause.timeout > 0 && <TimeoutChip left={left} />}
       </header>
-      <div aria-hidden="true" className={css.track} data-idle={left !== null}>
-        <div className={css.fill} style={{ width: `${pct}%` }} />
-      </div>
+      {pause.timeout > 0 && (
+        <div aria-hidden="true" className={css.track} data-idle={left !== null}>
+          <div className={css.fill} style={{ width: `${pct}%` }} />
+        </div>
+      )}
       <div className={css.body}>
         {pause.context && <p className={css.context}>{pause.context}</p>}
         <div id="qa-q" className={css.question}>

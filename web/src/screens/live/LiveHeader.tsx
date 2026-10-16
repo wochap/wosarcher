@@ -58,7 +58,7 @@ export function LiveHeader({
   // The profile line names the profile; a run without one keeps it in the meta line.
   const catalog = kind === "catalog";
   const meta = [
-    catalog ? "catalog" : recipeOf(run.until ?? detail?.until, detail?.writing.format),
+    catalog ? "catalog" : recipeOf(run.until ?? detail?.until, detail?.writing?.format),
     detail?.sources ?? "both",
     ...(detail?.use ? [] : [run.profile ?? detail?.profile ?? ""]),
   ];

@@ -12,7 +12,7 @@ import { type Draft, EMPTY_DRAFT, type RunOptions } from "../app/context";
 import { shortDate } from "../format";
 import type { AskDraft } from "./ask";
 import { depthLabel, researchOf } from "./depth";
-import { recipeOf } from "./format";
+import { DEFAULT_WRITING, recipeOf } from "./format";
 import type { ProfileEdits } from "./profileValues";
 
 export const RECENT_LIMIT = 20;
@@ -119,14 +119,25 @@ export function recentGroups(runs: RunSummary[], pins: string[]): RecentGroups {
   return { pinned, recent: [...rows.values()].slice(0, RECENT_LIMIT) };
 }
 
-/** "<Depth> · <recipe> · <sources> · <profile or custom (profile)> · <N> words". */
+/**
+ * "<Depth> · <recipe> · <sources> · <profile or custom (profile)> · <N> words"; a catalog run:
+ * "Catalog · <sources> · <profile> · <N> nodes" (no nodes part while null).
+ */
 export function rowSummary(run: RunSummary): string {
+  const profile = run.modified ? `custom (${run.profile})` : run.profile;
+  if (run.kind === "catalog")
+    return [
+      "Catalog",
+      run.sources,
+      profile,
+      ...(run.nodes == null ? [] : [`${run.nodes} nodes`]),
+    ].join(" · ");
   return [
     depthLabel(run.depth),
-    recipeOf(run.until, run.writing.format),
+    recipeOf(run.until, run.writing?.format),
     run.sources,
-    run.modified ? `custom (${run.profile})` : run.profile,
-    `${run.writing.words} words`,
+    profile,
+    `${run.writing?.words ?? DEFAULT_WRITING.words} words`,
   ].join(" · ");
 }
 
@@ -182,7 +193,7 @@ type Known = {
  * depth that no longer exists falls back to the active profile (no override) and Standard.
  */
 export function draftFromRun(run: RunSummary, name: string, known: Known): Draft {
-  const form = run.form;
+  const form = run.kind === "catalog" ? undefined : run.form;
   const profileKnown = known.profiles.some((p) => p.name === (form?.profile ?? run.profile));
   const requested = form ? form.depth : run.depth;
   const depth =
@@ -190,10 +201,14 @@ export function draftFromRun(run: RunSummary, name: string, known: Known): Draft
       ? (requested ?? "standard")
       : "standard";
   const { format, words, ...writing } = present(form?.writing);
-  const options: Partial<RunOptions> = {
-    recipe: recipeOf(form ? form.until : run.until, form ? format : run.writing.format),
-    depth,
-  };
+  // A catalog run has no depth, recipe, or writing options to fill: only question, sources, profile.
+  const options: Partial<RunOptions> =
+    run.kind === "catalog"
+      ? {}
+      : {
+          recipe: recipeOf(form ? form.until : run.until, form ? format : run.writing?.format),
+          depth,
+        };
   const sources = form ? form.sources : run.sources;
   if (sources) options.sources = sources;
   if (profileKnown) options.profile = form?.profile ?? run.profile;

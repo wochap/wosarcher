@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { RunDetail, RunEvent } from "../../api/types";
+import { DEFAULT_WRITING } from "../../run/format";
 import { ev } from "../../test/events";
 import { cancelled } from "../../test/fixtures/cancelled";
 import { failure } from "../../test/fixtures/failure";
@@ -227,7 +228,7 @@ describe("deviceLabel", () => {
 describe("LiveHeader recipe", () => {
   it("names an answer run's recipe in the meta", () => {
     const detail = {
-      ...summary({ writing: { ...summary().writing, format: "answer" } }),
+      ...summary({ writing: { ...DEFAULT_WRITING, ...summary().writing, format: "answer" } }),
       last_seq: 0,
     };
     header(
@@ -240,7 +241,10 @@ describe("LiveHeader recipe", () => {
 
   it("shows context when the run stops at select, whatever its format", () => {
     const detail = {
-      ...summary({ until: "select", writing: { ...summary().writing, format: "answer" } }),
+      ...summary({
+        until: "select",
+        writing: { ...DEFAULT_WRITING, ...summary().writing, format: "answer" },
+      }),
       last_seq: 0,
     };
     header(

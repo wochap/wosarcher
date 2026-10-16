@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_WRITING } from "../../run/format";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { clarifyLog } from "../../test/fixtures/questions";
 import { renderApp } from "../../test/renderApp";
@@ -64,7 +65,7 @@ describe("HistoryScreen", () => {
     const run = api.data.runs.find((r) =>
       r.query.startsWith("Rust async"),
     ) as (typeof api.data.runs)[0];
-    run.writing = { ...run.writing, format: "answer" };
+    run.writing = { ...DEFAULT_WRITING, ...run.writing, format: "answer" };
     await open(api);
     expect(
       rowOf("Rust async cancellation safety patterns with tokio::select!").textContent,

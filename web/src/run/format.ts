@@ -44,7 +44,20 @@ export function aSummary(w: WritingOptions): string {
 }
 
 /** The writing options in which `next` differs from `base`: "Concise · 300 words". */
-export function wDiff(base: WritingOptions, next: WritingOptions): string {
+/** A catalog summary may carry no writing options; research screens fall back to these. */
+export const DEFAULT_WRITING: WritingOptions = {
+  format: "report",
+  tone: "objective",
+  tone_instructions: "",
+  words: 1200,
+  language: "english",
+  citation_marker: "numeric",
+  reference_style: "APA",
+};
+
+/** Nothing differs when either run has no writing options (a catalog run). */
+export function wDiff(base: WritingOptions | null, next: WritingOptions | null): string {
+  if (!base || !next) return "";
   const fields = Object.keys(next) as WritingField[];
   return fields
     .filter((f) => String(base[f]) !== String(next[f]))

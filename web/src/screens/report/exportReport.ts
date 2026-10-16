@@ -22,7 +22,7 @@ export function contextJson(detail: RunDetail, context: Context) {
     parent: detail.parent_run_id ?? null,
     query: detail.query,
     options: {
-      recipe: recipeOf(detail.until, detail.writing.format),
+      recipe: recipeOf(detail.until, detail.writing?.format),
       sources: detail.sources ?? "both",
       profile: detail.profile,
       writing: detail.writing,
