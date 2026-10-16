@@ -228,7 +228,11 @@ export function LiveScreen() {
         conn={live.conn}
         elapsed={elapsed}
         now={now}
-        rewriteOf={detail?.fork_from === "write" ? detail.parent_run_id : null}
+        rewriteOf={
+          detail?.fork_from === "write" || detail?.fork_from === "select"
+            ? detail.parent_run_id
+            : null
+        }
       />
       {isPhone && <PhoneTabs tab={liveTab} onTab={setLiveTab} counts={counts} />}
       {progress && (

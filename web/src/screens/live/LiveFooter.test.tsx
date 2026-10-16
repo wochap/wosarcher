@@ -144,7 +144,7 @@ describe("StatusBanner", () => {
       <StatusBanner run={run} conn={conn("connected")} elapsed={0} now={0} rewriteOf="r_8c21" />,
     );
     expect(screen.getByRole("status").textContent).toBe(
-      "Rewrite of r_8c21: sources and passages are reused, only the write stage runs.",
+      "Rewrite of r_8c21: sources and passages are reused; only select and write run.",
     );
   });
 });

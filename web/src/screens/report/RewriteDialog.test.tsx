@@ -16,7 +16,7 @@ describe("RewriteDialog", () => {
   it("sends only the changed fields and opens the fork on Live run", async () => {
     const { api } = await openDialog();
     const dialog = screen.getByRole("dialog", { name: "Rewrite report" });
-    expect(dialog.textContent).toContain("Reuses the 21 sources and 14 selected passages");
+    expect(dialog.textContent).toContain("Reuses the 21 sources and 16 scored passages");
     expect(dialog.textContent).toContain(`Creates v2 linked to ${RUN_ID}`);
     const words = screen.getByLabelText("Length (words)");
     fireEvent.change(words, { target: { value: "250" } });
@@ -28,9 +28,11 @@ describe("RewriteDialog", () => {
     );
     expect(screen.getByText("was 1200 words")).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Rewrite from write stage" }));
+      fireEvent.click(screen.getByRole("button", { name: "Rewrite from select stage" }));
     });
-    expect(callsTo(api, "forkRun")).toEqual([[RUN_ID, { from: "write", writing: { words: 250 } }]]);
+    expect(callsTo(api, "forkRun")).toEqual([
+      [RUN_ID, { from: "select", writing: { words: 250 } }],
+    ]);
     expect(window.location.hash).toBe("#/live/r_new1");
   });
 
@@ -46,11 +48,49 @@ describe("RewriteDialog", () => {
     fireEvent.blur(words);
     expect(screen.getAllByText("changed")).toHaveLength(2);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Rewrite from write stage" }));
+      fireEvent.click(screen.getByRole("button", { name: "Rewrite from select stage" }));
     });
     expect(callsTo(api, "forkRun")).toEqual([
-      [RUN_ID, { from: "write", writing: { format: "answer", words: 400 } }],
+      [RUN_ID, { from: "select", writing: { format: "answer", words: 400 } }],
     ]);
+  });
+
+  it("rewrites with another model from the Model group", async () => {
+    const { api } = await openDialog();
+    const toggle = screen.getByRole("button", { name: "Model" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByLabelText("Context tokens")).toBeNull();
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText("Context tokens")).toBeTruthy();
+    expect(screen.getByLabelText("Write thinking")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gemma-3-12b" } });
+    expect(screen.getByText("edited")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Rewrite from select stage" }));
+    });
+    expect(callsTo(api, "forkRun")).toEqual([
+      [RUN_ID, { from: "select", writing: {}, llm: { model: "gemma-3-12b" } }],
+    ]);
+  });
+
+  it("shows the fallback and Context tokens notes in the Model group", async () => {
+    await openDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    await act(async () => {});
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gemma-3-12b" } });
+    expect(screen.getAllByText("Fallback: no limits set for this model.")).toHaveLength(2);
+    expect((screen.getByLabelText("Context window") as HTMLInputElement).value).toBe("32768");
+    expect(screen.getByText(/^Auto · /)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Context tokens"), { target: { value: "40000" } });
+    expect(screen.getByText("40,000 → 32,000 (model window)")).toBeTruthy();
+  });
+
+  it("counts the changes on the closed Model toggle", async () => {
+    await openDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Model" }));
+    fireEvent.change(screen.getByLabelText("Model"), { target: { value: "gemma-3-12b" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Model/ }));
+    expect(screen.getByRole("button", { name: /^Model/ }).textContent).toBe("Model· 1 changed");
   });
 
   it("closes without a request on Escape, Cancel, close, and backdrop", async () => {

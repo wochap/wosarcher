@@ -16,14 +16,14 @@ describe("VersionsNav", () => {
       .filter((b) => !b.dataset.help);
     expect(buttons.map((b) => b.textContent)).toEqual([
       `v1 · research${RUN_ID}full run · 2:30`,
-      `v2 · rewrite${REWRITE_ID}Concise · 250 words · ¹ Superscript · 0:51`,
+      `v2 · rewrite${REWRITE_ID}model gemma-3-12b · Concise · 250 words · ¹ Superscript · 0:51`,
     ]);
     expect(buttons[1].getAttribute("aria-current")).toBe("true");
     expect(
       screen.getByText(/^Rewritten from r_8c21 \(v1\): same sources and passages; changed/)
         .textContent,
     ).toBe(
-      "Rewritten from r_8c21 (v1): same sources and passages; changed Concise · 250 words · ¹ Superscript.",
+      "Rewritten from r_8c21 (v1): same sources and passages; changed model gemma-3-12b · Concise · 250 words · ¹ Superscript.",
     );
     expect(screen.getAllByRole("button", { name: /^Citation 1,/ })[0].textContent).toBe("¹");
     fireEvent.click(buttons[0]);

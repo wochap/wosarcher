@@ -12,7 +12,7 @@ import { HelpTip } from "../../components/HelpTip";
 import { OriginLabel } from "../../components/OriginLabel";
 import { StatusTag } from "../../components/StatusTag";
 import { dateTime, minSec } from "../../format";
-import { recipeOf, wDiff } from "../../run/format";
+import { modelDiff, recipeOf, wDiff } from "../../run/format";
 import css from "./HistoryTable.module.css";
 
 export const durationOf = (run: RunSummary) =>
@@ -87,7 +87,11 @@ export function HistoryTable({ runs, all, onOpen, onOpenLive, onRerun, onDelete 
                     <div className={css.rewrite}>
                       <ArrowElbowDownRight aria-hidden="true" />
                       rewrite of <span className={css.id}>{run.parent_run_id}</span> ·{" "}
-                      {parent ? wDiff(parent.writing, run.writing) || "same options" : "–"}
+                      {parent
+                        ? [modelDiff(parent, run), wDiff(parent.writing, run.writing)]
+                            .filter(Boolean)
+                            .join(" · ") || "same options"
+                        : "–"}
                       <HelpTip help="h-version" label="Rewrite marker" />
                     </div>
                   )}

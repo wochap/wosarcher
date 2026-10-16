@@ -84,6 +84,7 @@ export const runs: RunSummary[] = [
       version: 2,
       fork_from: "write",
       writing: { ...writing, tone: "explanatory", words: 300 },
+      model: "gemma-3-12b",
       duration_s: 48,
       cost: 0,
     },
@@ -93,6 +94,7 @@ export const runs: RunSummary[] = [
     "Compare pgvector HNSW vs IVFFlat recall and build time at 1M rows",
     "2026-10-02T21:14:00Z",
     "done",
+    { model: "qwen3-14b" },
   ),
   run(
     "r_7e90",

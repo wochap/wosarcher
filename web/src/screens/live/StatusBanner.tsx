@@ -150,7 +150,7 @@ export function StatusBanner({ run, conn, elapsed, now, rewriteOf }: Props) {
     banner = {
       tone: "accent",
       icon: Recycle,
-      text: `Rewrite of ${rewriteOf}: sources and passages are reused, only the write stage runs.`,
+      text: `Rewrite of ${rewriteOf}: sources and passages are reused; only select and write run.`,
     };
   }
   if (!banner) return null;

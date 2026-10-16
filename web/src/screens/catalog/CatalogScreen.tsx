@@ -15,18 +15,20 @@ import {
   Graph as GraphIcon,
   Link,
   MagnifyingGlass,
+  Recycle,
   Table,
   TreeStructure,
   Warning,
   X,
 } from "@phosphor-icons/react";
-import { type KeyboardEvent, useCallback, useEffect, useState } from "react";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../api/client";
 import type { Context, Report } from "../../api/generated";
-import type { Catalog, CatalogRecord, RunDetail, Structure } from "../../api/types";
+import type { Catalog, CatalogRecord, RunDetail, RunSummary, Structure } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { Dialog } from "../../components/Dialog";
+import { ForkModelGroup } from "../../components/ForkModelGroup";
 import { HelpTip } from "../../components/HelpTip";
 import { dateTime } from "../../format";
 import { LIMITS, limitsOf, shortField, typesOf } from "../../run/catalog";
@@ -49,11 +51,12 @@ import {
   typeOf,
   worstFilled,
 } from "../../run/catalogResult";
+import { forkModelBase, forkModelPatch, initialState } from "../../run/forkModel";
 import { wSummary } from "../../run/format";
+import { lineage } from "../../run/lineage";
 import { openRecord, RecordPopover, useRecordCitation } from "../../run/RecordCitation";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
 import { fmtDuration } from "../../run/stageTimes";
-import { EFFORT_LABELS, EFFORTS } from "../../run/thinking";
 import { NotFound } from "../live/NotFound";
 import { download, markdownFile } from "../report/exportReport";
 import { ReportScreen } from "../report/ReportScreen";
@@ -962,21 +965,23 @@ function ExpandDialog(props: {
 function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () => void }) {
   const api = useApi();
   const { follow, toast } = useUi();
-  const baseModel = detail.model ?? "";
-  const baseEffort = detail.reasoning?.extract ?? "none";
-  const [model, setModel] = useState(baseModel);
-  const [effort, setEffort] = useState(baseEffort);
+  const base = useMemo(() => forkModelBase(detail, "extract"), [detail]);
+  const [model, setModel] = useState(() => initialState(base));
+  const [runs, setRuns] = useState<RunSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  const nextVersion =
+    Math.max(0, ...lineage(runs, detail.run_id).map((v) => v.run.version ?? 1)) + 1;
+
+  useEffect(() => {
+    api.listRuns().then(setRuns, () => {});
+  }, [api]);
 
   async function confirm() {
     setBusy(true);
-    const llm: NonNullable<Parameters<typeof api.forkRun>[1]["llm"]> = {};
-    if (model.trim() && model.trim() !== baseModel) llm.model = model.trim();
-    if (effort !== baseEffort) llm.reasoning = { extract: effort };
     try {
       const created = await api.forkRun(detail.run_id, {
         from: "extract",
-        ...(Object.keys(llm).length ? { llm } : {}),
+        ...forkModelPatch(model, base, "extract"),
       });
       follow(created.run_id);
       go({ screen: "live", runId: created.run_id });
@@ -987,40 +992,30 @@ function ReextractDialog({ detail, onClose }: { detail: RunDetail; onClose: () =
   }
 
   return (
-    <Dialog title="Re-extract" onClose={onClose} className={css.dialog}>
-      <p className={css.dialogNote}>
-        Runs extract and assemble again. The fetched pages are kept, so nothing is crawled again.
-      </p>
-      <div className={css.dialogLimits}>
-        <label className={css.dialogLimit}>
-          Model
-          <input
-            className={`input ${css.modelInput}`}
-            value={model}
-            spellCheck={false}
-            onChange={(e) => setModel(e.target.value)}
-          />
-        </label>
-        <div className={css.dialogLimit}>
-          <span className={css.dialogLabel}>
-            <label htmlFor="rx-extract">Extract thinking</label>
-            <HelpTip help="p-think-extract" label="Extract thinking" />
-          </span>
-          <select
-            id="rx-extract"
-            className="input"
-            value={effort}
-            onChange={(e) => setEffort(e.target.value as typeof effort)}
-          >
-            {EFFORTS.map((x) => (
-              <option key={x} value={x}>
-                {EFFORT_LABELS[x]}
-              </option>
-            ))}
-          </select>
-        </div>
+    <Dialog title="Re-extract" onClose={onClose} className={`${css.dialog} ${css.reextract}`}>
+      <ArrowsClockwise className={css.rxIcon} aria-hidden="true" />
+      <button
+        type="button"
+        className={`btn btn-ghost btn-icon ${css.rxClose}`}
+        aria-label="Close"
+        onClick={onClose}
+      >
+        <X aria-hidden="true" />
+      </button>
+      <div className={css.rxNote}>
+        <Recycle className={css.rxNoteIcon} aria-hidden="true" />
+        <span>
+          Runs extract and assemble again with another model. The fetched pages are kept, so nothing
+          is crawled again.
+        </span>
+        <HelpTip help="cr-reextract" />
       </div>
-      <div className="dialog-actions">
+      <ForkModelGroup run={detail} step="extract" base={base} value={model} onChange={setModel} />
+      <div className={`dialog-actions ${css.rxActions}`}>
+        <span className={css.rxCreates}>
+          Creates <span className={css.mono}>v{nextVersion}</span> linked to{" "}
+          <span className={css.mono}>{detail.run_id}</span>
+        </span>
         <button type="button" className="btn btn-secondary" onClick={onClose}>
           Cancel
         </button>

@@ -83,6 +83,62 @@ function profileUse(profile: ProfileInfo | undefined): Record<Block, string> {
   >;
 }
 
+/** The model-owned values of a model, without the model itself. */
+export type ModelValues = {
+  values: Omit<ProfileFields, "model" | "context_tokens">;
+  sources: Record<Exclude<ModelField, "model">, ValueSource>;
+};
+
+/**
+ * The values of model `id` on an llm entry: the profile's `models.<id>`, else the entry's, else
+ * the built-in fallback, each with its source.
+ */
+export function modelValues(
+  profile: ProfileInfo | undefined,
+  entry: ProviderEntry | undefined,
+  id: string,
+): ModelValues {
+  const listed = entry?.models?.find((m) => m.id === id);
+  const tuned = profile?.models?.find((m) => m.id === id);
+  /** The profile's value for the model, else the entry's, with its source. */
+  const pick = <T>(of: (m: ModelInfo) => T | null | undefined): [T | undefined, ValueSource] => {
+    const mine = tuned ? of(tuned) : undefined;
+    if (mine != null) return [mine, "profile"];
+    const theirs = listed ? of(listed) : undefined;
+    return theirs != null ? [theirs, "entry"] : [undefined, ""];
+  };
+  const [window, windowFrom] = pick((m) => m.context_window);
+  const [output, outputFrom] = pick((m) => m.max_output_tokens);
+  const [plan, planFrom] = pick((m) => m.reasoning?.plan);
+  const [gap, gapFrom] = pick((m) => m.reasoning?.gap);
+  const [write, writeFrom] = pick((m) => m.reasoning?.write);
+  const [draft, draftFrom] = pick((m) => m.reasoning?.draft);
+  const [extract, extractFrom] = pick((m) => m.reasoning?.extract);
+  const [gapBudget, gapBudgetFrom] = pick((m) => m.gap_context_tokens);
+  return {
+    values: {
+      context_window: window ?? FALLBACK_WINDOW,
+      max_output_tokens: output ?? FALLBACK_OUTPUT,
+      plan: plan ?? "none",
+      gap: gap ?? "none",
+      write: write ?? "none",
+      draft: draft ?? "none",
+      extract: extract ?? "none",
+      gap_context_tokens: gapBudget ?? "auto",
+    },
+    sources: {
+      context_window: windowFrom,
+      max_output_tokens: outputFrom,
+      plan: planFrom,
+      gap: gapFrom,
+      write: writeFrom,
+      draft: draftFrom,
+      extract: extractFrom,
+      gap_context_tokens: gapBudgetFrom,
+    },
+  };
+}
+
 /**
  * What the profile gives with `use` applied. A switched LLM takes its entry's default model;
  * the limits, thinking, and gap budget are those of `model` (the model shown) on that entry.
@@ -98,46 +154,13 @@ export function profileBase(
   const own = use.llm ? "" : (profile?.model ?? "");
   const base = own || defaultModel(llm);
   const shown = model ?? base;
-  const entry = llm?.models?.find((m) => m.id === shown);
-  const tuned = profile?.models?.find((m) => m.id === shown);
-  /** The profile's value for the model, else the entry's, with its source. */
-  const pick = <T>(of: (m: ModelInfo) => T | null | undefined): [T | undefined, ValueSource] => {
-    const mine = tuned ? of(tuned) : undefined;
-    if (mine != null) return [mine, "profile"];
-    const listed = entry ? of(entry) : undefined;
-    return listed != null ? [listed, "entry"] : [undefined, ""];
-  };
-  const [window, windowFrom] = pick((m) => m.context_window);
-  const [output, outputFrom] = pick((m) => m.max_output_tokens);
-  const [plan, planFrom] = pick((m) => m.reasoning?.plan);
-  const [gap, gapFrom] = pick((m) => m.reasoning?.gap);
-  const [write, writeFrom] = pick((m) => m.reasoning?.write);
-  const [draft, draftFrom] = pick((m) => m.reasoning?.draft);
-  const [extract, extractFrom] = pick((m) => m.reasoning?.extract);
-  const [gapBudget, gapBudgetFrom] = pick((m) => m.gap_context_tokens);
+  const values = modelValues(profile, llm, shown);
   return {
     use: chosen,
     model: base,
-    context_window: window ?? FALLBACK_WINDOW,
-    max_output_tokens: output ?? FALLBACK_OUTPUT,
-    plan: plan ?? "none",
-    gap: gap ?? "none",
-    write: write ?? "none",
-    draft: draft ?? "none",
-    extract: extract ?? "none",
+    ...values.values,
     context_tokens: profile?.context_tokens ?? "auto",
-    gap_context_tokens: gapBudget ?? "auto",
-    sources: {
-      model: own ? "profile" : base ? "entry" : "",
-      context_window: windowFrom,
-      max_output_tokens: outputFrom,
-      plan: planFrom,
-      gap: gapFrom,
-      write: writeFrom,
-      draft: draftFrom,
-      extract: extractFrom,
-      gap_context_tokens: gapBudgetFrom,
-    },
+    sources: { model: own ? "profile" : base ? "entry" : "", ...values.sources },
   };
 }
 

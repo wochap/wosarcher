@@ -15,8 +15,12 @@ const catRun = (status: RunSummary["status"]): RunSummary => ({
   query: CATALOG_BRIEF,
   kind: "catalog",
   nodes: 6,
+  model: "research-smart",
+  use: { llm: "omniroute" },
   status,
   parent_run_id: null,
+  fork_from: null,
+  version: 1,
 });
 
 function api(status: RunSummary["status"] = "done") {
@@ -69,14 +73,20 @@ describe("CatalogScreen", () => {
     expect(window.location.hash).toMatch(/^#\/live\//);
   });
 
-  it("re-extracts with a model and Extract thinking", async () => {
+  async function openReextract() {
     const fake = api();
     renderApp({ hash: "#/catalog/r_cat", api: fake });
     await screen.findByRole("heading", { name: CATALOG_BRIEF });
     fireEvent.click(screen.getByRole("button", { name: "Re-extract" }));
-    const dialog = screen.getByRole("dialog", { name: "Re-extract" });
+    await act(async () => {});
+    return { fake, dialog: screen.getByRole("dialog", { name: "Re-extract" }) };
+  }
+
+  it("re-extracts with a model and Extract thinking", async () => {
+    const { fake, dialog } = await openReextract();
+    expect(dialog.textContent).toContain("Creates v2 linked to r_cat");
     fireEvent.change(within(dialog).getByLabelText("Model"), {
-      target: { value: "qwen3-30b-a3b" },
+      target: { value: "deepseek-v4-flash" },
     });
     fireEvent.change(within(dialog).getByLabelText(/^Extract thinking/), {
       target: { value: "medium" },
@@ -86,8 +96,33 @@ describe("CatalogScreen", () => {
     });
     expect(callsTo(fake, "forkRun")[0]).toEqual([
       "r_cat",
-      { from: "extract", llm: { model: "qwen3-30b-a3b", reasoning: { extract: "medium" } } },
+      {
+        from: "extract",
+        llm: { model: "deepseek-v4-flash", reasoning: { extract: "medium" } },
+      },
     ]);
+  });
+
+  it("re-extracts on another entry", async () => {
+    const { fake, dialog } = await openReextract();
+    fireEvent.change(within(dialog).getByLabelText("LLM entry"), { target: { value: "agents" } });
+    expect((within(dialog).getByLabelText("Model") as HTMLInputElement).value).toBe("qwen3-14b");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Re-extract" }));
+    });
+    expect(callsTo(fake, "forkRun")[0]).toEqual([
+      "r_cat",
+      { from: "extract", use: { llm: "agents" } },
+    ]);
+  });
+
+  it("shows no Context tokens row when re-extracting", async () => {
+    const { dialog } = await openReextract();
+    for (const label of ["LLM entry", "Model", "Context window", "Max output"]) {
+      expect(within(dialog).getByLabelText(label)).toBeTruthy();
+    }
+    expect(within(dialog).getByLabelText(/^Extract thinking/)).toBeTruthy();
+    expect(within(dialog).queryByLabelText("Context tokens")).toBeNull();
   });
 
   it("shows a live catalog run's frontier, records, and footer", async () => {

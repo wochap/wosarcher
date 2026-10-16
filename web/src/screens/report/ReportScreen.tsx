@@ -25,7 +25,7 @@ import { StatusTag } from "../../components/StatusTag";
 import { ThinkingTag } from "../../components/ThinkingTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
-import { aSummary, fmtElapsed, recipeOf, wDiff, wSummary } from "../../run/format";
+import { aSummary, fmtElapsed, modelDiff, recipeOf, wDiff, wSummary } from "../../run/format";
 import { lineage } from "../../run/lineage";
 import { openRecord, RecordPopover, useRecordCitation } from "../../run/RecordCitation";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
@@ -55,7 +55,7 @@ export function ReportScreen({ runId }: { runId: string }) {
   const api = useApi();
   const { toast, isPhone } = useUi();
   const { view: own } = useRun(runId);
-  const { detail, notFound, view, files, context, report } = useRunData(runId, own);
+  const { detail, notFound, view, files, context, report, skips } = useRunData(runId, own);
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [rewriting, setRewriting] = useState(false);
   const [queryOpen, setQueryOpen] = useState(false);
@@ -228,7 +228,11 @@ export function ReportScreen({ runId }: { runId: string }) {
               <div className={css.parentNote}>
                 <GitBranch className={css.parentIcon} aria-hidden="true" />
                 Rewritten from {parent.run_id} (v{parent.version ?? 1}): same sources and passages;
-                changed {wDiff(parent.writing, detail.writing) || "nothing"}.
+                changed{" "}
+                {[modelDiff(parent, detail), wDiff(parent.writing, detail.writing)]
+                  .filter(Boolean)
+                  .join(" · ") || "nothing"}
+                .
               </div>
             )}
             {recipe === "context" ? (
@@ -290,7 +294,7 @@ export function ReportScreen({ runId }: { runId: string }) {
         <RewriteDialog
           run={detail}
           sources={sourceCount}
-          passages={passageCount}
+          scored={passageCount + (skips?.length ?? 0)}
           nextVersion={Math.max(0, ...versions.map((v) => v.run.version ?? 1)) + 1}
           onClose={() => setRewriting(false)}
         />

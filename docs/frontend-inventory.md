@@ -138,6 +138,8 @@ Other props: `speed` (0.5 to 6, simulation rate), `device` (`auto`/`phone`) and 
 | failed | `ph-x-circle` | danger | danger 10% bg, danger border |
 | cancelled | `ph-stop-circle` | — | dashed muted border |
 
+**Fork Model group** (`ForkModelGroup`, scenarios `rewrite-model` and `catalog-result`): the grid of LLM entry, Model, Context window, Max output, the step's thinking, and (Rewrite only) Context tokens; each row has a source tag, a solid border and "was …" with Reset when changed, else a dashed border. Shared by the Rewrite and Re-extract dialogs.
+
 **Keyframes:** `sx-spin` (rotate 360), `sx-pulse` (opacity 1 → .3 → 1), `sx-blink` (50% opacity 0), `sx-shimmer` (bg-position -240px → 240px).
 
 ## 4. Data shown

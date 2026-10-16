@@ -938,6 +938,41 @@ def test_fork_profile_gone(env: dict[str, str]) -> None:
     assert resolved.settings.llm.reasoning.write == "low"
 
 
+def test_fork_model_change_applies_model_values(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    current = resolve_run(None, ["use.llm=omniroute"], env)
+    overrides = ['llm.model="qwen3-30b-a3b"']
+    resolved, _ = fork_settings(redact(current.settings), current.use, {}, overrides, env)
+    llm = resolved.settings.llm
+    assert (llm.context_window, llm.max_output_tokens, llm.reasoning.write) == (32768, 8192, "none")
+    assert resolved.use["llm"] == "omniroute"
+
+
+def test_fork_model_change_with_limit_override(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    current = resolve_run(None, ["use.llm=omniroute"], env)
+    overrides = ['llm.model="qwen3-30b-a3b"', "llm.context_window=65536"]
+    resolved, _ = fork_settings(redact(current.settings), current.use, {}, overrides, env)
+    assert (resolved.settings.llm.context_window, resolved.settings.llm.max_output_tokens) == (65536, 8192)
+
+
+def test_fork_same_model_keeps_saved_values(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    current = resolve_run(None, ["use.llm=omniroute", "llm.context_window=200000"], env)
+    overrides = ['llm.model="research-smart"']
+    resolved, _ = fork_settings(redact(current.settings), current.use, {}, overrides, env)
+    assert resolved.settings.llm.context_window == 200000
+
+
+def test_fork_catalog_model_change(env: dict[str, str]) -> None:
+    entry(env, "llm", "omniroute", OMNIROUTE)
+    current = resolve_run(None, ["use.llm=omniroute", 'llm.reasoning.extract="low"'], env)
+    overrides = ['llm.model="qwen3-30b-a3b"']
+    resolved, _ = fork_settings(redact(current.settings), current.use, {}, overrides, env)
+    llm = resolved.settings.llm
+    assert (llm.reasoning.extract, llm.context_window, llm.max_output_tokens) == ("none", 32768, 8192)
+
+
 def test_toml_quotes_model_ids() -> None:
     tree = {"models": {"qwen3.5:9b": {"reasoning": {"write": "high"}}}, "llm": {"model": "qwen3.5:9b"}}
     assert tomllib.loads(to_toml(tree)) == tree

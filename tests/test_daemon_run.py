@@ -329,6 +329,15 @@ def test_fork_keeps_thinking(world: World, tmp_path: Path) -> None:
     assert writer.efforts == ["high"]
 
 
+def test_fork_model_change_applies_fallbacks(world: World, tmp_path: Path) -> None:
+    assert runner.invoke(app, ["run", "battery recycling", "--context-window", "200000"]).exit_code == 0
+    parent = only_run(tmp_path)
+    result = runner.invoke(app, ["fork", parent.run_id, "--from", "select", "--model", "gemma-3-12b"])
+    assert result.exit_code == 0, result.output
+    llm = world.built[-1].llm
+    assert (llm.model, llm.context_window, llm.max_output_tokens) == ("gemma-3-12b", 32768, 8192)
+
+
 def test_fork_as_answer(world: World, tmp_path: Path) -> None:
     assert runner.invoke(app, ["run", "battery recycling"]).exit_code == 0
     parent = only_run(tmp_path)

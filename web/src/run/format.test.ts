@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { writing } from "../test/fixtures/data";
-import { fmtBytes, fmtCost, fmtElapsed, fmtK, wDiff, wSummary } from "./format";
+import { fmtBytes, fmtCost, fmtElapsed, fmtK, modelDiff, wDiff, wSummary } from "./format";
 
 describe("run formats", () => {
   it("formats the prototype's examples", () => {
@@ -19,5 +19,16 @@ describe("run formats", () => {
     const next = { ...writing, tone: "concise", words: 250, tone_instructions: "Short." };
     expect(wDiff(writing, next)).toBe("Concise · custom instructions · 250 words");
     expect(wDiff(writing, writing)).toBe("");
+  });
+
+  it("names a changed model or entry", () => {
+    const parent = { model: "research-smart", use: { llm: "omniroute" } };
+    expect(modelDiff(parent, { model: "gemma-3-12b", use: { llm: "omniroute" } })).toBe(
+      "model gemma-3-12b",
+    );
+    expect(modelDiff(parent, { model: "research-smart", use: { llm: "agents" } })).toBe(
+      "model research-smart",
+    );
+    expect(modelDiff(parent, parent)).toBe("");
   });
 });

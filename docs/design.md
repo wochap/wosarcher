@@ -1357,7 +1357,11 @@ commands, flags, or the value lists that mirror package constants.
   the fork, naming the block and the entry and listing that block's
   entries, unless the fork's `--use` replaces that block. `--use` replaces
   the saved block with the current entry (the profile-owned keys of that
-  block are kept), and for `llm` the chosen model's values apply again. A
+  block are kept), and for `llm` the chosen model's values apply again.
+The same happens when the fork's model (the `--model` override, else the
+`--use llm` entry's, else the saved one) differs from the saved model; a
+fork that keeps its model keeps the saved values, including the parent's
+own overrides of them. A
   parent recorded without `use` takes its secrets from resolving its
   profile. With `--profile`, settings come from that profile, the fork's
   `--use`, and the parent's and the new overrides; the parent's entry
@@ -2160,8 +2164,8 @@ with no profile file a command fails with "no profiles; add one in
 settings with `resolve_server` (defaults < the active profile's own keys,
 when a profile exists < environment), without entries, so a fresh install
 can serve. `fork_settings` rebuilds a fork's settings from the parent's
-saved ones (see Commands); with `--use llm=...` the chosen model's values
-apply again: built-in defaults, the entry's `models.<id>`, then the
+saved ones (see Commands); with `--use llm=...`, or when the fork's model
+differs from the saved one, the chosen model's values apply again: built-in defaults, the entry's `models.<id>`, then the
 parent profile's `models.<id>` as its file is now (nothing when the
 profile is gone).
 
@@ -2679,6 +2683,17 @@ screen, in both themes and on phone and desktop.
 - `docs/frontend-inventory.md` describes the prototype's screens,
   components, data, and interactions as a reading aid.
 
+Rewrite and Re-extract share a Model group (`ForkModelGroup`, rules in
+`run/forkModel.ts`): LLM entry, Model, Context window, Max output, the
+step's thinking, and (Rewrite only) Context tokens, each marked against the
+viewed run. Changing the entry or model refills the unedited model values;
+the fork sends only the entry, the model, and the edited rows, and the
+server applies the model's values again (see Configuration). Rewrite forks
+from `select`, so passages are picked again for the model's budget; its
+Live banner reads "sources and passages are reused; only select and write
+run". Versions and History name a changed model first ("model gemma-3-12b
+· 300 words").
+
 Catalog runs use three screens of the prototype and a History change:
 
 - **New run, Catalog kind** (scenario `new`, Catalog picked): the Kind
@@ -2710,8 +2725,9 @@ Catalog runs use three screens of the prototype and a History change:
 - **Catalog result** (`catalog-result`, `#/catalog/<id>`), built from
   `catalog.json`: Download JSON, Copy JSON, Download CSV (built in the
   client), Expand more (a dialog with the three limits, posting the
-  `expand` fork), and Re-extract (the Rewrite dialog's model field and
-  "Extract thinking", posting the `extract` fork with `reasoning.extract`); Table (filters by text, type,
+  `expand` fork), and Re-extract (a dialog with the always-open Model
+  group, Extract thinking and no Context tokens, posting the `extract`
+  fork with `use`/`llm` for the changed rows); Table (filters by text, type,
   flagged only, missing field), Graph (inline SVG tree from the ref
   field), and JSON views; a Summary aside; and the record drawer with each
   value's source link. With output `both` (`catalog-result-both`), Copy

@@ -77,7 +77,9 @@ describe("HistoryScreen", () => {
   it("shows a fork's parent and changed writing options", async () => {
     await open();
     const fork = screen.getByText("r_7f3a").closest("div") as HTMLElement;
-    expect(fork.textContent).toBe("rewrite of r_7f3a · Explanatory · 300 words");
+    expect(fork.textContent).toBe(
+      "rewrite of r_7f3a · model gemma-3-12b · Explanatory · 300 words",
+    );
     expect(within(fork).getByRole("button", { name: "Help: Rewrite marker" })).toBeTruthy();
   });
 

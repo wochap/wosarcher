@@ -1,5 +1,5 @@
 // Display formats of the run screens, after the prototype's fmtT, fmtK, fmtB, wSum, and wDiff.
-import type { WritingOptions } from "../api/types";
+import type { RunSummary, WritingOptions } from "../api/types";
 import { describeValue, type WritingField } from "../components/WritingOptionsForm";
 import { minSec } from "../format";
 
@@ -50,6 +50,15 @@ export function wDiff(base: WritingOptions, next: WritingOptions): string {
     .filter((f) => String(base[f]) !== String(next[f]))
     .map((f) => (f === "tone_instructions" ? "custom instructions" : describeValue(f, next[f])))
     .join(" · ");
+}
+
+/** "model gemma-3-12b" when the run's model or llm entry differs from its parent's, else "". */
+export function modelDiff(
+  parent: Pick<RunSummary, "model" | "use">,
+  run: Pick<RunSummary, "model" | "use">,
+): string {
+  const changed = parent.model !== run.model || parent.use?.llm !== run.use?.llm;
+  return changed && run.model ? `model ${run.model}` : "";
 }
 
 export type Recipe = "report" | "answer" | "context";

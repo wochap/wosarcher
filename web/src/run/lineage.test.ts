@@ -38,6 +38,20 @@ describe("lineage", () => {
     ]);
   });
 
+  it("starts the changes with a changed model", () => {
+    const m = run("r5", {
+      parent_run_id: "r1",
+      fork_from: "select",
+      version: 5,
+      model: "gemma-3-12b",
+      writing: { ...writing, words: 250 },
+      duration_s: 40,
+    });
+    const versions = lineage([root, m], "r5");
+    expect(versions[1].kind).toBe("rewrite");
+    expect(versions[1].description).toBe("model gemma-3-12b · 250 words · 0:40");
+  });
+
   it("follows a fork of a fork from score", () => {
     const fork = run("r4", { parent_run_id: "r2", fork_from: "score", version: 4, duration_s: 61 });
     const versions = lineage([root, v2, fork], "r4");

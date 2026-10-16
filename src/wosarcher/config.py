@@ -1191,7 +1191,9 @@ def fork_settings(
     Secrets come from the current entries the parent used. A block in `use` is replaced by
     that entry's fields (profile and depth keys stay as saved); for `llm`, the chosen
     model's values apply again: the entry's `models.<id>`, then the parent profile's as
-    its file is now (nothing when the profile is gone). Keys the current `Settings` does not know are dropped and
+    its file is now (nothing when the profile is gone). They also apply when the fork's
+    model (`llm.model` override, else the `use.llm` entry's, else the saved one) differs
+    from the saved model. Keys the current `Settings` does not know are dropped and
     returned as dotted paths. Saved `*_file` and `*_command` keys are ignored.
     """
     pruned, dropped = prune_unknown(saved, Settings)
@@ -1213,8 +1215,10 @@ def fork_settings(
     run_values, run_use = override_layer(overrides)
     if run_use:
         raise ConfigError("a fork chooses entries with --use, not --set use.<block>")
-    if "llm" in use:
-        model = str(tree_get(run_values[0], "llm.model") or loaded["llm"].settings.get("model") or "")
+    saved_model = str(tree_get(tree, "llm.model") or "")
+    entry_model = loaded["llm"].settings.get("model") if "llm" in use else None
+    model = str(tree_get(run_values[0], "llm.model") or entry_model or saved_model)
+    if "llm" in use or model != saved_model:
         tuning = deep_merge(model_defaults(), model_tree(loaded["llm"].models, model))
         if parent_profile is not None and parent_profile in list_profiles(env):
             tuning = deep_merge(tuning, model_tree(read_profile(parent_profile, env).models, model))

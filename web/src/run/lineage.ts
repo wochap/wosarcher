@@ -1,7 +1,7 @@
 // The versions of one run (its lineage) from the GET /api/runs list: the root and every fork
 // whose parent chain reaches it.
 import type { RunSummary } from "../api/types";
-import { fmtElapsed, wDiff } from "./format";
+import { fmtElapsed, modelDiff, wDiff } from "./format";
 
 export type Version = {
   run: RunSummary;
@@ -26,7 +26,9 @@ const duration = (run: RunSummary) => (run.duration_s == null ? "–" : fmtElaps
 
 export function kindOf(run: RunSummary): string {
   if (!run.parent_run_id) return "research";
-  return run.fork_from === "write" ? "rewrite" : `fork from ${run.fork_from}`;
+  return run.fork_from === "write" || run.fork_from === "select"
+    ? "rewrite"
+    : `fork from ${run.fork_from}`;
 }
 
 /** Oldest first (by version, then creation); empty when `id` is not in `runs`. */
@@ -39,7 +41,10 @@ export function lineage(runs: RunSummary[], id: string): Version[] {
   members.sort((a, b) => (a.version ?? 1) - (b.version ?? 1) || a.created.localeCompare(b.created));
   return members.map((run) => {
     const parent = run.parent_run_id ? byId.get(run.parent_run_id) : undefined;
-    const changes = parent ? wDiff(parent.writing, run.writing) || "same options" : "full run";
+    const changes = parent
+      ? [modelDiff(parent, run), wDiff(parent.writing, run.writing)].filter(Boolean).join(" · ") ||
+        "same options"
+      : "full run";
     return {
       run,
       kind: kindOf(run),
