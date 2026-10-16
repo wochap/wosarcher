@@ -15,10 +15,12 @@ summaries).
 one page, with at most `catalog.concurrency` calls in flight. Each call
 SHALL send:
 - a system message from `prompts/extract.md` with only the structure's
-  fields (as JSON), the node's name, type, and parent name, the child
-  relation, the expand mode, `catalog.max_children`, the record language
-  (the structure's `record_language`, or "the sources' language" when it
-  is empty), and the date substituted;
+  fields (as JSON: each field's `name`, `type`, `required`, `volatile`,
+  `values`, `dated_by`, and `description` when non-empty; never
+  `example`), the node's name, type, and parent name, the child relation,
+  the expand mode, `catalog.max_children`, the record language (the
+  structure's `record_language`, or "the sources' language" when it is
+  empty), and the date substituted;
 - one user message with a data preamble and a delimited data block
   holding the node's pages, each as a heading with the page's title, URL,
   and fetch date, followed by its chunks in order, cut to the extract
@@ -31,7 +33,8 @@ and when it is `auto`, the room `llm.context_window` leaves after
 the estimated tokens of the system message. Pages over budget SHALL be
 cut evenly, each keeping its heading.
 
-The prompt SHALL tell the model to: fill a value only when a page states
+The prompt SHALL tell the model to: treat each field's `description` as
+the definition of what to look for; fill a value only when a page states
 it, else null; write `text` values in the record language, keeping
 names, acronyms, URLs, dates, and enum values as the sources give them;
 fill a volatile field only when the page shows a date and give that date
@@ -62,6 +65,14 @@ type, url), and `flags` (strings).
 #### Scenario: Record language empty
 - **WHEN** the structure's `record_language` is empty
 - **THEN** the system message says text values keep the sources' language
+
+#### Scenario: Descriptions in the prompt
+- **WHEN** field `head_title` has the description "Title of the position that leads the organization" and the example "Ministro de Defensa"
+- **THEN** the system message's fields JSON carries that description for `head_title` and does not contain "Ministro de Defensa"
+
+#### Scenario: Field without description
+- **WHEN** a field's `description` is empty
+- **THEN** its entry in the fields JSON has no `description` key
 
 ### Requirement: Reply checks
 The stage SHALL check each reply in code: a `record` key that is not a

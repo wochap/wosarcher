@@ -14,7 +14,11 @@ A catalog run SHALL have a structure with:
 - `fields`: a list of record fields, each with `name` (matching
   `^[a-z][a-z0-9_]{0,39}$`, unique in the list), `type` (`text`, `slug`,
   `url`, `date`, `enum`, or `ref`), `required` (boolean, default false),
-  and `volatile` (boolean, default false; `text` fields only);
+  `volatile` (boolean, default false; `text` fields only), `description`
+  (a string of at most 200 characters, default empty: what the field
+  holds, sent to extraction), and `example` (a string of at most 80
+  characters, default empty: one plausible value, shown to the user only;
+  SHALL be empty on `slug` and `ref` fields);
 - `relation`: the child relation, a non-empty phrase of at most 200
   characters, written in the sources' language;
 - `seeds`: one or more seeds, each with `name` (non-empty), `type` (one of
@@ -76,6 +80,22 @@ SHALL be rejected naming the key.
 - **WHEN** a structure sets `record_language` to `spanish`
 - **THEN** it is rejected with an error naming `record_language`
 
+#### Scenario: Description and example kept
+- **WHEN** a field `head_name` has `description` "Name of the current holder of the leading position" and `example` "Walter Astudillo Chávez"
+- **THEN** the structure is accepted and both strings round-trip through `structure.json`
+
+#### Scenario: Field without help
+- **WHEN** a field is given with `name` and `type` only
+- **THEN** `description` and `example` resolve to empty strings
+
+#### Scenario: Example on a ref field
+- **WHEN** the `ref` field `parent_id` has `example` "pcm"
+- **THEN** the structure is rejected with an error naming `parent_id` and `example`
+
+#### Scenario: Description too long
+- **WHEN** a field's `description` is 201 characters
+- **THEN** the structure is rejected with an error naming the field and `description`
+
 ### Requirement: Draft stage
 The `draft` stage SHALL run first after `load` in a catalog run. When the
 run request carries a structure, `draft` SHALL validate it (Requirement:
@@ -94,10 +114,14 @@ ask for `output` too: `report` when the brief asks a question or for a
 summary, `table` when it asks for a list or data, `both` when it asks for
 both. It SHALL ask for `language` (the sources' language) and
 `record_language` (the brief's language when it differs from the
-sources', else empty). The reply SHALL be JSON in the structure's shape.
-The stage SHALL read it, apply the defaults for absent optional keys,
-validate it, and fail the run with `draft failed: <reason>` when the
-reply cannot be read or is invalid. The derived structure SHALL be
+sources', else empty). It SHALL ask, for every field, for a one-sentence
+`description` of what the field holds, written in the record language
+when set and else in the brief's language, and for an `example`: one
+value the model is confident of for a seed it names, else empty; never
+on `slug` or `ref` fields. The reply SHALL be JSON in the structure's
+shape. The stage SHALL read it, apply the defaults for absent optional
+keys, validate it, and fail the run with `draft failed: <reason>` when
+the reply cannot be read or is invalid. The derived structure SHALL be
 written as `structure.json` and recorded in `request.json` as the run's
 structure. Outlines SHALL never go through a template.
 
@@ -124,6 +148,14 @@ structure. Outlines SHALL never go through a template.
 #### Scenario: Languages proposed
 - **WHEN** an English brief asks for Peruvian state organizations and the draft reply sets `language` `es` and `record_language` `en`
 - **THEN** `structure.json` has both values and the run searches in `es`
+
+#### Scenario: Descriptions and examples proposed
+- **WHEN** the draft reply gives field `name` the description "Official Spanish name" and the example "Ministerio de Defensa", and field `legal_basis` a description and an empty example
+- **THEN** `structure.json` holds those values and the draft route returns them
+
+#### Scenario: Reply without help keys
+- **WHEN** the draft reply's fields carry no `description` or `example` keys
+- **THEN** the structure is accepted with both empty on every field
 
 ### Requirement: Draft route
 `POST /api/catalog/draft` SHALL accept a multipart form with a `request`

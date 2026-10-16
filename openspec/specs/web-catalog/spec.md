@@ -71,12 +71,19 @@ Structure panel from the reply; a 502 SHALL show the error box of web-run
 
 The Structure panel SHALL show the heading "Structure", the line "Drafted
 from your brief · edit anything", and these rows with the prototype's
-help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
-`c-output`, `c-limits`, `c-lang`, `c-record-lang`):
-- Record fields: one row per field with the name input (spaces become
-  `_`), the type select (`text`, `slug`, `url`, `date`, `enum`, `ref`),
-  the Required and Volatile switches, and a remove button; an "Add
-  field" link;
+help texts (`c-fields`, `c-example`, `c-vol`, `c-rel`, `c-seeds`,
+`c-leaf`, `c-expand`, `c-output`, `c-limits`, `c-lang`, `c-record-lang`):
+- Record fields: one row per field with, on its first line, the name
+  input (spaces become `_`), the type select (`text`, `slug`, `url`,
+  `date`, `enum`, `ref`), the Required and Volatile switches, and a
+  remove button; and on a second line, indented to the name column, the
+  description input (single line, placeholder "What this field holds",
+  bound to the field's `description`, labelled "Description of <name>")
+  and, when the field's `example` is non-empty, a read-only chip styled
+  as a disabled input reading "e.g. <example>" with the help icon
+  `c-example`; on phones the chip stacks under the description input.
+  Changing the type to `slug` or `ref` SHALL clear the example. An "Add
+  field" link adds a row with an empty description and no chip;
 - Child relation: a single-line input;
 - Seeds: chips with name, type, and a link icon when a URL is set, each
   removable; "Add seed" opens the inline name, type, and URL inputs
@@ -109,15 +116,15 @@ as `writing`. With Output Table the panel is hidden and no `writing` is
 sent.
 
 Run catalog SHALL post `POST /api/runs` with `kind` `catalog`, the brief
-as `query`, the structure (with `output`, `language`, and
-`record_language`), the profile and its edits (`use`, `llm` with `model`,
-`context_window`, `max_output_tokens`, and `reasoning.draft` and
-`reasoning.extract` when set), the Questions row's `questions`, the
-overridden writing fields when Output is not Table, the domain lists,
-and the attachments, and SHALL NOT send `search_language`; then show the
-Live run screen. A structure the server rejects SHALL show the error box
-with "Fix in Structure", which focuses the named row. Ctrl+Enter in the
-brief SHALL run the catalog when a structure exists.
+as `query`, the structure (with `output`, `language`, `record_language`,
+and each field's `description` and `example`), the profile and its edits
+(`use`, `llm` with `model`, `context_window`, `max_output_tokens`, and
+`reasoning.draft` and `reasoning.extract` when set), the Questions row's
+`questions`, the overridden writing fields when Output is not Table, the
+domain lists, and the attachments, and SHALL NOT send `search_language`;
+then show the Live run screen. A structure the server rejects SHALL show
+the error box with "Fix in Structure", which focuses the named row.
+Ctrl+Enter in the brief SHALL run the catalog when a structure exists.
 
 #### Scenario: Draft fills the panel
 - **WHEN** the user types a brief and presses Draft structure, and the server returns a structure with 12 fields and 6 seeds
@@ -166,6 +173,22 @@ brief SHALL run the catalog when a structure exists.
 #### Scenario: Questions on a catalog run
 - **WHEN** the user leaves Questions at Ask and runs the catalog
 - **THEN** the request has `questions` with `clarify` and `rounds` true
+
+#### Scenario: Field help after a draft
+- **WHEN** the draft returns field `name` with description "Official Spanish name" and example "Ministerio de Defensa", and field `legal_basis` with a description and no example
+- **THEN** the `name` row shows the description in its input and the chip "e.g. Ministerio de Defensa" with the `c-example` icon, and the `legal_basis` row shows its description and no chip
+
+#### Scenario: Description edited and sent
+- **WHEN** the user changes the description of `head_name` to "Current minister's full name" and runs the catalog
+- **THEN** the request's `structure.fields` entry for `head_name` has that `description` and the drafted `example` unchanged
+
+#### Scenario: Added field has no help
+- **WHEN** the user presses Add field
+- **THEN** the new row's description input is empty and shows no chip
+
+#### Scenario: Type change clears the example
+- **WHEN** a field with the example "mindef" is changed to type `ref`
+- **THEN** its chip disappears and the request sends an empty `example` for it
 
 ### Requirement: Catalog live run
 The Live run screen of a catalog run SHALL match scenario `live-catalog`:
