@@ -174,12 +174,18 @@ in `use`. A recorded entry that no longer exists SHALL fail the fork
 before it is created, naming the block and the entry and listing that
 block's entries, unless the fork replaces that block with `--use`. A
 `--use BLOCK=NAME` SHALL replace the whole saved block with the current
-entry; for `llm`, the chosen model's values SHALL apply again below the
-fork's overrides: the built-in model defaults, then the entry's
+entry. The fork's model SHALL be its `llm.model` override, else, with
+`--use llm`, that entry's `model`, else the parent's saved `llm.model`.
+When the fork's model differs from the parent's saved `llm.model`, or the
+fork has `--use llm`, the chosen model's values SHALL apply again below
+the fork's overrides: the built-in model defaults, then the llm entry's
 `models.<id>`, then the `models.<id>` of the parent's recorded profile as
-its file is now (none when that profile no longer exists). The fork SHALL
-record the entries it used. Forking from a stage whose earlier stages are
-not all finished SHALL fail and name the first unfinished stage.
+its file is now (none when that profile no longer exists); they replace
+the parent's saved model values, including the parent's own overrides of
+them. A fork that keeps the parent's model and entry SHALL keep the
+parent's saved model values. The fork SHALL record the entries it used.
+Forking from a stage whose earlier stages are not all finished SHALL fail
+and name the first unfinished stage.
 
 A fork SHALL have its parent's kind. A catalog run SHALL be forked only
 from `expand` or `extract`, with the copies and the continuation that
@@ -214,6 +220,22 @@ and record the raised limits in `structure.json` and as overrides.
 #### Scenario: Profile gone
 - **WHEN** the same parent's profile `cloud-rerank` was deleted and the user forks from `write` with `--use llm=openrouter`
 - **THEN** the fork resolves the model values from the `openrouter` entry alone
+
+#### Scenario: Model change applies its values
+- **WHEN** the parent ran on entry `omniroute` with model `research-smart` (`context_window` 1048576, `max_output_tokens` 131072, `reasoning.write` `low`), and the user forks from `select` with `--model qwen3-30b-a3b`, which no entry or profile lists
+- **THEN** the fork resolves `llm.context_window` 32768, `llm.max_output_tokens` 8192, and `llm.reasoning.write` `none`, and keeps `use.llm` `omniroute`
+
+#### Scenario: Model change with a limit override
+- **WHEN** the same parent is forked from `select` with `--model qwen3-30b-a3b --context-window 65536`
+- **THEN** the fork resolves `llm.context_window` 65536 and `llm.max_output_tokens` 8192
+
+#### Scenario: Same model keeps saved values
+- **WHEN** the parent ran with `--context-window 200000` on model `research-smart`, and the user forks from `write` with `--model research-smart --tone critical`
+- **THEN** the fork resolves `llm.context_window` 200000, as the parent did
+
+#### Scenario: Catalog model change
+- **WHEN** a catalog run on model `research-smart` with `reasoning.extract` `low` from its entry is forked from `extract` with `--model qwen3-30b-a3b`
+- **THEN** the fork resolves `llm.reasoning.extract` `none` and the built-in window and output limits
 
 #### Scenario: Catalog fork keeps the kind
 - **WHEN** a catalog run is forked from `extract`

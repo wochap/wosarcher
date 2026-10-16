@@ -254,11 +254,15 @@ parent" for a null ref), and the pages used; Escape closes it.
 
 Expand more SHALL open a dialog with the three limits prefilled with the
 run's, each at least the run's, and post `POST /api/runs/{id}/fork` with
-`from` `expand` and `limits`; Re-extract SHALL open a dialog with the
-Rewrite dialog's model field and one thinking field "Extract thinking"
-(help `p-think-extract`), and post the fork with `from` `extract` and
-`llm` holding `model` and `reasoning.extract` when set. Both SHALL show
-the new run on the Live run screen.
+`from` `expand` and `limits`. Re-extract SHALL open the prototype's
+"Re-extract" dialog (arrows-clockwise icon): the note with the
+`cr-reextract` help body, the Model group always open (web-run "Fork
+model group", with Extract thinking and no Context tokens), "Creates
+v<N> linked to <id>" (N as web-run "Rewrite" defines), Cancel, and
+"Re-extract", which posts the fork with `from` `extract` and the Model
+group's fields. Cancel, the close button, Escape, and a backdrop click
+SHALL close it without a request. Both dialogs SHALL show the new run on
+the Live run screen.
 
 #### Scenario: Filter by missing field
 - **WHEN** the user presses "website" in the Summary's worst-filled list
@@ -279,6 +283,14 @@ the new run on the Live run screen.
 #### Scenario: Re-extract with a level
 - **WHEN** the user opens Re-extract, picks the model `deepseek-v4-flash` and Extract thinking `medium`, and confirms
 - **THEN** `POST /api/runs/{id}/fork` is sent with `{"from": "extract", "llm": {"model": "deepseek-v4-flash", "reasoning": {"extract": "medium"}}}`
+
+#### Scenario: Re-extract on another entry
+- **WHEN** the user opens Re-extract and picks the LLM entry `agents`
+- **THEN** Model shows the `agents` default model, the unedited limits and Extract thinking are refilled for it, and the fork is sent with `{"from": "extract", "use": {"llm": "agents"}}`
+
+#### Scenario: Re-extract shows no budget
+- **WHEN** the user opens Re-extract
+- **THEN** the Model group shows LLM entry, Model, Context window, Max output, and Extract thinking, and no Context tokens row
 
 #### Scenario: Report view
 - **WHEN** the user opens a catalog run with `output` `both` and picks the Report view

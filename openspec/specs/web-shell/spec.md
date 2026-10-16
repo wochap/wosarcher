@@ -564,18 +564,20 @@ with Alt+3) SHALL list runs from `GET /api/runs`, newest first, with the H1
 from `duration_s`, "–" while it is null), Cost (`$` with three decimals
 from `cost`, "–" while it is null), and the row actions Open, Live view
 (completed runs only), Rerun, and Delete. A research fork SHALL show under
-its query "↳ rewrite of <parent id> · <writing changes>", where the
-changes are the writing options in which the fork's `writing` differs
-from its parent's; a catalog fork SHALL show "↳ expanded from <parent
-id>" (`fork_from` `expand`) or "↳ re-extracted from <parent id>"
-(`extract`). Every column SHALL come from the `GET /api/runs` response,
-with no request per row. Status tags SHALL use the prototype's icons and
-tints for completed (`done`), running (spinning; also `queued`, labelled
-"Queued"), failed, and cancelled; `interrupted` SHALL use the failed style
-with the label "Interrupted", and the Failed filter SHALL include it;
-`waiting` SHALL use the running tint with the hourglass icon and the label
-"Waiting", counted as running by the Status filter, and Open SHALL show it
-on the Live run screen with the question card.
+its query "↳ rewrite of <parent id> · <changes>", where the changes start
+with "model <model>" when the fork's `model` or `use.llm` differs from its
+parent's, followed by the writing options in which the fork's `writing`
+differs from its parent's, joined with " · "; a catalog fork SHALL show
+"↳ expanded from <parent id>" (`fork_from` `expand`) or "↳ re-extracted
+from <parent id>" (`extract`). Every column SHALL come from the `GET
+/api/runs` response, with no request per row. Status tags SHALL use the
+prototype's icons and tints for completed (`done`), running (spinning;
+also `queued`, labelled "Queued"), failed, and cancelled; `interrupted`
+SHALL use the failed style with the label "Interrupted", and the Failed
+filter SHALL include it; `waiting` SHALL use the running tint with the
+hourglass icon and the label "Waiting", counted as running by the Status
+filter, and Open SHALL show it on the Live run screen with the question
+card.
 
 #### Scenario: Answer row
 - **WHEN** `GET /api/runs` returns a finished run with `until` null and `writing.format` = `answer`
@@ -584,6 +586,10 @@ on the Live run screen with the question card.
 #### Scenario: Rewrite row
 - **WHEN** a run is a fork of `r_7f3a` with tone and length changed
 - **THEN** its row shows "rewrite of r_7f3a" with the changed options
+
+#### Scenario: Rewrite row with a model
+- **WHEN** a run is a fork of `r_7f3a` with model `gemma-3-12b` and length 300 changed (scenario `history`)
+- **THEN** its row shows "↳ rewrite of r_7f3a · model gemma-3-12b · 300 words"
 
 #### Scenario: Duration and cost
 - **WHEN** a finished run has `duration_s = 125` and `cost = 0.012`

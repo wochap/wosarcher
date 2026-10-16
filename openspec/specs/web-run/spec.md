@@ -1096,44 +1096,128 @@ Rewrite on the Report screen (scenarios `finished` and `versions`) SHALL
 open the prototype's "Rewrite report" dialog, prefilled with the viewed
 version's writing options. Above the writing fields the dialog SHALL show a
 Format field (segmented, `report` then `answer`, scenario `rewrite-format`)
-set to the viewed version's format, followed by its help button. The
-dialog SHALL mark each changed field "changed" with "was
-<value>" and Reset, explaining that sources and passages are reused, and
-showing "Creates v<N> linked to <id>", where N is the highest version in
-the viewed run's lineage plus one, the version the server gives the fork.
-"Rewrite from write stage" SHALL send `POST /api/runs/{id}/fork` with
-`from` = `write` and the changed writing options, then show the new run on
+set to the viewed version's format, followed by its help button. After the
+writing fields the dialog SHALL show the "Model" toggle (caret, "Model",
+and " · <n> changed" while it is closed and <n> rows are changed), closed
+when the dialog opens, which shows the Model group (Requirement: Fork
+model group, Write thinking and Context tokens; scenario `rewrite-model`).
+The dialog SHALL mark each changed writing field "changed" with "was
+<value>" and Reset, show the note "Reuses the <n> sources and <m> scored
+passages from this run. Passages are picked again for the model's budget,
+then the report is written; no searching or fetching.", where <m> counts
+the passages the score stage kept (the selected passages plus those
+`select.jsonl` reports as skipped), and show "Creates v<N> linked to
+<id>", where N is the highest version in the viewed run's lineage plus
+one, the version the server gives the fork. "Rewrite from select stage"
+SHALL send `POST /api/runs/{id}/fork` with `from` = `select`, the changed
+writing options, and the Model group's fields, then show the new run on
 the Live run screen (Report tab on phone) with reused phases, cached
 sources, the passages of the run that scored them, and the banner "Rewrite
-of <id>: sources and passages are reused, only the write stage runs."
+of <id>: sources and passages are reused; only select and write run."
 until writing starts. Cancel, the close button, Escape, and a backdrop
 click SHALL close the dialog without a request.
 
 #### Scenario: Rewrite shorter
 - **WHEN** the user sets the length to 250 and confirms
-- **THEN** a fork from `write` with `words` 250 is created and shown live with Plan to Select marked reused
+- **THEN** a fork from `select` with `words` 250 is created and shown live with Plan to Gap marked reused
 
 #### Scenario: Rewrite as an answer
 - **WHEN** the user opens Rewrite on a report, picks Format `answer` and length 400, and confirms (scenario `rewrite-format`)
-- **THEN** Format shows "changed" with "was report" and Reset, and `POST /api/runs/{id}/fork` is sent with `from` = `write` and `writing` containing `format` = `answer` and `words` = 400
+- **THEN** Format shows "changed" with "was report" and Reset, and `POST /api/runs/{id}/fork` is sent with `from` = `select` and `writing` containing `format` = `answer` and `words` = 400
 
 #### Scenario: Rewrite an older version
 - **WHEN** the user views v1 of a lineage that has v1 and v2 and opens Rewrite
 - **THEN** the dialog says "Creates v3", and the created run has version 3
 
+#### Scenario: Rewrite with another model
+- **WHEN** the user opens the Model group, types `gemma-3-12b`, and confirms (scenario `rewrite-model`)
+- **THEN** `POST /api/runs/{id}/fork` is sent with `from` = `select` and `llm` `{"model": "gemma-3-12b"}`, and the Live banner reads "only select and write run"
+
+#### Scenario: Closed group with changes
+- **WHEN** the user changes Model and closes the Model group
+- **THEN** the toggle reads "Model · 1 changed"
+
+### Requirement: Fork model group
+The Rewrite dialog (Requirement: Rewrite) and the Re-extract dialog
+(web-catalog "Catalog result screen") SHALL show the prototype's "Model"
+group: a grid of rows, in order, LLM entry (select of the llm entries,
+help `p-llm`), Model (text input with the IDs `GET /api/models?llm=<entry>`
+lists as suggestions, help `p-model`), Context window (number, min 1024,
+step 1024, help `p-limits`), Max output (number, min 256, step 1024, help
+`p-limits`), the thinking row of the dialog's step (Write thinking with
+help `p-think`, or Extract thinking with help `p-think-extract`, each with
+the five levels), and, in the Rewrite dialog only, Context tokens (number,
+min 1000, step 1000, placeholder "Auto", help `p-ctx`). Each row's base
+value SHALL be the parent run's: `use.llm`, and from its `request.settings`
+`llm.model`, `llm.context_window`, `llm.max_output_tokens`,
+`llm.reasoning.<step>`, and `select.max_context_tokens`.
+
+A row SHALL carry a source tag: "edited" when the user changed it in this
+dialog, else "from profile" or "from entry" as Requirement: Profile
+advanced values defines for the shown model. A row whose value differs
+from its base SHALL show "was <base value>" ("Auto" for `auto`) and
+Reset, and a solid border; an unchanged row a dashed one. Context window
+and Max output SHALL show "Fallback: no limits set for this model." when
+not edited and neither the entry nor the profile lists limits for the
+shown model. Context tokens SHALL show "Auto · <budget>" while empty, the
+budget the shown window, output limit, and the dialog's length leave
+(context-selection "Token budget"), or "<asked> → <cap> (model
+window)" when the number is above the window rounded down to thousands.
+
+Picking an LLM entry SHALL set Model to that entry's default model and
+clear Model's edit; changing the entry or the model SHALL refill each of
+Context window, Max output, and the thinking row that the user did not
+edit with the shown model's value: the profile's `models.<id>`, else the
+entry's, else the built-in fallback (32768, 8192, `none`). Reset SHALL
+restore the base value (for LLM entry, the base entry and model) and
+refill as above. On confirm the dialog SHALL send, besides its own
+fields, `use.llm` when the entry differs from its base, `llm.model` when
+the model differs, and `llm.context_window`, `llm.max_output_tokens`,
+`llm.reasoning.<step>`, and `llm.context_tokens` (a number or `auto`) for
+the rows the user edited that differ from their base; refilled values
+SHALL NOT be sent, since the server applies the model's values again
+(run-store "Fork").
+
+#### Scenario: Another model
+- **WHEN** the parent ran on entry `omniroute` with model `research-smart` and the user types `gemma-3-12b`, which no entry or profile lists (scenario `rewrite-model`)
+- **THEN** Model shows "edited" and "was research-smart", Context window and Max output show 32768 and 8192 with the fallback note and their "was" values, and the fork is sent with `llm` `{"model": "gemma-3-12b"}` and no limits
+
+#### Scenario: Another entry
+- **WHEN** the user picks the LLM entry `agents`, whose default model `qwen3-14b` it lists with 32768 / 8192
+- **THEN** Model shows `qwen3-14b`, Context window and Max output show "from entry", and the fork is sent with `use` `{"llm": "agents"}` and no `llm.model`
+
+#### Scenario: Edited limit survives a model change
+- **WHEN** the user sets Context window to 65536 and then changes Model
+- **THEN** Context window stays 65536 marked "edited", Max output is refilled, and the fork carries `llm.context_window` 65536
+
+#### Scenario: Context tokens above the window
+- **WHEN** the shown window is 32768 and the user types 40000 in Context tokens
+- **THEN** the note reads "40,000 → 32,000 (model window)" and the fork carries `llm.context_tokens` 40000
+
+#### Scenario: Reset the entry
+- **WHEN** the user picked `agents` and presses Reset on LLM entry
+- **THEN** LLM entry and Model show the base values again, no row is marked changed, and the fork carries no `use` and no `llm`
+
 ### Requirement: Versions
 When the viewed run has other runs in its lineage, the Report screen SHALL
 show the prototype scenario `versions`: the "Versions" nav with one button
 per run in the lineage, oldest first, each with "v<N> · <kind>", its id,
-and a description (the full run's duration, or the writing options changed
-against its parent plus duration), the viewed one marked current; and above
-the report the note "Rewritten from <parent id> (v<N>): same sources and
-passages; changed <changes>." Pressing a version SHALL show that run's
-report. A single-run lineage SHALL show no Versions nav.
+and a description (the full run's duration, or the changes against its
+parent plus duration), the viewed one marked current; and above the
+report the note "Rewritten from <parent id> (v<N>): same sources and
+passages; changed <changes>." The changes SHALL start with "model
+<model>" when the run's `model` or `use.llm` differs from its parent's,
+followed by the writing options changed against its parent, joined with
+" · ". Pressing a version SHALL show that run's report. A single-run
+lineage SHALL show no Versions nav.
 
 #### Scenario: Two versions
 - **WHEN** the user views `r_8c4e`, a rewrite of `r_8c21` with tone concise and 250 words
 - **THEN** the nav shows v1 and v2 with v2 current, and the parent note names `r_8c21` and the changes
+
+#### Scenario: Model in the changes
+- **WHEN** the user views a rewrite of `r_8c21` with model `gemma-3-12b` and 250 words (scenario `versions`)
+- **THEN** its description and the parent note's changes start with "model gemma-3-12b · " followed by the writing changes
 
 ### Requirement: Run help placements
 The run screens SHALL place help buttons (web-shell "Inline help") where
