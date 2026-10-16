@@ -6,6 +6,7 @@ The record fields, as JSON:
 $fields
 
 Rules:
+- A field's `description`, when present, defines what to look for in that field.
 - Fill a value only when a page states it; otherwise give null. Never guess.
 - A field marked volatile gets a value only when the page shows a date for it
   (an update or publication date); give that date, as YYYY-MM-DD, for the field

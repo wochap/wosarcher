@@ -546,6 +546,8 @@ export type Set1 = string[]
 export type Sources3 = (("both" | "web" | "files") | null)
 export type Expand = ("links" | "search" | "both")
 export type DatedBy = (string | null)
+export type Description8 = string
+export type Example = string
 export type Name9 = string
 export type Required = boolean
 export type Type21 = ("text" | "slug" | "url" | "date" | "enum" | "ref")
@@ -2329,6 +2331,8 @@ seeds: Seeds
  */
 export interface StructureField {
 dated_by?: DatedBy
+description?: Description8
+example?: Example
 name: Name9
 required?: Required
 type: Type21

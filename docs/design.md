@@ -274,7 +274,9 @@ output is not `table` (or no structure is sent), and exporting a
 table-only catalog answers 404 `no_report`.
 
 **Structure.** `Structure` (`models.py`) holds `fields` (name, type one of
-`text`, `slug`, `url`, `date`, `enum`, `ref`, `required`, `volatile`),
+`text`, `slug`, `url`, `date`, `enum`, `ref`, `required`, `volatile`, and
+optional `description`, at most 200 characters, and `example`, at most 80,
+both empty by default; `example` is rejected on `slug` and `ref` fields),
 `relation` (the child relation, "dependent organizations"), `seeds` (name,
 type, optional URL), `leaf_types`, `expand` (`links`, `search`, `both`),
 `limits` (`max_depth`, `max_nodes`, `pages_per_node`), `language`, and
@@ -286,7 +288,9 @@ writes `text` values in it, leaving names, acronyms, URLs, dates, and enum
 values as the sources give them. Draft proposes both; the CLI's
 `--search-language` and `--record-language` and the form's Search language
 and Record language rows write them into the structure, and the catalog
-request never carries `search_language`.
+request never carries `search_language`. A field's `description` is a
+sentence the user reads and edits and the extractor reads; its `example` is
+a draft guess shown only in the form.
 Field names match `^[a-z][a-z0-9_]{0,39}$`; the first required `text`
 field is the name field; at most one `slug` and one `ref` (the parent)
 field; the `enum` field's `values` are the node types, and leaf and seed
@@ -294,7 +298,10 @@ types must be among them. Unset limits and expand take the `catalog`
 block's values. The `draft` stage validates a supplied structure (an
 invalid one fails the run naming the field) or, when none is given, makes
 one LLM call (`prompts/draft.md`, with attachment outlines as data in
-`draft_data.md`, at thinking level `llm.reasoning.draft`) and reads a `Structure` from the reply. It writes
+`draft_data.md`, at thinking level `llm.reasoning.draft`) and reads a `Structure` from the reply; the prompt asks for a one-sentence
+`description` per field (in the record language, else the brief's) and an
+`example` only when the model is confident of it for a named seed, and absent
+keys take their defaults. It writes
 `structure.json`, emits `structure.ready`, and seeds the frontier: each
 seed a node at depth 0 with `found_by = seed`. The web form always sends a
 structure (from `POST /api/catalog/draft`, edited); the CLI drafts inside
@@ -324,7 +331,8 @@ count again toward `fetch.max_pages` (it counts toward the node's
 **Extract.** One LLM call per node, `catalog.concurrency` in flight, at
 thinking level `llm.reasoning.extract` (neither catalog call reads `plan`,
 `gap`, or `write`). The
-system message is `prompts/extract.md` with the structure as JSON, the
+system message is `prompts/extract.md` with the structure as JSON (each
+field's `description` included when non-empty, its `example` never), the
 node's name, type, parent, the relation, the expand mode,
 `catalog.max_children`, and the date; the user message is the data
 preamble plus a delimited block with the node's pages whole (`## <title>

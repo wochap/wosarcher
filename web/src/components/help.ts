@@ -405,7 +405,11 @@ export function funnelHelp(config: FunnelConfig): Record<FunnelKey, Help> {
 Object.assign(HELP, {
   "c-fields": {
     title: "Record fields",
-    body: "The columns every record gets. A record missing a required field is dropped. ref holds another record’s id; enum takes one of the type values.",
+    body: "The columns of each record. Name and type are fixed once the run starts. The description tells the extractor what to look for and is sent with every page; edit it to steer extraction. Fields you add start with a blank description.",
+  },
+  "c-example": {
+    title: "Example",
+    body: "A value the draft expects for this field, taken from the seeds it already knows. It is a guess to show the shape, not something found on a page. Real values appear in the table after the first wave.",
   },
   "c-vol": { title: "Volatile", body: "Taken only from a dated source; the date is recorded" },
   "c-rel": {

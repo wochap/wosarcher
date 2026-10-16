@@ -98,3 +98,13 @@ async def test_output_proposed() -> None:
     result = await draft(brief, None, [], llm, catalog=CatalogConfig(), today=TODAY)
     assert result.structure.output == "both"
     assert "`output`" in llm.calls[0][0].content
+
+
+async def test_reply_with_and_without_field_help() -> None:
+    data = structure_data()
+    data["fields"][1]["description"] = "Official name"
+    data["fields"][1]["example"] = "Ministry of Health"
+    result = await draft_structure("b", [], FakeLLM([json.dumps(data)]), today=TODAY)
+    assert (result.fields[1].description, result.fields[1].example) == ("Official name", "Ministry of Health")
+    result = await draft_structure("b", [], FakeLLM([json.dumps(structure_data())]), today=TODAY)
+    assert all((f.description, f.example) == ("", "") for f in result.fields)

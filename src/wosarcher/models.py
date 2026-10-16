@@ -719,6 +719,10 @@ class StructureField(Contract):
     """The node types; only on the `enum` field, 1 to 40 distinct non-empty strings."""
     dated_by: str | None = None
     """The `date` field that receives the date of the page a volatile value came from."""
+    description: str = Field(default="", max_length=200)
+    """What the field holds; the extractor reads it as the definition of what to look for."""
+    example: str = Field(default="", max_length=80)
+    """A draft guess of a value, for the user only; never sent to the extractor."""
 
     @field_validator("name")
     @classmethod
@@ -738,6 +742,8 @@ class StructureField(Contract):
                 raise ValueError(f"field {self.name}: enum values must be distinct and non-empty")
         elif self.values:
             raise ValueError(f"field {self.name}: only the enum field has values")
+        if self.example and self.type in ("slug", "ref"):
+            raise ValueError(f"field {self.name}: a {self.type} field takes no example")
         return self
 
 

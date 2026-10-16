@@ -46,6 +46,7 @@ from wosarcher.models import (
     Skipped,
     Source,
     Structure,
+    StructureField,
     WaveEntry,
     WritingOptions,
     answer_text,
@@ -551,3 +552,24 @@ def test_answer_text() -> None:
     assert answer_text(question, Answer(question_id="q1", option_ids=["a", "b"], other=" more ")) == (
         "Option 0, Option 1, more"
     )
+
+
+def test_field_help_round_trip_and_defaults() -> None:
+    field = StructureField(name="website", type="url", description="Official site", example="https://x.test")
+    assert StructureField.model_validate_json(field.model_dump_json()) == field
+    bare = StructureField(name="website", type="url")
+    assert (bare.description, bare.example) == ("", "")
+
+
+@pytest.mark.parametrize("kind", ["slug", "ref"])
+def test_example_rejected_on_generated_fields(kind: str) -> None:
+    with pytest.raises(ValidationError, match=r"field id: a (slug|ref) field takes no example"):
+        StructureField(name="id", type=kind, example="x")  # type: ignore[arg-type]
+    assert StructureField(name="id", type=kind, description="the id").example == ""  # type: ignore[arg-type]
+
+
+def test_field_help_limits() -> None:
+    with pytest.raises(ValidationError):
+        StructureField(name="a", type="text", description="x" * 201)
+    with pytest.raises(ValidationError):
+        StructureField(name="a", type="text", example="x" * 81)

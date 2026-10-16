@@ -102,6 +102,60 @@ describe("catalog form", () => {
     ).toBe(true);
   });
 
+  it("shows field help after a draft", async () => {
+    const { brief } = await openCatalog();
+    await draftIt(brief);
+    const name = (screen.getByLabelText("Description of name") as HTMLInputElement).value;
+    expect(name).toBe("Official Spanish name");
+    expect(screen.getByLabelText<HTMLInputElement>("Example of name").value).toBe(
+      "Ministerio de Defensa",
+    );
+    expect((screen.getByLabelText("Description of legal_basis") as HTMLInputElement).value).toBe(
+      "Law that created it",
+    );
+    expect(screen.queryByLabelText("Example of legal_basis")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Help: Example" }).length).toBeGreaterThan(0);
+  });
+
+  it("sends an edited description and keeps the drafted example", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.change(screen.getByLabelText("Description of head_name"), {
+      target: { value: "Current minister's full name" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    const fields = request.structure?.fields ?? [];
+    expect(fields.find((f) => f.name === "head_name")?.description).toBe(
+      "Current minister's full name",
+    );
+    expect(fields.find((f) => f.name === "name")?.example).toBe("Ministerio de Defensa");
+  });
+
+  it("starts an added field without help", async () => {
+    const { brief } = await openCatalog();
+    await draftIt(brief);
+    fireEvent.click(screen.getByRole("button", { name: "Add field" }));
+    const added = screen.getByLabelText("Description of field 13") as HTMLInputElement;
+    expect(added.value).toBe("");
+    expect(screen.queryByLabelText("Example of field 13")).toBeNull();
+  });
+
+  it("clears the example when the type becomes ref", async () => {
+    const { api, brief } = await openCatalog();
+    await draftIt(brief);
+    expect(screen.getByLabelText("Example of acronym")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Type of acronym"), { target: { value: "ref" } });
+    expect(screen.queryByLabelText("Example of acronym")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run catalog" }));
+    });
+    const [request] = callsTo(api, "createRun")[0] as [RunCreate];
+    expect(request.structure?.fields.find((f) => f.name === "acronym")?.example).toBe("");
+  });
+
   it("keeps the kind and brief across screens", async () => {
     const { brief } = await openCatalog();
     fireEvent.change(brief, { target: { value: "Kept brief" } });

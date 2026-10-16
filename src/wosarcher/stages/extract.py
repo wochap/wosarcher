@@ -117,7 +117,7 @@ def generated_fields(structure: Structure) -> set[str]:
 
 
 def system_message(structure: Structure, item: NodePages, *, max_children: int, today: str) -> str:
-    fields = [item.model_dump(exclude_defaults=True) for item in structure.fields]
+    fields = [item.model_dump(exclude_defaults=True, exclude={"example"}) for item in structure.fields]
     return load("extract").substitute(
         name=item.node.name,
         type=item.node.type,

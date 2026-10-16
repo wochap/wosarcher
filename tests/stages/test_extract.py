@@ -169,3 +169,18 @@ class ScriptLLM(FakeLLM):
             return Completion(text=self.answer(name))
         finally:
             self.flight -= 1
+
+
+def test_description_sent_and_example_withheld() -> None:
+    fields = [
+        {"name": "id", "type": "slug"},
+        {"name": "name", "type": "text", "required": True, "description": "Official name", "example": "SECRETEG"},
+        {"name": "type", "type": "enum", "values": ["power", "ministry", "office"]},
+        {"name": "parent_id", "type": "ref"},
+        {"name": "website", "type": "url"},
+    ]
+    system, _ = messages(structure(fields=fields), item(), max_children=50, today=TODAY, sizing=SIZING)
+    assert "Official name" in system.content
+    assert "SECRETEG" not in system.content
+    assert '"description": ""' not in system.content
+    assert '{"name": "website", "type": "url"}' in system.content

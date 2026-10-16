@@ -26,17 +26,25 @@ const field = (name: string, type: Structure["fields"][number]["type"], required
 export const structure: Structure = {
   fields: [
     field("id", "slug", true),
-    field("name", "text", true),
-    field("acronym", "text"),
+    {
+      ...field("name", "text", true),
+      description: "Official Spanish name",
+      example: "Ministerio de Defensa",
+    },
+    {
+      ...field("acronym", "text"),
+      description: "Official short form, when one exists",
+      example: "MINDEF",
+    },
     { ...field("type", "enum", true), values: TYPES },
     field("parent_id", "ref"),
     field("head_title", "text"),
-    { ...field("head_name", "text"), volatile: true },
+    { ...field("head_name", "text"), volatile: true, description: "Name of the current holder" },
     field("verified_on", "date"),
     field("description", "text"),
     field("website", "url"),
     field("gobpe", "url"),
-    field("legal_basis", "text"),
+    { ...field("legal_basis", "text"), description: "Law that created it" },
   ],
   relation: "organismos públicos adscritos o dependientes",
   seeds: [

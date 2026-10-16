@@ -45,4 +45,4 @@ Today is $today.
 Brief: $brief
 
 Answer with JSON only, in this shape:
-{"fields": [{"name": "id", "type": "slug"}, {"name": "name", "type": "text", "required": true}, {"name": "type", "type": "enum", "values": ["ministry", "agency"]}, {"name": "parent_id", "type": "ref"}], "relation": "child relation", "seeds": [{"name": "Seed", "type": "ministry", "url": null}], "leaf_types": ["agency"], "expand": "both", "limits": {"max_depth": $max_depth, "max_nodes": $max_nodes, "pages_per_node": $pages_per_node}, "language": "", "record_language": "", "output": "table"}
+{"fields": [{"name": "id", "type": "slug"}, {"name": "name", "type": "text", "required": true, "description": "Official name of the entity", "example": "Ministry of Health"}, {"name": "type", "type": "enum", "values": ["ministry", "agency"]}, {"name": "parent_id", "type": "ref"}], "relation": "child relation", "seeds": [{"name": "Seed", "type": "ministry", "url": null}], "leaf_types": ["agency"], "expand": "both", "limits": {"max_depth": $max_depth, "max_nodes": $max_nodes, "pages_per_node": $pages_per_node}, "language": "", "record_language": "", "output": "table"}

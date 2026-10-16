@@ -85,9 +85,13 @@ export function StructurePanel(props: Props) {
                     className={`input ${css.fieldType}`}
                     aria-label={`Type of ${label}`}
                     value={f.type}
-                    onChange={(e) =>
-                      setField(i, { type: e.target.value as StructureField["type"] })
-                    }
+                    onChange={(e) => {
+                      const type = e.target.value as StructureField["type"];
+                      setField(
+                        i,
+                        type === "slug" || type === "ref" ? { type, example: "" } : { type },
+                      );
+                    }}
                   >
                     {FIELD_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -117,6 +121,27 @@ export function StructurePanel(props: Props) {
                   >
                     <X aria-hidden="true" />
                   </button>
+                  <input
+                    className={`input ${css.fieldDesc}`}
+                    aria-label={`Description of ${label}`}
+                    value={f.description ?? ""}
+                    placeholder="What this field holds"
+                    maxLength={200}
+                    autoComplete="off"
+                    onChange={(e) => setField(i, { description: e.target.value })}
+                  />
+                  {f.example && (
+                    <div className={css.fieldExample}>
+                      <input
+                        className={`input ${css.exampleChip}`}
+                        readOnly
+                        aria-label={`Example of ${label}`}
+                        title={f.example}
+                        value={f.example}
+                      />
+                      <HelpTip help="c-example" />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -127,7 +152,14 @@ export function StructurePanel(props: Props) {
                 set({
                   fields: [
                     ...structure.fields,
-                    { name: "", type: "text", required: false, volatile: false },
+                    {
+                      name: "",
+                      type: "text",
+                      required: false,
+                      volatile: false,
+                      description: "",
+                      example: "",
+                    },
                   ],
                 })
               }
