@@ -14,7 +14,7 @@ by the stage named:
 
 | File | Written by |
 |---|---|
-| `request.json` | run creation |
+| `request.json` | run creation; `clarifications` added by the clarify pause |
 | `attachments/` | run creation |
 | `files.jsonl` | load |
 | `plan.json`, `initial.jsonl` | plan (research); `plan.json` by expand (catalog) |
@@ -29,18 +29,19 @@ by the stage named:
 | `nodes.jsonl` | draft, expand, extract |
 | `records.jsonl` | extract |
 | `catalog.json` | assemble |
+| `input/` | every pause: `<id>.json`, `<id>.answer.json`, `<id>.hold` (run-questions "Pause protocol") |
 | `events.jsonl` | every event that is logged |
 | `costs.json` | end of the run |
 
 A research run SHALL NOT have the four catalog files, and a catalog run
 SHALL NOT have `initial.jsonl`, `candidates.jsonl`, `scores.jsonl`, or
 `select.jsonl`. A catalog run SHALL have `context.json`, `report.md`, and
-`report.json` only when its `output` is `report` or `both`.
-`select.jsonl` SHALL hold one select skip per line (see context-selection
-"Skipped passages"). `runs_dir` SHALL default to
-`$XDG_DATA_HOME/wosarcher/runs` (`~/.local/share/wosarcher/runs` when
-unset) and SHALL be set by `run.runs_dir`. Run IDs SHALL sort by creation
-time.
+`report.json` only when its `output` is `report` or `both`. `input/`
+SHALL exist only for runs that paused. `select.jsonl` SHALL hold one
+select skip per line (see context-selection "Skipped passages").
+`runs_dir` SHALL default to `$XDG_DATA_HOME/wosarcher/runs`
+(`~/.local/share/wosarcher/runs` when unset) and SHALL be set by
+`run.runs_dir`. Run IDs SHALL sort by creation time.
 
 #### Scenario: Files after a full run
 - **WHEN** a run with sources `both` finishes
@@ -61,6 +62,10 @@ time.
 #### Scenario: Fork copies the select skips
 - **WHEN** a finished run is forked with `--from write`
 - **THEN** the fork's directory contains the parent's `context.json` and `select.jsonl`
+
+#### Scenario: Pause files
+- **WHEN** a run paused twice and both pauses were answered
+- **THEN** its `input/` holds `1.json`, `1.answer.json`, `2.json`, and `2.answer.json`
 
 ### Requirement: Request record
 `request.json` SHALL hold:
@@ -274,10 +279,12 @@ and nothing SHALL be written.
 
 ### Requirement: Status of a live run
 A run whose log has no `run.done`, `run.failed`, or `run.cancelled` SHALL
-have status `queued` while the server has it staged, `running` while a
-process holds its run lock (daemon-command "Run lock"), and `interrupted`
-otherwise. This status SHALL be the same for every reader of the runs
-directory: the server, and the server after a restart.
+have status `queued` while the server has it staged, `waiting` while a
+process holds its run lock and the log's last `input.needed` has no
+matching `input.answered`, `running` while a process holds its run lock
+otherwise (daemon-command "Run lock"), and `interrupted` otherwise. This
+status SHALL be the same for every reader of the runs directory: the
+server, and the server after a restart.
 
 #### Scenario: Server restarts during a run
 - **WHEN** the server restarts while a run process it spawned is in `fetch`
@@ -290,6 +297,7 @@ directory: the server, and the server after a restart.
 #### Scenario: Direct engine run
 - **WHEN** a developer's `wosarcherd run` is in its `search` stage and the server lists runs
 - **THEN** the run's status is `running`
+
 #### Scenario: CLI run seen by the server
 - **WHEN** a run created over the socket is between its `search` and `fetch` stages and the server lists runs
 - **THEN** the run's status is `running`
@@ -301,3 +309,11 @@ directory: the server, and the server after a restart.
 #### Scenario: CLI process killed
 - **WHEN** a direct `wosarcherd run` process is killed with SIGKILL during the `score` stage
 - **THEN** the run's status is `interrupted`
+
+#### Scenario: Waiting run
+- **WHEN** a run's process holds its lock and its log ends with `input.needed`
+- **THEN** its status is `waiting`, and after `input.answered` it is `running`
+
+#### Scenario: Killed while waiting
+- **WHEN** a paused run's process is killed with SIGKILL
+- **THEN** its status is `interrupted`

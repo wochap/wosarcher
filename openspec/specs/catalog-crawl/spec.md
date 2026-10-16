@@ -132,15 +132,17 @@ at the first of these in order:
 | nodes reached `limits.max_nodes` and no node has status `discovered` | `max nodes` |
 | counted pages reached `fetch.max_pages` | `page limit reached` |
 | every extraction of the wave failed | `extract failed` |
+| the user answered "No, assemble now" at a wave pause | `stopped by user` |
 
 `max depth` is not a stop reason: nodes at `max_depth` are extracted and
 not expanded, so the frontier empties. The run SHALL write `catalog.json`
 (catalog-extraction "Assemble stage") with the reason and a note: "No
 unexpanded nodes left after wave <k>." for `frontier empty`, "Max nodes
 <n> reached." for `max nodes`, "Page limit <n> reached." for `page limit
-reached`, and "Every extraction of wave <k> failed." for `extract failed`.
-When `max_depth` was not reached by any node, the note SHALL add " Max
-depth <d> was not reached." An `extract failed` stop SHALL add the warning
+reached`, "Every extraction of wave <k> failed." for `extract failed`,
+and "Stopped by the user after wave <k>." for `stopped by user`. When
+`max_depth` was not reached by any node, the note SHALL add " Max depth
+<d> was not reached." An `extract failed` stop SHALL add the warning
 `extract failed: <first reason>` and SHALL NOT fail the run.
 
 #### Scenario: Frontier empty
@@ -154,6 +156,10 @@ depth <d> was not reached." An `extract failed` stop SHALL add the warning
 #### Scenario: Extraction provider down
 - **WHEN** every extraction call of wave 2 fails with a provider error
 - **THEN** the loop stops with `extract failed`, `assemble` runs on wave 1's records, and the run succeeds with a warning
+
+#### Scenario: Stopped by the user
+- **WHEN** the user answers "No, assemble now" after wave 2
+- **THEN** the loop stops with `stopped by user`, the note reads "Stopped by the user after wave 2.", and `assemble` runs
 
 ### Requirement: Resume and fork of a catalog run
 A catalog run SHALL count its loop stages as finished only after
@@ -187,3 +193,18 @@ then `assemble`, with `expand`, `search`, and `fetch` skipped. Any other
 #### Scenario: Fork from fetch
 - **WHEN** a catalog run is forked with `--from fetch`
 - **THEN** the fork fails listing `expand` and `extract`
+
+### Requirement: Wave pause
+After a wave that found at least one new node, when the run's
+`questions.rounds` is on and a stop rule does not already hold, the loop
+SHALL pause as run-questions "Round pause" defines for catalogs ("Continue
+to wave <k+1>?"). "No, assemble now" SHALL stop the loop with `stopped by
+user`.
+
+#### Scenario: Continue
+- **WHEN** the user answers "Yes" after wave 1
+- **THEN** wave 2 runs with the nodes found in wave 1
+
+#### Scenario: No new nodes, no pause
+- **WHEN** wave 3 finds no new node
+- **THEN** the loop stops with `frontier empty` without pausing

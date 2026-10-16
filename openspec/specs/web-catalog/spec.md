@@ -47,19 +47,32 @@ kinds.
 ### Requirement: Catalog form
 With Catalog selected, the New run screen SHALL match the prototype
 (scenario `new`, Catalog picked): the brief textarea (placeholder from the
-prototype), the Attachments zone, the "Draft structure" secondary button
-(sparkle icon; "Drafting…" with a spinning icon while the draft request
-runs; disabled while the brief is blank), and the primary "Run catalog"
-button, disabled until a structure exists. Draft structure SHALL post the
-brief, the attachments, the profile, and the profile edits (`use` and
-`llm`, with `reasoning.draft` when set) to `POST /api/catalog/draft` and
-fill the Structure panel from the reply; a 502 SHALL show the error box
-of web-run "Start a run" with the title "Couldn’t draft the structure".
+prototype), the Attachments zone, then a "Run" group shown as soon as
+Catalog is picked and before any draft exists, holding:
+- Profile: the research form's Profile row (web-run "Run options") with
+  its description line, the "based on <profile> · N edit(s)" line, and
+  the Advanced toggle and box (web-run "Profile advanced values"), bound
+  to the same choice and edits as the research form. In catalog mode the
+  Advanced box's LLM group SHALL show "Draft thinking" (help
+  `p-think-draft`) and "Extract thinking" (help `p-think-extract`) in
+  place of the Plan, Gap, and Write thinking fields, bound to
+  `llm.reasoning.draft` and `llm.reasoning.extract`; the other groups are
+  unchanged;
+- Questions: the row of web-run "Questions row";
+
+then the "Draft structure" secondary button (sparkle icon; "Drafting…"
+with a spinning icon while the draft request runs; disabled while the
+brief is blank), and the primary "Run catalog" button, disabled until a
+structure exists. Draft structure SHALL post the brief, the attachments,
+the profile, and the profile edits (`use` and `llm`, with
+`reasoning.draft` when set) to `POST /api/catalog/draft` and fill the
+Structure panel from the reply; a 502 SHALL show the error box of web-run
+"Start a run" with the title "Couldn’t draft the structure".
 
 The Structure panel SHALL show the heading "Structure", the line "Drafted
 from your brief · edit anything", and these rows with the prototype's
 help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
-`c-output`, `c-limits`, `profile`, `c-lang`, `c-record-lang`):
+`c-output`, `c-limits`, `c-lang`, `c-record-lang`):
 - Record fields: one row per field with the name input (spaces become
   `_`), the type select (`text`, `slug`, `url`, `date`, `enum`, `ref`),
   the Required and Volatile switches, and a remove button; an "Add
@@ -73,15 +86,6 @@ help texts (`c-fields`, `c-vol`, `c-rel`, `c-seeds`, `c-leaf`, `c-expand`,
 - Output: segmented Table, Report, Both, from the structure's `output`;
 - Limits: Max depth (1 to 10), Max nodes (1 to 5000), Pages per node (1
   to 10);
-- Profile: the research form's Profile row (web-run "Run options") with
-  its description line, the "based on <profile> · N edit(s)" line, and
-  the Advanced toggle and box (web-run "Profile advanced values"), bound
-  to the same choice and edits as the research form. In catalog mode the
-  Advanced box's LLM group SHALL show "Draft thinking" (help
-  `p-think-draft`) and "Extract thinking" (help `p-think-extract`) in
-  place of the Plan, Gap, and Write thinking fields, bound to
-  `llm.reasoning.draft` and `llm.reasoning.extract`; the other groups are
-  unchanged;
 - Allow domains and Block domains, as web-run "Domain rows" defines
   them;
 - Search language: the input and validation of web-run "Run options",
@@ -108,12 +112,12 @@ Run catalog SHALL post `POST /api/runs` with `kind` `catalog`, the brief
 as `query`, the structure (with `output`, `language`, and
 `record_language`), the profile and its edits (`use`, `llm` with `model`,
 `context_window`, `max_output_tokens`, and `reasoning.draft` and
-`reasoning.extract` when set), the overridden writing fields when Output
-is not Table, the domain lists, and the attachments, and SHALL NOT send
-`search_language`; then show the Live run screen. A structure the server
-rejects SHALL show the error box with "Fix in Structure", which focuses
-the named row. Ctrl+Enter in the brief SHALL run the catalog when a
-structure exists.
+`reasoning.extract` when set), the Questions row's `questions`, the
+overridden writing fields when Output is not Table, the domain lists,
+and the attachments, and SHALL NOT send `search_language`; then show the
+Live run screen. A structure the server rejects SHALL show the error box
+with "Fix in Structure", which focuses the named row. Ctrl+Enter in the
+brief SHALL run the catalog when a structure exists.
 
 #### Scenario: Draft fills the panel
 - **WHEN** the user types a brief and presses Draft structure, and the server returns a structure with 12 fields and 6 seeds
@@ -154,6 +158,14 @@ structure exists.
 #### Scenario: Invalid record language
 - **WHEN** the user types `english` in Record language
 - **THEN** the row shows the danger note "Use all, auto, or a code such as es or es-PE." and Run catalog is disabled until fixed
+
+#### Scenario: Profile before drafting
+- **WHEN** the user picks Catalog and has not pressed Draft structure
+- **THEN** the Run group shows the Profile row and the Questions row, and the draft request carries the chosen profile
+
+#### Scenario: Questions on a catalog run
+- **WHEN** the user leaves Questions at Ask and runs the catalog
+- **THEN** the request has `questions` with `clarify` and `rounds` true
 
 ### Requirement: Catalog live run
 The Live run screen of a catalog run SHALL match scenario `live-catalog`:

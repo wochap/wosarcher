@@ -572,7 +572,10 @@ id>" (`fork_from` `expand`) or "↳ re-extracted from <parent id>"
 with no request per row. Status tags SHALL use the prototype's icons and
 tints for completed (`done`), running (spinning; also `queued`, labelled
 "Queued"), failed, and cancelled; `interrupted` SHALL use the failed style
-with the label "Interrupted", and the Failed filter SHALL include it.
+with the label "Interrupted", and the Failed filter SHALL include it;
+`waiting` SHALL use the running tint with the hourglass icon and the label
+"Waiting", counted as running by the Status filter, and Open SHALL show it
+on the Live run screen with the question card.
 
 #### Scenario: Answer row
 - **WHEN** `GET /api/runs` returns a finished run with `until` null and `writing.format` = `answer`
@@ -589,6 +592,10 @@ with the label "Interrupted", and the Failed filter SHALL include it.
 #### Scenario: Catalog row
 - **WHEN** `GET /api/runs` returns a finished catalog run with `nodes` 118
 - **THEN** its Kind tag reads `catalog` and its Recipe column reads "118 nodes"
+
+#### Scenario: Waiting row
+- **WHEN** `GET /api/runs` returns a run with `status` `waiting`
+- **THEN** its row shows the "Waiting" tag with the hourglass and Open shows the Live run screen with the card
 
 ### Requirement: History search and filters
 The search field SHALL filter rows by a case-insensitive substring of the
@@ -922,3 +929,21 @@ the favicon, the touch icon, and the manifest, and SHALL set the
 #### Scenario: Icons come from the build
 - **WHEN** `pnpm build` runs in a clean checkout
 - **THEN** `dist/` contains the three PNG icons, and no PNG icon is tracked in git
+
+### Requirement: Run questions settings
+The Settings screen (scenario `settings`) SHALL show a "Run questions"
+panel under "Writing defaults" with "Saved automatically": the toggles
+"Ask before searching" (help `q-clarify`) and "Ask between rounds" (help
+`q-rounds`) and the number field "Timeout when idle" in seconds (0 to
+3600, help `q-timeout`), loaded from `GET /api/settings` `questions` and
+saved with `PUT /api/settings` on change with the "Saved" mark. A value
+outside the range SHALL NOT be saved. The help texts SHALL be verbatim
+from the prototype.
+
+#### Scenario: Turn off round questions
+- **WHEN** the user switches "Ask between rounds" off
+- **THEN** `PUT /api/settings` is sent with `questions.rounds` false and "Saved" appears
+
+#### Scenario: Timeout out of range
+- **WHEN** the user types 4000 in "Timeout when idle"
+- **THEN** no settings request is sent

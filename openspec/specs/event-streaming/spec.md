@@ -143,3 +143,19 @@ reconnects with `since`, and other clients SHALL be unaffected.
 #### Scenario: Stalled client
 - **WHEN** one client stops reading while another keeps up
 - **THEN** the stalled client's socket is closed with code 4408 and the other client still receives every event
+
+### Requirement: Presence message
+A client MAY send the text message `{"type": "presence"}` on a run's
+event socket. For a `waiting` run the server SHALL touch the open pause's
+hold file (run-questions "Pause protocol"), so the deadline moves; for any
+other run it SHALL ignore the message. Any other client message SHALL be
+ignored. The socket SHALL stay open while the run is `waiting` and SHALL
+deliver `input.needed` and `input.answered` like any logged event.
+
+#### Scenario: Presence extends the deadline
+- **WHEN** a client sends `{"type": "presence"}` 30 seconds into a pause with `timeout` 60
+- **THEN** the hold file's modification time is updated and the run continues no earlier than 60 seconds after that message, absent further presence
+
+#### Scenario: Presence on a running run
+- **WHEN** a client sends `{"type": "presence"}` while the run is in `fetch`
+- **THEN** nothing changes and the socket stays open

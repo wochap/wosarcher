@@ -1960,3 +1960,94 @@ text SHALL be verbatim from the prototype's `time` entry.
 #### Scenario: Report aside
 - **WHEN** the user opens the report of a finished run
 - **THEN** the aside shows "Time" with the run's total, the bar, and every phase's time
+
+### Requirement: Question card
+While a followed run is `waiting`, the Live run screen SHALL show the
+prototype's question card (scenarios `live-clarify`, `live-clarify-idle`,
+`live-round-input`) above the column grid on desktop and in place of the
+Progress tab's content on phone: the title ("Before searching" for a
+clarify pause, "After round <k>" or "After wave <k>" for a round pause),
+the stepper "<i> / <N>" with one dot per question, the timeout chip
+(Requirement: Presence and timeout), a 2px progress line, the context
+line when present, the current question, its options as radio buttons
+(`confirm`, `single`) or checkboxes (`multi`) with descriptions and the
+"recommended" tag, the recommended options preselected, the "Other" row
+with its input when allowed (typing selects it), keyboard hints 1 to 9,
+and the footer Back, "Use recommended for the rest", and Next (reading
+"Continue" on the last question). Enter SHALL be Next or Continue; 1 to 9
+SHALL pick an option. The card SHALL hold answers per question so Back
+keeps them. Continue SHALL post `POST /api/runs/{id}/continue` with every
+question's answer; "Use recommended for the rest" SHALL fill the
+remaining questions with their recommendations and post. The card SHALL
+be built from `input.needed` and SHALL close on `input.answered`, also
+when another client answered. A rejected post SHALL show the server's
+detail under the footer and keep the card.
+
+#### Scenario: Step through
+- **WHEN** a clarify pause has four questions and the user picks "No" on question 1 and presses Next
+- **THEN** the card shows question 2 of 4 with the second dot current and question 1's answer kept for Back
+
+#### Scenario: Other selected by typing
+- **WHEN** the user types in the Other input of a `multi` question
+- **THEN** the Other row is checked and its text is sent as `other`
+
+#### Scenario: Answered elsewhere
+- **WHEN** `input.answered` arrives while the card is on question 3
+- **THEN** the card closes and the timeline shows the answers note
+
+### Requirement: Presence and timeout
+While the question card is shown, the client SHALL send the presence
+message (event-streaming "Presence message") at most every 10 seconds
+while the user is active (pointer, key, or focus activity in the last 10
+seconds and the tab visible). The timeout chip SHALL read "waiting for
+you" with a pause icon while active, and, once idle, a timer icon with a
+countdown from the run's `timeout` in `m:ss`, the progress line
+shrinking with it, with the help entry `qtimeout`. Activity SHALL reset
+the countdown to the full timeout and send presence. A `timeout` of 0
+SHALL show no chip.
+
+#### Scenario: Idle countdown
+- **WHEN** the user stops interacting for 10 seconds with `timeout` 60
+- **THEN** the chip shows the countdown from 1:00 (scenario `live-clarify-idle`) and no presence is sent
+
+#### Scenario: Back from idle
+- **WHEN** the countdown reads 0:47 and the user moves the pointer
+- **THEN** the chip reads "waiting for you", presence is sent, and the next countdown starts from 1:00
+
+### Requirement: Question timeline states
+During a clarify pause the Plan card (Draft card for a catalog) SHALL show
+the Waiting state of the prototype: hourglass icon, accent border, detail
+"<i> of <N> answered"; during a round pause the Gap card (Extract card for
+a catalog). After `input.answered` the card's detail SHALL read "<N>
+answers", or, for `answered_by` `timeout`, "continued with recommended
+answers after <m:ss>" in the warn colour; the Research rounds panel SHALL
+show the same note under the round's header (scenario
+`finished-timeout`). The detail text SHALL come from the events, not from
+a request.
+
+#### Scenario: Waiting plan card
+- **WHEN** a clarify pause is open with two of four answered on the card
+- **THEN** the Plan card shows the hourglass and "2 of 4 answered"
+
+#### Scenario: Timeout note
+- **WHEN** the round pause after round 2 timed out
+- **THEN** the Gap card reads "continued with recommended answers after 1:00" in the warn colour and the rounds panel repeats it under round 2
+
+### Requirement: Questions row
+The Options panel's Run group SHALL end with a "Questions" row (scenario
+`new`): a segmented control "Ask" / "Don't ask" preselected from the
+settings' `questions.clarify` or `questions.rounds` (Ask when either is
+true), with the help entry `q-ask`, and, while Ask is selected, a
+"Timeout" number input (0 to 3600 seconds) prefilled from the settings
+with the "overridden" mark and Reset when changed. The run request SHALL
+carry `questions` with `clarify` and `rounds` both equal to the choice
+and `timeout` when overridden. The row's value SHALL be kept with the New
+run draft like the other options.
+
+#### Scenario: Don't ask
+- **WHEN** the user picks "Don't ask" and starts a run
+- **THEN** the request has `questions` = `{"clarify": false, "rounds": false}`
+
+#### Scenario: Timeout override
+- **WHEN** the settings timeout is 60 and the user sets 120
+- **THEN** the row shows the overridden mark and the request has `questions.timeout` 120

@@ -219,10 +219,10 @@ parent SHALL exit with 2 printing the server's 409 detail.
 ### Requirement: Runs command
 `wosarcher runs` SHALL list the runs `GET /api/runs` returns, newest first,
 with ID, creation time, kind (`research` or `catalog`), status (`queued`,
-`running`, `done`, `failed`, `cancelled`, or `interrupted`), origin,
-version, parent run ID, and query. `--limit N` SHALL limit the list
-(default 20), `--kind research|catalog` SHALL keep only that kind, and
-`--json` SHALL print the list as a JSON array of `RunSummary`.
+`running`, `waiting`, `done`, `failed`, `cancelled`, or `interrupted`),
+origin, version, parent run ID, and query. `--limit N` SHALL limit the
+list (default 20), `--kind research|catalog` SHALL keep only that kind,
+and `--json` SHALL print the list as a JSON array of `RunSummary`.
 
 #### Scenario: Status from the log
 - **WHEN** a run's last run event is `run.failed`
@@ -243,6 +243,10 @@ version, parent run ID, and query. `--limit N` SHALL limit the list
 #### Scenario: Catalog run listed
 - **WHEN** a finished catalog run of 118 records is listed
 - **THEN** its line shows the kind `catalog` and `wosarcher runs --kind research` leaves it out
+
+#### Scenario: Waiting run listed
+- **WHEN** a run is paused at a round pause
+- **THEN** `wosarcher runs` shows its status as `waiting`
 
 ### Requirement: Logs command
 `wosarcher logs <run-id> [--follow]` SHALL print the run's logged events
@@ -501,3 +505,58 @@ directly SHALL be uploaded as is.
 #### Scenario: JSON uploaded
 - **WHEN** the user runs `wosarcher run "q" --attach data/ --sources files --until load` and `data/` holds `a.md` and `b.json`
 - **THEN** both files are uploaded and the run's `files.jsonl` has a page for `b.json` with `format` `json`
+
+### Requirement: Question flags
+`wosarcher run` and `wosarcher catalog` SHALL accept `--clarify`,
+`--interactive`, and `--input-timeout SECONDS` (0 to 3600). Without
+`--clarify` the request SHALL carry `questions.clarify` false; without
+`--interactive`, `questions.rounds` false; without `--input-timeout`,
+`questions.timeout` 0. With either flag and standard input a terminal,
+the command SHALL show each pause as text: the title and context, then
+one question at a time as "<n>/<N> <text>", numbered options with
+"(recommended)" on the recommendation, "o) other: …" when allowed, and a
+prompt that accepts option numbers (several, comma-separated, for
+`multi`), `o <text>`, or Enter for the recommendation; it SHALL then post
+the answers with `POST /api/runs/{id}/continue` and keep following the
+run. With either flag and no terminal, the command SHALL print the pause
+as JSON on standard error and keep waiting, so an agent can answer with
+`wosarcher continue`. An invalid timeout SHALL exit 2 before a request is
+sent.
+
+#### Scenario: Agent default
+- **WHEN** an agent runs `wosarcher run "q" --json`
+- **THEN** the request has `questions` with `clarify` false, `rounds` false, and `timeout` 0, and the run never pauses
+
+#### Scenario: Interactive in a terminal
+- **WHEN** the user runs `wosarcher run "q" --rounds 3 --interactive` in a terminal and the run pauses after round 1
+- **THEN** the card is printed, the user types `1,3` then Enter then Enter, and the run continues with those answers
+
+#### Scenario: Clarify without a terminal
+- **WHEN** an agent runs `wosarcher run "q" --clarify` with standard input redirected
+- **THEN** the pause is printed as JSON on standard error and the command keeps following the run until it is answered or times out
+
+### Requirement: Questions command
+`wosarcher questions <run-id> [--json]` SHALL print the run's open pause
+from `GET /api/runs/{id}/questions` in the text form of Requirement:
+Question flags, or as JSON, and exit 1 with "not waiting" when the run is
+not paused.
+
+#### Scenario: Open pause
+- **WHEN** a run is paused for clarify
+- **THEN** `wosarcher questions <id> --json` prints the pause with its questions and deadline
+
+### Requirement: Continue command
+`wosarcher continue <run-id> --answer QID=VALUE…` SHALL post the answers
+to `POST /api/runs/{id}/continue` for the open pause, where `VALUE` is an
+option ID, several option IDs joined by commas, or `other:<text>`;
+`--recommended` SHALL answer every question with its recommendation. A
+missing or invalid answer SHALL exit 2 with the server's detail; a run
+that is not waiting SHALL exit 1.
+
+#### Scenario: Answer from the CLI
+- **WHEN** the user runs `wosarcher continue <id> --answer q1=a --answer q2=a,c --answer "q3=other:Diario Oficial"`
+- **THEN** the answers are posted and the run continues
+
+#### Scenario: Recommended
+- **WHEN** an agent runs `wosarcher continue <id> --recommended`
+- **THEN** every question is answered with its recommended options and `input.answered` carries `answered_by` `agent`

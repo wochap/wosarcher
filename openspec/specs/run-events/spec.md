@@ -49,6 +49,8 @@ The system SHALL define exactly these event types and data:
 | `node.failed` | node ID, reason |
 | `wave.done` | wave, expanded, found, records, failed, dropped |
 | `catalog.done` | waves, nodes, records, flagged, stop reason, note |
+| `input.needed` | pause ID, kind, after, context, questions, created, timeout, max wait |
+| `input.answered` | pause ID, answers, answered by, seconds waited |
 
 The `round` of stage and page events SHALL be the research round (1 for
 single-round runs and for stages outside the loop) in a research run, and
@@ -63,6 +65,9 @@ for children); `node.extracted` and `node.failed` `extract` (or `fetch`
 when no page could be fetched); `wave.done` `extract`; `catalog.done`
 `assemble`. `node.extracted` SHALL carry the checked record (catalog-
 extraction "Reply checks"), so the Records panel needs no artifact read.
+`input.needed` and `input.answered` SHALL carry the stage that paused
+(`plan` or `draft` for a clarify pause, `gap` or `extract` for a round
+pause) and are logged events.
 
 `thin` of `page.fetched` SHALL be true when the page is a thin page
 (source-collection "Fetch page cap and order"), and false otherwise. It is
@@ -134,6 +139,10 @@ reports 0.
 #### Scenario: Wave as round
 - **WHEN** wave 2's fetch stage starts
 - **THEN** its `stage.started` carries `round` 2
+
+#### Scenario: Pause events
+- **WHEN** a run pauses for clarify and the user answers after 20 seconds
+- **THEN** the log has `input.needed` with stage `plan`, four questions, and the timeout, then `input.answered` with the answers, `answered_by` `user`, and about 20 seconds waited
 
 ### Requirement: Sequence and log
 Appending an event to a run's `events.jsonl` SHALL assign `seq`: 1 for

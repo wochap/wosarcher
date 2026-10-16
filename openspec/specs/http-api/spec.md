@@ -306,22 +306,24 @@ newest first, each with `run_id`, `query`, `kind` (`research` or
 `table`), `output` (catalog runs: `table`, `report`, or `both` from the
 structure; null for a research run), `nodes` (catalog runs: the number of
 extracted records so far from `nodes.jsonl`, or `catalog.json`'s record
-count when done; null for a research run), `duration_s` (seconds from
-`run.started` to the terminal run event; null while queued or running,
-and for interrupted runs), `cost` (the total cost in dollars from
-`costs.json`; null when absent), `queue_position` (null unless queued),
-`error` (the `run.failed` error text; null unless failed), `end_stage`
-(the stage named by `run.failed` or `run.cancelled`; null otherwise),
-`origin` (`web`, `api`, or `cli`, from `request.json` or the staged
-request), and `token_name` (the API token's name for origin `api`; null
-otherwise), `form` (the request the run was created with, as run-store
-"Request record" stores it; null for runs created without one), and
+count when done; null for a research run), `pending` (for a `waiting`
+run: the open pause's `id`, `kind`, `after`, question count, and
+deadline; null otherwise), `duration_s` (seconds from `run.started` to
+the terminal run event; null while queued, running, or waiting, and for
+interrupted runs), `cost` (the total cost in dollars from `costs.json`;
+null when absent), `queue_position` (null unless queued), `error` (the
+`run.failed` error text; null unless failed), `end_stage` (the stage
+named by `run.failed` or `run.cancelled`; null otherwise), `origin`
+(`web`, `api`, or `cli`, from `request.json` or the staged request), and
+`token_name` (the API token's name for origin `api`; null otherwise),
+`form` (the request the run was created with, as run-store "Request
+record" stores it; null for runs created without one), and
 `attachments` (each attachment's `name` and `size` in bytes, in the order
 stored; empty when it has none). Status SHALL be one of `queued`,
-`running`, `done`, `failed`, `cancelled`, or `interrupted`, following
-run-store "Status of a live run" for runs with no terminal event,
-whichever process started them. `queue_position` SHALL be the run's place
-in the shared run queue (1 for the next run to start). `GET
+`running`, `waiting`, `done`, `failed`, `cancelled`, or `interrupted`,
+following run-store "Status of a live run" for runs with no terminal
+event, whichever process started them. `queue_position` SHALL be the
+run's place in the shared run queue (1 for the next run to start). `GET
 /api/runs/{id}` SHALL return the same summary plus the redacted
 `request`, the `costs` when present, and `last_seq` (0 when the run has no
 logged event).
@@ -381,6 +383,10 @@ logged event).
 #### Scenario: Older run without a kind
 - **WHEN** a run's `request.json` has no `kind`
 - **THEN** its summary has `kind = "research"`, `output = null`, and `nodes = null`
+
+#### Scenario: Waiting run in the list
+- **WHEN** a run is paused for clarify with four questions
+- **THEN** its summary has `status = "waiting"` and `pending` with `kind` `clarify`, 4 questions, and the deadline
 
 ### Requirement: Delete a run
 `DELETE /api/runs/{id}` SHALL remove a finished, failed, cancelled, or
@@ -627,13 +633,16 @@ secret value in `set` (such as `llm.api_key=...`) is still accepted.
 ### Requirement: Global settings
 `GET /api/settings` SHALL return the global defaults: `writing` (all writing
 option fields, including `format`), `sources`, `domains` (`allow` and
-`block`, each a list of domain entries, empty by default), and
+`block`, each a list of domain entries, empty by default),
 `max_concurrent_runs` (an integer from 1 to 8, default 1; run-slots "One
-limit for every run"). `PUT /api/settings` SHALL replace them after
+limit for every run"), and `questions` (`clarify` and `rounds`, booleans
+default true; `timeout`, 0 to 3600 seconds, default 60; `max_wait`, 60 to
+86400 seconds, default 1800). `PUT /api/settings` SHALL replace them after
 validation and persist them in `server-settings.json` in the wosarcher
 config directory, so they survive a restart. Built-in defaults SHALL apply
 when the file does not exist. A new `max_concurrent_runs` SHALL take effect
-at the next slot decision, with no restart.
+at the next slot decision, with no restart. New `questions` values SHALL
+apply to runs created after the change.
 
 #### Scenario: Defaults persist
 - **WHEN** a client puts settings with words 800 and the server restarts
@@ -666,6 +675,14 @@ at the next slot decision, with no restart.
 #### Scenario: Limit raised while a run waits
 - **WHEN** one run is running, one is queued, and a client puts settings with `max_concurrent_runs = 2`
 - **THEN** the queued run starts within 2 seconds
+
+#### Scenario: Questions defaults
+- **WHEN** `server-settings.json` has no `questions`
+- **THEN** `GET /api/settings` returns `questions` with `clarify` true, `rounds` true, `timeout` 60, and `max_wait` 1800
+
+#### Scenario: Questions saved
+- **WHEN** a client puts settings with `questions.timeout = 120`
+- **THEN** a run created afterwards without `questions.timeout` pauses with a 120-second timeout
 
 ### Requirement: Profiles
 `GET /api/profiles` SHALL return every profile with:
@@ -998,3 +1015,55 @@ It SHALL NOT create a run or appear in `GET /api/runs`.
 #### Scenario: Draft route
 - **WHEN** a client posts a brief with the profile `cloud`
 - **THEN** the response is 200 with a structure and no run directory is created
+
+### Requirement: Questions in a run request
+The request JSON of `POST /api/runs` SHALL accept an optional `questions`
+object with `clarify` (boolean), `rounds` (boolean), and `timeout` (an
+integer from 0 to 3600 seconds); absent fields take the global settings
+(Requirement: Global settings). `POST /api/catalog/draft` SHALL accept
+none of them. An invalid value SHALL be rejected with 422 naming
+`questions.<field>`. The resolved values SHALL be recorded in
+`request.json`; a fork or rerun SHALL ignore them and never pause
+(run-questions "Pause protocol").
+
+#### Scenario: Questions off for one run
+- **WHEN** a client posts `request = {"query": "q", "questions": {"clarify": false, "rounds": false}}`
+- **THEN** the run makes no clarify call and never pauses
+
+#### Scenario: Timeout for one run
+- **WHEN** a client posts `request = {"query": "q", "questions": {"timeout": 120}}`
+- **THEN** the run's pauses use a 120-second timeout
+
+#### Scenario: Invalid timeout
+- **WHEN** a client posts `request = {"query": "q", "questions": {"timeout": 4000}}`
+- **THEN** the response is 422 naming `questions.timeout`
+
+### Requirement: Continue a run
+`POST /api/runs/{id}/continue` SHALL accept JSON with `pause_id` and
+`answers` (one per question of that pause, each `question_id`,
+`option_ids`, and optional `other`), write them as the pause's answer
+file with `answered_by` `user` for a browser session and `agent` for an
+API token or the Unix socket, and answer 202 with the run's status. It
+SHALL answer 404 for an unknown run, 409 `not_waiting` when the run is
+not paused or `pause_id` is not the open pause, and 422 naming the
+question when an answer is missing, names an unknown option, gives more
+than one option to a `confirm` or `single` question, or gives `other` to
+a question that does not allow it. `GET /api/runs/{id}/questions` SHALL
+return the open pause (the `input.needed` data plus the server's current
+deadline) or 404 `not_waiting`.
+
+#### Scenario: Answer a pause
+- **WHEN** a client posts `{"pause_id": 1, "answers": [{"question_id": "q1", "option_ids": ["a"]}, {"question_id": "q2", "option_ids": ["a", "c"], "other": "Diario Oficial"}]}` to a waiting run
+- **THEN** the response is 202, the run continues within 1 second, and `input.answered` carries those answers with `answered_by` `user`
+
+#### Scenario: Not waiting
+- **WHEN** a client continues a run that is `running`
+- **THEN** the response is 409 with `error = "not_waiting"`
+
+#### Scenario: Missing answer
+- **WHEN** a client's answers leave `q3` unanswered
+- **THEN** the response is 422 naming `q3` and the run stays `waiting`
+
+#### Scenario: Agent answers
+- **WHEN** an API token's client posts answers
+- **THEN** `input.answered` carries `answered_by` `agent`

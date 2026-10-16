@@ -192,9 +192,10 @@ in table order. Each has a stop reason:
 | Condition | Stop reason |
 |---|---|
 | the last round ran | `max rounds` |
+| the user answered "Yes, write now" at a round pause | `stopped by user` |
 | two rounds in a row after round 1 fetched no new page because all their hits were already fetched or queued | `no new sources` |
 | the counted pages (thin pages excluded) across all rounds reached `fetch.max_pages` | `page limit reached` |
-| the gap step kept no follow-up after its second call | `no follow-ups` |
+| the gap step kept no follow-up after its second call, or the user dropped every follow-up at a round pause | `no follow-ups` |
 | a gap call failed, timed out, or its reply was unreadable | `gap step failed` |
 
 When the last planned round ran, the stop reason SHALL be `max rounds`
@@ -204,9 +205,11 @@ A single round after round 1 that fetched no new page SHALL NOT stop
 research: the gap step runs and is told which queries found only known
 pages. For `no new sources` the end note SHALL read "Follow-up searches
 returned only pages fetched in earlier rounds." For `no follow-ups` the end
-note SHALL read "The gap step wrote no usable follow-up query." A failed
-gap step SHALL add the warning `gap failed: <error>` and SHALL NOT fail the
-run.
+note SHALL read "The gap step wrote no usable follow-up query." or, when
+the user dropped them, "Every follow-up was dropped by the user." For
+`stopped by user` the end note SHALL read "Research stopped by the user
+after round <k>." A failed gap step SHALL add the warning `gap failed:
+<error>` and SHALL NOT fail the run.
 
 #### Scenario: Coverage sufficient
 - **WHEN** `research.rounds = 3` and the gap step after round 1 writes the note "Every sub-query has primary sources." with two follow-ups
@@ -231,6 +234,10 @@ run.
 #### Scenario: Gap failure
 - **WHEN** the gap LLM call fails after round 1
 - **THEN** select and write still run on round 1's passages, the stop reason is `gap step failed`, and the run has a `gap failed:` warning
+
+#### Scenario: Stopped by the user
+- **WHEN** `research.rounds = 4` and the user answers "Yes, write now" at the pause after round 2
+- **THEN** research stops with `stopped by user`, `research.json` has `ran` 2 and the note "Research stopped by the user after round 2.", and select follows
 
 ### Requirement: Round data
 Every query, hit, page, and score SHALL carry the `round` it first appeared
@@ -402,3 +409,22 @@ query keeps its best pair, so judge by best").
 #### Scenario: Relative scorer
 - **WHEN** the scorer is `rerank`
 - **THEN** the table's first line says the rerank scale is relative and to judge by best
+
+### Requirement: Round pause
+After the gap step of round k keeps at least one follow-up and the run's
+`questions.rounds` is on, the research loop SHALL pause as run-questions
+"Round pause" defines before round k+1 searches. The queries kept by the
+answer SHALL be round k+1's queries; a follow-up the user dropped SHALL be
+kept in `plan.json` with `dropped_by` `user` and SHALL NOT be searched;
+an added query SHALL follow the gap step's checks (length, URL,
+duplicate) and get the next ID. `gap.ready` SHALL be emitted before the
+pause with the gap step's follow-ups, and `round.done` of round k+1 SHALL
+name only the queries searched.
+
+#### Scenario: Dropped follow-up recorded
+- **WHEN** the user drops `q7` at the pause after round 1
+- **THEN** `plan.json` keeps `q7` with `dropped_by` `user` and round 2 does not search it
+
+#### Scenario: Added query checked
+- **WHEN** the user adds a query that duplicates `q3`
+- **THEN** it is not added and the pause's answer records it as `duplicate`

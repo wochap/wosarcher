@@ -29,7 +29,9 @@ The skill SHALL document, each with a command example:
 - choosing a depth preset with `--depth` and listing presets with `wosarcher depth list`;
 - writing options `--tone`, `--tone-instructions`, `--words`, `--language`, `--citation-marker`, `--reference-style`, and `--format`;
 - rewriting a finished run with `wosarcher fork <run_id> --from write`;
-- listing runs with `wosarcher runs --json` and checking providers with `wosarcher doctor`.
+- listing runs with `wosarcher runs --json` and checking providers with `wosarcher doctor`;
+- building a catalog with `wosarcher catalog "<brief>" --json` and drafting its structure first with `wosarcher catalog draft "<brief>"`;
+- steering a run with questions: that runs ask nothing unless `--clarify` or `--interactive` is passed, that with them a pause is printed as JSON on standard error, and that the agent answers with `wosarcher questions <run_id> --json` and `wosarcher continue <run_id> --answer q1=<option> …` or `--recommended`.
 
 The skill SHALL also say that the agent's environment may set
 `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE` as its default depth and profile,
@@ -49,6 +51,10 @@ comment SHALL say where to set the two variables for an agent.
 #### Scenario: Per-agent defaults documented
 - **WHEN** an agent reads the skill
 - **THEN** it finds `WOSARCHER_DEPTH` and `WOSARCHER_PROFILE` described as its defaults, and an instruction to omit `--depth` and `--profile` unless the user asks
+
+#### Scenario: Questions documented
+- **WHEN** an agent reads the skill
+- **THEN** it finds that runs ask nothing by default and the `wosarcher continue` example with `--answer`
 
 ### Requirement: Output description
 The skill SHALL describe the JSON document printed by `--json` (run ID,

@@ -12,11 +12,12 @@ frontend agree on one shape.
 The system SHALL define these data types: run request, query, search hit,
 source, page, chunk, score, selected context, select skip, report,
 writing options, structure (with its field, seed, and limits types),
-node, extracted record, and catalog (the `catalog.json` record with its
-wave entries). Each type SHALL serialise to JSON and parse back to an
-equal value. The run request SHALL carry `kind` and an optional
-structure; a query SHALL carry an optional node ID; a search hit's query
-IDs MAY be node query IDs (`n<k>s`, `n<k>c`).
+node, extracted record, catalog (the `catalog.json` record with its
+wave entries), question, answer, and pause. Each type SHALL serialise to
+JSON and parse back to an equal value. The run request SHALL carry `kind`,
+an optional structure, and optional `questions`; a query SHALL carry an
+optional node ID and an optional `dropped_by`; a search hit's query IDs
+MAY be node query IDs (`n<k>s`, `n<k>c`).
 
 #### Scenario: Round trip
 - **WHEN** any contract value is serialised to JSON and parsed again
@@ -29,6 +30,10 @@ IDs MAY be node query IDs (`n<k>s`, `n<k>c`).
 #### Scenario: Catalog types published
 - **WHEN** `wosarcher schema` runs
 - **THEN** its output defines the structure, node, record, and catalog types, and the frontend's generated types include them
+
+#### Scenario: Question types published
+- **WHEN** `wosarcher schema` runs
+- **THEN** its output defines the question, answer, and pause types and the `input.needed` and `input.answered` events
 
 ### Requirement: Source identity
 Every source SHALL have a kind (`web` or `file`), a URI, a title, and a

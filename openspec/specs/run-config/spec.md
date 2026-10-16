@@ -513,3 +513,24 @@ run request's structure limits and expand mode SHALL win over the block.
 #### Scenario: Structure wins
 - **WHEN** a profile sets `catalog.max_nodes = 500` and the run's structure sets `max_nodes` 200
 - **THEN** the run stops adding nodes at 200
+
+### Requirement: Questions block
+The configuration SHALL have a `questions` block with `clarify` (boolean,
+default true), `rounds` (boolean, default true), `timeout` (0 to 3600
+seconds, default 60), and `max_wait` (60 to 86400 seconds, default 1800).
+It SHALL be validated like any other block. A depth preset SHALL NOT set
+it. The server's global settings (http-api "Global settings") SHALL be its
+source for runs the server creates, and a run request's `questions` SHALL
+win over them.
+
+#### Scenario: Defaults
+- **WHEN** no source sets the `questions` block
+- **THEN** the resolved values are `clarify` true, `rounds` true, `timeout` 60, and `max_wait` 1800
+
+#### Scenario: Invalid timeout
+- **WHEN** a profile sets `questions.timeout = -1`
+- **THEN** loading fails naming the profile file and `questions.timeout`
+
+#### Scenario: Preset cannot set questions
+- **WHEN** a depth preset sets `questions.rounds`
+- **THEN** loading the preset fails naming the file and the key
