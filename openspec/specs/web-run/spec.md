@@ -469,11 +469,15 @@ The Live run screen (scenario `live`) SHALL show the Sub-queries panel
 (query ID, text, status queued, searching, "N results", reused, or
 cancelled; summary `done/total`) and the Sources panel, newest first, each
 row with icon, title linking to the URL in a new tab, URL without scheme,
-and state: found, fetched, cached (for a fork), the failure reason, not
+and state: found, fetched, cached (for a fork), "failed", not
 fetched (cancelled run), or for files the size; plus "N kept" once
 passages are selected. A fetched page whose `page.fetched` has `thin` true
 SHALL show the state "thin" in place of "fetched" or "cached", in the
-muted tone.
+muted tone. A failed page's state SHALL read "failed" in the danger color,
+with the failure reason (when the event carries one) as its native tooltip
+and in its accessible name ("failed: <reason>"); the reason SHALL NOT be
+shown inline, and no row SHALL widen the panel past its width (scenario
+`live`).
 
 Each web source row SHALL show, under its URL, the IDs of every query
 whose `hit.found` listed that URL, in query order (`q0` first), joined by
@@ -503,7 +507,7 @@ Search phase.
 
 #### Scenario: Failed page
 - **WHEN** `page.failed` arrives with reason "403 Forbidden"
-- **THEN** that row shows "403 Forbidden" in the danger color and the header shows "1 failed · run continues"
+- **THEN** that row shows "failed" in the danger color with the tooltip "403 Forbidden", and the header shows "1 failed · run continues"
 
 #### Scenario: Source found by two queries
 - **WHEN** `hit.found` events list `https://www.gob.pe/371-inscribir-alerta-registral` for `q4` in round 1 and for `q7` in round 2
@@ -516,6 +520,10 @@ Search phase.
 #### Scenario: Search language kept in the draft
 - **WHEN** the user types "es" as the search language, opens Settings, and returns to New run
 - **THEN** the search language still reads "es"; after the user starts that run, New run shows it empty
+
+#### Scenario: Long failure reason
+- **WHEN** `page.failed` arrives with reason "firecrawl: cannot fetch https://pe.todosnegocios.com/c/..." (a 200-character reason)
+- **THEN** the row's state reads "failed", the full reason shows on hover, and the Sources panel has no horizontal scrollbar
 
 ### Requirement: Passages panel
 The Live run screen SHALL show the Passages panel as the prototype does in
@@ -1924,7 +1932,10 @@ you repeat to keep them on top." Each row SHALL be a button (32px tall on
 desktop, 44px on phone) labelled "Fill the form from: <name>" with the
 full question as its title, showing the name (the user's name for it,
 else the question, cut with "…"), a summary "<Depth> · <recipe> ·
-<sources> · <profile or custom (profile)> · <N> words", the paperclip
+<sources> · <profile or custom (profile)> · <N> words" (for a catalog
+run: "Catalog · <sources> · <profile or custom (profile)> · <N> nodes",
+or "Catalog · <sources> · <profile or custom (profile)>" while its node
+count is null), the paperclip
 icon and "<n> file(s)" when it has attachments, the relative creation
 date, and the "×<n>" mark. A row's "…" menu button ("Actions for
 <name>") SHALL open a menu with Rename (pencil), Pin or Unpin (push-pin,
@@ -1945,7 +1956,10 @@ Attachments). Values come from the run summary's `form`; a field the
 `form` leaves unset (sent as `null`) SHALL keep its default (the writing
 defaults, or Standard's value for a Custom research value) and SHALL NOT
 be filled as empty. A run without `form` fills the question, Sources,
-Recipe, profile, and Depth from its summary. When the form had a question or edits before, the toast "Filled
+Recipe, profile, and Depth from its summary. A summary's `writing` MAY be
+`null` (a catalog run whose output is `table`); the list SHALL render and
+fill without error, treating it as unset writing. Pressing a catalog run's
+row SHALL fill only the question, Sources, and profile. When the form had a question or edits before, the toast "Filled
 from “<name>”" (name cut at 28 characters) SHALL offer Undo, which
 restores the previous form. The pressed row SHALL be marked (accent ring,
 `aria-current`) while the form still matches it.
@@ -1989,6 +2003,10 @@ entry.
 #### Scenario: Narrow window
 - **WHEN** New run is shown 1000px wide
 - **THEN** the list is a collapsed "Recent & pinned · <count>" disclosure under the question
+
+#### Scenario: Catalog run in the list
+- **WHEN** `GET /api/runs` lists a catalog run with `writing` null, sources `web`, profile `default`, and `nodes` 42, and the page is reloaded on New run (scenario `new-recent`)
+- **THEN** its row shows "Catalog · web · default · 42 nodes", the page shows no error, and pressing the row fills the question, `web`, and `default` without starting a run
 
 ### Requirement: Time per stage
 Each phase card's time row (mono, 11px) SHALL show:
@@ -2052,7 +2070,8 @@ prototype's question card (scenarios `live-clarify`, `live-clarify-idle`,
 Progress tab's content on phone: the title ("Before searching" for a
 clarify pause, "After round <k>" or "After wave <k>" for a round pause),
 the stepper "<i> / <N>" with one dot per question, the timeout chip
-(Requirement: Presence and timeout), a 2px progress line, the context
+(Requirement: Presence and timeout), a 3px progress line (Requirement:
+Presence and timeout), the context
 line when present, the current question, its options as radio buttons
 (`confirm`, `single`) or checkboxes (`multi`) with descriptions and the
 "recommended" tag, the recommended options preselected, the "Other" row
@@ -2085,18 +2104,29 @@ message (event-streaming "Presence message") at most every 10 seconds
 while the user is active (pointer, key, or focus activity in the last 10
 seconds and the tab visible). The timeout chip SHALL read "waiting for
 you" with a pause icon while active, and, once idle, a timer icon with a
-countdown from the run's `timeout` in `m:ss`, the progress line
-shrinking with it, with the help entry `qtimeout`. Activity SHALL reset
-the countdown to the full timeout and send presence. A `timeout` of 0
-SHALL show no chip.
+countdown from the run's `timeout` in `m:ss`, with the help entry
+`qtimeout`. The 3px progress line SHALL be full (accent fill on the
+line-colored track) while active and, once idle, shrink with the
+countdown to empty at 0:00. Activity SHALL reset the countdown and the
+line to full and send presence. A `timeout` of 0 SHALL show no chip and
+no line. The same card and line SHALL serve research and catalog runs
+(scenarios `live-clarify`, `live-clarify-idle`).
 
 #### Scenario: Idle countdown
 - **WHEN** the user stops interacting for 10 seconds with `timeout` 60
-- **THEN** the chip shows the countdown from 1:00 (scenario `live-clarify-idle`) and no presence is sent
+- **THEN** the chip shows the countdown from 1:00, the line starts shrinking from full (scenario `live-clarify-idle`), and no presence is sent
 
 #### Scenario: Back from idle
 - **WHEN** the countdown reads 0:47 and the user moves the pointer
-- **THEN** the chip reads "waiting for you", presence is sent, and the next countdown starts from 1:00
+- **THEN** the chip reads "waiting for you", the line is full again, presence is sent, and the next countdown starts from 1:00
+
+#### Scenario: Line while active
+- **WHEN** a catalog run's clarify card opens with `timeout` 60 and the user keeps moving the pointer
+- **THEN** the 3px line shows full and the chip reads "waiting for you"
+
+#### Scenario: No timeout
+- **WHEN** the pause has `timeout` 0
+- **THEN** the card shows neither the chip nor the line
 
 ### Requirement: Question timeline states
 During a clarify pause the Plan card (Draft card for a catalog) SHALL show
