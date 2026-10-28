@@ -14,7 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Report } from "../../api/generated";
-import type { RunSummary, WritingOptions } from "../../api/types";
+import type { RunSummary } from "../../api/types";
 import { useApi, useUi } from "../../app/context";
 import { go } from "../../app/route";
 import { DepthTag } from "../../components/DepthTag";
@@ -25,7 +25,15 @@ import { StatusTag } from "../../components/StatusTag";
 import { ThinkingTag } from "../../components/ThinkingTag";
 import { dateTime } from "../../format";
 import { CitationTooltip, useCitation } from "../../run/CitationTooltip";
-import { aSummary, fmtElapsed, modelDiff, recipeOf, wDiff, wSummary } from "../../run/format";
+import {
+  aSummary,
+  DEFAULT_WRITING,
+  fmtElapsed,
+  modelDiff,
+  recipeOf,
+  wDiff,
+  wSummary,
+} from "../../run/format";
 import { lineage } from "../../run/lineage";
 import { openRecord, RecordPopover, useRecordCitation } from "../../run/RecordCitation";
 import { References, ReportMarkdown } from "../../run/ReportMarkdown";
@@ -39,17 +47,6 @@ import { CatalogReportAside, ReportAside, SelectedPassages } from "./ReportAside
 import css from "./ReportScreen.module.css";
 import { RewriteDialog } from "./RewriteDialog";
 import { VersionsNav } from "./VersionsNav";
-
-/** A catalog summary may carry no writing options; the report still renders with these. */
-const DEFAULT_WRITING: WritingOptions = {
-  format: "report",
-  tone: "objective",
-  tone_instructions: "",
-  words: 1200,
-  language: "english",
-  citation_marker: "numeric",
-  reference_style: "APA",
-};
 
 export function ReportScreen({ runId }: { runId: string }) {
   const api = useApi();
@@ -293,6 +290,7 @@ export function ReportScreen({ runId }: { runId: string }) {
       {rewriting && (
         <RewriteDialog
           run={detail}
+          writing={writing}
           sources={sourceCount}
           scored={passageCount + (skips?.length ?? 0)}
           nextVersion={Math.max(0, ...versions.map((v) => v.run.version ?? 1)) + 1}

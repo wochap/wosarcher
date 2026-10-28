@@ -8,6 +8,7 @@ import {
   pruneMarks,
   recentGroups,
   rename,
+  rowSummary,
   saveMarks,
   togglePin,
 } from "./recent";
@@ -170,5 +171,33 @@ describe("draftFromRun", () => {
     expect(draft.options).toEqual({ recipe: "context", sources: "web", depth: "standard" });
     expect(draft.writing).toEqual({});
     expect(draft.reused).toEqual([]);
+  });
+
+  it("fills only the question, sources, and profile for a catalog run", () => {
+    const run = at("c1", "2026-10-01T00:00:00Z", {
+      kind: "catalog",
+      writing: null,
+      sources: "web",
+      profile: profiles[0].name,
+    });
+    const draft = draftFromRun(run, run.query, known);
+    expect(draft.query).toBe(run.query);
+    expect(draft.options).toEqual({ sources: "web", profile: profiles[0].name });
+    expect(draft.writing).toEqual({});
+  });
+});
+
+describe("rowSummary", () => {
+  it("summarises a catalog run with null writing", () => {
+    const run = at("c2", "2026-10-01T00:00:00Z", {
+      kind: "catalog",
+      writing: null,
+      sources: "web",
+      profile: "low-vram",
+      modified: false,
+      nodes: 12,
+    });
+    expect(rowSummary(run)).toBe("Catalog · web · low-vram · 12 nodes");
+    expect(rowSummary({ ...run, nodes: null })).toBe("Catalog · web · low-vram");
   });
 });

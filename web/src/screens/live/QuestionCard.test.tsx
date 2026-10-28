@@ -308,6 +308,50 @@ describe("timeout chip", () => {
     expect(chip().textContent).toBe("1:00");
   });
 
+  it("Line while active: fill width 100%", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={60} />);
+    const fill = () => container.querySelector<HTMLElement>('[class*="fill"]');
+    expect(container.querySelector('[class*="track"]')).toBeTruthy();
+    expect(fill()?.style.width).toBe("100%");
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(fill()?.style.width).toBe("100%");
+  });
+
+  it("Idle countdown: width shrinks", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={60} />);
+    const fill = () => container.querySelector<HTMLElement>('[class*="fill"]');
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    const idle = Number.parseFloat(fill()?.style.width ?? "100");
+    expect(idle).toBeLessThan(100);
+    expect(idle).toBeGreaterThan(0);
+  });
+
+  it("Back from idle: back to 100%", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={60} />);
+    const fill = () => container.querySelector<HTMLElement>('[class*="fill"]');
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(Number.parseFloat(fill()?.style.width ?? "100")).toBeLessThan(100);
+    act(() => {
+      window.dispatchEvent(new Event("pointermove"));
+    });
+    expect(fill()?.style.width).toBe("100%");
+  });
+
+  it("No timeout: no track", () => {
+    vi.useFakeTimers();
+    const { container } = renderWithHelp(<Harness presence={() => {}} timeout={0} />);
+    expect(container.querySelector('[class*="track"]')).toBeNull();
+  });
+
   it("shows no chip for a timeout of 0", () => {
     vi.useFakeTimers();
     renderWithHelp(<Harness presence={() => {}} timeout={0} />);

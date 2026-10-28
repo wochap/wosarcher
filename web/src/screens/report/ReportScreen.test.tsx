@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../api/client";
+import { DEFAULT_WRITING } from "../../run/format";
 import { callsTo, fakeApi } from "../../test/fakeApi";
 import { finished } from "../../test/fixtures/finished";
 import { MD1, QUERY, RUN_ID, reportJson, summary } from "../../test/fixtures/sample";
@@ -162,7 +163,9 @@ describe("ReportScreen", () => {
   });
 
   it("names the reference style after References and in Written with", async () => {
-    const run = summary({ writing: { ...summary().writing, reference_style: "MLA" } });
+    const run = summary({
+      writing: { ...DEFAULT_WRITING, ...summary().writing, reference_style: "MLA" },
+    });
     await openScenario({ ...finished, data: { ...finished.data, runs: [run] } });
     await screen.findByRole("heading", { level: 1, name: QUERY });
     const heading = screen.getByRole("heading", { name: /^References/ });
@@ -172,7 +175,9 @@ describe("ReportScreen", () => {
   });
 
   it("shows a finished answer with its options line, actions, and References", async () => {
-    const run = summary({ writing: { ...summary().writing, format: "answer", words: 400 } });
+    const run = summary({
+      writing: { ...DEFAULT_WRITING, ...summary().writing, format: "answer", words: 400 },
+    });
     await openScenario({ ...finished, data: { ...finished.data, runs: [run] } });
     await screen.findByRole("heading", { level: 1, name: QUERY });
     expect(screen.getByText(/· answer ·/)).toBeTruthy();

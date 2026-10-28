@@ -22,7 +22,7 @@ export const costOf = (run: RunSummary) => (run.cost == null ? "–" : `$${run.c
 /** The Recipe column: the recipe, or "<n> nodes" for a catalog run ("–" while null). */
 export function recipeLabel(run: RunSummary): string {
   if (run.kind === "catalog") return run.nodes == null ? "–" : `${run.nodes} nodes`;
-  return recipeOf(run.until, run.writing.format);
+  return recipeOf(run.until, run.writing?.format);
 }
 
 type Props = {

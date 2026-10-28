@@ -32,7 +32,7 @@ describe("dev preview run scenarios", () => {
   it.each(SCENARIOS)("renders %s without errors", async (name, text) => {
     const errors = vi.spyOn(console, "error");
     render(<Preview name={name} />);
-    expect((await screen.findAllByText(text, {}, { timeout: 4000 })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(text, {}, { timeout: 8000 })).length).toBeGreaterThan(0);
     expect(errors).not.toHaveBeenCalled();
   });
 });

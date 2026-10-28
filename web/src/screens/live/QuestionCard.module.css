@@ -95,11 +95,7 @@
 }
 
 .track {
-  height: 2px;
-  background: transparent;
-}
-
-.track[data-idle="true"] {
+  height: 3px;
   background: var(--line);
 }
 

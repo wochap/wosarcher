@@ -22,6 +22,8 @@ type Row = {
   url: string;
   href?: string;
   state: string;
+  /** Why a page failed: the state's tooltip and accessible name. */
+  reason?: string;
   tone: "muted" | "faint" | "danger";
   icon: Icon;
   kept: number;
@@ -42,7 +44,7 @@ function webRow(run: RunView, s: SourceView): Row {
     kept: 0,
   };
   if (s.state === "failed")
-    return { ...base, state: s.reason ?? "failed", tone: "danger", icon: XCircle };
+    return { ...base, state: "failed", reason: s.reason, tone: "danger", icon: XCircle };
   if (s.state === "fetched")
     return {
       ...base,
@@ -167,7 +169,15 @@ export function SourcesPanel({ run, files, context, rounds = 1, className }: Pro
                 )}
               </div>
               <div className={css.state}>
-                <div data-tone={row.tone}>{row.state}</div>
+                <div data-tone={row.tone}>
+                  {row.reason ? (
+                    <span role="img" title={row.reason} aria-label={`${row.state}: ${row.reason}`}>
+                      {row.state}
+                    </span>
+                  ) : (
+                    row.state
+                  )}
+                </div>
                 {row.kept > 0 && <div className={css.kept}>{row.kept} kept</div>}
                 {row.roundTag && <div className={css.roundTag}>{row.roundTag}</div>}
               </div>

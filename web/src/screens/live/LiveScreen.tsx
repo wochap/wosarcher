@@ -190,7 +190,7 @@ export function LiveScreen() {
     passages: selected ? String(context?.passages.length ?? kept) : kept ? String(kept) : "",
     report: run.report ? (writing === "running" ? "…" : "✓") : "",
   };
-  const marker = detail?.writing.citation_marker ?? "numeric";
+  const marker = detail?.writing?.citation_marker ?? "numeric";
   // While the run is active, a finished stage reloads the open Source dialog.
   const finishedStages = Object.values(run.phases).filter(
     (p) => p.state === "done" || p.state === "reused",
