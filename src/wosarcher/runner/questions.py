@@ -7,8 +7,8 @@ deadline passes it answers itself with the recommended options. Nothing here cal
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
-from contextlib import suppress
+from collections.abc import Awaitable, Callable, Generator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -98,7 +98,8 @@ class Asker:
             max_wait=pause.max_wait,
         )
         self.log.emit("input.needed", stage, needed)
-        answered = await self.wait(pause)
+        with self.pause_stage_timeout():
+            answered = await self.wait(pause)
         waited = round(self.waiter.now() - pause.created.timestamp(), 3)
         self.store.write_pause(
             self.run_id, pause.model_copy(update={"answers": answered.answers, "answered_by": answered.answered_by})
@@ -121,6 +122,25 @@ class Asker:
                 self.store.write_answer(self.run_id, pause.id, answered)
                 return answered
             await self.waiter.sleep(POLL_SECONDS)
+
+    @contextmanager
+    def pause_stage_timeout(self) -> Generator[None]:
+        runner = self.runner
+        to = runner.stage_timeout if runner else None
+        if to is None:
+            yield
+            return
+        when = to.when()
+        if when is None or to.expired():
+            yield
+            return
+        loop = asyncio.get_running_loop()
+        remaining = max(0.001, when - loop.time())
+        to.reschedule(None)
+        try:
+            yield
+        finally:
+            to.reschedule(loop.time() + remaining)
 
     async def release(self, stage: Stage) -> None:
         """A waiting run holds no device: release the stage's model first, as the exclusive policy does."""

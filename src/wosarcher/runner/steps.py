@@ -3,6 +3,7 @@
 Each step returns an `Outcome`; the runner turns it into `stage.done`.
 """
 
+import asyncio
 import logging
 import math
 from collections.abc import Callable, Sequence
@@ -104,6 +105,8 @@ class StepContext:
     round: RoundState = field(default_factory=RoundState)
     asker: Asker | None = None
     """Set by the runner; pauses go through it."""
+    stage_timeout: asyncio.Timeout | None = None
+    """The active stage's timeout controller, if any."""
 
     @property
     def run_id(self) -> str:

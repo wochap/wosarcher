@@ -118,6 +118,8 @@ class Runner:
     """The stage running now; a cancelled run reports it."""
     waiter: Waiter = field(default_factory=Waiter)
     """The clock and sleep of a pause; tests replace it."""
+    stage_timeout: asyncio.Timeout | None = None
+    """The active stage's timeout controller, if any."""
 
     async def run(self, run_id: str, until: Stage | None = None) -> RunEnd:
         """Run every unfinished stage up to `until`; return `done` or `failed`. Cancellation re-raises."""
@@ -364,12 +366,17 @@ class Runner:
         start = time.monotonic()
         timeout = self.settings.run.stage_timeouts[stage]
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(timeout) as to:
+                self.stage_timeout = to
+                ctx.stage_timeout = to
                 outcome = await step(ctx)
         except TimeoutError:
             outcome = self.failed_stage(ctx, stage, f"timed out after {timeout:g} s")
         except Exception as error:
             outcome = self.failed_stage(ctx, stage, str(error) or type(error).__name__)
+        finally:
+            self.stage_timeout = None
+            ctx.stage_timeout = None
         ctx.log.flush(stage)
         if outcome.count == 0 and number == 1 and ctx.record.kind == "research":
             files = len(self.store.read_items(ctx.run_id, "files.jsonl", Page))

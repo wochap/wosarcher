@@ -264,3 +264,29 @@ async def test_fork_does_not_ask(tmp_path: Path) -> None:
     fakes = planner_world(CLARIFY)
     await Runner(store, cfg, fakes, UsageLedger({}), waiter=Clock().waiter).run(fork.run_id)
     assert not [e for e in store.read_events(fork.run_id) if isinstance(e, InputNeeded)]
+
+
+async def test_stage_timeout_paused_during_clarify(tmp_path: Path) -> None:
+    cfg = settings(
+        tmp_path,
+        QuestionsConfig(clarify=True, rounds=False),
+        stage_timeouts={"plan": 0.1},
+    )
+    store = RunStore.from_settings(cfg)
+    run_id = new_run(store, cfg)
+    fakes = planner_world(CLARIFY)
+
+    async def sleep_and_answer(_seconds: float) -> None:
+        await asyncio.sleep(0.2)
+        pause = store.read_pause(run_id, 1)
+        assert pause is not None
+        answers = [Answer(question_id=q.id, option_ids=["a"]) for q in pause.questions]
+        store.write_answer(run_id, 1, QuestionsAnswered(answers=answers, answered_by="user"))
+
+    waiter = Waiter(sleep=sleep_and_answer, now=time.time)
+    result = await Runner(store, cfg, fakes, UsageLedger({}), waiter=waiter).run(run_id, "plan")
+    assert result == "done"
+    pause = store.read_pause(run_id, 1)
+    assert pause is not None
+    assert pause.answered_by == "user"
+    assert store.read_artifact(run_id, "plan.json", Plan) is not None
