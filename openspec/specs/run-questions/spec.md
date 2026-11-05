@@ -37,19 +37,22 @@ values.
 ### Requirement: Pause protocol
 A run SHALL pause by writing `input/<id>.json` (the pause) and emitting
 `input.needed`, releasing a held GPU model first as the exclusive policy
-does between stages. While paused it SHALL check once per second for
-`input/<id>.answer.json` and the presence file `input/<id>.hold`. The
-deadline SHALL be the later of the pause's creation and the hold file's
-last modification, plus `timeout`, and never later than creation plus
-`max_wait`; a `timeout` of 0 SHALL continue at once. When the answer file
-appears, the run SHALL read it, record it in the pause file with
-`answered_by` from the file, emit `input.answered`, and continue. When
-the deadline passes without an answer, the run SHALL write the answer
-file itself with every question's recommended options, `answered_by`
-`timeout`, and continue the same way. The run SHALL keep its slot and its
-lock while paused. Cancellation while paused SHALL behave as run-lifecycle
-"Cancellation". A fork or rerun SHALL NOT pause: it SHALL reuse its
-parent's recorded answers where the pause would have been.
+does between stages. When a pause occurs during an active stage, the
+stage's execution timeout SHALL be suspended while waiting for an answer
+and resumed with the remaining budget when the pause finishes. While
+paused the run SHALL check once per second for `input/<id>.answer.json`
+and the presence file `input/<id>.hold`. The deadline SHALL be the later
+of the pause's creation and the hold file's last modification, plus
+`timeout`, and never later than creation plus `max_wait`; a `timeout` of
+0 SHALL continue at once. When the answer file appears, the run SHALL read
+it, record it in the pause file with `answered_by` from the file, emit
+`input.answered`, and continue. When the deadline passes without an answer,
+the run SHALL write the answer file itself with every question's
+recommended options, `answered_by` `timeout`, and continue the same way.
+The run SHALL keep its slot and its lock while paused. Cancellation while
+paused SHALL behave as run-lifecycle "Cancellation". A fork or rerun SHALL
+NOT pause: it SHALL reuse its parent's recorded answers where the pause
+would have been.
 
 #### Scenario: Answered by the user
 - **WHEN** a run is paused and the server writes the answer file with `answered_by` `user` after 20 seconds
@@ -70,6 +73,10 @@ parent's recorded answers where the pause would have been.
 #### Scenario: Fork does not ask
 - **WHEN** a run that answered a clarify pause is forked from `write`
 - **THEN** the fork pauses nowhere and its request carries the parent's clarifications
+
+#### Scenario: Active stage timeout suspended during pause
+- **WHEN** a run pauses during a stage with an active stage timeout
+- **THEN** the stage timeout is suspended for the duration of the pause and restored with the remaining duration when resumed
 
 ### Requirement: Clarify pause
 When the run's `questions.clarify` is on, the `plan` stage SHALL, after

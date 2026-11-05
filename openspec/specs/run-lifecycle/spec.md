@@ -162,10 +162,13 @@ no chunks; an empty context from `select`; no report text from `write`.
 
 ### Requirement: Stage timeouts
 Each stage SHALL have a timeout from `run.stage_timeouts` (the `gap`
-default is 360 seconds, room for a gap step that asks its model twice). In a multi-round run the timeout SHALL apply to
-each round's run of a stage separately. A stage that exceeds it SHALL be
-cancelled and SHALL fail the run, except `gap`: a gap timeout SHALL stop
-research as a failed gap step (research-rounds "Stop rules").
+default is 360 seconds, room for a gap step that asks its model twice).
+In a multi-round run the timeout SHALL apply to each round's run of a
+stage separately. Time spent waiting for answers during a pause (such as
+a clarify pause) SHALL NOT count against the stage execution timeout. A
+stage that exceeds its execution timeout SHALL be cancelled and SHALL
+fail the run, except `gap`: a gap timeout SHALL stop research as a failed
+gap step (research-rounds "Stop rules").
 
 #### Scenario: Score timeout
 - **WHEN** the score stage exceeds its timeout
@@ -178,6 +181,10 @@ research as a failed gap step (research-rounds "Stop rules").
 #### Scenario: Gap timeout default
 - **WHEN** no source sets `run.stage_timeouts.gap`
 - **THEN** the resolved gap timeout is 360 seconds
+
+#### Scenario: Pause wait excluded from stage timeout
+- **WHEN** a stage with a 180-second stage timeout pauses for clarification and waits 300 seconds for user answers
+- **THEN** the stage does not time out while waiting and resumes with its remaining execution budget when answered
 
 ### Requirement: Stop early
 A run started with `--until <stage>` SHALL stop after that stage has
